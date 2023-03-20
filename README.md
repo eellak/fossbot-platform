@@ -18,3 +18,11 @@
 * Eleftheria Papageorgiou
 * Manousos Linardakis
 
+[![Build Windows app](https://github.com/chronis10/fossbot-app/actions/workflows/windows_app.yml/badge.svg)](https://github.com/chronis10/fossbot-app/actions/workflows/windows_app.yml)
+
+[![Build MacOS app](https://github.com/chronis10/fossbot-app/actions/workflows/macos_app.yml/badge.svg)](https://github.com/chronis10/fossbot-app/actions/workflows/macos_app.yml)
+
+[![Build Ubuntu app](https://github.com/chronis10/fossbot-app/actions/workflows/ubuntu_app.yml/badge.svg)](https://github.com/chronis10/fossbot-app/actions/workflows/ubuntu_app.yml)
+
+[![Docker Build Robot image](https://github.com/chronis10/fossbot-app/actions/workflows/Robot%20Image.yml/badge.svg)](https://github.com/chronis10/fossbot-app/actions/workflows/Robot%20Image.yml)
+
