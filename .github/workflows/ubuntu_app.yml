@@ -12,7 +12,7 @@ jobs:
         - uses: actions/checkout@v2
         - uses: actions/setup-python@v4
           with:
-            python-version: "3.8"
+            python-version: "3.9"
         - name: Install Dev
           run: sudo apt-get install python3-dev
         - name: pip install dependencies basic
