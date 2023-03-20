@@ -6,9 +6,7 @@ jobs:
   build:
     runs-on: macos-latest
     steps:
-      # used to checkout different branches
-      - name: Checkout
-        uses: actions/checkout@v3
+
         
       - uses: actions/setup-python@v4
         with:
