@@ -26,28 +26,9 @@ jobs:
             cd dist/
             ls
             pwd
-        - name: Download artifact
-          uses: actions/download-artifact@v1
+        - name: Upload artifact
+          uses: actions/upload-artifact@v3
           with:
-            name: dis
+            name: macos-fossbot
+            path: dist
 
-# jobs:
-#   build:
-#     runs-on: macos-latest
-#     steps:
-
-        
-#       - uses: actions/setup-python@v4
-#         
-#           
-#       - name: pip install dependencies basic
-#         run: pip install -r blockly_server/requirements.txt
-#       - name: pip install dependencies extra
-#         run: pip install -r blockly_server/requirements_app.txt
-#       - name: compile GUI for Mac OS
-#         run: python -m pyinstaller blockly_server/app.spec
-#       - name: see files
-#         run: |
-#           cd dist/
-#           ls
-#           pwd
