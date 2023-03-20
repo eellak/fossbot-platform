@@ -3,7 +3,7 @@ name: Build MacOS app
 on: [workflow_dispatch]
 
 jobs:
-  deploy:
+  build:
     runs-on: macos-latest
     steps:
       # used to checkout different branches
