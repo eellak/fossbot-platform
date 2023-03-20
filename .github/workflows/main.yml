@@ -6,12 +6,10 @@ jobs:
   deploy:
     runs-on: macos-latest
     steps:
-    
       # used to checkout different branches
-      - uses: actions/checkout@v2
-        with:
-          # checkout my specific branch
-          ref: master
+      - name: Checkout
+        uses: actions/checkout@v2
+        
       - uses: actions/setup-python@v4
         with:
           python-version: "3.8"
