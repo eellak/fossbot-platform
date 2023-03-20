@@ -30,5 +30,4 @@ jobs:
           uses: actions/upload-artifact@v3
           with:
             name: macos-fossbot
-            path: dist/
-
+            path: /Users/runner/work/fossbot-app/fossbot-app/blockly_server/dist
