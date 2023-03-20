@@ -14,6 +14,8 @@ jobs:
           run: pip install -r blockly_server/requirements.txt
         - name: pip install dependencies extra
           run: pip install -r blockly_server/requirements_app.txt
+        - name: Install pyinstaller
+          run: pip install pyinstaller
         - name: compile GUI for Mac OS
           run: python -m pyinstaller blockly_server/app.spec
         - name: see files
