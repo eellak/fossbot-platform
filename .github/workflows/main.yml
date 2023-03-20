@@ -5,9 +5,6 @@ on: [workflow_dispatch]
 jobs:
   deploy:
     runs-on: macos-latest
-    defaults:
-      run:
-        working-directory: blockly_server
     steps:
     
       # used to checkout different branches
@@ -19,11 +16,11 @@ jobs:
         with:
           python-version: "3.8"
       - name: pip install dependencies basic
-        run: pip install -r requirements.txt
+        run: pip install -r blockly_server/requirements.txt
       - name: pip install dependencies extra
-        run: pip install -r requirements_app.txt
+        run: pip install -r blockly_server/requirements_app.txt
       - name: compile GUI for Mac OS
-        run: python -m pyinstaller app.spec
+        run: python -m pyinstaller blockly_server/app.spec
       - name: see files
         run: |
           cd dist/
