@@ -7,6 +7,21 @@ jobs:
     runs-on: macos-latest
     steps:
         - uses: actions/checkout@v2
+        - uses: actions/setup-python@v4
+          with:
+            python-version: "3.8"
+        - name: pip install dependencies basic
+          run: pip install -r blockly_server/requirements.txt
+        - name: pip install dependencies extra
+          run: pip install -r blockly_server/requirements_app.txt
+        - name: compile GUI for Mac OS
+          run: python -m pyinstaller blockly_server/app.spec
+        - name: see files
+          run: |
+            cd dist/
+            ls
+            pwd
+
 # jobs:
 #   build:
 #     runs-on: macos-latest
@@ -14,8 +29,8 @@ jobs:
 
         
 #       - uses: actions/setup-python@v4
-#         with:
-#           python-version: "3.8"
+#         
+#           
 #       - name: pip install dependencies basic
 #         run: pip install -r blockly_server/requirements.txt
 #       - name: pip install dependencies extra
