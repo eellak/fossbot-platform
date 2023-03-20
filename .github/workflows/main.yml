@@ -20,7 +20,7 @@ jobs:
         - name: Install pyinstaller
           run: pip install pyinstaller
         - name: compile GUI for Mac OS
-          run: python -m pyinstaller app.spec
+          run: pyinstaller app.spec
         - name: see files
           run: |
             cd dist/
