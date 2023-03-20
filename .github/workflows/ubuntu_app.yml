@@ -30,4 +30,4 @@ jobs:
           uses: actions/upload-artifact@v3
           with:
             name: ubuntu-fossbot
-            path: /Users/runner/work/fossbot-app/fossbot-app/blockly_server/dist
+            path: /home/runner/work/fossbot-app/fossbot-app/blockly_server/dist
