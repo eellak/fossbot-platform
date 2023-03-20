@@ -10,11 +10,17 @@ jobs:
         working-directory: blockly_server
     steps:
         - uses: actions/checkout@v2
-        - uses: actions/setup-python@v4
-          with:
-            python-version: "3.9"
-        - name: Install Dev
-          run: sudo apt-get install python3-dev
+#         - uses: actions/setup-python@v4
+#           with:
+#             python-version: "3.8"
+#         - name: Install Dev
+#           run: sudo apt-get install python3-dev
+        - name: Pyenv
+          run: curl https://pyenv.run | bash
+        - name: Restart shell
+          run: exec $$SHELL
+        - name: Activate pyenv
+          run: $ env PYTHON_CONFIGURE_OPTS="--enable-shared" pyenv install 3.8.0 
         - name: pip install dependencies basic
           run: pip install -r requirements.txt
         - name: pip install dependencies extra
