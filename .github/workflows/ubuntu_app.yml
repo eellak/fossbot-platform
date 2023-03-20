@@ -17,6 +17,8 @@ jobs:
 #           run: sudo apt-get install python3-dev
         - name: Pyenv
           run: curl https://pyenv.run | bash
+        - name: c0
+          run: exec bash
         - name: c1
           run: export PYENV_ROOT="$HOME/.pyenv"
         - name: c2
