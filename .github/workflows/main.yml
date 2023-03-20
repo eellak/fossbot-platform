@@ -26,6 +26,10 @@ jobs:
             cd dist/
             ls
             pwd
+        - name: Download artifact
+          uses: actions/download-artifact@v1
+          with:
+            name: dis
 
 # jobs:
 #   build:
