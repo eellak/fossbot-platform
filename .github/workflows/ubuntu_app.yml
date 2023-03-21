@@ -14,7 +14,7 @@ jobs:
           with:
              python-version: "3.8"
         - name: Install Dev
-          run: sudo apt-get libpython3.8-dev
+          run: sudo apt-get install libpython3.8-dev
         - name: pip install dependencies basic
           run: pip install -r requirements.txt
         - name: pip install dependencies extra
