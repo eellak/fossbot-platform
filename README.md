@@ -47,7 +47,7 @@
 
 [![Build MacOS app](https://github.com/chronis10/fossbot-app/actions/workflows/macos_app.yml/badge.svg)](https://github.com/chronis10/fossbot-app/actions/workflows/macos_app.yml)
 
-[![Build Ubuntu app](https://github.com/chronis10/fossbot-app/actions/workflows/ubuntu_app.yml/badge.svg)](https://github.com/chronis10/fossbot-app/actions/workflows/ubuntu_app.yml)
+[![Build Ubuntu 20.04 app](https://github.com/chronis10/fossbot-app/actions/workflows/ubuntu_20_04_app.yml/badge.svg)](https://github.com/chronis10/fossbot-app/actions/workflows/ubuntu_20_04_app.yml)
 
-[![Docker Build Robot image](https://github.com/chronis10/fossbot-app/actions/workflows/Robot%20Image.yml/badge.svg)](https://github.com/chronis10/fossbot-app/actions/workflows/Robot%20Image.yml)
+[![Docker Build Robot image](https://github.com/chronis10/fossbot-app/actions/workflows/robot_image.yml/badge.svg)](https://github.com/chronis10/fossbot-app/actions/workflows/robot_image.yml)
 
