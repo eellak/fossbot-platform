@@ -6,6 +6,16 @@ jobs:
   docker:
     runs-on: ubuntu-latest
     steps:
+      - name: Get latest release of NodeJS
+        uses: rez0n/actions-github-release@main
+        id: fossapp
+        env:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          repository: "chronis10/fossbot-app"
+          type: "stable"
+      - name: "Print result"
+        run: |
+          echo "id: ${{ steps.fossapp.outputs.release }}"
       -
         name: Checkout
         uses: actions/checkout@v2
@@ -32,4 +42,4 @@ jobs:
           platforms: linux/arm64,linux/arm/v7,linux/arm/v6
           push: true
           tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/fossbot_blockly_phy:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/fossbot_blockly_phy:${{steps.fossapp.outputs.release }}
