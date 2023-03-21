@@ -13,8 +13,12 @@ jobs:
         - uses: actions/setup-python@v4
           with:
              python-version: "3.8"
-        - name: Install Dev
-          run: sudo apt-get install libpython3.8-dev
+        - name: Upgrade pip     
+          run: pip install --upgrade pip
+        - name: Make env
+          run: python3 -m venv ubu_env
+        - name: Use env
+          run: source ubu_env/bin/activate
         - name: pip install dependencies basic
           run: pip install -r requirements.txt
         - name: pip install dependencies extra
