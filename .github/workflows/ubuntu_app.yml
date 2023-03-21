@@ -10,23 +10,11 @@ jobs:
         working-directory: blockly_server
     steps:
         - uses: actions/checkout@v2
-#         - uses: actions/setup-python@v4
-#           with:
-#             python-version: "3.8"
-#         - name: Install Dev
-#           run: sudo apt-get install python3-dev
-        - name: Pyenv
-          run: curl https://pyenv.run | bash
-        - name: c0
-          run: exec bash
-        - name: c1
-          run: export PYENV_ROOT="$HOME/.pyenv"
-        - name: c2
-          run: export PATH="$PYENV_ROOT/bin:$PATH"
-        - name: c3
-          run: eval "$(pyenv virtualenv-init -)"
-        - name: Activate pyenv
-          run: $ env PYTHON_CONFIGURE_OPTS="--enable-shared" pyenv install 3.8.0 
+        - uses: actions/setup-python@v4
+          with:
+             python-version: "3.8"
+        - name: Install Dev
+          run: sudo apt-get libpython3.8-dev
         - name: pip install dependencies basic
           run: pip install -r requirements.txt
         - name: pip install dependencies extra
