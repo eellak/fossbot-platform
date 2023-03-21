@@ -439,5 +439,4 @@ if __name__ == '__main__':
         # systray = Thread(target=systray_agent,daemon=True)
         # systray.start()
         webbrowser.open_new("http://127.0.0.1:8081")
-    DEBUG = True
     socketio.run(app, host = '0.0.0.0',port=8081, debug=DEBUG)
