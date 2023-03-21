@@ -1,6 +1,16 @@
 let parameters = new Object();
 let parameters_array = [];
 
+function languange_select(value)
+
+{   
+    
+    document.cookie = 'locale='+value;
+    window.location.reload();
+    //alert(document.cookie);
+}
+
+
 function loadSettings(data) {
     console.log('Loading settings of the projects');
 

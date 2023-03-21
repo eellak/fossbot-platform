@@ -56,7 +56,7 @@ app.config ['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + SQLITE_DIR
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['BABEL_DEFAULT_LOCALE'] = LOCALE
 
-babel = Babel(app)
+
 
 CORS(app)
 socketio = SocketIO(app)
@@ -74,9 +74,21 @@ class Projects(db.Model, SerializerMixin):
 def execute_blocks(code):
     agent.execute(code)
     
+
+
+def get_locale():
+
+    locale = request.cookies.get('locale')
+    if locale is not None:
+        return locale
+    return request.accept_languages.best_match(['el', 'en'])
+
+babel = Babel(app,locale_selector=get_locale)
+
 @app.before_first_request
 def before_first_request():
-    
+    locale = request.cookies.get('locale')
+
     if not os.path.exists(DATA_DIR):
         os.mkdir(DATA_DIR)
         os.mkdir(PROJECT_DIR)
@@ -423,16 +435,9 @@ def handle_systray_controls(message):
 
 if __name__ == '__main__':
     freeze_support()
-
-    # ----- Uncomment for pyinstaller  -------
-    # DOCKER = False
-    # DEBUG = False
-    # ROBOT_MODE  = 'coppelia'
-    # ----------------------------------------
-
     if not DOCKER:
         # systray = Thread(target=systray_agent,daemon=True)
         # systray.start()
         webbrowser.open_new("http://127.0.0.1:8081")
-    
+    DEBUG = True
     socketio.run(app, host = '0.0.0.0',port=8081, debug=DEBUG)

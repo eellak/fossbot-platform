@@ -14,9 +14,9 @@ body {
   position: relative;
   display: flex;
   align-items: center;
-  justify-content: left;
+  justify-content: right;
   flex-direction: row;
-  padding: 1%;
+  padding: 10px;
 }
 
 #go-back-to-home-button-wrap { 

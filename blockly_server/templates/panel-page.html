@@ -64,13 +64,6 @@
         <i class="fa-solid fa-house"></i>
         </a>
       </div>
-      <!-- <div id="go-back-to-home-button-wrap">
-        <button type="button" class="go-back-to-home">
-          <a href='/' id="open-home-href" style="color: white; text-decoration: none;">
-            Επιστροφή στην αρχική σελίδα
-          </a>
-        </button>
-      </div> -->
     </div>
 
     <div id="panel-title-container">
@@ -84,6 +77,8 @@
           <strong>{{ gettext('In the administration page you can configure several FOSSbot parameters, such as its name or the values of some of its blocks')}}</strong>
         </div>
       </div>
+      
+     
 
       <div class="d-flex justify-content-center">
         <div class="row justify-content-center">
@@ -106,6 +101,18 @@
 
 
       <div id="Blockly-Button-container">
+        <div id="Blockly-Button-wrap">
+          <div class="dropdown">
+            <button class="btn btn-primary dropdown-toggle" type="button" id="dropdownMenuButton" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+              Languange
+            </button>
+            <div class="dropdown-menu" aria-labelledby="dropdownMenuButton">
+              <a class="dropdown-item" href="javascript:languange_select('el');">Ελληνικά</a>
+              <a class="dropdown-item" href="javascript:languange_select('en');">English</a>
+            </div>
+          </div>
+        </div>
+
         {% if not docker %}
           <div id="Blockly-Button-wrap">
             <button onclick="open_audio_folder()"  class="save-panel-changes">{{ gettext('Sounds Folder')}}</button>
@@ -117,6 +124,7 @@
         <div id="Blockly-Button-wrap">
           <button onclick="saveSettings()" name="submit" type="submit" class="save-panel-changes">{{ gettext('Save changes')}}</button>
         </div>
+  
       </div>
 
     </div>
