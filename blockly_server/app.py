@@ -38,9 +38,9 @@ if os.getenv('DEBUG') is not None:
     if os.getenv('DEBUG') == 'True':
         DEBUG = True
 
-
+LOCALE = 'en'
 if os.getenv('LOCALE') is None:
-    LOCALE = 'el'
+    LOCALE = 'en'
 else:
     LOCALE = os.getenv('LOCALE')
 
@@ -77,18 +77,18 @@ def execute_blocks(code):
 
 
 def get_locale():
-
-    locale = request.cookies.get('locale')
-    if locale is not None:
-        return locale
+    global LOCALE
+    lan = request.cookies.get('locale')
+    if lan is not None:
+        LOCALE = lan
+        app.config['BABEL_DEFAULT_LOCALE'] = lan
+        return lan
     return request.accept_languages.best_match(['el', 'en'])
 
 babel = Babel(app,locale_selector=get_locale)
 
 @app.before_first_request
-def before_first_request():
-    locale = request.cookies.get('locale')
-
+def before_first_request():    
     if not os.path.exists(DATA_DIR):
         os.mkdir(DATA_DIR)
         os.mkdir(PROJECT_DIR)
@@ -140,7 +140,7 @@ def blockly():
     robot_name = get_robot_name()
     get_sound_effects()
     scenes = get_scenes()
-    locale = app.config['BABEL_DEFAULT_LOCALE']
+    locale = LOCALE
     return render_template('blockly.html', project_id=id, robot_name=robot_name,locale=locale,scenes=scenes)           
 
 @app.route('/kindergarten')

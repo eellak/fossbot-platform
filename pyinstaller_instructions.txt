@@ -1,9 +1,0 @@
-Run the following command inside the blockly_server
-Remeber to manually set the Global Variables as follow
-if __name__ == '__main__':
-    ...
-    DOCKER = False
-    DEBUG = False
-    ROBOT_MODE  = 'coppelia'
-    
-pyinstaller app.spec 

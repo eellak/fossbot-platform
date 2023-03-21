@@ -1,4 +1,0 @@
-docker buildx create --name mybuilder
-docker buildx use mybuilder
-docker buildx inspect --bootstrap
-docker buildx build -f Dockerfile_PHYS --platform linux/arm64,linux/arm/v7,linux/arm/v6 -t chronis10/fossbot_blockly_phy:latest --push .
