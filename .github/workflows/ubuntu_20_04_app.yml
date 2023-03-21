@@ -1,4 +1,4 @@
-name: Build Ubuntu app
+name: Build Ubuntu-20.04 app 
 
 on: [workflow_dispatch]
 
@@ -27,6 +27,8 @@ jobs:
           run: pip install pyinstaller
         - name: compile GUI for Ubuntu
           run: pyinstaller app.spec
+        - name: copy lib
+          run: cp -r ../lib dist/
         - name: see files
           run: |
             cd dist/
@@ -35,5 +37,5 @@ jobs:
         - name: Upload artifact
           uses: actions/upload-artifact@v3
           with:
-            name: ubuntu-fossbot
+            name: ubuntu-20.04-fossbot
             path: /home/runner/work/fossbot-app/fossbot-app/blockly_server/dist
