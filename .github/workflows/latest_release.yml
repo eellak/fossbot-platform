@@ -7,19 +7,13 @@ jobs:
   docker:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v1
-      - name: "call action"
-        id: last_release
-        uses: InsonusK/get-latest-release@v1.0.1
-        with:
-          myToken: ${{ secrets.GITHUB_TOKEN }}
-          exclude_types: "release"
-          view_top: 1
+      - name: Get latest release of NodeJS
+        uses: rez0n/actions-github-release@main
+        id: fossapp
+        env:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          repository: "chronis10/fossbot-app"
+          type: "stable"
       - name: "Print result"
         run: |
-          echo "id: ${{ steps.last_release.outputs.id }}"
-          echo "name: ${{ steps.last_release.outputs.name }}"
-          echo "tag_name: ${{ steps.last_release.outputs.tag_name }}"
-          echo "created_at: ${{ steps.last_release.outputs.created_atd }}"
-          echo "draft: ${{ steps.last_release.outputs.draft }}"
-          echo "prerelease: ${{ steps.last_release.outputs.prerelease }}"
+          echo "id: ${{ steps.fossapp.outputs.release }}"
