@@ -43,3 +43,4 @@ jobs:
           push: true
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/fossbot_blockly_phy:${{steps.fossapp.outputs.release }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/fossbot_blockly_phy:latest
