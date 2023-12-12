@@ -1,4 +1,0 @@
-Pillow
-pystray
-pygame
-fossbot-lib
