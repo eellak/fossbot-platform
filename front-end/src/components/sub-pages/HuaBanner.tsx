@@ -2,28 +2,22 @@
 // @ts-ignore
 import React from 'react';
 import {
-  Grid,
   Box,
   Typography,
-  Button,
-  Avatar,
-  Stack,
   CardMedia,
   styled,
-  Fab,
-  Card
 } from '@mui/material';
 import huabuilding from 'src/assets/images/backgrounds/hua_building.jpg';
 import userimg from 'src/assets/images/profile/user-1.jpg';
-import {
-  IconBrandDribbble,
-  IconBrandFacebook,
-  IconBrandTwitter,
-  IconBrandYoutube,
-  IconFileDescription,
-  IconUserCheck,
-  IconUserCircle,
-} from '@tabler/icons-react';
+// import {
+//   IconBrandDribbble,
+//   IconBrandFacebook,
+//   IconBrandTwitter,
+//   IconBrandYoutube,
+//   IconFileDescription,
+//   IconUserCheck,
+//   IconUserCircle,
+// } from '@tabler/icons-react';
 // import ProfileTab from './ProfileTab';
 import BlankCard from 'src/components/shared/BlankCard';
 import { motion } from 'framer-motion';
@@ -106,21 +100,35 @@ const HuaBanner = () => {
         pr: '10%'
       }}>
 
-    <Typography
-      
-      fontWeight={1}>
-          There are many variations of passages of Lorem Ipsum available, 
-          but the majority have suffered alteration in some form, by injected humour,
-          or randomised words which don't look even slightly believable. If you are 
-          going to use a passage of Lorem Ipsum, you need to be sure there isn't anything 
-          embarrassing hidden in the middle of text. All the Lorem Ipsum generators on the 
-          Internet tend to repeat predefined chunks as necessary, making this the first true 
-          generator on the Internet. It uses a dictionary of over 200 Latin words, combined with a
-            handful of model sentence structures, to generate Lorem Ipsum which looks reasonable. 
-            The generated Lorem Ipsum is therefore 
-          always free from repetition, injected humour, 
-          or non-characteristic words etc.
-          </Typography>
+        <Typography
+          variant="body1"
+          fontWeight={400}
+          sx={{
+            fontSize: {
+              xs: '1rem',
+              sm: '1.1rem',
+              md: '1.2rem',
+            },
+            lineHeight: {
+              xs: '1.5',
+              sm: '1.6',
+              md: '1.7',
+            },
+            letterSpacing: '0.05em',
+            textAlign: 'justify',
+            textJustify: 'inter-word',
+          }}>
+          Harokopio University of Athens is a public university dedicated to promoting research
+          and learning in a small, well focused set of intellectual areas. The university,
+          situated in the centre of Athens and close to the Unesco World Heritage Centre of the Acropolis,
+          originates from an educational institution that was first established in 1929 and
+          gained the status of University in 1990. It takes its name from the national benefactor
+          Panagis Harokopos. The University’s excellent campus facilities houses four academic
+          departments, the central administration, the library, the IT centre and student advisory
+          services. Harokopio University of Athens is located close to many important cultural
+          sites of interest such as the Acropolis Museum, Thissio, Panathenaic Stadium (Kallimarmaron),
+          Keramikos and the Benaki Museum.
+        </Typography>
       </Box>
       </motion.div>
           

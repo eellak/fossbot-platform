@@ -1,6 +1,7 @@
-import React, { useRef } from 'react'; // Import React
+import { useRef } from 'react'; // Import React
 import MonacoEditor from '@monaco-editor/react';
 import { editor } from 'monaco-editor';
+import './monacoeditor.css';
 
 type MonacoEditorProps = {
   code: string;
@@ -18,7 +19,7 @@ const MonacoEditorComponent2 = ({ code, handleGetValue }: MonacoEditorProps) => 
 
   return (
     <MonacoEditor
-      // height="90vh"
+      className={'monacoeditor'} 
       language="python"
       theme="vs-dark"
       value={code}
