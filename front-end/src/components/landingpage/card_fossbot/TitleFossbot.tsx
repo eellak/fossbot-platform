@@ -19,7 +19,7 @@ const FossbotTitle = () => {
                         lg: '43px',
                         xs: '30px'
                     }
-                }}>What is the FOSSBot?</Typography>
+                }}>Introducing FOSSBot</Typography>
             </Grid>
         </Grid>
     );
