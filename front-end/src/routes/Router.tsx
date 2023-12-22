@@ -18,6 +18,8 @@ const LandingPage = Loadable(lazy(() => import('../views/landing-page/LandingPag
 const BlocklyPage = Loadable(lazy(() => import('../views/blockly-page/BlocklyPage')));
 const MonacoPage = Loadable(lazy(() => import('../views/monaco-page/MonacoPage')));
 const HuaPage = Loadable(lazy(() => import('../views/sub-pages/HuaPage')));
+const Register = Loadable(lazy(() => import('../views/authentication/Register')));
+const Login = Loadable(lazy(() => import('../views/authentication/Login')));
 const MonacoPage2 = Loadable(lazy(() => import('../views/monaco-page-2/MonacoPage2')));
 const Error = Loadable(lazy(() => import('../views/authentication/Error')));
 
@@ -50,6 +52,15 @@ const Router = [
     element: <BlankLayout />,
     children: [
       { path: '/hua-page', exact: true, element: <HuaPage /> },
+    ],
+  },
+  {
+    path: '/auth',
+    element: <BlankLayout />,
+    children: [
+      { path: '/auth/login', element: <Login /> },
+      { path: '/auth/register', element: <Register /> },
+      { path: '/auth/404', element: <Error /> },
     ],
   },
   {

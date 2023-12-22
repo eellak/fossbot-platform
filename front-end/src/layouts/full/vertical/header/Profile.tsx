@@ -162,7 +162,7 @@ const Profile = () => {
               <img src={unlimitedImg} alt="unlimited" className="signup-bg"></img>
             </Box>
           </Box>
-          <Button to="/" variant="outlined" color="primary" component={Link} fullWidth>
+          <Button to="/auth/login" variant="outlined" color="primary" component={Link} fullWidth>
             Logout
           </Button>
         </Box>

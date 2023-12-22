@@ -6,4 +6,5 @@ dist/
 data/
 **/__pycache__/
 /back-end/fossenv
-
+/back-end/.env
+/back-end/jwtgenerator.py
