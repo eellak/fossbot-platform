@@ -6,7 +6,7 @@ import { Link } from 'react-router-dom';
 
 import CustomTextField from '../../components/forms/theme-elements/CustomTextField';
 import CustomFormLabel from '../../components/forms/theme-elements/CustomFormLabel';
-import { registerType } from 'src/types/auth';
+import { registerType } from 'src/types/auth/auth';
 
 
 const AuthRegister = ({ title, subtitle, subtext }: registerType) => (
