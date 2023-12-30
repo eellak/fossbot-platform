@@ -1,17 +1,20 @@
 import schemas
 import models
 import jwt
+import os
 from datetime import datetime 
-from models import User,TokenTable
+from models import User,TokenTable, Project
 from database import Base, engine, SessionLocal
+from sqlalchemy import ForeignKey
 from sqlalchemy.orm import Session
 from fastapi import FastAPI, Depends, HTTPException,status
 from fastapi.security import OAuth2PasswordBearer
+from fastapi.responses import FileResponse
 from auth_bearer import JWTBearer
 from functools import wraps
-from utils import create_access_token,create_refresh_token,verify_password,get_hashed_password
+from utils import create_access_token,create_refresh_token,verify_password,get_hashed_password, get_current_user
 from dotenv import load_dotenv
-import os
+from schemas import ProjectCreate, ProjectUpdate
 
 # Load environment variables from .env file
 load_dotenv()
@@ -118,15 +121,71 @@ def logout(dependencies=Depends(JWTBearer()), db: Session = Depends(get_session)
 
 def token_required(func):
     @wraps(func)
-    def wrapper(*args, **kwargs):
-    
-        payload = jwt.decode(kwargs['dependencies'], JWT_SECRET_KEY, ALGORITHM)
+    def wrapper(dependencies=Depends(JWTBearer()), session: Session = Depends(get_session)):
+        payload = jwt.decode(dependencies, JWT_SECRET_KEY, ALGORITHM)
         user_id = payload['sub']
-        data= kwargs['session'].query(models.TokenTable).filter_by(user_id=user_id,access_toke=kwargs['dependencies'],status=True).first()
+        data = session.query(models.TokenTable).filter_by(user_id=user_id, access_toke=dependencies, status=True).first()
         if data:
-            return func(kwargs['dependencies'],kwargs['session'])
-        
+            return func(dependencies, session)
         else:
             return {'msg': "Token blocked"}
-        
     return wrapper
+
+@app.post("/projects")
+def create_project(
+    project: schemas.ProjectCreate,
+    current_user: models.User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    existing_project = session.query(Project).filter_by(name=project.name).first()
+    if existing_project:
+        raise HTTPException(status_code=400, detail="Project already exists")
+
+    new_project = models.Project(
+        name=project.name, description=project.description, editor=project.editor, user_id=current_user.id
+    )
+
+    session.add(new_project)
+    session.commit()
+    session.refresh(new_project)
+
+    return {"message": "Project created successfully"}
+
+@app.put("/projects/{project_id}")
+def update_project(project_id: int, project: ProjectUpdate, session: Session = Depends(get_session)):
+    existing_project = session.query(models.Project).filter_by(id=project_id).first()
+    if not existing_project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    for key, value in project.dict(exclude_unset=True).items():
+        setattr(existing_project, key, value)
+
+    session.add(existing_project)
+    session.commit()
+    session.refresh(existing_project)
+
+    return {"message": "Project updated successfully"}
+
+@app.delete("/projects/{project_id}")
+def delete_project(project_id: int, session: Session = Depends(get_session)):
+    existing_project = session.query(models.Project).filter_by(id=project_id).first()
+    if not existing_project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    session.delete(existing_project)
+    session.commit()
+
+    return {"message": "Project deleted successfully"}
+
+@app.get("/projects/{project_id}/download")
+def download_project_code(project_id: int, session: Session = Depends(get_session)):
+    project = session.query(models.Project).filter_by(id=project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    return FileResponse(project.code_path, filename=f"{project.name}_code.zip")
+
+@app.get("/projects/all")
+def get_all_projects(session: Session = Depends(get_session)):
+    projects = session.query(Project).all()
+    return projects
