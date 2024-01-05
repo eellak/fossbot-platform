@@ -8,3 +8,4 @@ data/
 /back-end/fossenv
 /back-end/.env
 /back-end/jwtgenerator.py
+**/*-env/

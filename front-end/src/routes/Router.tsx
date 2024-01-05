@@ -15,12 +15,14 @@ const BlankLayout = Loadable(lazy(() => import('../layouts/blank/BlankLayout')))
 const SamplePage = Loadable(lazy(() => import('../views/sample-page/SamplePage')));
 const HomePage = Loadable(lazy(() => import('../views/home-page/HomePage')));
 const LandingPage = Loadable(lazy(() => import('../views/landing-page/LandingPage')));
-const BlocklyPage = Loadable(lazy(() => import('../views/blockly-page/BlocklyPage')));
-const MonacoPage = Loadable(lazy(() => import('../views/monaco-page/MonacoPage')));
+//const BlocklyPage = Loadable(lazy(() => import('../views/blockly-page/BlocklyPage')));
+//const BlocklyPage =  '../views/blockly-page/BlocklyPage';
+import BlocklyPage from '../views/blockly-page/BlocklyPage';
+import MonacoPage from '../views/monaco-page/MonacoPage';
+// const MonacoPage = Loadable(lazy(() => import('../views/monaco-page/MonacoPage')));
 const HuaPage = Loadable(lazy(() => import('../views/sub-pages/HuaPage')));
 const Register = Loadable(lazy(() => import('../views/authentication/Register')));
 const Login = Loadable(lazy(() => import('../views/authentication/Login')));
-const MonacoPage2 = Loadable(lazy(() => import('../views/monaco-page-2/MonacoPage2')));
 const Error = Loadable(lazy(() => import('../views/authentication/Error')));
 
 const Router = [
@@ -67,7 +69,7 @@ const Router = [
     path: '/blockly-page',
     element: <FullFillLayout />,
     children: [
-      { path: '/blockly-page', exact: true, element: <BlocklyPage /> },
+      { path: '/blockly-page', exact: true, element: <BlocklyPage/> },
     ],
   },  
   {
@@ -75,13 +77,6 @@ const Router = [
     element: <FullLayout />,
     children: [
       { path: '/monaco-page', exact: true, element: <MonacoPage /> },
-    ],
-  },
-  {
-    path: '/monaco-page2',
-    element: <FullLayout />,
-    children: [
-      { path: '/monaco-page2', exact: true, element: <MonacoPage2 /> },
     ],
   },
   {

@@ -1,41 +1,45 @@
-import  { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Box } from '@mui/material';
 
 const WebGLApp = () => {
+  // const [isScriptLoaded, setIsScriptLoaded] = useState(false);
 
-  const loadScript = () => {
-    const script = document.createElement('script');
-    script.src = 'src/components/websimulator/index.js';
-    script.async = true;
-    document.body.appendChild(script);
+  // useEffect(() => {
+  //   if (!window.myWebGLAppScriptLoaded) {
+  //     const script = document.createElement('script');
+  //     script.src = 'src/components/websimulator/index.js';
+  //     script.async = true;
+  //     script.onload = () => {
+  //       window.myWebGLAppScriptLoaded = true;
+  //       setIsScriptLoaded(true);
+  //     };
+  //     document.body.appendChild(script);
+  //   } else {
+  //     setIsScriptLoaded(true);
+  //   }
 
-    return () => {
-      document.body.removeChild(script);
-    }
-  };
-
-  useEffect(() => {
-    const removeScript = loadScript();
-
-    return () => {
-      removeScript();
-    };
-  }, []); // Empty array ensures this runs once on mount and once on unmount
+  //   return () => {
+  //     // Cleanup logic if necessary
+  //   };
+  // }, []);
 
   return (
     <Box width={'100%'}>
-      <canvas id='canvas' style={{ display: 'block', width: '100%', position: 'relative' }}>
-        HTML5 canvas appears to be unsupported in the current browser.<br />
-        Please try updating or use a different browser.
-      </canvas>
-      <div id='status'>
-          <div id='status-progress' style={{ display: 'none' }} onContextMenu={(e) => e.preventDefault()}>
-            <div id='status-progress-inner'></div>
-          </div>
-          <div id='status-indeterminate' style={{ display: 'none' }} onContextMenu={(e) => e.preventDefault()}></div>
-          <div id='status-notice' className='godot' style={{ display: 'none' }}></div>
-      </div>
-      </Box>
+       <iframe
+                src="http://localhost:5000"
+                width={"100%"}
+                height={"370px"}
+                frameBorder="0"
+                allowFullScreen
+            ></iframe>
+      {/* {isScriptLoaded && (
+        <canvas id='canvas' style={{ display: 'block', width: '100%', position: 'relative' }}>
+          HTML5 canvas appears to be unsupported in the current browser.<br />
+          Please try updating or use a different browser.
+        </canvas>
+      )}
+      Status elements */}
+    </Box>
   );
 };
 

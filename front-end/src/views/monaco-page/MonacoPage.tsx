@@ -1,13 +1,14 @@
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
-import React from 'react';
-import { useState } from 'react';
-import { Box, Grid, Stack, DialogContent } from '@mui/material';
+import React, { useEffect, useState,useRef }  from 'react';
+import { useLocation } from 'react-router-dom';
+import { Box, Grid, Stack, DialogContent, alertTitleClasses } from '@mui/material';
 import PageContainer from 'src/components/container/PageContainer';
 import MonacoEditorComponent from 'src/components/editors/MonacoEditor';
 import Buttons from 'src/components/editors/RightColButtons';
 // import Terminal from 'src/components/editors/Terminal';
-import PythonTerminal from 'src/components/editors/PythonTerminal';
+import PythonExecutor from 'src/components/editors/PythonExecutor';
+
 import WebGLApp from 'src/components/websimulator/Simulator';
 
 // import FunctionsManual from 'src/components/monaco-functions/MonacoFunctions';
@@ -15,37 +16,51 @@ import SearchBar from 'src/components/monaco-functions/MonacoSearchBar';
 
 const MonacoPage = () => {
 
-  const [getValueFunc, setGetValueFunc] = useState<(() => string) | null>(null);
+  //Editor get set value
+  const [editorValue, setEditorValue] = useState('');
+  const runScriptRef = useRef<() => Promise<void>>();
 
+  
+  // Function to be called when the value in the editor changes
   const handleGetValue = (getValueFunc: () => string) => {
-    setGetValueFunc(() => getValueFunc);
+    const value = getValueFunc();
+    setEditorValue(value);
+    // pythonScript = value;
+    
+    // console.log("Editor Value: ", value);
+  };
+    const handlePlayClick = () => {
+      if (runScriptRef.current) {
+          runScriptRef.current();
+      }
   };
 
-  const [terminalOutput, setTerminalOutput] = useState('');
-
-  const handlePlayClick = () => {
-    if (getValueFunc) {
-      const code = getValueFunc();
-      setTerminalOutput(code);
-    }
+  const setRunScriptFunction = (runScript: () => Promise<void>) => {
+      runScriptRef.current = runScript;
   };
 
+ 
   return (
     <PageContainer title="Monaco Page" description="this is Monaco page">
       <Box flexGrow={1}>
         <Grid container spacing={1}>
           {/* column */}
-          <Grid item xs={12} lg={7}>
-            <MonacoEditorComponent code='Type Here!' handleGetValue={handleGetValue} />
+          <Grid item xs={12} lg={7}>          
+            <MonacoEditorComponent code={editorValue} handleGetValue={handleGetValue} />
           </Grid>
           {/* column */}
           <Grid item xs={12} lg={5}>
-            <Box height={'400px'}>
-              <PythonTerminal terminalOutput={terminalOutput} />
-            </Box>
+
+              <Box height={'400px'} style={{ backgroundColor: 'black',
+                                              color: 'white',
+                                              padding: '2px 20px 5px',
+                                              overflow: 'auto'   }}>
+              <p>FOSSBot terminal 🐍</p>                                                
+              <PythonExecutor pythonScript={editorValue} onRunScript={setRunScriptFunction} />
+              </Box>
             <br></br>
             <Box>
-              <WebGLApp />
+            <WebGLApp />
             </Box>
             <Box mt={2}>
               <DialogContent className="testdialog">

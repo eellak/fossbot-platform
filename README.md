@@ -23,6 +23,11 @@ The FOSSBot Platform is a open-source project combining a DIY educational robot 
 
 ![](images/screen3.png)
 
+
+### Development
+1. Start Websocket Server
+2. Start the fornt-end server
+
 ### Usage
 
 Soon...

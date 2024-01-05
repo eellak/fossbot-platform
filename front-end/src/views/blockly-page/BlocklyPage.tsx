@@ -1,13 +1,14 @@
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
 // import React, { lazy, useState } from 'react';
-
+import React, { useEffect, useState }  from 'react';
+import { useLocation } from 'react-router-dom';
 import { Box, Grid, Stack } from '@mui/material';
 import PageContainer from '../../components/container/PageContainer'; //'src/components/container/PageContainer';
 import BlocklyEditorComponent from '../../components/editors/BlocklyEditor';
 
 import Buttons from 'src/components/editors/RightColButtons';
-import Terminal from 'src/components/editors/Terminal';
+import PythonTerminal from 'src/components/editors/PythonTerminal';
 import WebGLApp from 'src/components/websimulator/Simulator';
 
 // const BlocklyEditorComponent = Loadable(
@@ -16,6 +17,19 @@ import WebGLApp from 'src/components/websimulator/Simulator';
 
 const BlocklyPage = () => {
   // const [getValueFunc, setGetValueFunc] = useState<(() => string) | null>(null);
+  const [getValueFunc, setGetValueFunc] = useState<(() => string) | null>(null);
+
+  const handleGetValue = (getValueFunc: () => string) => {
+    setGetValueFunc(() => getValueFunc);
+  };
+  const [terminalOutput, setTerminalOutput] = useState('');
+
+  const handlePlayClick = () => {
+    if (getValueFunc) {
+      const code = getValueFunc();
+      setTerminalOutput(code);
+    }
+  };
 
   return (
     <PageContainer title="Blockly Page" description="This is the Blockly page" >
@@ -29,9 +43,10 @@ const BlocklyPage = () => {
           </Grid>
           {/* column */}
           <Grid item xs={12} lg={5}>
-          <Box height={'400px'} >
-          <Terminal terminalOutput=''/>
-          </Box>
+          <Box height={'400px'}>
+              <PythonTerminal terminalOutput={terminalOutput} />
+            </Box>
+            <br></br>
           <Box>
           <WebGLApp />
           </Box>
@@ -40,24 +55,6 @@ const BlocklyPage = () => {
               <Buttons handlePlayClick={() => {}}/>
             </Stack>
           </Box>
-
-          {/* <Box mt={2}>
-              <DashboardCard>
-                <Buttons handlePlayClick={() => {}}/>
-              </DashboardCard>
-            </Box>
-            <Box mt={2}>
-              <DashboardCard title="Web Simulator">
-                <WebGLApp />
-              </DashboardCard>
-            </Box>
-            <Box mt={2}>
-             <DashboardCard title="Terminal">
-               <Box>
-                  <Terminal terminalOutput=''/>
-                </Box>
-              </DashboardCard>
-            </Box> */}
           </Grid>
         </Grid>
       </Box>

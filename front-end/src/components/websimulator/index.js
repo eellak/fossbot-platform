@@ -525,11 +525,11 @@ const InternalConfig = function (initConfig) { // eslint-disable-line no-unused-
  */
 const Engine = (function () {
 	const preloader = new Preloader();
-
+	
 	let loadPromise = null;
 	let loadPath = './';
 	let initPromise = null;
-
+	
 	/**
 	 * @classdesc The ``Engine`` class provides methods for loading and starting exported projects on the Web. For default export
 	 * settings, this is already part of the exported HTML page. To understand practical use of the ``Engine`` class,

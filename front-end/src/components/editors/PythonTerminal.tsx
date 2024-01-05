@@ -1,9 +1,13 @@
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useImperativeHandle, forwardRef  } from 'react';
 import jQuery from 'jquery';
-import terminal from 'jquery.terminal';
+
 import 'jquery.terminal/css/jquery.terminal.min.css';
 
 import './pythonTerminal.css';
+
+import terminal from 'jquery.terminal';
+
+
 
 // interface PythonTerminalProps {
 //   pyodide: any;
@@ -11,10 +15,17 @@ import './pythonTerminal.css';
 // }
 
 type PythonTerminalProps = {
-    terminalOutput: string;
+  terminalOutput: string; 
 };
 
-const PythonTerminal = ({ terminalOutput }: PythonTerminalProps) => {
+export interface PythonTerminalHandle {
+  interpreter: (command: string) => Promise<void>;
+}
+
+
+
+const PythonTerminal = forwardRef<PythonTerminalHandle, PythonTerminalProps>(
+  ({ terminalOutput }, ref) => {
   let indexURL: string = 'https://cdn.jsdelivr.net/pyodide/v0.21.2/full/';
   let term: JQueryTerminal;
   let termReady: any;
@@ -30,18 +41,21 @@ const PythonTerminal = ({ terminalOutput }: PythonTerminalProps) => {
   let pyconsole: any;
   let clear_console: any;
   const terminalRef = useRef<any>();
+  
 
   useEffect(() => {
     (async function () {
-      const urlParams = new URLSearchParams(window.location.search);
-      const buildParam = urlParams.get('build');
-      if (buildParam) {
-        if (['full', 'debug', 'pyc'].includes(buildParam)) {
-          indexURL = indexURL.replace('/full/', '/' + urlParams.get('build') + '/');
-        } else {
-          console.warn('Invalid URL parameter: build="' + buildParam + '". Using default "full".');
-        }
-      }
+      // const urlParams = new URLSearchParams(window.location.search);
+      // const buildParam = urlParams.get('build');
+      // if (buildParam) {
+      //   if (['full', 'debug', 'pyc'].includes(buildParam)) {
+      //     indexURL = indexURL.replace('/full/', '/' + urlParams.get('build') + '/');
+          
+      //   } else {
+      //     console.warn('Invalid URL parameter: build="' + buildParam + '". Using default "full".');
+      //   }
+      // }
+      
       const { loadPyodide } = await import(indexURL + 'pyodide.mjs');
 
       pyodide = await loadPyodide({
@@ -125,6 +139,7 @@ const PythonTerminal = ({ terminalOutput }: PythonTerminalProps) => {
         term.error(s.trimEnd());
       };
       termReady = Promise.resolve();
+      
       pyodide._api.on_fatal = async (e: any) => {
         if (e.name === 'Exit') {
           jQuery(() => {
@@ -167,27 +182,39 @@ const PythonTerminal = ({ terminalOutput }: PythonTerminalProps) => {
     return new Promise((resolve) => setTimeout(resolve, s));
   }
 
+  //const interpreter = async (command: any) => {
+       
   async function interpreter(command: any) {
+  // async function interpreter(command: any) {
+    
     console.log('interpreter start with command:', command);
     const unlock: any = await lock();
+    // // alert(command);  
+    jQuery(() => { 
+        term.pause();
+        console.log('term.pause()');
+      
 
-    jQuery(() => {
-      term.pause();
     });
-    console.log('term.pause()');
+    
 
     // multiline should be split (useful when pasting)
     for (const c of command.split('\n')) {
       const escaped = c.replaceAll(/\u00a0/g, ' ');
+      
       const fut = pyconsole.push(escaped);
+      
       term.set_prompt(fut.syntax_check === 'incomplete' ? ps2 : ps1);
       switch (fut.syntax_check) {
         case 'syntax-error':
+          
           term.error(fut.formatted_error.trimEnd());
           continue;
         case 'incomplete':
+          
           continue;
         case 'complete':
+          
           break;
         default:
           throw new Error(`Unexpected type`);
@@ -198,9 +225,11 @@ const PythonTerminal = ({ terminalOutput }: PythonTerminalProps) => {
       // the inner future too. This is not what we want so we
       // temporarily put it into a list to protect it.
       const wrapped = await_fut(fut);
+      
       // complete case, get result / error and print it.
       try {
         const [value] = await wrapped;
+        
         if (value !== undefined) {
           echo(
             repr_shorten.callKwargs(value, {
@@ -211,11 +240,14 @@ const PythonTerminal = ({ terminalOutput }: PythonTerminalProps) => {
         if (pyodide.isPyProxy(value)) {
           value.destroy();
         }
+        
       } catch (e: any) {
         if (e.constructor.name === 'PythonError') {
           const message = fut.formatted_error || e.message;
+          
           term.error(message.trimEnd());
         } else {
+          
           throw e;
         }
       } finally {
@@ -223,15 +255,20 @@ const PythonTerminal = ({ terminalOutput }: PythonTerminalProps) => {
         wrapped.destroy();
       }
     }
+    
     term.resume();
-    console.log('term.resume()');
+    // // console.log('term.resume()');
     await sleep(10);
-    console.log('sleep(10)');
+    // // console.log('sleep(10)');
     unlock();
-    console.log('interpreter end');
+    // console.log('interpreter end');
   }
 
+  useImperativeHandle(ref, () => ({
+    interpreter,
+  }));
+
   return <div ref={terminalRef} className="python-terminal"></div>;
-};
+});
 
 export default PythonTerminal;
