@@ -1,4 +1,5 @@
 from pydantic import BaseModel
+from typing import List
 import datetime
 
 class UserCreate(BaseModel):
@@ -25,3 +26,20 @@ class TokenCreate(BaseModel):
     refresh_token:str
     status:bool
     created_date:datetime.datetime
+
+class ProjectBase(BaseModel):
+    name: str
+    description: str
+    editor: str
+
+class User(BaseModel):
+    username: str
+    email: str
+    password: str
+    projects: List[ProjectBase] = [] 
+
+class ProjectCreate(ProjectBase):
+    pass
+
+class ProjectUpdate(ProjectBase):
+    pass
