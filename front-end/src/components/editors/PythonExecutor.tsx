@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Socket } from 'socket.io-client';
 
 type PythonExecutorProps = {
     pythonScript: string;
@@ -7,9 +6,7 @@ type PythonExecutorProps = {
 };
 
 const PythonExecutor: React.FC<PythonExecutorProps> = ({ pythonScript, onRunScript }) => {
-    const [pyodide, setPyodide] = useState<any>(null);
     const [results, setResults] = useState<string[]>([]);
-    const [socket, setSocket] = useState<Socket | null>(null);
 
     // Create a new web worker
     const pyodideWorker = new Worker(new URL('../../workers/pyodideWorker.ts', import.meta.url));

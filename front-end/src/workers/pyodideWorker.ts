@@ -15,7 +15,7 @@ onmessage = async function (event: MessageEvent<string>) {
     if(event.data == 'SETUP') {
         await setUpSocket();
         if(socket)
-            await setUpPyodide(socket);
+            pyodide = await setUpPyodide(socket);
 
         console.log('SET UP READY');
     } else if (event.data == 'CLOSE') {
@@ -82,7 +82,7 @@ const setUpPyodide = async (socket: any) => {
         console.error("Error loading module or installing package:", e);
     }
 
-    setPyodide(loadedPyodide);
+    return loadedPyodide;
 }
 
 const closeSocket = () => {
@@ -97,7 +97,7 @@ const runPythonCode = async (pythonScript: string) => {
 
     if (!pyodide) { 
         console.log("Pyodide not already loaded ..");
-        await setUpPyodide(socket);
+        pyodide = await setUpPyodide(socket);
     } 
 
     console.log("Pyodide okay ..  pyodide:", pyodide);
