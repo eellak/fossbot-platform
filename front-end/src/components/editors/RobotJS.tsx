@@ -1,6 +1,6 @@
 import { Socket } from 'socket.io-client';
 
-export class Fossbot {     
+export default class Fossbot {     
     private socket: Socket;
     private fossbot_name: string;
     private user_id: string;

@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { io, Socket } from 'socket.io-client';
-import { Fossbot } from "./RobotJS";
+import { Socket } from 'socket.io-client';
 
 type PythonExecutorProps = {
     pythonScript: string;
@@ -22,7 +21,7 @@ const PythonExecutor: React.FC<PythonExecutorProps> = ({ pythonScript, onRunScri
         console.log('Received result from worker:', event.data);
     };
     
-    pyodideWorker.postMessage('pyodideWorker set up ready')
+    pyodideWorker.postMessage('SETUP')
 
     return (
         <div>
