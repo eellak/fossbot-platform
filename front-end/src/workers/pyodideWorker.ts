@@ -29,8 +29,6 @@ onmessage = async function (event: MessageEvent<string>) {
     } else {
         console.log('Lets run command '+event.data);
         const res = await runPythonCode(event.data)
-        console.log('res :'+ res.length);
-        console.log('results :'+ results.length);
     } 
 }
 
@@ -66,15 +64,17 @@ const setUpPyodide = async (socket: any) => {
     });
 
     loadedPyodide.setStdout({ batched: (msg: string) => {
-        console.log('CMD:'+ msg)
-        setResult(msg)         //postMessage('CMD:'+msg)
+        // console.log('CMD:'+ msg)
+        // setResult(msg)         
+        postMessage('CMD:' + msg)
     }
     });
 
     loadedPyodide.setStderr({ batched: (msg: string) => 
         {
-            console.log('CMD:'+ msg)
-            setResult(msg)         //postMessage('CMD:'+msg)
+            // console.log('CMD:'+ msg)
+            // setResult(msg)         
+            postMessage('CMD:'+ msg)
         }
     });
 
@@ -145,9 +145,9 @@ const runPythonCode = async (pythonScript: string) => {
                 }
                     // Append the formatted error message to the results
                     //results.push(formattedErrorMessage);
-                    setResult(formattedErrorMessage)
+                    //setResult(formattedErrorMessage)
 
-                    console.log('CMD:'+ formattedErrorMessage)
+                    postMessage('CMD:'+ formattedErrorMessage)
                 } else {
                 // For non-Python errors, you might still want to handle them differently
                 console.error("Unexpected error:", e);
@@ -155,8 +155,8 @@ const runPythonCode = async (pythonScript: string) => {
             }
         }
     
-    postMessage('CMD:'+results.toString())
-    return results
+    //postMessage('CMD:'+results.toString())
+    //return results
 }
 
 const fix_awaits = (code: string) => {
