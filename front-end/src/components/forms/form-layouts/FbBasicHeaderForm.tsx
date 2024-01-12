@@ -1,5 +1,4 @@
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
+ 
 import React from 'react';
 import { Box, FormControlLabel, Button, Grid, MenuItem, FormControl, Alert } from '@mui/material';
 import CustomTextField from '../theme-elements/CustomTextField';

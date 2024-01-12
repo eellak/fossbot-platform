@@ -1,6 +1,5 @@
 import { Grid, InputAdornment, Button } from '@mui/material';
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
+ 
 import React , { useState } from 'react';
 import CustomFormLabel from '../theme-elements/CustomFormLabel';
 import CustomOutlinedInput from '../theme-elements/CustomOutlinedInput';

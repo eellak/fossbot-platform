@@ -1,5 +1,4 @@
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
+ 
 import * as React from 'react';
 import {
   IconButton,
@@ -14,8 +13,7 @@ import {
 
 import { useSelector, useDispatch } from 'src/store/Store';
 import { toggleMobileSidebar } from 'src/store/customizer/CustomizerSlice';
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
+ 
 import { IconMenu2 } from '@tabler/icons-react';
 import Notifications from 'src/layouts/full/vertical/header/Notification';
 import Cart from 'src/layouts/full/vertical/header/Cart';

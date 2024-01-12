@@ -1,5 +1,4 @@
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
+ 
 import React from 'react';
 import { Grid, Link, Typography, Container } from '@mui/material';
 import logoIcon from 'src/assets/images/logos/logoIcon.svg';

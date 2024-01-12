@@ -1,8 +1,6 @@
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
 import React from 'react';
 import { useState } from 'react';
-import DashboardCard from '../../shared/DashboardCard';
+import DashboardCard from '../../shared/DashboardCardWithChildren';
 // import CustomSelect from '../../forms/theme-elements/CustomSelect';
 import ProjectForm from 'src/views/forms/ProjectForm';
 import {

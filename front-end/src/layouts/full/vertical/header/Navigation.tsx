@@ -1,13 +1,11 @@
 import { useState } from 'react';
 import { Box, Menu, Typography, Button, Divider, Grid } from '@mui/material';
 import { Link } from 'react-router-dom';
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
+ 
 import { IconChevronDown, IconHelp } from '@tabler/icons-react';
 import AppLinks from './AppLinks';
 import QuickLinks from './QuickLinks';
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
+ 
 import React from 'react';
 
 const AppDD = () => {

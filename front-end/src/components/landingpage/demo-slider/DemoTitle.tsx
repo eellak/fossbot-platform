@@ -1,5 +1,4 @@
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
+ 
 import React from 'react';
 import { Grid, Typography, AvatarGroup, Avatar, Stack } from '@mui/material';
 import AnimationFadeIn from '../animation/Animation';

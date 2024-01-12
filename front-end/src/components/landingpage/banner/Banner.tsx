@@ -1,5 +1,4 @@
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
+ 
 import React from 'react';
 import { Grid, Box, Container, useMediaQuery, styled, Stack, Theme } from '@mui/material';
 import BannerContent from './BannerContent';

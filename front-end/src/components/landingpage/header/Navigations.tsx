@@ -1,5 +1,4 @@
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
+ 
 import React, { useState } from 'react';
 import { Box, Button, Divider, Grid, styled, Paper } from '@mui/material';
 import { IconChevronDown } from '@tabler/icons-react';

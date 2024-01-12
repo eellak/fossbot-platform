@@ -3,7 +3,7 @@ import COMMANDS_JSON from 'src/utils/toolboxMonaco/toolboxMonaco';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faCopy } from '@fortawesome/free-solid-svg-icons';
 import { IconChevronDown } from '@tabler/icons-react';
-import DashboardCard from 'src/components/shared/DashboardCard';
+import DashboardCard from 'src/components/shared/DashboardCardWithChildren';
 import {
     Divider,
     Accordion,

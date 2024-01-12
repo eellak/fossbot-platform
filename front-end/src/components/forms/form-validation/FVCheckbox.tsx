@@ -1,5 +1,4 @@
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
+ 
 import React from 'react';
 import { useFormik } from 'formik';
 import * as yup from 'yup';
@@ -41,7 +40,7 @@ const FVCheckbox = () => {
           {formik.errors.color && (
             <FormHelperText error id="standard-weight-helper-text-email-login">
               {' '}
-              {formik.errors.color}{' '}
+              {formik.errors.color && ' '}
             </FormHelperText>
           )}
         </Box>

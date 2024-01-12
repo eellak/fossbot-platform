@@ -1,9 +1,7 @@
 import { ListSubheader, styled } from '@mui/material';
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
+ 
 import { IconDots } from '@tabler/icons-react';
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
+ 
 import React from 'react';
 
 type NavGroup = {

@@ -1,5 +1,4 @@
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
+ 
 import React, { useEffect, useState,useRef }  from 'react';
 import { useLocation } from 'react-router-dom';
 import { Box, Grid, Stack, DialogContent, alertTitleClasses } from '@mui/material';

@@ -3,7 +3,7 @@ import { Grid, Fab, Box, TextField } from '@mui/material';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faSave, faPlay, faStop } from '@fortawesome/free-solid-svg-icons';
 
-import DashboardCard from 'src/components/shared/DashboardCard';
+import DashboardCard from 'src/components/shared/DashboardCardWithChildren';
 
 import WebGLApp from 'src/components/websimulator/Simulator';
 

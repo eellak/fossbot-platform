@@ -1,5 +1,4 @@
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
+ 
 import React from 'react';
 
 import { Card, CardHeader, CardContent, Divider } from '@mui/material';

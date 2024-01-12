@@ -1,5 +1,4 @@
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
+ 
 import React from 'react';
 import {
   Accordion,
@@ -79,8 +78,6 @@ const CollapsibleForm = () => {
   const [expanded, setExpanded] = React.useState<string | false>('panel1');
 
   const handleChange5 =
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    // @ts-ignore
     (panel: string) => (event: React.SyntheticEvent, newExpanded: boolean) => {
       setExpanded(newExpanded ? panel : false);
     };

@@ -1,5 +1,3 @@
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
 import * as React from 'react';
 import { Snackbar, Alert, AlertTitle } from '@mui/material';
 

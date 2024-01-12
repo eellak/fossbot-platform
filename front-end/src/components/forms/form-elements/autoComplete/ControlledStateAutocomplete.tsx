@@ -1,5 +1,3 @@
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
 import React from 'react';
 import { Typography } from '@mui/material';
 import Autocomplete from '@mui/material/Autocomplete';
@@ -8,21 +6,17 @@ import CustomTextField from "../../theme-elements/CustomTextField";
 const options = ['Option 1', 'Option 2'];
 
 const ControlledStateAutocomplete = () => {
-  const [value, setValue] = React.useState<string | null>(options[0]);
+  const [value, setValue] = React.useState<string[] | null>([options[0]]);
   const [inputValue, setInputValue] = React.useState('');
 
   return (
     <>
       <Autocomplete
         value={value}
-        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-        // @ts-ignore
-        onChange={(event: any, newValue: string | null) => {
+        onChange={(event: any, newValue: string[] | null) => {
           setValue(newValue);
         }}
         inputValue={inputValue}
-        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-        // @ts-ignore
         onInputChange={(event, newInputValue) => {
           setInputValue(newInputValue);
         }}

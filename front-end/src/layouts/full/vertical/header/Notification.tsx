@@ -1,5 +1,4 @@
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
+ 
 import React, { useState } from 'react';
 import {
   IconButton,
@@ -16,8 +15,7 @@ import {
 import * as dropdownData from './data';
 import Scrollbar from 'src/components/custom-scroll/Scrollbar';
 
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
+ 
 import { IconBellRinging } from '@tabler/icons-react';
 import { Link } from 'react-router-dom';
 

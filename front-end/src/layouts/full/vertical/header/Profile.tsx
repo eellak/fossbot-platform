@@ -1,5 +1,4 @@
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
+ 
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
@@ -14,8 +13,7 @@ import {
 } from '@mui/material';
 import * as dropdownData from './data';
 
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
+ 
 import { IconMail } from '@tabler/icons-react';
 
 import ProfileImg from 'src/assets/images/profile/user-1.jpg';

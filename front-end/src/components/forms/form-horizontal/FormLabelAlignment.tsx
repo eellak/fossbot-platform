@@ -8,8 +8,7 @@ import {
     IconButton,
     Stack
   } from '@mui/material';
-  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
+   
 import React from 'react';
   import CustomFormLabel from '../theme-elements/CustomFormLabel';
   import CustomTextField from '../theme-elements/CustomTextField';

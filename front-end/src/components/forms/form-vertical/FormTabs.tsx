@@ -1,5 +1,4 @@
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
+ 
 import React from 'react';
 import { Box, Button, Grid, IconButton, InputAdornment, MenuItem, Stack, Tab } from '@mui/material';
 import TabContext from '@mui/lab/TabContext';
@@ -47,8 +46,6 @@ const lang: countryType[] = [
 
 const FormTabs = () => {
   const [value, setValue] = React.useState('1');
-  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-  // @ts-ignore
   const handleChange = (event: React.SyntheticEvent, newValue: string) => {
     setValue(newValue);
   };

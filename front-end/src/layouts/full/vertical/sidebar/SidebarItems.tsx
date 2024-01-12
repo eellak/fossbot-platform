@@ -1,5 +1,4 @@
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
+ 
 import React from 'react';
 import Menuitems from './MenuItems';
 import { useLocation } from 'react-router';
@@ -29,7 +28,6 @@ const SidebarItems = () => {
             return <NavGroup item={item} hideMenu={hideMenu} key={item.subheader} />;
 
             // {/********If Sub Menu**********/}
-            /* eslint no-else-return: "off" */
           } else if (item.children) {
             return (
               <NavCollapse

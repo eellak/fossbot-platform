@@ -1,5 +1,4 @@
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
+ 
 import React from 'react';
 import { useTheme } from '@mui/material/styles';
 import { useLocation } from 'react-router-dom';
@@ -12,8 +11,7 @@ import { useSelector } from 'src/store/Store';
 import NavItem from '../NavItem/NavItem';
 
 // plugins
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
+ 
 import { IconChevronDown } from '@tabler/icons-react';
 import { AppState } from 'src/store/Store';
 
