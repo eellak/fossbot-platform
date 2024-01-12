@@ -18,7 +18,7 @@ const PythonExecutor: React.FC<PythonExecutorProps> = ({ pythonScript, onRunScri
     pyodideWorker.onmessage = function (event: MessageEvent<string>) {
         console.log('Received result from worker:', event.data);
 
-        if(event.data.includes('CMD')) {
+        if(event.data.includes('CMD:')) {
           let result = event.data.split('CMD:')[1];
           setResults([result]);
         }

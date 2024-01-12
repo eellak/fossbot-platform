@@ -15,13 +15,13 @@ onmessage = async function (event: MessageEvent<string>) {
 
     if(event.data == 'SETUP') {
         await setUp();
-        postMessage('SET UP READY');
+        console.log('SET UP READY');
     } else if (event.data == 'CLOSE') {
         closeSocket()
-        postMessage('SOCKET WAS JUST CLOSED');
+        console.log('SOCKET WAS JUST CLOSED');
     } else {
-        postMessage('Lets run command '+event.data);
-        //await runPythonCode('CMD:' + event.data)
+        console.log('Lets run command '+event.data);
+        await runPythonCode(event.data)
     } 
 }
 
@@ -57,11 +57,11 @@ const setUp = async () => {
 
     loadedPyodide.setStdout({ batched: (msg: string) => 
         // results.push(msg)
-        postMessage(msg)
+        postMessage('CMD:'+msg)
     });
 
     loadedPyodide.setStderr({ batched: (msg: string) => 
-        postMessage(msg)
+        postMessage('CMD:'+msg)
     });
 
     const Fossbot = await import("../components/editors/RobotJS");
@@ -136,7 +136,7 @@ const runPythonCode = async (pythonScript: string) => {
             }
                 // Append the formatted error message to the results
                 //results.push(formattedErrorMessage);
-                postMessage(formattedErrorMessage)
+                postMessage('CMD:'+formattedErrorMessage)
             } else {
             // For non-Python errors, you might still want to handle them differently
             console.error("Unexpected error:", e);
