@@ -12,17 +12,16 @@ function setPyodide(value: any) {
 
 onmessage = async function (event: MessageEvent<string>) {
     console.log("Received message from the main thread:", event.data);
-    postMessage('message received')
 
     if(event.data == 'SETUP') {
         await setUp();
-        postMessage('SET UP READY')
+        postMessage('SET UP READY');
     } else if (event.data == 'CLOSE') {
         closeSocket()
-        postMessage('SOCKET WAS JUST CLOSED')
+        postMessage('SOCKET WAS JUST CLOSED');
     } else {
-        postMessage('Lets run command: ', event.data)
-        runPythonCode('CMD:' + event.data)
+        postMessage('Lets run command '+event.data);
+        //await runPythonCode('CMD:' + event.data)
     } 
 }
 
