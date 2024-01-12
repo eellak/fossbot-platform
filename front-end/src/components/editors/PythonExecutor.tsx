@@ -20,7 +20,11 @@ const PythonExecutor: React.FC<PythonExecutorProps> = ({ pythonScript, onRunScri
 
         if(event.data.includes('CMD:')) {
           let result = event.data.split('CMD:')[1];
-          setResults([result]);
+          setResults(prevResults => [...prevResults, result]);
+        }
+
+        if(event.data == 'EMPTY_RESULTS') { 
+          setResults([]);
         }
     };
 

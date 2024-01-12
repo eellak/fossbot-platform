@@ -1,6 +1,5 @@
 let socket: any;
 let pyodide: any; 
-let results: any[] = [];
 
 function setSocket(value: any) {
     socket = value;
@@ -8,10 +7,6 @@ function setSocket(value: any) {
 
 function setPyodide(value: any) {
     pyodide = value;
-}
-
-function setResult(value: any) {
-    results.push(value)
 }
 
 onmessage = async function (event: MessageEvent<string>) {
@@ -63,20 +58,9 @@ const setUpPyodide = async (socket: any) => {
         indexURL: "https://cdn.jsdelivr.net/pyodide/v0.23.4/full/",
     });
 
-    loadedPyodide.setStdout({ batched: (msg: string) => {
-        // console.log('CMD:'+ msg)
-        // setResult(msg)         
-        postMessage('CMD:' + msg)
-    }
-    });
+    loadedPyodide.setStdout({ batched: (msg: string) => postMessage('CMD:'+ msg) });
 
-    loadedPyodide.setStderr({ batched: (msg: string) => 
-        {
-            // console.log('CMD:'+ msg)
-            // setResult(msg)         
-            postMessage('CMD:'+ msg)
-        }
-    });
+    loadedPyodide.setStderr({ batched: (msg: string) => postMessage('CMD:'+ msg) });
 
     const Fossbot = await import("../components/editors/RobotJS");
     const robot = new Fossbot.default(socket, "fossbot", "1");
@@ -122,7 +106,8 @@ const runPythonCode = async (pythonScript: string) => {
         if(pythonScript) {
             console.log("Running Python script :", pythonScript);
 
-           // results = [];
+           postMessage('EMPTY_RESULTS')
+
             // Adds await to some function
             //const finalScript = fix_awaits(pythonScript);
             const finalScript = JSON.parse(pythonScript);
@@ -144,9 +129,6 @@ const runPythonCode = async (pythonScript: string) => {
                     formattedErrorMessage += errorMessage;
                 }
                     // Append the formatted error message to the results
-                    //results.push(formattedErrorMessage);
-                    //setResult(formattedErrorMessage)
-
                     postMessage('CMD:'+ formattedErrorMessage)
                 } else {
                 // For non-Python errors, you might still want to handle them differently
@@ -154,9 +136,6 @@ const runPythonCode = async (pythonScript: string) => {
                 }
             }
         }
-    
-    //postMessage('CMD:'+results.toString())
-    //return results
 }
 
 const fix_awaits = (code: string) => {
