@@ -23,6 +23,7 @@ const components: any = (theme: Theme) => {
         },
         '#root': {
           height: '100%',
+          width: '100%',
         },
         "*[dir='rtl'] .buyNowImg": {
           transform: 'scaleX(-1)',
