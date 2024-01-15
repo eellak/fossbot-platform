@@ -17,11 +17,11 @@ The FOSSBot Platform is a open-source project combining a DIY educational robot 
 
 ## Screenshots
 ### Blockly IDE
-![](images/screen2.png)
+![](images/main_page.png)
 
 ### Monaco (native Python) IDE
 
-![](images/screen3.png)
+![](images/monaco.png)
 
 
 ### Development
