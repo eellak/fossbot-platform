@@ -1,6 +1,5 @@
 import { Card } from '@mui/material';
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
+ 
 import React from 'react';
 import { useTheme } from '@mui/material/styles';
 import { AppState, useSelector } from 'src/store/Store';

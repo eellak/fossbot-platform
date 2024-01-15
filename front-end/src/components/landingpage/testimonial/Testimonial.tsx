@@ -1,5 +1,4 @@
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
+ 
 import React from 'react';
 import { Avatar, Box, CardContent, Container, Typography, Rating, Stack } from '@mui/material';
 import TestimonialTitle from './TestimonialTitle';
@@ -130,8 +129,6 @@ const Testimonial = () => {
                             size="small"
                             name="simple-controlled"
                             value={value}
-                            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-                            // @ts-ignore
                             onChange={(event, newValue) => {
                               setValue(newValue);
                             }}

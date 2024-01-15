@@ -1,5 +1,3 @@
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
 import React from 'react';
 import { Box, CardContent, Chip, Paper, Stack, Typography, LinearProgress } from '@mui/material';
 import { useTheme } from '@mui/material/styles';

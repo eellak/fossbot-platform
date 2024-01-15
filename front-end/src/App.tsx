@@ -1,6 +1,5 @@
-
 import { useRoutes } from 'react-router-dom';
-import { useSelector } from 'src/store/Store';
+import { useSelector } from './store/Store';
 import { ThemeSettings } from './theme/Theme';
 import RTL from './layouts/full/shared/customizer/RTL';
 import ScrollToTop from './components/shared/ScrollToTop';
@@ -22,4 +21,4 @@ function App() {
   );
 }
 
-export default App
+export default App;

@@ -1,5 +1,4 @@
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
+ 
 import React, { useState } from 'react';
 import { Box, Button, Divider, Grid, styled, Paper } from '@mui/material';
 import { IconChevronDown } from '@tabler/icons-react';
@@ -122,7 +121,7 @@ const Navigations = () => {
             <StyledButton color="inherit" variant="text" href="/about-page">
                 About us
             </StyledButton>
-            <Button color="primary"  variant="contained" href="/home-page">
+            <Button color="primary"  variant="contained" href="/dashboard">
                 Try Now
             </Button>
         </>

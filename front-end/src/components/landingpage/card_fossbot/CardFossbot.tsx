@@ -1,5 +1,4 @@
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
+ 
 import React from 'react';
 import FeaturesTitle from './TitleFossbot';
 import { Typography, Grid, Container, Box, CardMedia } from '@mui/material';

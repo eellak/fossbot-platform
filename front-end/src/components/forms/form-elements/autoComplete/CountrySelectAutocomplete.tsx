@@ -1,5 +1,3 @@
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
 import React from 'react';
 import { Box } from '@mui/material';
 import Autocomplete from '@mui/material/Autocomplete';
@@ -22,7 +20,7 @@ const CountrySelectAutocomplete = () => {
         fullWidth
         options={countryData}
         autoHighlight
-        getOptionLabel={(option) => option.label}
+        getOptionLabel={(option) => (typeof option === 'string' ? '' : option.label)}
         renderOption={(props, option) => (
           <Box
             component="li"

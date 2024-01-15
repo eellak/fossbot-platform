@@ -1,5 +1,4 @@
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
+ 
 import React, { useState } from 'react';
 import { Button, Box, Drawer, useMediaQuery, Paper, Theme } from '@mui/material';
 

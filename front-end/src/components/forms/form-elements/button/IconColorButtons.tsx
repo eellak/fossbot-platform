@@ -1,5 +1,4 @@
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
+ 
 import React from 'react';
 import { IconButton, Tooltip, Stack } from '@mui/material';
 import { IconBell } from '@tabler/icons-react';

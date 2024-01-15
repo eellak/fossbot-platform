@@ -1,5 +1,4 @@
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
+ 
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
@@ -14,8 +13,7 @@ import {
 } from '@mui/material';
 import * as dropdownData from './data';
 
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
+ 
 import { IconMail } from '@tabler/icons-react';
 
 import ProfileImg from 'src/assets/images/profile/user-1.jpg';
@@ -148,7 +146,7 @@ const Profile = () => {
           </Box>
         ))}
         <Box mt={2}>
-          <Box bgcolor="primary.light" p={3} mb={3} overflow="hidden" position="relative">
+          {/* <Box bgcolor="primary.light" p={3} mb={3} overflow="hidden" position="relative">
             <Box display="flex" justifyContent="space-between">
               <Box>
                 <Typography variant="h5" mb={2}>
@@ -161,7 +159,7 @@ const Profile = () => {
               </Box>
               <img src={unlimitedImg} alt="unlimited" className="signup-bg"></img>
             </Box>
-          </Box>
+          </Box> */}
           <Button to="/auth/login" variant="outlined" color="primary" component={Link} fullWidth>
             Logout
           </Button>

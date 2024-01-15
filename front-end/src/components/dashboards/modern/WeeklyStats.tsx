@@ -1,10 +1,8 @@
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
 import React from 'react';
 import Chart from 'react-apexcharts';
 import { useTheme } from '@mui/material/styles';
 import { Stack, Typography, Avatar, Box } from '@mui/material';
-import DashboardCard from '../../shared/DashboardCard';
+import DashboardCard from '../../shared/DashboardCardWithChildren';
 import { IconGridDots } from '@tabler/icons-react';
 import { Props } from 'react-apexcharts';
 

@@ -1,5 +1,3 @@
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
 import React from 'react';
 import { useFormik } from 'formik';
 import * as yup from 'yup';
@@ -23,9 +21,12 @@ const validationSchema = yup.object({
     .string()
     .min(8, 'Password should be of minimum 8 characters length')
     .required('Password is required'),
-  changepassword: yup.string().when('password', {
-    is: (val: string) => (val && val.length > 0 ? true : false),
-    then: yup.string().oneOf([yup.ref('password')], 'Both password need to be the same'),
+  changepassword: yup.string().transform((originalValue, originalObject) => {
+    // Use the transformation function to conditionally apply the validation
+    if (originalObject.password && originalObject.password.length > 0) {
+      return yup.string().oneOf([yup.ref('password')], 'Both passwords need to be the same');
+    }
+    return originalValue;
   }),
 });
 
@@ -42,7 +43,7 @@ const FVRegister = () => {
       alert(JSON.stringify(values, null, 2));
     },
   });
-  
+
   return (
     <form onSubmit={formik.handleSubmit}>
       <Stack>

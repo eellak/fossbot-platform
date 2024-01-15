@@ -1,5 +1,3 @@
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
 import React from 'react';
 import { Stack } from '@mui/material';
 import Autocomplete from '@mui/material/Autocomplete';

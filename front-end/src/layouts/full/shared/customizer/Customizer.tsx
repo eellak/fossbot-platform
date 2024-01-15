@@ -13,8 +13,7 @@ import {
 } from '@mui/material';
 import { useSelector, useDispatch } from 'src/store/Store';
 import Box, { BoxProps } from '@mui/material/Box';
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
+ 
 import { IconX, IconSettings, IconCheck } from '@tabler/icons-react';
 import {
   setTheme,

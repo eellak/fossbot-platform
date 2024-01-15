@@ -1,5 +1,3 @@
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
 import React from 'react';
 import { Autocomplete } from '@mui/material';
 import CustomTextField from '../../theme-elements/CustomTextField';
@@ -12,7 +10,7 @@ const CheckboxesAutocomplete = () => (
     id="checkboxes-tags-demo"
     options={top100Films}
     disableCloseOnSelect
-    getOptionLabel={(option) => option.title}
+    getOptionLabel={(option) => (typeof option === 'string' ? '' : option.title)}
     renderOption={(props, option, { selected }) => (
       <li {...props}>
         <CustomCheckbox style={{ marginRight: 8 }} checked={selected} />

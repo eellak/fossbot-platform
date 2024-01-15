@@ -2,8 +2,7 @@ import { IconButton, Box, AppBar, useMediaQuery, Toolbar, styled, Stack } from '
 
 import { useSelector, useDispatch } from 'src/store/Store';
 import { toggleSidebar, toggleMobileSidebar } from 'src/store/customizer/CustomizerSlice';
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
+ 
 import { IconMenu2 } from '@tabler/icons-react';
 import Notifications from './Notification';
 import Profile from './Profile';
@@ -13,6 +12,25 @@ import Language from './Language';
 import { AppState } from 'src/store/Store';
 import Navigation from './Navigation';
 import MobileRightSidebar from './MobileRightSidebar';
+import ToggleTheme from './ToggleTheme';
+// import WbSunnyTwoToneIcon from '@mui/icons-material/WbSunnyTwoTone';
+// import DarkModeTwoToneIcon from '@mui/icons-material/DarkModeTwoTone';
+// import { BoxProps } from '@mui/material/Box';
+// import { setDarkMode} from 'src/store/customizer/CustomizerSlice';
+// import { ToggleButton, ToggleButtonGroup } from '@mui/material';
+
+// const StyledBox = styled(Box)<BoxProps>(({ theme }) => ({
+//   boxShadow: theme.shadows[8],
+//   padding: '20px',
+//   cursor: 'pointer',
+//   justifyContent: 'center',
+//   display: 'flex',
+//   transition: '0.1s ease-in',
+//   border: '1px solid rgba(145, 158, 171, 0.12)',
+//   '&:hover': {
+//     transform: 'scale(1.05)',
+//   },
+// }));
 
 const Header = () => {
   const lgUp = useMediaQuery((theme: any) => theme.breakpoints.up('lg'));
@@ -54,14 +72,14 @@ const Header = () => {
         {/* Search Dropdown */}
         {/* ------------------------------------------- */}
         <Search />
-        {lgUp ? (
+        {/* {lgUp ? (
           <>
             <Navigation />
           </>
-        ) : null}
-
+        ) : null} */}
         <Box flexGrow={1} />
-        <Stack spacing={1} direction="row" alignItems="center">
+        <Stack spacing={2} direction="row" alignItems="center">
+          <ToggleTheme />
           <Language />
           {/* ------------------------------------------- */}
           {/* Ecommerce Dropdown */}
@@ -70,7 +88,7 @@ const Header = () => {
           {/* ------------------------------------------- */}
           {/* End Ecommerce Dropdown */}
           {/* ------------------------------------------- */}
-          <Notifications />
+          {/* <Notifications /> */}
           {/* ------------------------------------------- */}
           {/* Toggle Right Sidebar for mobile */}
           {/* ------------------------------------------- */}
@@ -81,5 +99,6 @@ const Header = () => {
     </AppBarStyled>
   );
 };
+
 
 export default Header;

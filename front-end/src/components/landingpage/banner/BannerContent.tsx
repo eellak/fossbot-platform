@@ -1,5 +1,4 @@
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
+ 
 import React from 'react';
 import { Typography, Box, Button, Stack, styled, useMediaQuery, Theme } from '@mui/material';
 import { IconRocket } from '@tabler/icons-react';
@@ -85,7 +84,7 @@ const BannerContent = () => {
         }}
       >
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} mt={3}>
-          <StyledButton variant="contained" color="primary" href="/home-page">
+          <StyledButton variant="contained" color="primary" href="/dashboard">
             Try it now
           </StyledButton>
 

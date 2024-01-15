@@ -13,11 +13,9 @@ import {
 } from '@mui/material';
 import * as dropdownData from './data';
 
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
+ 
 import { IconChecks, IconClock, IconMessageDots } from '@tabler/icons-react';
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
+ 
 import React from 'react';
 
 const Message = () => {

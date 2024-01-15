@@ -12,8 +12,7 @@ import {
   TextField,
   ListItemButton,
 } from '@mui/material';
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
+ 
 import { IconSearch, IconX } from '@tabler/icons-react';
 import Menuitems from '../sidebar/MenuItems';
 import { Link } from 'react-router-dom';

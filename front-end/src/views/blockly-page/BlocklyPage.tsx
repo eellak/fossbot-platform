@@ -1,5 +1,4 @@
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
+ 
 // import React, { lazy, useState } from 'react';
 import React, { useEffect, useState }  from 'react';
 import { useLocation } from 'react-router-dom';

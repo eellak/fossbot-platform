@@ -73,7 +73,7 @@ const FullFillLayout: FC = () => {
           {/* End Page */}
           {/* ------------------------------------------- */}
         </Container>
-        <Customizer />
+        {/* <Customizer /> */}
       </PageWrapper>
     </MainWrapper>
   );

@@ -1,5 +1,4 @@
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
+ 
 import React from 'react';
 import { Grid, Typography, Box, Button, styled, Container, Stack } from '@mui/material';
 import fossbotImg from 'src/assets/images/landingpage/background/fossbot.png';
