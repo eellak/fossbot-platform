@@ -121,7 +121,7 @@ const Navigations = () => {
             <StyledButton color="inherit" variant="text" href="/about-page">
                 About us
             </StyledButton>
-            <Button color="primary"  variant="contained" href="/home-page">
+            <Button color="primary"  variant="contained" href="/dashboard">
                 Try Now
             </Button>
         </>

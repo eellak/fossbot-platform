@@ -2,11 +2,14 @@
 import React from 'react';
 import { Grid, Box, Container, useMediaQuery, styled, Stack, Theme } from '@mui/material';
 import BannerContent from './BannerContent';
-import bannerbgImg1 from 'src/assets/images/landingpage/fossbot1.jpg';
-import bannerbgImg2 from 'src/assets/images/landingpage/fossbot2.jpg';
-import bannerbgImg3 from 'src/assets/images/landingpage/fossbot3.jpg';
-import bannerbgImg4 from 'src/assets/images/landingpage/fossbot4.jpg';
-import bannerbgImg5 from 'src/assets/images/landingpage/fossbot5.jpg';
+import bot from 'src/assets/images/fossbot/logos-main/bot.png';
+import botR from 'src/assets/images/fossbot/logos-main/botR.png';
+import gfoss from 'src/assets/images/fossbot/logos-main/gfoss.png';
+import hua from 'src/assets/images/fossbot/logos-main/hua.png';
+// import bannerbgImg2 from 'src/assets/images/landingpage/fossbot2.jpg';
+// import bannerbgImg3 from 'src/assets/images/landingpage/fossbot3.jpg';
+// import bannerbgImg4 from 'src/assets/images/landingpage/fossbot4.jpg';
+// import bannerbgImg5 from 'src/assets/images/landingpage/fossbot5.jpg';
 
 const Banner = () => {
   const lgUp = useMediaQuery((theme: Theme) => theme.breakpoints.up('lg'));
@@ -49,6 +52,19 @@ const Banner = () => {
   //   },
   // }));
 
+  const images = [
+    { src: hua, alt: 'banner' },
+    { src: bot, alt: 'banner' },
+    { src: gfoss, alt: 'banner' },
+    // Add more objects as needed
+  ];
+
+  let repeatedData = [];
+  for (let i = 0; i < 10; i++) {
+    repeatedData = repeatedData.concat(images);
+  }
+ 
+
   return (
     <Box mb={10} sx={{ overflow: 'hidden' }}>
       <Container maxWidth="lg">
@@ -69,25 +85,16 @@ const Banner = () => {
               >
                 <Stack direction={'row'}>
                   <Grid container spacing={2}>
-                    <Grid item xs={6}>
-                      <SliderBox>
-                        <img src={bannerbgImg1} alt="banner" />
+                  {repeatedData.map((repeatedData, index) => (
+                  <Grid item xs={3}>
+                      <SliderBox width={"100px"}>
+                        <img src={repeatedData.src} alt={repeatedData.alt} />
                       </SliderBox>
-                      <SliderBox>
-                        <img src={bannerbgImg2} alt="banner" />
-                      </SliderBox>
+                      
                     </Grid>
-                    <Grid item xs={6}>
-                      <SliderBox>
-                        <img src={bannerbgImg3} alt="banner" />
-                      </SliderBox>
-                      {/* <SliderBox>
-                        <img src={bannerbgImg4} alt="banner" />
-                      </SliderBox> */}
-                      <SliderBox>
-                        <img src={bannerbgImg5} alt="banner" />
-                      </SliderBox>
-                    </Grid>
+                  ))}
+
+
                   </Grid>
                 </Stack>
               </Box>

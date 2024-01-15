@@ -12,7 +12,7 @@ const BlankLayout = Loadable(lazy(() => import('../layouts/blank/BlankLayout')))
 
 /* ****Pages***** */
 const SamplePage = Loadable(lazy(() => import('../views/sample-page/SamplePage')));
-const HomePage = Loadable(lazy(() => import('../views/home-page/HomePage')));
+const Dashboard = Loadable(lazy(() => import('../views/dashboard/Dashboard')));
 const LandingPage = Loadable(lazy(() => import('../views/landing-page/LandingPage')));
 //const BlocklyPage = Loadable(lazy(() => import('../views/blockly-page/BlocklyPage')));
 //const BlocklyPage =  '../views/blockly-page/BlocklyPage';
@@ -33,10 +33,10 @@ const Router = [
     ],
   },
   {
-    path: '/home-page',
+    path: '/dashboard',
     element: <BoxedLayout />,
     children: [
-      { path: '/home-page', exact: true, element: <HomePage /> },
+      { path: '/dashboard', exact: true, element: <Dashboard /> },
     ],
   },
   {

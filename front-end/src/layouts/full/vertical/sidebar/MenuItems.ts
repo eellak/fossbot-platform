@@ -33,7 +33,8 @@ import {
   IconSchool,
   IconBrandGoogle,
   IconBrandOpenSource,
-  IconMoodHappy
+  IconMoodHappy,
+  IconLayoutDashboard
 } from '@tabler/icons-react';
 //https://tabler-icons-react.vercel.app/
 //search above for icons names
@@ -50,6 +51,14 @@ const Menuitems: MenuitemsType[] = [
     title: 'FOSSBot Home',
     icon: IconHome,
     href: '/',
+    // chip: 'New',
+    chipColor: 'secondary',
+  },
+  {
+    id: uniqueId(),
+    title: 'Dashboard',
+    icon: IconLayoutDashboard,
+    href: '/home-page',
     // chip: 'New',
     chipColor: 'secondary',
   },
@@ -176,38 +185,38 @@ const Menuitems: MenuitemsType[] = [
   //   variant: 'outlined',
   //   chipColor: 'primary',
   // },
-  {
-    navlabel: true,
-    subheader: 'About us',
-  },
-  {
-    id: uniqueId(),
-    title: 'Our Team',
-    icon: IconArrowMerge,
-    href: '/team-page',
-    disabled: false,
-  },
-  {
-    id: uniqueId(),
-    title: 'Google Summer of Code',
-    icon: IconBrandGoogle,
-    href: '/gsoc-page',
-    disabled: false,
-  },
-  {
-    id: uniqueId(),
-    title: 'Harokopio University',
-    icon: IconSchool,
-    href: '/hua-page',
-    disabled: false,
-  },
-  {
-    id: uniqueId(),
-    title: 'GFOSS',
-    icon: IconBrandOpenSource,
-    href: '/gfoss-page',
-    disabled: false,
-  },
+  // {
+  //   navlabel: true,
+  //   subheader: 'About us',
+  // },
+  // {
+  //   id: uniqueId(),
+  //   title: 'Our Team',
+  //   icon: IconArrowMerge,
+  //   href: '/team-page',
+  //   disabled: false,
+  // },
+  // {
+  //   id: uniqueId(),
+  //   title: 'Google Summer of Code',
+  //   icon: IconBrandGoogle,
+  //   href: '/gsoc-page',
+  //   disabled: false,
+  // },
+  // {
+  //   id: uniqueId(),
+  //   title: 'Harokopio University',
+  //   icon: IconSchool,
+  //   href: '/hua-page',
+  //   disabled: false,
+  // },
+  // {
+  //   id: uniqueId(),
+  //   title: 'GFOSS',
+  //   icon: IconBrandOpenSource,
+  //   href: '/gfoss-page',
+  //   disabled: false,
+  // },
 
 
 

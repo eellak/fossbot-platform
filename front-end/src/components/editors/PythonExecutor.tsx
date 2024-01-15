@@ -25,15 +25,15 @@ const PythonExecutor: React.FC<PythonExecutorProps> = ({ pythonScript, onRunScri
     }
   };
 
-  useEffect(() => {
-    //Set up socket connection and pyodide
-    pyodideWorker.postMessage('SETUP');
+  // useEffect(() => {
+  //   //Set up socket connection and pyodide
+  //   pyodideWorker.postMessage('SETUP');
 
-    return () => {
-      // Cleanup socket.io connection
-      pyodideWorker.postMessage('CLOSE');
-    };
-  }, []);
+  //   return () => {
+  //     // Cleanup socket.io connection
+  //     pyodideWorker.postMessage('CLOSE');
+  //   };
+  // }, []);
 
   const runPythonScript = useCallback(async () => {
     if (pythonScript == '') {

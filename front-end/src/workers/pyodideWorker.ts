@@ -1,19 +1,19 @@
 let socket: any;
 let pyodide: any;
 
-function setSocket(value: any) {
-  socket = value;
-}
+// function setSocket(value: any) {
+//   socket = value;
+// }
 
-function setPyodide(value: any) {
-  pyodide = value;
-}
+// function setPyodide(value: any) {
+//   pyodide = value;
+// }
 
 onmessage = async function (event: MessageEvent<string>) {
   console.log('Received message from the main thread:', event.data);
 
   if (event.data == 'SETUP') {
-    await setUpSocket();
+    socket = await setUpSocket();
     if (socket) pyodide = await setUpPyodide(socket);
 
     console.log('SET UP READY');
@@ -33,7 +33,7 @@ const setUpSocket = async () => {
 
   newSocket.on('connect', () => {
     console.log('Socket.io connected');
-    setSocket(newSocket);
+    //setSocket(newSocket);
   });
 
   newSocket.on('connect_error', (error) => {
@@ -47,8 +47,11 @@ const setUpSocket = async () => {
   newSocket.on('disconnect', () => {
     console.log('Socket.io disconnected');
   });
-  setSocket(newSocket);
+  //setSocket(newSocket);
+  return newSocket;
 };
+
+
 
 const setUpPyodide = async (socket: any) => {
   //Inintialize Pyodide
@@ -60,16 +63,17 @@ const setUpPyodide = async (socket: any) => {
   loadedPyodide.setStdout({ batched: (msg: string) => postMessage('CMD:' + msg) });
 
   loadedPyodide.setStderr({ batched: (msg: string) => postMessage('CMD:' + msg) });
-
-  const Fossbot = await import('../components/editors/RobotJS');
-  const robot = new Fossbot.default(socket, 'fossbot', '1');
+  
+  const RobotJS = await import ('../components/editors/RobotJS');
+  const robot = new RobotJS.Fossbot(socket, 'fossbot', '1');
+  
 
   try {
     // Use micropip to install Python packages
     // await loadedPyodide.loadPackage('https://files.pythonhosted.org/packages/f8/bf/4790ed063ca2daa58fb20285fc3707218cf01e174209355d081d83094f6d/python_socketio-5.10.0-py3-none-any.whl');
 
     // Expose JS methods to Python
-    loadedPyodide.globals.set('robot', robot);
+    loadedPyodide.globals.set('robot', robot);    
 
     //Custom Modules
     const moduleResponse = await fetch('/fossbotlib/testlib.py'); // Relative path from the public folder
@@ -93,11 +97,12 @@ const closeSocket = () => {
 
 const runPythonCode = async (pythonScript: string) => {
   console.log('runPythonCode..');
-
-  if (!pyodide) {
-    console.log('Pyodide not already loaded ..');
-    pyodide = await setUpPyodide(socket);
-  }
+  const socket = await setUpSocket();
+  if (socket) pyodide = await setUpPyodide(socket);
+  // if (!pyodide) {
+  //   console.log('Pyodide not already loaded ..');
+  //   pyodide = await setUpPyodide(socket);
+  // }
 
   console.log('Pyodide okay ..  pyodide:', pyodide);
 
@@ -109,7 +114,7 @@ const runPythonCode = async (pythonScript: string) => {
     // Adds await to some function
     //const finalScript = fix_awaits(pythonScript);
     const finalScript = JSON.parse(pythonScript);
-    console.log('finalScript :', finalScript);
+    //console.log('finalScript :', finalScript);
 
     try {
       await pyodide.runPythonAsync(finalScript);
@@ -133,6 +138,9 @@ const runPythonCode = async (pythonScript: string) => {
         console.error('Unexpected error:', e);
       }
     }
+    // }finally{
+    //   socket.disconnect();
+    // }
   }
 };
 

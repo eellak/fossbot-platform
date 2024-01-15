@@ -1,15 +1,14 @@
 import { Socket } from 'socket.io-client';
 
-export default class Fossbot {     
-    private socket: Socket;
-    private fossbot_name: string;
-    private user_id: string;
+export class Fossbot {     
+    public socket: Socket;
+    public fossbot_name: string;
+    public user_id: string;
 
     constructor(socket: Socket, fossbot_name: string, user_id: string) {
         this.socket = socket;
         this.fossbot_name = fossbot_name;
-        this.user_id = user_id;
-
+        this.user_id = user_id;        
     }
 
     just_move = async () => {
@@ -24,7 +23,7 @@ export default class Fossbot {
 
         let serializedDict = JSON.stringify(param);
         this.socket.emit('clientMessage', serializedDict);
-
+        
     }
 
     move_distance = async (dist: DoubleRange) => {

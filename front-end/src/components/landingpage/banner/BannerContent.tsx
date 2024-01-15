@@ -84,7 +84,7 @@ const BannerContent = () => {
         }}
       >
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} mt={3}>
-          <StyledButton variant="contained" color="primary" href="/home-page">
+          <StyledButton variant="contained" color="primary" href="/dashboard">
             Try it now
           </StyledButton>
 
