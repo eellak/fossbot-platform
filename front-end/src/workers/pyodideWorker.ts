@@ -1,28 +1,25 @@
 let socket: any;
 let pyodide: any;
 
-// function setSocket(value: any) {
-//   socket = value;
-// }
-
-// function setPyodide(value: any) {
-//   pyodide = value;
-// }
+let input_data: string | null = null;
 
 onmessage = async function (event: MessageEvent<string>) {
-  console.log('Received message from the main thread:', event.data);
+  const data = JSON.parse(event.data);
 
-  if (event.data == 'SETUP') {
-    socket = await setUpSocket();
-    if (socket) pyodide = await setUpPyodide(socket);
-
-    console.log('SET UP READY');
-  } else if (event.data == 'CLOSE') {
+  if (data.command == 'CLOSE') {
     closeSocket();
     console.log('SOCKET WAS JUST CLOSED');
+
+  } else if (data.command === 'INPUT_RESPONSE') {
+
+    console.log("input " + data);
+    input_data = data.inputdata;
+
+  } else if (data.command === 'RUN_SCRIPT') {
+    console.log('Lets run command ' + data);
+    const res = await runPythonCode(data);
   } else {
-    console.log('Lets run command ' + event.data);
-    const res = await runPythonCode(event.data);
+    console.log('Message: ' + event.data);
   }
 };
 
@@ -44,6 +41,17 @@ const setUpSocket = async () => {
     console.log('Received message:', message);
     // Handle incoming messages
   });
+
+  // newSocket.on('clientMessage', (message) => {
+  //   console.log('clientMessage message:', message);
+  //   // Handle incoming messages
+  // });
+
+  newSocket.on('frontMessage', (message) => {
+    console.log('Godot message:', message);
+    // Handle incoming messages
+  });
+
   newSocket.on('disconnect', () => {
     console.log('Socket.io disconnected');
   });
@@ -51,21 +59,22 @@ const setUpSocket = async () => {
   return newSocket;
 };
 
-
-
-const setUpPyodide = async (socket: any) => {
+const setUpPyodide = async (socket: any,sessionId:string) => {
   //Inintialize Pyodide
   const pyodideModule = await import('pyodide');
   const loadedPyodide = await pyodideModule.loadPyodide({
     indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.23.4/full/',
   });
 
+ 
+  
   loadedPyodide.setStdout({ batched: (msg: string) => postMessage('CMD:' + msg) });
 
   loadedPyodide.setStderr({ batched: (msg: string) => postMessage('CMD:' + msg) });
+  //loadedPyodide.setStdin( { stdin: () => requestInputFromMainThread()});
   
   const RobotJS = await import ('../components/editors/RobotJS');
-  const robot = new RobotJS.Fossbot(socket, 'fossbot', '1');
+  const robot = new RobotJS.Fossbot(socket, 'fossbot', '1',sessionId);
   
 
   try {
@@ -95,10 +104,13 @@ const closeSocket = () => {
   }
 };
 
-const runPythonCode = async (pythonScript: string) => {
+const runPythonCode = async (data) => {
+  const pythonScript = data.script;
+  const sessionId  = data.sessionId;
+
   console.log('runPythonCode..');
   const socket = await setUpSocket();
-  if (socket) pyodide = await setUpPyodide(socket);
+  if (socket) pyodide = await setUpPyodide(socket,sessionId);
   // if (!pyodide) {
   //   console.log('Pyodide not already loaded ..');
   //   pyodide = await setUpPyodide(socket);
@@ -113,7 +125,8 @@ const runPythonCode = async (pythonScript: string) => {
 
     // Adds await to some function
     //const finalScript = fix_awaits(pythonScript);
-    const finalScript = JSON.parse(pythonScript);
+
+    const finalScript = pythonScript;
     //console.log('finalScript :', finalScript);
 
     try {

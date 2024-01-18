@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  backend:
+    image: fsbt-back
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./back-end/test.db:/usr/src/app/test.db
+      
+  simulator:
+    image: fsbt-sim
+    ports:
+      - "5000:5000"
+
+    
+    
+
+#   db:
+#     image: postgres:13
+#     volumes:
+#       - postgres_data:/var/lib/postgresql/data
+#     environment:
+#       POSTGRES_USER: user
+#       POSTGRES_PASSWORD: password
+#       POSTGRES_DB: fastapi
+
+# volumes:
+#   postgres_data:

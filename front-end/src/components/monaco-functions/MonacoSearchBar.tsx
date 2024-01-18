@@ -72,7 +72,7 @@ const SearchBar = () => {
     navigator.clipboard.writeText(command);
     setCopiedCommand(command);
     setCopySuccess(true);
-
+    
     // Reset copySuccess after a certain duration
     setTimeout(() => {
       setCopySuccess(false);
@@ -81,11 +81,11 @@ const SearchBar = () => {
 
   return (
     <PageContainer>
-      <Fab color="warning" aria-label="search">
+      <Fab color="warning" aria-label="search" onClick={() => setShowDrawer(true)}>
         <FontAwesomeIcon
           icon={faCogs}
           size="1x"
-          onClick={() => setShowDrawer(true)}
+          
         />
       </Fab>
       <Dialog

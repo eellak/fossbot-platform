@@ -1,191 +1,240 @@
-import schemas
-import models
-import jwt
-import os
-from datetime import datetime 
-from models import User,TokenTable, Project
-from database import Base, engine, SessionLocal
-from sqlalchemy import ForeignKey
-from sqlalchemy.orm import Session
-from fastapi import FastAPI, Depends, HTTPException,status
-from fastapi.security import OAuth2PasswordBearer
-from fastapi.responses import FileResponse
-from auth_bearer import JWTBearer
-from functools import wraps
-from utils import create_access_token,create_refresh_token,verify_password,get_hashed_password, get_current_user
-from dotenv import load_dotenv
-from schemas import ProjectCreate, ProjectUpdate
+from fastapi import FastAPI, Depends, HTTPException, status,Form
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from sqlalchemy import create_engine, Column, Integer, String,ForeignKey,DateTime
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker,relationship
+import datetime
 
-# Load environment variables from .env file
-load_dotenv()
+from jose import JWTError, jwt
 
-ACCESS_TOKEN_EXPIRE_MINUTES = 30  # 30 minutes
-REFRESH_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7 # 7 days
+import uvicorn
+from passlib.context import CryptContext
+from fastapi import Body
+from fastapi.middleware.cors import CORSMiddleware
+import logging
+from pydantic import BaseModel
+from typing import Optional
+
+logger = logging.getLogger("uvicorn")
+# Constants for JWT
+SECRET_KEY = "your-secret-key"
 ALGORITHM = "HS256"
-JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY")
-JWT_REFRESH_SECRET_KEY = os.getenv("JWT_REFRESH_SECRET_KEY")
 
+# Database setup
+DATABASE_URL = "sqlite:///./test.db"
+engine = create_engine(DATABASE_URL)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+Base = declarative_base()
+
+
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+class RegisterRequest(BaseModel):
+    username: str
+    password: str
+    firstname: str
+    lastname: str
+    email: str
+
+class ProjectsCreate(BaseModel):
+    name: str
+    description: str
+    project_type: str    
+    code: str
+
+
+# User model
+class User(Base):
+    __tablename__ = "users"
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String, unique=True, index=True, nullable=False)
+    firstname = Column(String, nullable=False)
+    lastname = Column(String, nullable=False)
+    email = Column(String, unique=True, nullable=False)
+    hashed_password = Column(String , nullable=False)
+
+class Projects(Base):
+    __tablename__ = "projects"
+    id = Column(Integer, primary_key=True, index=True)
+    name =  Column(String, nullable=False)
+    description = Column(String)
+    project_type = Column(String, default="python")
+    date_created = Column(DateTime, default=datetime.datetime.utcnow)
+    code = Column(String)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    user = relationship("User")
+
+
+Base.metadata.create_all(bind=engine)
+
+# FastAPI app
 app = FastAPI()
 
-Base.metadata.create_all(engine)
+# Configure CORS
+origins = [
+    "http://localhost:3000",  # Add other origins as needed
+]
 
-def get_session():
-    session = SessionLocal()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Security
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+
+
+def get_db():
+    db = SessionLocal()
     try:
-        yield session
+        yield db
     finally:
-        session.close()
+        db.close()
 
-@app.post('/login' ,response_model=schemas.TokenSchema)
-def login(request: schemas.requestdetails, db: Session = Depends(get_session)):
-    user = db.query(User).filter(User.email == request.email).first()
-    if user is None:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Incorrect email")
-    hashed_pass = user.password
-    if not verify_password(request.password, hashed_pass):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Incorrect password"
-        )
-    
-    access=create_access_token(user.id)
-    refresh = create_refresh_token(user.id)
+def verify_password(plain_password, hashed_password):
+    return pwd_context.verify(plain_password, hashed_password)
 
-    token_db = models.TokenTable(user_id=user.id,  access_toke=access,  refresh_toke=refresh, status=True)
-    db.add(token_db)
-    db.commit()
-    db.refresh(token_db)
-    return {
-        "access_token": access,
-        "refresh_token": refresh,
-    }
+def get_password_hash(password):
+    return pwd_context.hash(password)
 
-@app.post("/register")
-def register_user(user: schemas.UserCreate, session: Session = Depends(get_session)):
-    existing_user = session.query(models.User).filter_by(email=user.email).first()
-    if existing_user:
-        raise HTTPException(status_code=400, detail="Email already registered")
+def get_user(db, username: str):
+    return db.query(User).filter(User.username == username).first()
 
-    encrypted_password =get_hashed_password(user.password)
-
-    new_user = models.User(username=user.username, email=user.email, password=encrypted_password )
-
-    session.add(new_user)
-    session.commit()
-    session.refresh(new_user)
-
-    return {"message":"user created successfully"}
-
-@app.get('/getusers')
-def getusers( dependencies=Depends(JWTBearer()),session: Session = Depends(get_session)):
-    user = session.query(models.User).all()
+def authenticate_user(db, username: str, password: str):
+    user = get_user(db, username)
+    if not user or not verify_password(password, user.hashed_password):
+        return False
     return user
 
-@app.post('/change-password')
-def change_password(request: schemas.changepassword, db: Session = Depends(get_session)):
-    user = db.query(models.User).filter(models.User.email == request.email).first()
-    if user is None:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User not found")
-    
-    if not verify_password(request.old_password, user.password):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid old password")
-    
-    encrypted_password = get_hashed_password(request.new_password)
-    user.password = encrypted_password
-    db.commit()
-    
-    return {"message": "Password changed successfully"}
+def create_access_token(data: dict):
+    encoded_jwt = jwt.encode(data, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
 
-@app.post('/logout')
-def logout(dependencies=Depends(JWTBearer()), db: Session = Depends(get_session)):
-    token=dependencies
-    payload = jwt.decode(token, JWT_SECRET_KEY, ALGORITHM)
-    user_id = payload['sub']
-    token_record = db.query(models.TokenTable).all()
-    info=[]
-    for record in token_record :
-        print("record",record)
-        if (datetime.utcnow() - record.created_date).days >1:
-            info.append(record.user_id)
-    if info:
-        existing_token = db.query(models.TokenTable).where(TokenTable.user_id.in_(info)).delete()
-        db.commit()
-        
-    existing_token = db.query(models.TokenTable).filter(models.TokenTable.user_id == user_id, models.TokenTable.access_toke==token).first()
-    if existing_token:
-        existing_token.status=False
-        db.add(existing_token)
-        db.commit()
-        db.refresh(existing_token)
-    return {"message":"Logout Successfully"} 
-
-def token_required(func):
-    @wraps(func)
-    def wrapper(dependencies=Depends(JWTBearer()), session: Session = Depends(get_session)):
-        payload = jwt.decode(dependencies, JWT_SECRET_KEY, ALGORITHM)
-        user_id = payload['sub']
-        data = session.query(models.TokenTable).filter_by(user_id=user_id, access_toke=dependencies, status=True).first()
-        if data:
-            return func(dependencies, session)
-        else:
-            return {'msg': "Token blocked"}
-    return wrapper
-
-@app.post("/projects")
-def create_project(
-    project: schemas.ProjectCreate,
-    current_user: models.User = Depends(get_current_user),
-    session: Session = Depends(get_session),
-):
-    existing_project = session.query(Project).filter_by(name=project.name).first()
-    if existing_project:
-        raise HTTPException(status_code=400, detail="Project already exists")
-
-    new_project = models.Project(
-        name=project.name, description=project.description, editor=project.editor, user_id=current_user.id
+async def get_current_user(token: str = Depends(oauth2_scheme), db: SessionLocal = Depends(get_db)):
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
     )
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username: str = payload.get("sub")
+        if username is None:
+            raise credentials_exception
+    except JWTError:
+        raise credentials_exception
+    user = get_user(db, username=username)
+    if user is None:
+        raise credentials_exception
+    return user
 
-    session.add(new_project)
-    session.commit()
-    session.refresh(new_project)
+@app.post("/token")
+async def login_for_access_token( login_request: LoginRequest,  db: SessionLocal = Depends(get_db)):
+    
+    logger.info(f"Request body: {login_request}")
+    user = authenticate_user(db, login_request.username, login_request.password)
+    
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    access_token = create_access_token(data={"sub": user.username})
+    return {"user":user.username, "access_token": access_token, "token_type": "bearer"}
 
-    return {"message": "Project created successfully"}
+@app.get("/users/me")
+async def read_users_me(token: str = Depends(oauth2_scheme), db: SessionLocal = Depends(get_db)):
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username: str = payload.get("sub")
+        if username is None:
+            raise credentials_exception
+    except jwt.PyJWTError:
+        raise credentials_exception
+    user = get_user(db, username=username)
+    if user is None:
+        raise credentials_exception
+    return user
 
-@app.put("/projects/{project_id}")
-def update_project(project_id: int, project: ProjectUpdate, session: Session = Depends(get_session)):
-    existing_project = session.query(models.Project).filter_by(id=project_id).first()
-    if not existing_project:
+@app.post("/register")
+async def register_user(register_request: RegisterRequest, db: SessionLocal = Depends(get_db)):
+    # Check if the user already exists
+    print(register_request)
+    db_user = get_user(db, register_request.username)
+    if db_user:
+        raise HTTPException(status_code=400, detail="Username already registered")
+
+    # Create new user instance
+    hashed_password = get_password_hash(register_request.password)
+    new_user = User(username=register_request.username,
+                     hashed_password=hashed_password,
+                     firstname=register_request.firstname,
+                     lastname=register_request.lastname,
+                     email=register_request.email)
+
+    # Add new user to the database
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+    return {"username": new_user.username,"email":new_user.email, "id": new_user.id}
+
+@app.get("/projects/")
+async def read_own_projects(current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):
+    return db.query(Projects).filter(Projects.user_id == current_user.id).all()
+
+@app.post("/projects/")
+async def create_project(project: ProjectsCreate, current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):
+    db_project = Projects(name=project.name, description=project.description,project_type=project.project_type,code=project.code, user_id=current_user.id)
+    db.add(db_project)
+    db.commit()
+    db.refresh(db_project)
+    return db_project
+
+@app.get("/projects/{project_id}")
+async def read_project(project_id: int, current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):
+    project = db.query(Projects).filter(Projects.id == project_id, Projects.user_id == current_user.id).first()
+    if project is None:
         raise HTTPException(status_code=404, detail="Project not found")
-
-    for key, value in project.dict(exclude_unset=True).items():
-        setattr(existing_project, key, value)
-
-    session.add(existing_project)
-    session.commit()
-    session.refresh(existing_project)
-
-    return {"message": "Project updated successfully"}
+    return project
 
 @app.delete("/projects/{project_id}")
-def delete_project(project_id: int, session: Session = Depends(get_session)):
-    existing_project = session.query(models.Project).filter_by(id=project_id).first()
-    if not existing_project:
+async def delete_project(project_id: int, current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):
+    db_project = db.query(Projects).filter(Projects.id == project_id, Projects.user_id == current_user.id).first()
+    if db_project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    db.delete(db_project)
+    db.commit()
+    return {"detail": "Project deleted"}
+
+@app.put("/projects/{project_id}")
+async def update_project(project_id: int, project_update: ProjectsCreate, current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):
+    db_project = db.query(Projects).filter(Projects.id == project_id, Projects.user_id == current_user.id).first()
+    if db_project is None:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    session.delete(existing_project)
-    session.commit()
+    db_project.name = project_update.name
+    db_project.description = project_update.description    
+    db_project.code = project_update.code
 
-    return {"message": "Project deleted successfully"}
+    db.commit()
+    db.refresh(db_project)
+    return db_project
 
-@app.get("/projects/{project_id}/download")
-def download_project_code(project_id: int, session: Session = Depends(get_session)):
-    project = session.query(models.Project).filter_by(id=project_id).first()
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
 
-    return FileResponse(project.code_path, filename=f"{project.name}_code.zip")
-
-@app.get("/projects/all")
-def get_all_projects(session: Session = Depends(get_session)):
-    projects = session.query(Project).all()
-    return projects
+# Run the application
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=8000, log_level="debug")

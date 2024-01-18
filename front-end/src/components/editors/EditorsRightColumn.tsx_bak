@@ -42,7 +42,7 @@ const RightColumn = ({ getValue }: RightColumnProps) => {
       </DashboardCard>
       <Box mt={2}>
         <DashboardCard title="Web Simulator">
-          <WebGLApp />
+          <WebGLApp sessionId={sessionId}/>
         </DashboardCard>
       </Box>
       <Box mt={2}>

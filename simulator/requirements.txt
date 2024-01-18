@@ -1,0 +1,6 @@
+python-socketio
+gevent-websocket
+flask
+flask-socketio
+gunicorn
+gevent

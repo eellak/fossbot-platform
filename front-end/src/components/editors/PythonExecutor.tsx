@@ -1,11 +1,13 @@
+import { Button } from '@mui/material';
 import React, { useState, useEffect, useCallback } from 'react';
 
 type PythonExecutorProps = {
   pythonScript: string;
   onRunScript: (runScript: () => Promise<void>) => void;
+  sessionId: string; // 
 };
 
-const PythonExecutor: React.FC<PythonExecutorProps> = ({ pythonScript, onRunScript }) => {
+const PythonExecutor: React.FC<PythonExecutorProps> = ({ pythonScript, onRunScript, sessionId }) => {
   const [results, setResults] = useState<string[]>([]);
 
   // Create a new web worker
@@ -40,15 +42,29 @@ const PythonExecutor: React.FC<PythonExecutorProps> = ({ pythonScript, onRunScri
       alert('Please write a command in the Monaco Editor!');
       return;
     }
-    pyodideWorker.postMessage(JSON.stringify(pythonScript));
+    const scriptWithSession = {
+      command: "RUN_SCRIPT",
+      script: pythonScript,
+      sessionId: sessionId,
+    };
+
+    pyodideWorker.postMessage(JSON.stringify(scriptWithSession));
   }, [pythonScript]);
 
   useEffect(() => {
     onRunScript(runPythonScript);
   }, [runPythonScript, onRunScript]);
 
+  // const testinput= useCallback(async () => {
+  //   const packet = { command: 'INPUT_RESPONSE',
+  //                    inputdata:'testinput'};
+  //   pyodideWorker.postMessage(JSON.stringify(packet));
+  // },[]);
+
   return (
+   
     <div>
+       {/* <Button variant="contained" onClick={testinput}>Test</Button> */}
       {results.map((result, index) => (
         <p key={index}>{result}</p>
       ))}

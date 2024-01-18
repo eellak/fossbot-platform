@@ -1,7 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Box } from '@mui/material';
 
-const WebGLApp = () => {
+type WebGLAppProps = {
+  sessionId: string; // Add sessionId to the props
+};
+
+const WebGLApp: React.FC<WebGLAppProps> = ({ sessionId }) => {
   // const [isScriptLoaded, setIsScriptLoaded] = useState(false);
 
   // useEffect(() => {
@@ -22,11 +26,11 @@ const WebGLApp = () => {
   //     // Cleanup logic if necessary
   //   };
   // }, []);
-
+  const SimUrl = "http://localhost:5000/"+sessionId
   return (
     <Box width={'100%'}>
        <iframe
-                src="http://localhost:5000"
+                src={SimUrl}
                 width={"100%"}
                 height={"370px"}
                 frameBorder="0"

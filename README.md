@@ -30,9 +30,27 @@ The FOSSBot Platform is a open-source project combining a DIY educational robot 
 
 ### Usage
 
-Soon...
+Backend servers
+```
+cd back-end
+docker build -t fsbt-back .
+cd ..
+cd simulator
+docker build -t fsbt-sim .
+cd ..
+docker-compose up 
+```
 
+Front-end server
+```
+cd front-end
+npm install
+npm run dev
+```
 
+Test database 
+username : test1
+password : 123456
 
 
 ## Software Development Team

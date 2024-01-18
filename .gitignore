@@ -9,3 +9,6 @@ data/
 /back-end/.env
 /back-end/jwtgenerator.py
 **/*-env/
+**/alembic.ini
+**/alembic/
+**/old*

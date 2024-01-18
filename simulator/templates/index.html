@@ -86,7 +86,7 @@ window.addEventListener('DOMContentLoaded', () => {
 		function initGodotSocket(){
 			godotSocket = io.connect('http://' + ws_ip + ':' + ws_port + sio_namespace);
 			godotSocket.on('connect', function () {
-				godotSocket.emit('browserConnect');
+				godotSocket.emit('browserConnect', JSON.stringify({'session_id': "{{ session_id }}"}));
 			});
 			godotSocket.on('clientMessage', async (message) => {
 				callbackGodot(JSON.stringify(message));

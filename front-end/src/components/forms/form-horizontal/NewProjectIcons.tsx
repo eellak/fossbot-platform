@@ -7,14 +7,52 @@ import { IconFileDescription, IconSourceCode, IconUser, IconFileTypography } fro
 
 import Select from '@mui/material/Select';
 import MenuItem from '@mui/material/MenuItem';
-
+import {useAuth} from 'src/authentication/AuthProvider';
+import { useNavigate } from "react-router-dom";
 const NewProjectIcons = () => {
 
   const [selectedOption, setSelectedOption] = useState("Monaco");
+  const [projectName, setProjectName] = useState("");
+  const [description, setDescription] = useState("");
+  const navigate = useNavigate();
 
-  const handleChange = (event: any) => {
+  const handleProjectNameChange = (event: any) => {
+    setProjectName(event.target.value);
+  }
+  const handleDescriptionChange = (event: any) => {
+    setDescription(event.target.value);
+  }
+  const handleEditorChange = (event: any) => {
     setSelectedOption(event.target.value);
-  };
+  }
+   
+  // const handleChange = (event: any) => {
+  //   setSelectedOption(event.target.value);
+  // };
+
+  const auth = useAuth();
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();   
+    try {
+      // Call the login function
+      if (projectName !== "" && description !== "" && selectedOption !== "") {
+        const projectID = await auth.createProjectAction({'name': projectName,
+                                  'description': description,
+                                  'project_type': selectedOption,
+                                  'code': ''});
+        if (selectedOption === "python"){
+          navigate('/monaco-page/' + projectID);
+        }else{
+          navigate('/blockly-page/' + projectID);
+        }
+      }
+    } catch (error) {
+      // Handle errors (e.g., show an error message to the user)
+      console.error('Login error:', error);
+
+    }
+  }
 
   return (
     <div>
@@ -22,23 +60,7 @@ const NewProjectIcons = () => {
       {/* Basic Layout */}
       {/* ------------------------------------------------------------------------------------------------ */}
       <Grid container spacing={3}>
-        {/* 1 */}
-        <Grid item xs={12} sm={3} display="flex" alignItems="center">
-          <CustomFormLabel sx={{ mt: 0, mb: { xs: '-10px', sm: 0 } }}>
-            Creator Name
-          </CustomFormLabel>
-        </Grid>
-        <Grid item xs={12} sm={9}>
-          <CustomOutlinedInput
-            startAdornment={
-              <InputAdornment position="start">
-                <IconUser size="20" />
-              </InputAdornment>
-            }
-            placeholder="John Deo"
-            fullWidth
-          />
-        </Grid>
+        
         {/* 2 */}
         <Grid item xs={12} sm={3} display="flex" alignItems="center">
           <CustomFormLabel sx={{ mt: 0, mb: { xs: '-10px', sm: 0 } }}>
@@ -54,6 +76,7 @@ const NewProjectIcons = () => {
             }
             placeholder="Give your project a name"
             fullWidth
+            onChange={handleProjectNameChange}
           />
         </Grid>
         {/* 3 */}
@@ -71,6 +94,7 @@ const NewProjectIcons = () => {
             }
             placeholder="Describe your project"
             fullWidth
+            onChange={handleDescriptionChange}
           />
         </Grid>
         {/* 4 */}
@@ -88,15 +112,15 @@ const NewProjectIcons = () => {
             }
             fullWidth
             value={selectedOption}
-            onChange={handleChange}
+            onChange={handleEditorChange}
           >
-            <MenuItem value={"Monaco"}>Monaco</MenuItem>
-            <MenuItem value={"Blockly"}>Blockly</MenuItem>
+            <MenuItem value={"python"}>Monaco</MenuItem>
+            <MenuItem value={"blockly"}>Blockly</MenuItem>
           </Select>
         </Grid>
         <Grid item xs={12} sm={3}></Grid>
         <Grid item xs={12} sm={9}>
-          <Button variant="contained" color="primary">
+          <Button variant="contained" color="primary" onClick={handleSubmit}>
             Submit
           </Button>
         </Grid>

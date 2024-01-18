@@ -23,6 +23,8 @@ const HuaPage = Loadable(lazy(() => import('../views/sub-pages/HuaPage')));
 const Register = Loadable(lazy(() => import('../views/authentication/Register')));
 const Login = Loadable(lazy(() => import('../views/authentication/Login')));
 const Error = Loadable(lazy(() => import('../views/authentication/Error')));
+import AuthProvider from '../authentication/AuthProvider'; // Update with actual path
+import PrivateRoute from './PrivateRoute'; // Update with actual path
 
 const Router = [
   {
@@ -34,10 +36,15 @@ const Router = [
   },
   {
     path: '/dashboard',
+    element: <PrivateRoute />,
+    children: [
+      {path: '',
     element: <BoxedLayout />,
     children: [
-      { path: '/dashboard', exact: true, element: <Dashboard /> },
+      { path: '', exact: true, element: <Dashboard /> },
+    ]},
     ],
+    
   },
   {
     path: '/',
@@ -69,12 +76,14 @@ const Router = [
     element: <FullFillLayout />,
     children: [
       { path: '/blockly-page', exact: true, element: <BlocklyPage/> },
+      { path: '/blockly-page/:projectId', exact: true, element: <BlocklyPage/> },
     ],
   },  
   {
     path: '/monaco-page',
     element: <FullLayout />,
     children: [
+      { path: '/monaco-page/:projectId', exact: true, element: <MonacoPage /> },
       { path: '/monaco-page', exact: true, element: <MonacoPage /> },
     ],
   },

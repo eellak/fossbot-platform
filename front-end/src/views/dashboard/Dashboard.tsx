@@ -8,8 +8,11 @@ import ProjectsCard from 'src/components/dashboards/modern/ProjectsCard';
 import WelcomeHomePage from 'src/layouts/full/shared/welcome/WelcomeHomePage';
 
 const Modern = () => {
+
+
   return (
     <PageContainer title="Modern Dashboard" description="this is Modern Dashboard page">
+
       <Box>
         <Grid container spacing={3}>
           {/* column */}
@@ -22,7 +25,7 @@ const Modern = () => {
           </Grid>
         </Grid>
         {/* column */}
-        <WelcomeHomePage />
+        {/* <WelcomeHomePage /> */}
       </Box>
     </PageContainer>
   );

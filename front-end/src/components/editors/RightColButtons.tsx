@@ -3,13 +3,23 @@ import { Stack, Fab } from '@mui/material';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faSave, faPlay, faStop } from '@fortawesome/free-solid-svg-icons';
 
-type ButtonsProps = {
-    handlePlayClick: () => void;
-};
+// type PlayProp = {
+//     handlePlayClick: () => void;
+    
+// };
 
-const Buttons = ({ handlePlayClick }: ButtonsProps) => (
+// type SaveProp = {
+//     handleSaveClick: () => void;
+// };
+
+interface ButtonsProps {
+    handlePlayClick: () => void;
+    handleSaveClick: () => void;
+}
+
+const Buttons: React.FC<ButtonsProps> = ( { handlePlayClick, handleSaveClick } )  => (
     <Stack direction="row" spacing={3}>
-        <Fab color="primary" aria-label="save">
+        <Fab color="primary" aria-label="save" onClick={handleSaveClick}>
             <FontAwesomeIcon icon={faSave} size="1x" />
         </Fab>
             <Fab color="success" aria-label="play" onClick={handlePlayClick}>

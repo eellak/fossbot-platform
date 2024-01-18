@@ -58,7 +58,7 @@ const Menuitems: MenuitemsType[] = [
     id: uniqueId(),
     title: 'Dashboard',
     icon: IconLayoutDashboard,
-    href: '/home-page',
+    href: '/dashboard',
     // chip: 'New',
     chipColor: 'secondary',
   },
