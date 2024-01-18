@@ -16,17 +16,16 @@ The FOSSBot Platform is a open-source project combining a DIY educational robot 
 * WebGL and WASM
 
 ## Screenshots
-### Blockly IDE
 ![](images/main_page.png)
-
+![](images/dashboard.png)
+![](images/login.png)
+### Blockly IDE
+...
 ### Monaco (native Python) IDE
 
-![](images/monaco.png)
+![](images/monaco_light.png)
+![](images/monaco_dark.png)
 
-
-### Development
-1. Start Websocket Server
-2. Start the fornt-end server
 
 ### Usage
 

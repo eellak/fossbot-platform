@@ -16,9 +16,9 @@ const Modern = () => {
       <Box>
         <Grid container spacing={3}>
           {/* column */}
-          <Grid item xs={12} lg={12}>
+          {/* <Grid item xs={12} lg={12}>
             <TopCards />
-          </Grid>
+          </Grid> */}
           {/* column */}
           <Grid item xs={12} lg={12}>
             <ProjectsCard />
