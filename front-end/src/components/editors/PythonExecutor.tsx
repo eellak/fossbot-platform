@@ -20,23 +20,16 @@ const PythonExecutor: React.FC<PythonExecutorProps> = ({ pythonScript, onRunScri
     if (event.data.includes('CMD:')) {
       let result = event.data.split('CMD:')[1];
       setResults((prevResults) => [...prevResults, result]);
+
+      //After receiving the result, close socket connection
+      pyodideWorker.postMessage(JSON.stringify({ command: 'CLOSE' }));
     }
 
     if (event.data == 'EMPTY_RESULTS') {
       setResults([]);
     }
   };
-
-  // useEffect(() => {
-  //   //Set up socket connection and pyodide
-  //   pyodideWorker.postMessage('SETUP');
-
-  //   return () => {
-  //     // Cleanup socket.io connection
-  //     pyodideWorker.postMessage('CLOSE');
-  //   };
-  // }, []);
-
+  
   const runPythonScript = useCallback(async () => {
     if (pythonScript == '') {
       alert('Please write a command in the Monaco Editor!');
