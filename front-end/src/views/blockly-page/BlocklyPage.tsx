@@ -1,6 +1,5 @@
  
-import React, { useEffect, useState, useRef }  from 'react';
-import { useLocation } from 'react-router-dom';
+import { useEffect, useState, useRef }  from 'react';
 import { Box, Grid, Stack, DialogContent } from '@mui/material';
 import PageContainer from '../../components/container/PageContainer'; //'src/components/container/PageContainer';
 import BlocklyEditorComponent from '../../components/editors/BlocklyEditor';
@@ -9,16 +8,10 @@ import Buttons from 'src/components/editors/RightColButtons';
 import PythonTerminal from 'src/components/editors/PythonTerminal';
 import WebGLApp from 'src/components/websimulator/Simulator';
 import { v4 as uuidv4 } from 'uuid';
-// const BlocklyEditorComponent = Loadable(
-//   lazy(() => import('../../components/editors/BlocklyEditor')),
-// );
 
 const BlocklyPage = () => {
-  const [editorValue, setEditorValue] = useState('');
-
-  // const [getValueFunc, setGetValueFunc] = useState<(() => string) | null>(null);
+  const [editorValue, setEditorValue] =  useState('<xml xmlns="http://www.w3.org/1999/xhtml"></xml>');
   const [sessionId, setSessionId] = useState('');
-  // const [terminalOutput, setTerminalOutput] = useState('');
 
   const runScriptRef = useRef<() => Promise<void>>();
 
@@ -40,9 +33,10 @@ const BlocklyPage = () => {
   }, []);
 
   // Function to be called when the value in the editor changes
-  const handleGetValue = (getValueFunc: () => string) => {
+  const handleGetValue = (getValueFunc) => {
     const value = getValueFunc();
     setEditorValue(value);
+    console.log('new value : ', value)
   };
 
   const handleSaveClick = async () => {
@@ -55,8 +49,9 @@ const BlocklyPage = () => {
         <Grid container spacing={1}>
           {/* column */}
           <Grid item xs={12} lg={7}>
-            <BlocklyEditorComponent />
-            {/* code={editorValue} handleGetValue={handleGetValue} /> */}
+            <BlocklyEditorComponent
+            code={editorValue} 
+            handleGetValue={handleGetValue} />
           </Grid>
           {/* column */}
           <Grid item xs={12} lg={5}>
