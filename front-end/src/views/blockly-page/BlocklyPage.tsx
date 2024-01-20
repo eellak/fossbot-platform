@@ -1,5 +1,4 @@
- 
-import { useEffect, useState, useRef }  from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Box, Grid, Stack, DialogContent } from '@mui/material';
 import PageContainer from '../../components/container/PageContainer'; //'src/components/container/PageContainer';
 import BlocklyEditorComponent from '../../components/editors/BlocklyEditor';
@@ -10,7 +9,10 @@ import WebGLApp from 'src/components/websimulator/Simulator';
 import { v4 as uuidv4 } from 'uuid';
 
 const BlocklyPage = () => {
-  const [editorValue, setEditorValue] =  useState('<xml xmlns="http://www.w3.org/1999/xhtml"></xml>');
+  const [editorValue, setEditorValue] = useState(
+    '<xml xmlns="http://www.w3.org/1999/xhtml"></xml>',
+  );
+  const [editorPythonValue, setEditorPythonValue] = useState('');
   const [sessionId, setSessionId] = useState('');
 
   const runScriptRef = useRef<() => Promise<void>>();
@@ -28,15 +30,21 @@ const BlocklyPage = () => {
   useEffect(() => {
     // Generate a new session ID when the component mounts
     const newSessionId = uuidv4();
-    setSessionId(newSessionId);  // Update the state
+    setSessionId(newSessionId); // Update the state
     console.log('New Session ID:', newSessionId); // Log the new session ID directly
   }, []);
 
   // Function to be called when the value in the editor changes
   const handleGetValue = (getValueFunc) => {
+    //Save xml code
     const value = getValueFunc();
     setEditorValue(value);
-    console.log('new value : ', value)
+  };
+
+  const handleGetPythonCodeValue = (getValueFunc) => {
+    //save Python code
+    const value = getValueFunc;
+    setEditorPythonValue(value);
   };
 
   const handleSaveClick = async () => {
@@ -50,25 +58,29 @@ const BlocklyPage = () => {
           {/* column */}
           <Grid item xs={12} lg={7}>
             <BlocklyEditorComponent
-            code={editorValue} 
-            handleGetValue={handleGetValue} />
+              code={editorValue}
+              handleGetValue={handleGetValue}
+              handleGetPythonCodeValue={handleGetPythonCodeValue}
+            />
           </Grid>
           {/* column */}
           <Grid item xs={12} lg={5}>
-            <Box height={'400px'} style={{ 
+            <Box
+              height={'400px'}
+              style={{
                 backgroundColor: 'black',
                 color: 'white',
                 padding: '2px 20px 5px',
                 overflow: 'auto',
                 fontFamily: 'monospace', // setting the font to monospace for a console-like appearance
-                lineHeight: '0.2' // adjusting line height for closer lines
-              }}>
+                lineHeight: '0.2', // adjusting line height for closer lines
+              }}
+            >
               <p>FOSSBot terminal 🐍</p>
               <PythonTerminal
                 pythonScript={editorValue}
                 sessionId={sessionId}
                 onRunScript={setRunScriptFunction}
-                // terminalOutput={terminalOutput}
               />
             </Box>
             <br></br>
