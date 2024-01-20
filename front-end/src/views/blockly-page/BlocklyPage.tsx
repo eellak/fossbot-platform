@@ -78,7 +78,7 @@ const BlocklyPage = () => {
             >
               <p>FOSSBot terminal 🐍</p>
               <PythonTerminal
-                pythonScript={editorValue}
+                pythonScript={editorPythonValue}
                 sessionId={sessionId}
                 onRunScript={setRunScriptFunction}
               />
