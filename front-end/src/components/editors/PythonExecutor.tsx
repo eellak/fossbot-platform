@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 type PythonExecutorProps = {
   pythonScript: string;
   onRunScript: (runScript: () => Promise<void>) => void;
-  sessionId: string; // 
+  sessionId: string; 
 };
 
 const PythonExecutor: React.FC<PythonExecutorProps> = ({ pythonScript, onRunScript, sessionId }) => {
@@ -55,7 +55,6 @@ const PythonExecutor: React.FC<PythonExecutorProps> = ({ pythonScript, onRunScri
   // },[]);
 
   return (
-   
     <div>
        {/* <Button variant="contained" onClick={testinput}>Test</Button> */}
       {results.map((result, index) => (

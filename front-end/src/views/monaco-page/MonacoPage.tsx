@@ -1,5 +1,5 @@
  
-import React, { useEffect, useState,useRef }  from 'react';
+import React, { useEffect, useState, useRef }  from 'react';
 import { useLocation } from 'react-router-dom';
 import { Box, Grid, Stack, DialogContent, alertTitleClasses, Typography } from '@mui/material';
 import PageContainer from 'src/components/container/PageContainer';
@@ -15,7 +15,6 @@ import SearchBar from 'src/components/monaco-functions/MonacoSearchBar';
 import { v4 as uuidv4 } from 'uuid';
 
 const MonacoPage = () => {
-
   //Editor get set value
   const [editorValue, setEditorValue] = useState('');
   const [projectTile, setProjectTile] = useState('New Project');
@@ -27,10 +26,10 @@ const MonacoPage = () => {
   const navigate = useNavigate();
   const { projectId } = useParams(); // Get project ID from URL
   
-    const handlePlayClick = () => {
-      if (runScriptRef.current) {
-          runScriptRef.current();
-      }
+  const handlePlayClick = () => {
+    if (runScriptRef.current) {
+      runScriptRef.current();
+    }
   };
 
   const setRunScriptFunction = (runScript: () => Promise<void>) => {
