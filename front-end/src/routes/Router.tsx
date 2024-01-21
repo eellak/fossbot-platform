@@ -18,6 +18,7 @@ const LandingPage = Loadable(lazy(() => import('../views/landing-page/LandingPag
 //const BlocklyPage =  '../views/blockly-page/BlocklyPage';
 import BlocklyPage from '../views/blockly-page/BlocklyPage';
 import MonacoPage from '../views/monaco-page/MonacoPage';
+import ElementaryPage from '../views/elementary/ElementaryPage';
 // const MonacoPage = Loadable(lazy(() => import('../views/monaco-page/MonacoPage')));
 const HuaPage = Loadable(lazy(() => import('../views/sub-pages/HuaPage')));
 const Register = Loadable(lazy(() => import('../views/authentication/Register')));
@@ -25,6 +26,7 @@ const Login = Loadable(lazy(() => import('../views/authentication/Login')));
 const Error = Loadable(lazy(() => import('../views/authentication/Error')));
 import AuthProvider from '../authentication/AuthProvider'; // Update with actual path
 import PrivateRoute from './PrivateRoute'; // Update with actual path
+import UserProfile from 'src/views/user-profile/UserProfile';
 
 const Router = [
   {
@@ -85,6 +87,22 @@ const Router = [
     children: [
       { path: '/monaco-page/:projectId', exact: true, element: <MonacoPage /> },
       { path: '/monaco-page', exact: true, element: <MonacoPage /> },
+    ],
+  },
+  {
+    path: '/elementary-page',
+    element: <BoxedLayout />,
+    children: [
+      { path: '/elementary-page', exact: true, element: <ElementaryPage /> },
+      { path: '/elementary-page', exact: true, element: <ElementaryPage /> },
+    ],
+  },
+  {
+    path: '/user-profile',
+    element: <BoxedLayout />,
+    children: [
+      { path: '/user-profile', exact: true, element: <UserProfile /> },
+      { path: '/user-profile', exact: true, element: <UserProfile /> },
     ],
   },
   {

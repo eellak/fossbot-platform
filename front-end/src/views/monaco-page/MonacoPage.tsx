@@ -79,6 +79,10 @@ const MonacoPage = () => {
     }
   }
 
+  useEffect(() => {
+    document.title = `Monaco`;
+  }, );
+
   return (
     <PageContainer title="Monaco Page"  description="this is Monaco page">
       <Box flexGrow={1}>

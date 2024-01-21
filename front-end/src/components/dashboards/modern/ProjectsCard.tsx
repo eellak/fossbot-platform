@@ -38,6 +38,48 @@ const ProjectsCard = () => {
   const navigate = useNavigate();
   const  [showDrawer, setShowDrawer] = useState(false);
 
+    // Add these state variables
+  const [selectedProject, setSelectedProject] = useState(null);
+  const [deleteConfirmationOpen, setDeleteConfirmationOpen] = useState(false);
+
+  const handleDeleteProject = async (projectId) => {
+    try {
+      // Open the delete confirmation dialog
+      setSelectedProject(projectId);
+      setDeleteConfirmationOpen(true);
+  
+      // Optionally, you can perform additional actions before showing the confirmation dialog
+  
+    } catch (error) {
+      console.error('Error preparing to delete project:', error);
+    }
+  };
+
+  const handleDeleteConfirmation = async (confirmed) => {
+    setDeleteConfirmationOpen(false);
+  
+    if (confirmed) {
+      // User confirmed deletion, proceed with delete
+      try {
+        const success = await auth.getDeleteProjectAction(selectedProject);
+        if (success) {
+          console.log('Project deleted');
+          // Update the projects state to reflect the deletion
+          setProjects((prevProjects) =>
+            prevProjects.filter((project) => project.id !== selectedProject)
+          );
+        } else {
+          console.error('Error deleting project');
+        }
+      } catch (error) {
+        console.error('Error deleting project:', error);
+      }
+    }
+    // Clear the selected project
+    setSelectedProject(null);
+  };
+  
+
   const handleDrawerClose = () => {
     setShowDrawer(false);
   };
@@ -60,20 +102,6 @@ const ProjectsCard = () => {
     fetchProjects();
 }, []);
 
-  const handleDeleteProject = async (projectId) => {
-    try {
-      const success = await auth.getDeleteProjectAction(projectId);
-    if (success) {
-          console.log('Project deleted',);
-          // Update the projects state to reflect the deletion
-          setProjects(prevProjects => prevProjects.filter(project => project.id !== projectId));
-        }else {
-          console.error('Error deleting project');
-        }
-    } catch (error) {
-      console.error('Error deleting project:', error);
-    }
-  };
 
   const handleEditProject = async (projectId,project_type) => {
 
@@ -107,6 +135,24 @@ const ProjectsCard = () => {
           PaperProps={{ sx: { position: 'fixed', top: 30, m: 0 } }}
         >
           <ProjectForm/>
+        </Dialog>
+        <Dialog
+          open={deleteConfirmationOpen}
+          onClose={() => handleDeleteConfirmation(false)}
+          fullWidth
+          maxWidth={'xs'}
+        >
+          <Box p={2}>
+            <Typography variant="h6">Are you sure you want to delete this project?</Typography>
+            <Stack direction="row" spacing={2} mt={2}>
+              <Fab color="default" size="small" onClick={() => handleDeleteConfirmation(true)}>
+                Yes
+              </Fab>
+              <Fab color="default" size="small" onClick={() => handleDeleteConfirmation(false)}>
+                No
+              </Fab>
+            </Stack>
+          </Box>
         </Dialog>
         <TableContainer>
           <Table

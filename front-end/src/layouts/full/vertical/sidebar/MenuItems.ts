@@ -162,10 +162,9 @@ const Menuitems: MenuitemsType[] = [
     title: 'Elementary',
     // subtitle: 'Simply Blocks',
     icon: IconMoodHappy,
-    chip: 'Soon',
-    // chipColor: 'primary',
-    href: '/material-page',
-    disabled: true,
+    chip: 'New',
+    chipColor: 'primary',
+    href: '/elementary-page'
   },
 
   // {

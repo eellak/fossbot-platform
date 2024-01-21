@@ -1,5 +1,5 @@
  
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Box, Grid } from '@mui/material';
 import PageContainer from 'src/components/container/PageContainer';
 
@@ -8,7 +8,10 @@ import ProjectsCard from 'src/components/dashboards/modern/ProjectsCard';
 import WelcomeHomePage from 'src/layouts/full/shared/welcome/WelcomeHomePage';
 
 const Modern = () => {
-
+  
+  useEffect(() => {
+    document.title = `Dashboard`;
+  }, );
 
   return (
     <PageContainer title="Modern Dashboard" description="this is Modern Dashboard page">

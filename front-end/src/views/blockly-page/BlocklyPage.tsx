@@ -51,6 +51,10 @@ const BlocklyPage = () => {
     console.log('Save clicked');
   };
 
+  useEffect(() => {
+    document.title = `Blockly`;
+  }, );
+
   return (
     <PageContainer title="Blockly Page" description="This is the Blockly page">
       <Box flexGrow={1}>

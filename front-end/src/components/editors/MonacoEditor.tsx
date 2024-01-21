@@ -26,7 +26,7 @@ const MonacoEditorComponent = ({ code, handleGetValue }: MonacoEditorProps) => {
 
   return (
     <MonacoEditor
-      height="90vh"
+      height="83vh"
       language="python"
       theme="vs-dark"
       value={code}
