@@ -26,11 +26,23 @@ const Logo: FC = () => {
 
   if (customizer.activeDir === 'ltr') {
     return (
+      
       <LinkStyled to="/" style={{
         display: 'flex',
         alignItems: 'center',
       }}>
-        <Typography align={'center'} fontSize={18} lineHeight={40} fontWeight={1000} color={'primary'} > FOSSBOT Platform</Typography>
+        
+        {/* <Typography align={'center'} fontSize={18} lineHeight={40} color={'primary'} > FOSSBOT Platform</Typography> */}
+        <Typography align={'center'} fontSize={20} lineHeight={40} fontWeight={500} color={'primary'} >
+        <Typography component={'span'} variant="inherit" color={'primary'}>
+            FOSS
+          </Typography>{''}
+          <Typography component={'span'} variant="inherit" color={'orange'}>
+            Bot
+          </Typography>{' '}
+          Platform
+        </Typography>
+        
         {/* {customizer.activeMode === 'dark' ? (
           <LogoLight  />
         ) : (
@@ -45,7 +57,16 @@ const Logo: FC = () => {
       display: 'flex',
       alignItems: 'center',
     }}>
-      <Typography align={'center'} fontSize={18} lineHeight={40} fontWeight={1000} color={'primary'} > FOSSBOT Platform</Typography>
+      {/* <Typography align={'center'} fontSize={18} lineHeight={40} color={'primary'} > FOSSBOT Platform</Typography> */}
+      <Typography align={'center'} fontSize={20} lineHeight={40} fontWeight={500} color={'primary'} >
+        <Typography component={'span'} variant="inherit" color={'primary'}>
+            FOSS
+          </Typography>{''}
+          <Typography component={'span'} variant="inherit" color={'orange'}>
+            Bot
+          </Typography>{' '}
+          Platform
+        </Typography>
       {/* {customizer.activeMode === 'dark' ? (
         <LogoDarkRTL  />
       ) : (

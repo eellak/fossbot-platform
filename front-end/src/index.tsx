@@ -13,6 +13,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
   <Provider store={store}>
     <Suspense fallback={<Spinner />}>
       <BrowserRouter>
+      
         <App />
       </BrowserRouter>
     </Suspense>
