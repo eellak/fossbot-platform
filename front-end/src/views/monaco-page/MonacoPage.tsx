@@ -81,10 +81,11 @@ const MonacoPage = () => {
 
   return (
     <PageContainer title="Monaco Page"  description="this is Monaco page">
+      <Box flexGrow={1}>
       <Box mb={3}>
       <Typography variant='h1' mt={2} color={'primary'}>🐍 {projectTile} </Typography>
       </Box>
-      <Box flexGrow={1}>
+      
         <Grid container spacing={1}>
           {/* column */}
           <Grid item xs={12} lg={7}>          

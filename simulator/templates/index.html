@@ -1,59 +1,126 @@
-<!DOCTYPE html>
+<!doctype html>
 <html xmlns='http://www.w3.org/1999/xhtml' lang='' xml:lang=''>
 <head>
 	<meta charset='utf-8' />
 	<meta name='viewport' content='width=device-width, user-scalable=no' />
 	<title>Fossbot-Simulator</title>
-	<link rel='stylesheet' href="{{url_for('static', filename='style/index.css')}}" />
-<link id='-gd-engine-icon' rel='icon' type='image/png' href="{{url_for('static', filename='wasm-files/index.icon.png')}}" />
-<link rel='apple-touch-icon' href="{{url_for('static', filename='wasm-files/index.apple-touch-icon.png')}}"/>
-<script>
-// Resizing window + quality to match size of browser (with footer):
-window.addEventListener('resize', () => {
-    const canvasContainer = document.getElementById('canvas-container');
-    const canvas = document.getElementById('canvas');
-    const footer = document.querySelector('.footer');
+	<style type='text/css'>
 
-    const windowWidth = window.innerWidth;
-    const windowHeight = window.innerHeight - footer.offsetHeight;
+		body {
+			touch-action: none;
+			margin: 0;
+			border: 0 none;
+			padding: 0;
+			text-align: center;
+			background-color: black;
+		}
 
-    canvasContainer.style.width = windowWidth + 'px';
-    canvasContainer.style.height = windowHeight + 'px';
-    canvas.width = windowWidth;
-    canvas.height = windowHeight;
-});
+		#canvas {
+			display: block;
+			margin: 0;
+			color: white;
+		}
 
-window.addEventListener('DOMContentLoaded', () => {
-    window.dispatchEvent(new Event('resize'));
-});
-</script>
+		#canvas:focus {
+			outline: none;
+		}
+
+		.godot {
+			font-family: 'Noto Sans', 'Droid Sans', Arial, sans-serif;
+			color: #e0e0e0;
+			background-color: #3b3943;
+			background-image: linear-gradient(to bottom, #403e48, #35333c);
+			border: 1px solid #45434e;
+			box-shadow: 0 0 1px 1px #2f2d35;
+		}
+
+
+		/* Status display
+		 * ============== */
+
+		#status {
+			position: absolute;
+			left: 0;
+			top: 0;
+			right: 0;
+			bottom: 0;
+			display: flex;
+			justify-content: center;
+			align-items: center;
+			/* don't consume click events - make children visible explicitly */
+			visibility: hidden;
+		}
+
+		#status-progress {
+			width: 366px;
+			height: 7px;
+			background-color: #38363A;
+			border: 1px solid #444246;
+			padding: 1px;
+			box-shadow: 0 0 2px 1px #1B1C22;
+			border-radius: 2px;
+			visibility: visible;
+		}
+
+		@media only screen and (orientation:portrait) {
+			#status-progress {
+				width: 61.8%;
+			}
+		}
+
+		#status-progress-inner {
+			height: 100%;
+			width: 0;
+			box-sizing: border-box;
+			transition: width 0.5s linear;
+			background-color: #202020;
+			border: 1px solid #222223;
+			box-shadow: 0 0 1px 1px #27282E;
+			border-radius: 3px;
+		}
+
+		#status-indeterminate {
+			height: 42px;
+			visibility: visible;
+			position: relative;
+		}
+
+		#status-indeterminate > div {
+			width: 4.5px;
+			height: 0;
+			border-style: solid;
+			border-width: 9px 3px 0 3px;
+			border-color: #2b2b2b transparent transparent transparent;
+			transform-origin: center 21px;
+			position: absolute;
+		}
+
+		#status-indeterminate > div:nth-child(1) { transform: rotate( 22.5deg); }
+		#status-indeterminate > div:nth-child(2) { transform: rotate( 67.5deg); }
+		#status-indeterminate > div:nth-child(3) { transform: rotate(112.5deg); }
+		#status-indeterminate > div:nth-child(4) { transform: rotate(157.5deg); }
+		#status-indeterminate > div:nth-child(5) { transform: rotate(202.5deg); }
+		#status-indeterminate > div:nth-child(6) { transform: rotate(247.5deg); }
+		#status-indeterminate > div:nth-child(7) { transform: rotate(292.5deg); }
+		#status-indeterminate > div:nth-child(8) { transform: rotate(337.5deg); }
+
+		#status-notice {
+			margin: 0 100px;
+			line-height: 1.3;
+			visibility: visible;
+			padding: 4px 6px;
+			visibility: visible;
+		}
+	</style>
+<link id='-gd-engine-icon' rel='icon' type='image/png' href='index.icon.png' />
+<link rel='apple-touch-icon' href='index.apple-touch-icon.png'/>
+
 </head>
 <body>
-	<div id="canvas-container">
-		<canvas id="canvas">
-			HTML5 canvas appears to be unsupported in the current browser.<br />
-			Please try updating or use a different browser.
-		</canvas>
-	</div>
-	<!-- <div class="footer">
-		<strong>Session ID: </strong>
-		<span id="session-id">{{ session_id }}</span>
-		<button onclick="copySessionId()">Copy</button>
-		"{{url_for('static', filename='wasm-files/index.js')}}"
-	</div> -->
-
-	<script>
-		function copySessionId() {
-			var sessionElement = document.getElementById('session-id');
-			var textarea = document.createElement('textarea');
-			textarea.value = sessionElement.textContent;
-			document.body.appendChild(textarea);
-			textarea.select();
-			textarea.setSelectionRange(0, 99999); // For mobile devices
-			document.execCommand('copy');
-			document.body.removeChild(textarea);
-		}
-	</script>
+	<canvas id='canvas'>
+		HTML5 canvas appears to be unsupported in the current browser.<br />
+		Please try updating or use a different browser.
+	</canvas>
 	<div id='status'>
 		<div id='status-progress' style='display: none;' oncontextmenu='event.preventDefault();'><div id ='status-progress-inner'></div></div>
 		<div id='status-indeterminate' style='display: none;' oncontextmenu='event.preventDefault();'>
@@ -67,10 +134,12 @@ window.addEventListener('DOMContentLoaded', () => {
 			<div></div>
 		</div>
 		<div id='status-notice' class='godot' style='display: none;'></div>
+		
 	</div>
-	
+
 	<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js" integrity="sha512-q/dWJ3kcmjBLU4Qc47E4A9kTB4m3wuTY7vkFJDTZKjTs8jhyGQnaUrxa0Ytd0ssMZhbNua9hE+E7Qv1j+DyZwA==" crossorigin="anonymous"></script>
-	<script type='text/javascript' src="{{url_for('static', filename='wasm-files/index.js')}}"></script>
+	<script type='text/javascript' src='{{url_for("static", filename="index.js")}}'></script>
+
 	<script type='text/javascript'>//<![CDATA[
 
 		const GODOT_CONFIG = {"args":[],"canvasResizePolicy":2,"executable":"index","experimentalVK":false,"focusCanvas":true,"gdnativeLibs":[]};
@@ -86,9 +155,12 @@ window.addEventListener('DOMContentLoaded', () => {
 		function initGodotSocket(){
 			godotSocket = io.connect('http://' + ws_ip + ':' + ws_port + sio_namespace);
 			godotSocket.on('connect', function () {
-				godotSocket.emit('browserConnect', JSON.stringify({'session_id': "{{ session_id }}"}));
+				//godotSocket.emit('browserConnect', JSON.stringify({'session_id': "{{ session_id }}"}));
+				godotSocket.emit('godotConnect', JSON.stringify({'session_id': "{{ session_id }}"}));
+
 			});
-			godotSocket.on('clientMessage', async (message) => {
+
+			godotSocket.on('godotIncMessage', async (message) => {
 				callbackGodot(JSON.stringify(message));
 			});
 		}
@@ -101,8 +173,8 @@ window.addEventListener('DOMContentLoaded', () => {
 			godotSocket.disconnect() 
 		}
 
-		function sendMessageFromGodot(data, fossbot_name, user_id) {
-			godotSocket.emit("godotMessage", {"data":data, "fossbot_name":fossbot_name, "user_id": user_id});
+		function sendMessageFromGodot(data,func, fossbot_name, user_id) {
+			godotSocket.emit("godotMessage", {"data":data, "function":func, "fossbot_name":fossbot_name, "user_id": user_id});
 		}
 
 		function sendErrorFromGodot(data, fossbot_name, user_id) {

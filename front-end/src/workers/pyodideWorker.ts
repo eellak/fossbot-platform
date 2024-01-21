@@ -30,27 +30,21 @@ const setUpSocket = async () => {
 
   newSocket.on('connect', () => {
     console.log('Socket.io connected');
-    //setSocket(newSocket);
   });
 
   newSocket.on('connect_error', (error) => {
     console.error('Socket.io connection error:', error);
   });
 
-  newSocket.on('message', (message) => {
-    console.log('Received message:', message);
-    // Handle incoming messages
-  });
-
-  // newSocket.on('clientMessage', (message) => {
-  //   console.log('clientMessage message:', message);
+  // newSocket.on('godotMessage', (message) => {
+  //   console.log('Received message:', message);
   //   // Handle incoming messages
   // });
 
-  newSocket.on('frontMessage', (message) => {
-    console.log('Godot message:', message);
-    // Handle incoming messages
-  });
+  // newSocket.on('clientIncMessage', (message) => {
+  //   console.log('clientIncMessage message:', message);
+  //   // Handle incoming messages
+  // });
 
   newSocket.on('disconnect', () => {
     console.log('Socket.io disconnected');

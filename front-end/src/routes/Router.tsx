@@ -39,7 +39,7 @@ const Router = [
     element: <PrivateRoute />,
     children: [
       {path: '',
-    element: <BoxedLayout />,
+    element: <FullLayout />,
     children: [
       { path: '', exact: true, element: <Dashboard /> },
     ]},
@@ -73,7 +73,7 @@ const Router = [
   },
   {
     path: '/blockly-page',
-    element: <FullFillLayout />,
+    element: <FullLayout />,
     children: [
       { path: '/blockly-page', exact: true, element: <BlocklyPage/> },
       { path: '/blockly-page/:projectId', exact: true, element: <BlocklyPage/> },
