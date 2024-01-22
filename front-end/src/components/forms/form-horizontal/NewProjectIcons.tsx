@@ -9,6 +9,7 @@ import Select from '@mui/material/Select';
 import MenuItem from '@mui/material/MenuItem';
 import {useAuth} from 'src/authentication/AuthProvider';
 import { useNavigate } from "react-router-dom";
+
 const NewProjectIcons = () => {
 
   const [selectedOption, setSelectedOption] = useState("Monaco");

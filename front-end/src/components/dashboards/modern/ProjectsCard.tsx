@@ -29,6 +29,7 @@ import {useAuth} from 'src/authentication/AuthProvider';
 import python from 'src/assets/images/dashboard/python.png';
 import blockly from 'src/assets/images/dashboard/blockly.png';
 import { useNavigate } from "react-router-dom";
+import DeleteBanner from 'src/components/widgets/banners/Banner3';
 // const users = PlatformUsersData;
 
 
@@ -143,15 +144,19 @@ const ProjectsCard = () => {
           maxWidth={'xs'}
         >
           <Box p={2}>
-            <Typography variant="h6">Are you sure you want to delete this project?</Typography>
-            <Stack direction="row" spacing={2} mt={2}>
+            <DeleteBanner
+              onDelete={() => handleDeleteConfirmation(true)}
+              onCancel={() => handleDeleteConfirmation(false)}
+            />
+            {/* <Typography variant="h6" align='center'>Are you sure you want to delete this project?</Typography>
+            <Stack direction="row" spacing={2} justifyContent="space-between" mt={2}>
               <Fab color="default" size="small" onClick={() => handleDeleteConfirmation(true)}>
                 Yes
               </Fab>
               <Fab color="default" size="small" onClick={() => handleDeleteConfirmation(false)}>
                 No
               </Fab>
-            </Stack>
+            </Stack> */}
           </Box>
         </Dialog>
         <TableContainer>
