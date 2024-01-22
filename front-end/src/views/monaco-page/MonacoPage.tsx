@@ -17,7 +17,7 @@ import { v4 as uuidv4 } from 'uuid';
 const MonacoPage = () => {
   //Editor get set value
   const [editorValue, setEditorValue] = useState('');
-  const [projectTile, setProjectTile] = useState('New Project');
+  const [projectTitle, setProjectTitle] = useState('New Project');
   const [projectDescription, setProjectDescription] = useState('New Project Description');
   const [sessionId, setSessionId] = useState('');
 
@@ -49,7 +49,7 @@ const MonacoPage = () => {
         const fetchedProject = await auth.getProjectById(Number(projectId));
         if (fetchedProject) {
           setEditorValue(fetchedProject.code);
-          setProjectTile(fetchedProject.name);
+          setProjectTitle(fetchedProject.name);
         }
       } catch (error) {
         console.error('Error fetching project:', error);
@@ -69,7 +69,7 @@ const MonacoPage = () => {
   const handleSaveClick = async () => {
     try {
       await auth.updateProjectAction(Number(projectId), {
-        name: projectTile,
+        name: projectTitle,
         description: projectDescription,
         project_type: 'python',
         code: editorValue,
@@ -83,7 +83,7 @@ const MonacoPage = () => {
     <PageContainer title="Monaco Page"  description="this is Monaco page">
       <Box flexGrow={1}>
       <Box mb={3}>
-      <Typography variant='h1' mt={2} color={'primary'}>🐍 {projectTile} </Typography>
+      <Typography variant='h1' mt={2} color={'primary'}>🐍 {projectTitle} </Typography>
       </Box>
       
         <Grid container spacing={1}>
