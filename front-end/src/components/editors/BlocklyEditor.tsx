@@ -5,7 +5,6 @@ import { useCallback } from 'react';
 
 import Blockly from 'blockly';
 import { pythonGenerator } from 'blockly/python';
-import Spinner from '../../views/spinner/Spinner.tsx';
 
 type BlocklyEditorProps = {
   code: string;
