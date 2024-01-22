@@ -1,15 +1,15 @@
 import { useEffect, useState, useRef } from 'react';
 import { Box, Grid, Stack, DialogContent, Typography } from '@mui/material';
-import PageContainer from '../../components/container/PageContainer'; //'src/components/container/PageContainer';
-import BlocklyEditorComponent from '../../components/editors/BlocklyEditor';
-
 import { useAuth } from 'src/authentication/AuthProvider'; // Assuming AuthProvider is in the same directory
-
-import Buttons from 'src/components/editors/RightColButtons';
-import PythonTerminal from 'src/components/editors/PythonTerminal';
-import WebGLApp from 'src/components/websimulator/Simulator';
 import { v4 as uuidv4 } from 'uuid';
 import { useParams, useNavigate } from 'react-router-dom';
+
+import PythonTerminal from 'src/components/editors/PythonTerminal';
+import WebGLApp from 'src/components/websimulator/Simulator';
+import Buttons from 'src/components/editors/RightColButtons';
+import PageContainer from '../../components/container/PageContainer'; 
+import BlocklyEditorComponent from '../../components/editors/BlocklyEditor';
+import Spinner from '../spinner/Spinner';
 
 const BlocklyPage = () => {
   const [editorValue, setEditorValue] = useState(
@@ -49,7 +49,7 @@ const BlocklyPage = () => {
       try {
         const fetchedProject = await auth.getProjectById(Number(projectId));
         if (fetchedProject) {
-          if(fetchedProject.code != '') {
+          if (fetchedProject.code != '') {
             setEditorValue(fetchedProject.code);
           }
           setProjectTitle(fetchedProject.name);
@@ -100,7 +100,7 @@ const BlocklyPage = () => {
           </Typography>
         </Box>
         {loading ? (
-          <p>Loading...</p>
+          <Spinner />
         ) : (
           <Grid container spacing={1}>
             <Grid item xs={12} lg={7}>
