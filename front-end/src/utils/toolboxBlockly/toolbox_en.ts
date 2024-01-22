@@ -522,6 +522,84 @@ const TOOLBOX_JSON = {
       custom: 'PROCEDURE',
       colour: 290,
     },
+    {
+      kind: 'category',
+      name: 'Movement',
+      colour: '#995ba5',
+      contents: [
+        {
+          kind: 'block',
+          type: 'move_distance',
+        },
+        {
+          kind: 'block',
+          type: 'just_move',
+        },
+        {
+          kind: 'block',
+          type: 'sleep',
+        },
+       
+        {
+          kind: 'block',
+          type: 'stop',
+        },
+        {
+          kind: 'block',
+          type: 'just_rotate',
+        },
+        {
+          kind: 'block',
+          type: 'rotate_90',
+        },
+      ]
+    },
+    {
+      kind: 'category',
+      name: 'Sensors',
+      colour: '#A5935B',
+      contents: [
+        {
+          kind: 'block',
+          type: 'distance',
+        },
+        {
+          kind: 'block',
+          type: 'floor_sensor',
+        },
+        {
+          kind: 'block',
+          type: 'noise_detection',
+        },
+        {
+          kind: 'block',
+          type: 'get_acceleration',
+        },
+        {
+          kind: 'block',
+          type: 'get_gyroscope',
+        },
+        {
+          kind: 'block',
+          type: 'light_sensor',
+        },
+      ]
+    },
+    {
+      kind: 'category',
+      name: 'Interaction',
+      colour: '135',
+      contents: [
+        {
+          kind: 'block',
+          type: 'set_color',
+        },
+        {
+          kind: 'block',
+          type: 'play_sound',
+        },
+      ]
+    },
   ],
 };
 
