@@ -126,7 +126,7 @@ const Menuitems: MenuitemsType[] = [
   },
   {
     id: uniqueId(),
-    title: 'Blocly Editor',
+    title: 'Blockly Editor',
     subtitle: 'Blocks based',
     icon: IconPuzzle,
     href: '/blockly-page',
