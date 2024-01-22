@@ -8,11 +8,13 @@ Blockly.Blocks['move_distance'] = {
       .appendField('Move distance')
       .appendField(
         new Blockly.FieldDropdown([
-          ['forward', '1'],
-          ['reverse', '0'],
+          ['forward', "'forward'"],
+          ['reverse', "'reverse'"],
         ]),
         'option',
-      );
+      ) 
+      .appendField(new Blockly.FieldNumber(0, 0, 1000), 'distance')
+      .appendField('cms')
     this.setPreviousStatement(true, null);
     this.setNextStatement(true, null);
     this.setColour(290);
@@ -25,7 +27,8 @@ Blockly.Blocks['move_distance'] = {
 
 pythonGenerator.forBlock['move_distance'] = function (block) {
   var input_value = block.getFieldValue('option');
-  var code = 'await robot.move_distance(' + input_value + ')\n';
+  var distance_value = block.getFieldValue('distance');
+  var code = 'await robot.move_distance(' + distance_value + ',' + input_value + ')\n';
   return code;
 };
 
@@ -37,8 +40,8 @@ Blockly.Blocks['just_move'] = {
       .appendField('Just move')
       .appendField(
         new Blockly.FieldDropdown([
-          ['forward', 'forward'],
-          ['reverse', 'reverse'],
+          ['forward', "'forward'"],
+          ['reverse', "'reverse'"],
         ]),
         'option',
       );
@@ -162,15 +165,15 @@ Blockly.Blocks['play_sound'] = {
       .appendField('Play sound')
       .appendField(
         new Blockly.FieldDropdown([
-          ['empodio', 'res://soundfx/empodio.mp3'],
-          ['euxaristw', 'res://soundfx/euxaristw.mp3'],
-          ['geia', 'res://soundfx/geia.mp3'],
-          ['kalhmera', 'res://soundfx/kalhmera.mp3'],
-          ['machine_gun', 'res://soundfx/machine_gun.mp3'],
-          ['mpravo', 'res://soundfx/mpravo.mp3'],
-          ['processing', 'res://soundfx/processing.mp3'],
-          ['r2d2', 'res://soundfx/r2d2.mp3'],
-          ['startup', 'res://soundfx/startup.mp3'],
+          ['empodio', "'res://soundfx/empodio.mp3'"],
+          ['euxaristw', "'res://soundfx/euxaristw.mp3'"],
+          ['geia', "'res://soundfx/geia.mp3'"],
+          ['kalhmera', "'res://soundfx/kalhmera.mp3'"],
+          ['machine_gun', "'res://soundfx/machine_gun.mp3'"],
+          ['mpravo', "'res://soundfx/mpravo.mp3'"],
+          ['processing', "'res://soundfx/processing.mp3'"],
+          ['r2d2', "'res://soundfx/r2d2.mp3'"],
+          ['startup', "'res://soundfx/startup.mp3'"],
         ]),
         'option',
       );
