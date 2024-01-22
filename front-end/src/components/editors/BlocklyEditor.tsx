@@ -5,7 +5,7 @@ import { useCallback } from 'react';
 
 import Blockly from 'blockly';
 import { pythonGenerator } from 'blockly/python';
-import "../../utils/blocks/customBlocks.ts";
+import "../../utils/blocksBlockly/customBlocks.ts";
 
 type BlocklyEditorProps = {
   code: string;
