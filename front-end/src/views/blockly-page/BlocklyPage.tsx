@@ -7,7 +7,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import PythonTerminal from 'src/components/editors/PythonTerminal';
 import WebGLApp from 'src/components/websimulator/Simulator';
 import Buttons from 'src/components/editors/RightColButtons';
-import PageContainer from '../../components/container/PageContainer'; 
+import PageContainer from '../../components/container/PageContainer';
 import BlocklyEditorComponent from '../../components/editors/BlocklyEditor';
 import Spinner from '../spinner/Spinner';
 
@@ -20,7 +20,8 @@ const BlocklyPage = () => {
 
   const [projectTitle, setProjectTitle] = useState('New Project');
   const [projectDescription, setProjectDescription] = useState('New Project Description');
-  const [loading, setLoading] = useState(true); // Loading state
+  const [loading, setLoading] = useState(true); // Loading state of Blockly project
+  const [isSimulatorLoading, setIsSimulatorLoading] = useState(true); // Loading state of Simulator
 
   const runScriptRef = useRef<() => Promise<void>>();
   const auth = useAuth();
@@ -91,6 +92,12 @@ const BlocklyPage = () => {
     }
   };
 
+  const handleMountChange = (isMounted: boolean) => {
+    // Do something with the updated value of isMounted
+    console.log('isMounted:', isMounted);
+    setIsSimulatorLoading(false);
+  };
+
   return (
     <PageContainer title="Blockly Page" description="This is the Blockly page">
       <Box flexGrow={1}>
@@ -99,7 +106,7 @@ const BlocklyPage = () => {
             🐍 {projectTitle}{' '}
           </Typography>
         </Box>
-        {loading ? (
+        {loading && isSimulatorLoading ? (
           <Spinner />
         ) : (
           <Grid container spacing={1}>
@@ -134,7 +141,7 @@ const BlocklyPage = () => {
               </Box>
               <br></br>
               <Box>
-                <WebGLApp sessionId={sessionId} />
+                <WebGLApp sessionId={sessionId} onMountChange={handleMountChange} />
               </Box>
               <Box mt={2}>
                 <DialogContent className="testdialog">
