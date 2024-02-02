@@ -40,6 +40,15 @@ cd ..
 docker-compose up 
 ```
 
+Backend servers (2nd way)
+```
+docker-compose -f docker-compose-dev.yml up --build
+```
+or just to run the docker containers: 
+```
+docker-compose -f docker-compose-dev.yml up 
+```
+
 Front-end server
 ```
 cd front-end
@@ -51,13 +60,8 @@ Test database
 username : test1
 password : 123456
 
-
 ## Software Development Team
 * Christos Chronis
 * Eleftheria Papageorgiou
 * Dimitris Charitos
 * Manousos Linardakis
-
-
-
-

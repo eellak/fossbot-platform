@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  backend:
+    image: fsbt-back
+    container_name: fsbt-back
+    build: ./back-end
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./back-end/test.db:/usr/src/app/test.db
+      
+  simulator:
+    image: fsbt-sim
+    container_name: fsbt-sim
+    build: ./simulator
+    ports:
+      - "5000:5000"
