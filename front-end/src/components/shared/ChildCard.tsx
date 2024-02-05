@@ -1,6 +1,3 @@
- 
-import React from 'react';
-
 import { Card, CardHeader, CardContent, Divider } from '@mui/material';
 
 type Props = {

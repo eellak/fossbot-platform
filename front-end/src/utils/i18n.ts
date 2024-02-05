@@ -1,23 +1,11 @@
 import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
-import english from 'src/utils/languages/en.json';
-import french from 'src/utils/languages/fr.json';
-import arabic from 'src/utils/languages/ar.json';
-import chinese from 'src/utils/languages/ch.json';
+import english from './languages/en.json';
 
 const resources = {
   en: {
     translation: english,
-  },
-  fr: {
-    translation: french,
-  },
-  ar: {
-    translation: arabic,
-  },
-  ch: {
-    translation: chinese,
-  },
+  }
 };
 
 i18n
