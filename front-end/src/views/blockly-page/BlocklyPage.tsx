@@ -134,7 +134,7 @@ const BlocklyPage = () => {
               </Box>
               <br></br>
               <Box>
-                <WebGLApp sessionId={sessionId} />
+                <WebGLApp appsessionId={sessionId} />
               </Box>
               <Box mt={2}>
                 <DialogContent className="testdialog">

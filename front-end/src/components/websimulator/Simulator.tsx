@@ -2,10 +2,10 @@ import { useEffect, useState } from 'react';
 import { Box } from '@mui/material';
 
 type WebGLAppProps = {
-  sessionId: string; // Add sessionId to the props
+  appsessionId: string; // Add sessionId to the props
 };
 
-const WebGLApp: React.FC<WebGLAppProps> = ({ sessionId }) => {
+const WebGLApp: React.FC<WebGLAppProps> = ({ appsessionId }) => {
   // const [isScriptLoaded, setIsScriptLoaded] = useState(false);
 
   // useEffect(() => {
@@ -26,7 +26,7 @@ const WebGLApp: React.FC<WebGLAppProps> = ({ sessionId }) => {
   //     // Cleanup logic if necessary
   //   };
   // }, []);
-  const SimUrl = "http://localhost:5000/"+sessionId
+  const SimUrl = "http://localhost:5000/"+appsessionId
   return (
     <Box width={'100%'}>
        <iframe
