@@ -539,7 +539,7 @@ const TOOLBOX_JSON = {
           kind: 'block',
           type: 'sleep',
         },
-       
+
         {
           kind: 'block',
           type: 'stop',
@@ -552,7 +552,7 @@ const TOOLBOX_JSON = {
           kind: 'block',
           type: 'rotate_90',
         },
-      ]
+      ],
     },
     {
       kind: 'category',
@@ -583,7 +583,7 @@ const TOOLBOX_JSON = {
           kind: 'block',
           type: 'light_sensor',
         },
-      ]
+      ],
     },
     {
       kind: 'category',
@@ -598,7 +598,7 @@ const TOOLBOX_JSON = {
           kind: 'block',
           type: 'play_sound',
         },
-      ]
+      ],
     },
   ],
 };

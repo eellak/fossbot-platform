@@ -12,9 +12,9 @@ Blockly.Blocks['move_distance'] = {
           ['reverse', "'reverse'"],
         ]),
         'option',
-      ) 
+      )
       .appendField(new Blockly.FieldNumber(0, 0, 1000), 'distance')
-      .appendField('cms')
+      .appendField('cms');
     this.setPreviousStatement(true, null);
     this.setNextStatement(true, null);
     this.setColour(290);

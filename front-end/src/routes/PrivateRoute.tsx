@@ -1,6 +1,6 @@
-import React from "react";
-import { Navigate, Outlet } from "react-router-dom";
-import { useAuth } from "../authentication/AuthProvider";
+import React from 'react';
+import { Navigate, Outlet } from 'react-router-dom';
+import { useAuth } from '../authentication/AuthProvider';
 
 const PrivateRoute = () => {
   const user = useAuth();

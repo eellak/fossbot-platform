@@ -1,134 +1,132 @@
 {
+  "login": "Login",
+  "register": "Register",
+  "projects": "Projects",
+  "edit": "Edit",
+  "delete": "Delete",
+  "logOut": "Log Out",
+  "signInWith": "Sign in with",
+  "signIn": "Sign In",
+  "username": "Username", 
+  "password": "Password",
+  "signUpWith": "Sign up with",
+  "signUp": "Sign up",
+  "firstname": "Firstname",
+  "lastname": "Lastname",
+  "emailAddress": "Email Adddress",
+  "projects-card": {
+    "card-title": "FOSSBot Projects",
+    "subtitle": "What kind of project will you create today?",
+    "type": "Type",
+    "title": "Title",
+    "description": "Description"
+  },
+  "banner-content": {
+    "foss": "FOSS",
+    "bot": "Bot",
+    "openTechnologies": "an open technologies robot for education.",
+    "democratizeEducation": "Let's democratize robotics education! ",
+    "tryNow": "Try it now"
+  },
+  "c2a2": {
+    "description": "Let's start your journey with us, build your own application using blocks or native Python code.",
     "login": "Login",
-    "register": "Register",
-    "projects": "Projects",
-    "edit": "Edit",
-    "delete": "Delete",
-    "projects-card": {
-        "card-title": "FOSSBot Projects",
-        "subtitle": "What kind of project will you create today?",
-        "type": "Type",
-        "title": "Title",
-        "description": "Description"
+    "register": "Register"
+  },
+  "card-fossbot": {
+    "fossbot": "FOSSBot is an open source and open design DIY robot that has been developed by Greek Free and Open Source Software (GFOSS) and Harokopio University of Athens (HUA) for educational purposes. The robot does not come alone, but comprises multiple software and system solutions that provide a holistic approach for STEM education at all educational levels."
+  },
+  "title-fossbot": {
+    "introduceFossbot": "Introducing FOSSBot"
+  },
+  "footer": {
+    "rights": "All rights reserved by Harokopio University of Athens and GFOSS. Designed & Developed by",
+    "fossbotTeam": "FOSSBot team."
+  },
+  "mobile-sidebar": {
+    "demos": "Demos",
+    "pages": "Pages",
+    "documentation": "Documentation",
+    "support": "Support"
+  },
+  "navigations": {
+    "github": "Github",
+    "hua": "Harokopio University",
+    "gfoss": "GFOSS",
+    "aboutUs": "About us",
+    "tryNow": "Try Now"
+  },
+  "demosDD": {
+    "differentDemos": "Different Demos",
+    "includedWithThePackage": "Included with the package",
+    "livePreview": "Live Preview",
+    "differentApps": " Different Apps"
+  },
+  "monaco-search-bar": {
+    "quickCommandLinks": "Quick Command Links",
+    "clickToCopy": "Click to copy",
+    "searchHere": "Search here"
+  },
+  "monaco-functions": {
+    "copied": "Copied!"
+  },
+  "hua-banner": {
+    "haorkopioUniversity": "Harokopio University of Athens",
+    "haorkopioUniversityDescription": "Harokopio University of Athens is a public university dedicated to promoting research and learning in a small, well focused set of intellectual areas. The university, situated in the centre of Athens and close to the Unesco World Heritage Centre of the Acropolis, originates from an educational institution that was first established in 1929 and gained the status of University in 1990. It takes its name from the national benefactor Panagis Harokopos. The University/’s excellent campus facilities houses four academic departments, the central administration, the library, the IT centre and student advisory services. Harokopio University of Athens is located close to many important cultural sites of interest such as the Acropolis Museum, Thissio, Panathenaic Stadium (Kallimarmaron), Keramikos and the Benaki Museum."
+  },
+  "theme": {
+    "light": "Light",
+    "dark": "Dark"
+  },
+  "authentication": {
+    "authLogin": {
+      "rememberDevice": "Remember this Device",
+      "forgotPassword": "Forgot Password ?"
     },
-    "banner-content": {
-        "foss": "FOSS",
-        "bot": "Bot",
-        "openTechnologies": "an open technologies robot for education.",
-        "democratizeEducation": "Let's democratize robotics education! ",
-        "tryNow": "Try it now"
+    "error": {
+      "oops": "Opps!!!",
+      "pageNotFound": "This page you are looking for could not be found.",
+      "gobackHome": "Go Back to Home"
     },
-    "c2a2": {
-        "description": "Let's start your journey with us, build your own application using blocks or native Python code.",
-        "login": "Login",
-        "register": "Register"
+    "login": {
+      "title": "Login Page",
+      "description": "This is the Login page",
+      "welcome": "Welcome to FOSSBot-Platform",
+      "robotsCodingCreativity": "Robotics, Coding, Creativity. All in one place.",
+      "newToPlatform": " New to FOSSBot-Platform?",
+      "createAccount": "Create an account"
     },
-    "card-fossbot": {
-        "fossbot": "FOSSBot is an open source and open design DIY robot that has been developed by Greek Free and Open Source Software (GFOSS) and Harokopio University of Athens (HUA) for educational purposes. The robot does not come alone, but comprises multiple software and system solutions that provide a holistic approach for STEM education at all educational levels."
-    },
-    "title-fossbot": {
-        "introduceFossbot": "Introducing FOSSBot"
-    },
-    "footer": {
-        "rights": "All rights reserved by Harokopio University of Athens and GFOSS. Designed & Developed by",
-        "fossbotTeam": "FOSSBot team."
-    },
-    "mobile-sidebar": {
-        "demos": "Demos",
-        "pages": "Pages",
-        "documentation": "Documentation",
-        "support": "Support"
-    },
-    "navigations": {
-        "github": "Github",
-        "hua": "Harokopio University",
-        "gfoss": "GFOSS",
-        "aboutUs": "About us",
-        "tryNow": "Try Now"
-    },
-    "demosDD": {
-        "differentDemos": "Different Demos",
-        "includedWithThePackage": "Included with the package",
-        "livePreview": "Live Preview",
-        "differentApps": " Different Apps"
-    },
-    "monaco-search-bar": {
-        "quickCommandLinks": "Quick Command Links",
-        "clickToCopy": "Click to copy",
-        "searchHere": "Search here"
-    },
-    "monaco-functions": {
-        "copied": "Copied!"
-    },
-    "hua-banner": {
-        "haorkopioUniversity": "Harokopio University of Athens",
-        "haorkopioUniversityDescription": "Harokopio University of Athens is a public university dedicated to promoting research and learning in a small, well focused set of intellectual areas. The university, situated in the centre of Athens and close to the Unesco World Heritage Centre of the Acropolis, originates from an educational institution that was first established in 1929 and gained the status of University in 1990. It takes its name from the national benefactor Panagis Harokopos. The University/’s excellent campus facilities houses four academic departments, the central administration, the library, the IT centre and student advisory services. Harokopio University of Athens is located close to many important cultural sites of interest such as the Acropolis Museum, Thissio, Panathenaic Stadium (Kallimarmaron), Keramikos and the Benaki Museum."
-    },
-    "theme": {
-        "light": "Light",
-        "dark": "Dark"
-    },
-    "authentication": {
-        "authLogin": {
-            "username": "Username",
-            "password": "Password",
-            "rememberDevice": "Remeber this Device",
-            "forgotPassword": "Forgot Password?",
-            "singIn": "Sign In"
-        },
-        "authRegister": {
-            "signUpWith": "Sign up with",
-            "signUp": "Sign Up",
-            "password": "Password",
-            "username": "Username",
-            "firstname": "Firstname",
-            "lastname": "Lastname",
-            "emailAddress": "Email Address"
-        },
-        "error": {
-            "oops": "Opps!!!",
-            "pageNotFound": "This page you are looking for could not be found.",
-            "gobackHome": "Go Back to Home"
-        },
-        "login": {
-            "title": "Login Page",
-            "description": "This is the Login page",
-            "welcome": "Welcome to FOSSBot-Platform", 
-            "robotsCodingCreativity": "Robotics, Coding, Creativity. All in one place.",
-            "newToPlatform": " New to FOSSBot-Platform?",
-            "createAccount": "Create an account"
-        },
-        "register": {
-            "title": "Register Page",
-            "description": "This is the Register page",
-            "welcome": "Welcome to FOSSBot-Platform", 
-            "robotsCodingCreativity": "Robotics, Coding, Creativity. All in one place.",
-            "singIn": "Sign In",
-            "alreadyHaveAccount": "Already have an Account?"
-        }
-    },
-    "blockly-page": {
-        "title": "Blockly Page",
-        "description": "This is the Blockly page",
-        "fossbot-terminal": "FOSSBot terminal"
-    },
-    "dashboard-page": {
-        "title": "Modern Dashboard",
-        "description": "This is the Modern Dashboard page"
-    },
-    "project-form": {
-        "title": "Horizontal Form",
-        "description": "This is the Horizontal Form page",
-        "createNewProject": "Create New Project",
-        "newProjectForm": "New Project Form"
-    },
-    "monaco-page": {
-        "title": "Monaco Page",
-        "description": "This is the Monaco page",
-        "fossbot-terminal": "FOSSBot terminal"
-    },
-    "hua-page": {
-        "title": "Landing Page",
-        "description": "This is the Landing page"
+    "register": {
+      "title": "Register Page",
+      "description": "This is the Register page",
+      "welcome": "Welcome to FOSSBot-Platform",
+      "robotsCodingCreativity": "Robotics, Coding, Creativity. All in one place.",
+      "singIn": "Sign In",
+      "alreadyHaveAccount": "Already have an Account?"
     }
+  },
+  "blockly-page": {
+    "title": "Blockly Page",
+    "description": "This is the Blockly page",
+    "fossbot-terminal": "FOSSBot terminal"
+  },
+  "dashboard-page": {
+    "title": "Modern Dashboard",
+    "description": "This is the Modern Dashboard page"
+  },
+  "project-form": {
+    "title": "Horizontal Form",
+    "description": "This is the Horizontal Form page",
+    "createNewProject": "Create New Project",
+    "newProjectForm": "New Project Form"
+  },
+  "monaco-page": {
+    "title": "Monaco Page",
+    "description": "This is the Monaco page",
+    "fossbot-terminal": "FOSSBot terminal"
+  },
+  "hua-page": {
+    "title": "Landing Page",
+    "description": "This is the Landing page"
+  }
 }

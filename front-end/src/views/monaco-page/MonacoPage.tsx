@@ -1,19 +1,22 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Box, Grid, Stack, DialogContent, alertTitleClasses, Typography } from '@mui/material';
+
+import Spinner from '../spinner/Spinner';
 import PageContainer from 'src/components/container/PageContainer';
 import MonacoEditorComponent from 'src/components/editors/MonacoEditor';
 import Buttons from 'src/components/editors/RightColButtons';
-// import Terminal from 'src/components/editors/Terminal';
 import PythonExecutor from 'src/components/editors/PythonExecutor';
-import { useAuth } from 'src/authentication/AuthProvider'; // Assuming AuthProvider is in the same directory
 import WebGLApp from 'src/components/websimulator/Simulator';
-import { useParams, useNavigate } from 'react-router-dom';
-// import FunctionsManual from 'src/components/monaco-functions/MonacoFunctions';
 import SearchBar from 'src/components/monaco-functions/MonacoSearchBar';
+
+import { Box, Grid, Stack, DialogContent, alertTitleClasses, Typography } from '@mui/material';
+import { useAuth } from 'src/authentication/AuthProvider'; // Assuming AuthProvider is in the same directory
+import { useParams, useNavigate } from 'react-router-dom';
 import { v4 as uuidv4 } from 'uuid';
-import Spinner from '../spinner/Spinner';
+import { useTranslation } from 'react-i18next';
 
 const MonacoPage = () => {
+  const { t } = useTranslation();
+
   //Editor get set value
   const [editorValue, setEditorValue] = useState('');
   const [projectTitle, setProjectTitle] = useState('New Project');
@@ -90,7 +93,7 @@ const MonacoPage = () => {
   };
 
   return (
-    <PageContainer title="Monaco Page" description="this is Monaco page">
+    <PageContainer title={t('monaco-page.title')} description={t('monaco-page.description')}>
       <Box flexGrow={1}>
         <Box mb={3}>
           <Typography variant="h1" mt={2} color={'primary'}>
@@ -118,7 +121,7 @@ const MonacoPage = () => {
                   lineHeight: '0.2', // adjusting line height for closer lines
                 }}
               >
-                <p>FOSSBot terminal 🐍</p>
+                <p>{t('monaco-page.fossbot-terminal')} 🐍</p>
                 <PythonExecutor
                   pythonScript={editorValue}
                   sessionId={sessionId}

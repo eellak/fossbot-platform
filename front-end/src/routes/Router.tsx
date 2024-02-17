@@ -1,4 +1,3 @@
- 
 import React, { lazy } from 'react';
 import { Navigate } from 'react-router-dom';
 import Loadable from '../layouts/full/shared/loadable/Loadable';
@@ -30,21 +29,18 @@ const Router = [
   {
     path: '/sample-page',
     element: <BoxedLayout />,
-    children: [
-      { path: '/sample-page', exact: true, element: <SamplePage /> },
-    ],
+    children: [{ path: '/sample-page', exact: true, element: <SamplePage /> }],
   },
   {
     path: '/dashboard',
     element: <PrivateRoute />,
     children: [
-      {path: '',
-    element: <FullLayout />,
-    children: [
-      { path: '', exact: true, element: <Dashboard /> },
-    ]},
+      {
+        path: '',
+        element: <FullLayout />,
+        children: [{ path: '', exact: true, element: <Dashboard /> }],
+      },
     ],
-    
   },
   {
     path: '/',
@@ -54,13 +50,11 @@ const Router = [
       { path: '/landing-page', exact: true, element: <LandingPage /> },
       { path: '*', element: <Navigate to="/auth/404" /> },
     ],
-  },  
+  },
   {
     path: '/hua-page',
     element: <BlankLayout />,
-    children: [
-      { path: '/hua-page', exact: true, element: <HuaPage /> },
-    ],
+    children: [{ path: '/hua-page', exact: true, element: <HuaPage /> }],
   },
   {
     path: '/auth',
@@ -75,10 +69,10 @@ const Router = [
     path: '/blockly-page',
     element: <FullLayout />,
     children: [
-      { path: '/blockly-page', exact: true, element: <BlocklyPage/> },
-      { path: '/blockly-page/:projectId', exact: true, element: <BlocklyPage/> },
+      { path: '/blockly-page', exact: true, element: <BlocklyPage /> },
+      { path: '/blockly-page/:projectId', exact: true, element: <BlocklyPage /> },
     ],
-  },  
+  },
   {
     path: '/monaco-page',
     element: <FullLayout />,
@@ -90,9 +84,7 @@ const Router = [
   {
     path: '/auth',
     element: <BlankLayout />,
-    children: [
-      { path: '404', element: <Error /> },
-    ],
+    children: [{ path: '404', element: <Error /> }],
   },
 ];
 

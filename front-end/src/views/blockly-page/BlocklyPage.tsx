@@ -3,6 +3,7 @@ import { Box, Grid, Stack, DialogContent, Typography } from '@mui/material';
 import { useAuth } from 'src/authentication/AuthProvider'; // Assuming AuthProvider is in the same directory
 import { v4 as uuidv4 } from 'uuid';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 
 import PythonTerminal from 'src/components/editors/PythonTerminal';
 import WebGLApp from 'src/components/websimulator/Simulator';
@@ -12,6 +13,8 @@ import BlocklyEditorComponent from '../../components/editors/BlocklyEditor';
 import Spinner from '../spinner/Spinner';
 
 const BlocklyPage = () => {
+  const { t } = useTranslation();
+
   const [editorValue, setEditorValue] = useState(
     '<xml xmlns="http://www.w3.org/1999/xhtml"></xml>',
   );
@@ -99,7 +102,7 @@ const BlocklyPage = () => {
   };
 
   return (
-    <PageContainer title="Blockly Page" description="This is the Blockly page">
+    <PageContainer title={t('blockly-page.title')} description={t('blockly-page.description')}>
       <Box flexGrow={1}>
         <Box mb={3}>
           <Typography variant="h1" mt={2} color={'primary'}>
@@ -132,7 +135,7 @@ const BlocklyPage = () => {
                   lineHeight: '0.2', // adjusting line height for closer lines
                 }}
               >
-                <p>FOSSBot terminal 🐍</p>
+                <p>{t('blockly-page.fossbot-terminal')} 🐍</p>
                 <PythonTerminal
                   pythonScript={editorPythonValue}
                   sessionId={sessionId}
