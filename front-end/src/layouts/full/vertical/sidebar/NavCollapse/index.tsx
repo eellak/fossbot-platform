@@ -1,5 +1,5 @@
- 
 import React from 'react';
+import NavItem from '../NavItem';
 
 import { useState } from 'react';
 import { useSelector } from 'src/store/Store';
@@ -15,11 +15,6 @@ import {
   useTheme,
 } from '@mui/material';
 
-// custom imports
-import NavItem from '../NavItem';
-
-// plugins
- 
 import { IconChevronDown, IconChevronUp } from '@tabler/icons-react';
 import { useTranslation } from 'react-i18next';
 import { AppState } from 'src/store/Store';
@@ -49,7 +44,7 @@ const NavCollapse = ({
   pathWithoutLastPart,
   pathDirect,
   hideMenu,
-  onClick
+  onClick,
 }: NavCollapseProps) => {
   const customizer = useSelector((state: AppState) => state.customizer);
   const Icon = menu?.icon;
@@ -81,9 +76,10 @@ const NavCollapse = ({
     backgroundColor: open && level < 2 ? theme.palette.primary.main : '',
     whiteSpace: 'nowrap',
     '&:hover': {
-      backgroundColor: pathname.includes(menu.href) || open
-        ? theme.palette.primary.main
-        : theme.palette.primary.light,
+      backgroundColor:
+        pathname.includes(menu.href) || open
+          ? theme.palette.primary.main
+          : theme.palette.primary.light,
       color: pathname.includes(menu.href) || open ? 'white' : theme.palette.primary.main,
     },
     color:

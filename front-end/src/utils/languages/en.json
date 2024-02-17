@@ -14,6 +14,29 @@
   "firstname": "Firstname",
   "lastname": "Lastname",
   "emailAddress": "Email Adddress",
+  "foss": "FOSS",
+  "bot": "Bot",
+  "platform": "Platform",
+  "new": "New",
+  "soon": "Soon",
+  "harokopioUniversity": "Harokopio University",
+  "gfoss": "GFOSS",
+  "menu": {
+    "home": "Home",
+    "fossbotHome": "FOSSBot Home", 
+    "dashboard": "Dashboard",
+    "monacoEditor": "Monaco Editor",
+    "editors": "Editors",
+    "pythonBased": "Python based",
+    "blocklyEditor": "Blockly Editor",
+    "blocksBased": "Blocks based",
+    "kindergarten": "Kindergarten",
+    "simplyBlocks": "Simply Blocks",
+    "educationalMaterial": "Educational Material",
+    "elementary": "Elementary",
+    "fossbotRepository": "FOSSBot Repository",
+    "externalLinks": "External Links"
+  },
   "projects-card": {
     "card-title": "FOSSBot Projects",
     "subtitle": "What kind of project will you create today?",
@@ -128,5 +151,9 @@
   "hua-page": {
     "title": "Landing Page",
     "description": "This is the Landing page"
+  },
+  "welcome-home-page": {
+    "welcome": "Welcome To FOSSBot Home Page",
+    "manageProjects": " Here you can manage your projects!"
   }
 }

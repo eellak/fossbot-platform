@@ -1,7 +1,6 @@
+import img1 from 'src/assets/images/profile/user-1.jpg';
 import { Box, Avatar, Typography, IconButton, Tooltip, useMediaQuery } from '@mui/material';
 import { useSelector } from 'src/store/Store';
-import img1 from 'src/assets/images/profile/user-1.jpg';
- 
 import { IconPower } from '@tabler/icons-react';
 import { AppState } from 'src/store/Store';
 import { Link } from 'react-router-dom';

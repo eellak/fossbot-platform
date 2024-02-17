@@ -1,5 +1,7 @@
- 
 import React from 'react';
+// custom imports
+import NavItem from '../NavItem/NavItem';
+
 import { useTheme } from '@mui/material/styles';
 import { useLocation } from 'react-router-dom';
 
@@ -7,11 +9,7 @@ import { useLocation } from 'react-router-dom';
 import { ListItemIcon, styled, ListItemText, Box, ListItemButton } from '@mui/material';
 import { useSelector } from 'src/store/Store';
 
-// custom imports
-import NavItem from '../NavItem/NavItem';
-
 // plugins
- 
 import { IconChevronDown } from '@tabler/icons-react';
 import { AppState } from 'src/store/Store';
 
@@ -34,7 +32,13 @@ interface NavCollapseProps {
 }
 
 // FC Component For Dropdown Menu
-const NavCollapse = ({ menu, level, pathWithoutLastPart, pathDirect, hideMenu }: NavCollapseProps) => {
+const NavCollapse = ({
+  menu,
+  level,
+  pathWithoutLastPart,
+  pathDirect,
+  hideMenu,
+}: NavCollapseProps) => {
   const Icon = menu.icon;
   const theme = useTheme();
   const { pathname } = useLocation();
@@ -60,7 +64,8 @@ const NavCollapse = ({ menu, level, pathWithoutLastPart, pathDirect, hideMenu }:
     gap: '10px',
     borderRadius: `${customizer.borderRadius}px`,
     whiteSpace: 'nowrap',
-    color: open || pathname.includes(menu.href) || level < 1 ? 'white' : theme.palette.text.secondary,
+    color:
+      open || pathname.includes(menu.href) || level < 1 ? 'white' : theme.palette.text.secondary,
     backgroundColor: open || pathname.includes(menu.href) ? theme.palette.primary.main : '',
 
     '&:hover': {
@@ -100,7 +105,9 @@ const NavCollapse = ({ menu, level, pathWithoutLastPart, pathDirect, hideMenu }:
           level={level + 1}
           pathWithoutLastPart={pathWithoutLastPart}
           pathDirect={pathDirect}
-          hideMenu={hideMenu} onClick={undefined}        />
+          hideMenu={hideMenu}
+          onClick={undefined}
+        />
       );
     } else {
       return (
@@ -109,9 +116,11 @@ const NavCollapse = ({ menu, level, pathWithoutLastPart, pathDirect, hideMenu }:
           item={item}
           level={level + 1}
           pathDirect={pathDirect}
-          hideMenu={hideMenu} onClick={function (): void {
+          hideMenu={hideMenu}
+          onClick={function (): void {
             throw new Error('Function not implemented.');
-          } }        />
+          }}
+        />
       );
     }
   });

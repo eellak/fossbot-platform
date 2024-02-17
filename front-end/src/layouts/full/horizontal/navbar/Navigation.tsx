@@ -1,9 +1,10 @@
-import { useMediaQuery, Box, Drawer, Container, Theme } from '@mui/material';
+import SidebarItems from '../../vertical/sidebar/SidebarItems';
 import NavListing from './NavListing/NavListing';
 import Logo from '../../shared/logo/Logo';
+
+import { useMediaQuery, Box, Drawer, Container, Theme } from '@mui/material';
 import { useSelector, useDispatch } from 'src/store/Store';
 import { toggleMobileSidebar } from 'src/store/customizer/CustomizerSlice';
-import SidebarItems from '../../vertical/sidebar/SidebarItems';
 import { AppState } from 'src/store/Store';
 
 const Navigation = () => {

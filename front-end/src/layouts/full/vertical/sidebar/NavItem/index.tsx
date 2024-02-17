@@ -1,4 +1,3 @@
- 
 import React from 'react';
 import { NavLink } from 'react-router-dom';
 
@@ -75,6 +74,8 @@ const NavItem = ({ item, level, pathDirect, hideMenu, onClick }: ItemType) => {
     },
   }));
 
+  const itemSubtitle = item?.subtitle ? t(item?.subtitle) : '';
+
   const listItemProps: {
     component: any;
     href?: string;
@@ -111,7 +112,7 @@ const NavItem = ({ item, level, pathDirect, hideMenu, onClick }: ItemType) => {
           {hideMenu ? '' : <>{t(`${item?.title}`)}</>}
           <br />
           {item?.subtitle ? (
-            <Typography variant="caption">{hideMenu ? '' : item?.subtitle}</Typography>
+            <Typography variant="caption">{hideMenu ? '' : itemSubtitle}</Typography>
           ) : (
             ''
           )}
@@ -122,7 +123,7 @@ const NavItem = ({ item, level, pathDirect, hideMenu, onClick }: ItemType) => {
             color={item?.chipColor}
             variant={item?.variant ? item?.variant : 'filled'}
             size="small"
-            label={item?.chip}
+            label={t(item?.chip)}
           />
         )}
       </ListItemStyled>

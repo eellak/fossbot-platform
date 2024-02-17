@@ -1,19 +1,6 @@
-import { uniqueId } from 'lodash';
 import FOSSBotIcon from '/src/assets/images/fossbot/fossbot-icon.png';
-interface MenuitemsType {
-  [x: string]: any;
-  id?: string;
-  navlabel?: boolean;
-  subheader?: string;
-  title?: string;
-  icon?: any;
-  href?: string;
-  children?: MenuitemsType[];
-  chip?: string;
-  chipColor?: string;
-  variant?: string;
-  external?: boolean;
-}
+
+import { uniqueId } from 'lodash';
 import {
   IconAward,
   IconBoxMultiple,
@@ -34,110 +21,71 @@ import {
   IconBrandGoogle,
   IconBrandOpenSource,
   IconMoodHappy,
-  IconLayoutDashboard
+  IconLayoutDashboard,
 } from '@tabler/icons-react';
-//https://tabler-icons-react.vercel.app/
-//search above for icons names
 
+interface MenuitemsType {
+  [x: string]: any;
+  id?: string;
+  navlabel?: boolean;
+  subheader?: string;
+  title?: string;
+  icon?: any;
+  href?: string;
+  children?: MenuitemsType[];
+  chip?: string;
+  chipColor?: string;
+  variant?: string;
+  external?: boolean;
+}
 
 const Menuitems: MenuitemsType[] = [
   {
     navlabel: true,
-    subheader: 'Home',
+    subheader: 'menu.home',
   },
 
   {
     id: uniqueId(),
-    title: 'FOSSBot Home',
+    title: 'menu.fossbotHome',
     icon: IconHome,
     href: '/',
-    // chip: 'New',
     chipColor: 'secondary',
   },
   {
     id: uniqueId(),
-    title: 'Dashboard',
+    title: 'menu.dashboard',
     icon: IconLayoutDashboard,
     href: '/dashboard',
-    // chip: 'New',
     chipColor: 'secondary',
   },
-
-  // {
-  //   id: uniqueId(),
-  //   title: 'Menu Level',
-  //   icon: IconBoxMultiple,
-  //   href: '/menulevel/',
-  //   children: [
-  //     {
-  //       id: uniqueId(),
-  //       title: 'Level 1',
-  //       icon: IconPoint,
-  //       href: '/l1',
-  //     },
-  //     {
-  //       id: uniqueId(),
-  //       title: 'Level 1.1',
-  //       icon: IconPoint,
-  //       href: '/l1.1',
-  //       children: [
-  //         {
-  //           id: uniqueId(),
-  //           title: 'Level 2',
-  //           icon: IconPoint,
-  //           href: '/l2',
-  //         },
-  //         {
-  //           id: uniqueId(),
-  //           title: 'Level 2.1',
-  //           icon: IconPoint,
-  //           href: '/l2.1',
-  //           children: [
-  //             {
-  //               id: uniqueId(),
-  //               title: 'Level 3',
-  //               icon: IconPoint,
-  //               href: '/l3',
-  //             },
-  //             {
-  //               id: uniqueId(),
-  //               title: 'Level 3.1',
-  //               icon: IconPoint,
-  //               href: '/l3.1',
-  //             },
-  //           ],
-  //         },
-  //       ],
-  //     },
-  //   ],
-  // },
   {
     navlabel: true,
-    subheader: 'Editors',
+    subheader: 'menu.editors',
   },
   {
     id: uniqueId(),
-    title: 'Monaco Editor',
+    title: 'menu.monacoEditor',
     subtitle: 'Python based',
-    chip: 'New',
+    chip: 'new',
     chipColor: 'primary',
     icon: IconCode,
     href: '/monaco-page',
   },
   {
     id: uniqueId(),
-    title: 'Blockly Editor',
-    subtitle: 'Blocks based',
+    title: 'menu.blocklyEditor',
+    subtitle: 'menu.blocksBased',
     icon: IconPuzzle,
     href: '/blockly-page',
   },
 
   {
     id: uniqueId(),
-    title: 'Kindergarten',
-    subtitle: 'Simply Blocks',
+    title: 'menu.kindergarten',
+    subtitle: 'menu.simplyBlocks',
     icon: IconMoodKid,
-    chip: 'Soon',
+    chip: 'soon',
     // chipColor: 'primary',
     href: '/blockly-simply-page',
     disabled: true,
@@ -145,110 +93,53 @@ const Menuitems: MenuitemsType[] = [
 
   {
     navlabel: true,
-    subheader: 'Educational Material',
+    subheader: 'menu.educationalMaterial',
   },
   {
     id: uniqueId(),
-    title: 'Kindergarten',
-    // subtitle: 'Simply Blocks',
+    title: 'menu.kindergarten',
     icon: IconMoodKid,
-    chip: 'Soon',
+    chip: 'soon',
     // chipColor: 'primary',
     href: '/material-page',
     disabled: true,
   },
   {
     id: uniqueId(),
-    title: 'Elementary',
-    // subtitle: 'Simply Blocks',
+    title: 'menu.elementary',
     icon: IconMoodHappy,
-    chip: 'Soon',
-    // chipColor: 'primary',
+    chip: 'soon',
     href: '/material-page',
     disabled: true,
   },
-
-  // {
-  //   id: uniqueId(),
-  //   title: 'Chip',
-  //   icon: IconAward,
-  //   href: '/',
-  //   chip: '9',
-  //   chipColor: 'primary',
-  // },
-  // {
-  //   id: uniqueId(),
-  //   title: 'Outlined',
-  //   icon: IconMoodSmile,
-  //   href: '/',
-  //   chip: 'outline',
-  //   variant: 'outlined',
-  //   chipColor: 'primary',
-  // },
-  // {
-  //   navlabel: true,
-  //   subheader: 'About us',
-  // },
-  // {
-  //   id: uniqueId(),
-  //   title: 'Our Team',
-  //   icon: IconArrowMerge,
-  //   href: '/team-page',
-  //   disabled: false,
-  // },
-  // {
-  //   id: uniqueId(),
-  //   title: 'Google Summer of Code',
-  //   icon: IconBrandGoogle,
-  //   href: '/gsoc-page',
-  //   disabled: false,
-  // },
-  // {
-  //   id: uniqueId(),
-  //   title: 'Harokopio University',
-  //   icon: IconSchool,
-  //   href: '/hua-page',
-  //   disabled: false,
-  // },
-  // {
-  //   id: uniqueId(),
-  //   title: 'GFOSS',
-  //   icon: IconBrandOpenSource,
-  //   href: '/gfoss-page',
-  //   disabled: false,
-  // },
-
-
-
-
   {
     navlabel: true,
-    subheader: 'External Links',
+    subheader: 'menu.externalLinks',
   },
 
   {
     id: uniqueId(),
-    title: 'FOSSBot Repository',
+    title: 'menu.fossbotRepository',
     external: true,
     icon: IconBrandGithub,
     href: 'https://github.com/eellak/fossbot',
-    newWindow: true
+    newWindow: true,
   },
   {
     id: uniqueId(),
-    title: 'Harokopio University',
+    title: 'harokopioUniversity',
     icon: IconSchool,
     external: true,
     href: 'https://www.hua.gr/index.php/en/',
-    newWindow: true
+    newWindow: true,
   },
   {
     id: uniqueId(),
-    title: 'GFOSS',
+    title: 'gfoss',
     icon: IconBrandOpenSource,
     external: true,
     href: 'https://gfoss.eu/',
-    newWindow: true
+    newWindow: true,
   },
 ];
 

@@ -1,8 +1,11 @@
  
 import * as React from 'react';
 import { Snackbar, Alert, AlertTitle } from '@mui/material';
+import { useTranslation } from 'react-i18next';
 
 const WelcomeHomePage = () => {
+  const { t } = useTranslation();
+
   const [open, setOpen] = React.useState(false);
 
   const handleClick = () => {
@@ -38,8 +41,8 @@ const WelcomeHomePage = () => {
           variant="filled"
           sx={{ width: '100%', color: 'white' }}
         >
-          <AlertTitle>Welcome To FOSSBot Home Page</AlertTitle>
-          Here you can manage your projects!
+          <AlertTitle>{t('welcome-home-page.welcome')}</AlertTitle>
+          {t('welcome-home-page.manageProjects')}
         </Alert>
       </Snackbar>
     </React.Fragment>

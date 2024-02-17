@@ -1,3 +1,4 @@
+import Menuitems from '../sidebar/MenuItems';
 import { useState } from 'react';
 import {
   IconButton,
@@ -14,8 +15,8 @@ import {
 } from '@mui/material';
  
 import { IconSearch, IconX } from '@tabler/icons-react';
-import Menuitems from '../sidebar/MenuItems';
 import { Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 
 interface menuType {
   title: string;
@@ -26,6 +27,8 @@ interface menuType {
 }
 
 const Search = () => {
+  const { t } = useTranslation();
+
   // drawer top
   const [showDrawer2, setShowDrawer2] = useState(false);
   const [search, setSerach] = useState('');
