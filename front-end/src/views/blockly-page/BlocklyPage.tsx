@@ -48,7 +48,7 @@ const BlocklyPage = () => {
   useEffect(() => {
     const fetchProject = async () => {
       try {
-        const fetchedProject = await auth.getProjectById(Number(projectId));
+        const fetchedProject = await auth.getProjectByIdAction(Number(projectId));
         if (fetchedProject) {
           if (fetchedProject.code != '') {
             setEditorValue(fetchedProject.code);
@@ -81,7 +81,7 @@ const BlocklyPage = () => {
 
   const handleSaveClick = async () => {
     try {
-      await auth.updateProjectAction(Number(projectId), {
+      await auth.updateProjectByIdAction(Number(projectId), {
         name: projectTitle,
         description: projectDescription,
         project_type: 'python',

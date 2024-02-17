@@ -160,7 +160,7 @@ const Profile = () => {
               <img src={unlimitedImg} alt="unlimited" className="signup-bg"></img>
             </Box>
           </Box> */}
-          <Button  variant="outlined" color="primary" onClick={() => auth.logOut()} fullWidth>
+          <Button  variant="outlined" color="primary" onClick={() => auth.logOutAction()} fullWidth>
             Logout
           </Button>
         </Box>
