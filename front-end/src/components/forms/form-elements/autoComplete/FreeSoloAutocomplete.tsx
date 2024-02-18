@@ -1,11 +1,11 @@
 import React from 'react';
-import { Stack } from '@mui/material';
 import Autocomplete from '@mui/material/Autocomplete';
 import CustomTextField from '../../theme-elements/CustomTextField';
 import top100Films from './data';
 
+import { Stack } from '@mui/material';
+
 const FreeSoloAutocomplete = () => {
-  
   return (
     <Stack>
       <Autocomplete

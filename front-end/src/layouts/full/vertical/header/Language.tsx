@@ -12,12 +12,12 @@ import { AppState } from 'src/store/Store';
 
 const Languages = [
   {
-    flagname: 'English (UK)',
+    flagname: 'english',
     icon: FlagEn,
     value: 'en',
   },
   {
-    flagname: 'Gree (GR)',
+    flagname: 'greek',
     icon: FlagGr,
     value: 'gr',
   },
@@ -30,7 +30,7 @@ const Language = () => {
   const customizer = useSelector((state: AppState) => state.customizer);
   const currentLang =
     Languages.find((_lang) => _lang.value === customizer.isLanguage) || Languages[1];
-  const { i18n } = useTranslation();
+  const { i18n, t } = useTranslation();
   const handleClick = (event: any) => {
     setAnchorEl(event.currentTarget);
   };
@@ -72,7 +72,7 @@ const Language = () => {
           >
             <Stack direction="row" spacing={1} alignItems="center">
               <Avatar src={option.icon} alt={option.icon} sx={{ width: 20, height: 20 }} />
-              <Typography> {option.flagname}</Typography>
+              <Typography> {t(option.flagname)}</Typography>
             </Stack>
           </MenuItem>
         ))}

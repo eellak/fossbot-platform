@@ -1,9 +1,11 @@
- 
 import React from 'react';
-import { Grid, Typography } from '@mui/material';
 import AnimationFadeIn from '../animation/Animation';
+import { useTranslation } from 'react-i18next';
+import { Grid, Typography } from '@mui/material';
 
 const TestimonialTitle = () => {
+  const { t } = useTranslation();
+
   return (
     <Grid container spacing={3} justifyContent="center">
       <Grid item xs={12} sm={10} lg={8}>
@@ -23,7 +25,7 @@ const TestimonialTitle = () => {
               },
             }}
           >
-            Don’t just take our words for it, See what developers like you are saying
+            {t('testimonial-title.description')}
           </Typography>
         </AnimationFadeIn>
       </Grid>

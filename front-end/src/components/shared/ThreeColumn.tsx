@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Button, Box, Drawer, useMediaQuery, Paper, Theme } from '@mui/material';
+import { useTranslation } from 'react-i18next';
 
 const drawerWidth = 240;
 const secdrawerWidth = 320;
@@ -11,6 +12,8 @@ type Props = {
 };
 
 const ThreeColumn = ({ leftChild, middleChild, rightChild }: Props) => {
+  const { t } = useTranslation();
+
   const [isLeftSidebarOpen, setLeftSidebarOpen] = useState(false);
   const [isRightSidebarOpen, setRightSidebarOpen] = useState(false);
   const lgUp = useMediaQuery((theme: Theme) => theme.breakpoints.up('lg'));
@@ -73,7 +76,7 @@ const ThreeColumn = ({ leftChild, middleChild, rightChild }: Props) => {
               onClick={() => setRightSidebarOpen(false)}
               sx={{ mb: 3, display: { xs: 'block', md: 'none', lg: 'none' } }}
             >
-              Back{' '}
+              {t('back')}{' '}
             </Button>
           </Box>
         )}

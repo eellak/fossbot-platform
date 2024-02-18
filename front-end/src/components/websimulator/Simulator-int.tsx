@@ -1,12 +1,14 @@
 import React, { useEffect } from 'react';
-import { useRef } from 'react';
-import {Box} from '@mui/material';
-// import io from 'socket.io-client';
 import styles from './GodotGame.module.css';
 
+import { useRef } from 'react';
+import { Box } from '@mui/material';
+import { useTranslation } from 'react-i18next';
+
+// import io from 'socket.io-client';
 declare global {
   interface Window {
-    Engine: any;    
+    Engine: any;
     appsessionId: string;
     initGodotSocket: (ws_ip: string, ws_port: string, sio_namespace: string) => void;
     sendMessageFromGodot: (data: any, func: string, fossbot_name: string, user_id: string) => void;
@@ -20,16 +22,15 @@ type WebGLAppProps = {
 };
 
 const WebGLApp: React.FC<WebGLAppProps> = ({ appsessionId }) => {
+  const { t } = useTranslation();
 
   const engineRef = useRef(null); // Ref to store the engine instance
-  
 
   useEffect(() => {
-    if (window.appsessionId == undefined){
+    if (window.appsessionId == undefined) {
       window.appsessionId = appsessionId;
     }
     const loadScript = (src: string, onLoad: () => void, onError?: () => void) => {
-      
       const script = document.createElement('script');
       script.src = src;
       script.async = false;
@@ -47,48 +48,47 @@ const WebGLApp: React.FC<WebGLAppProps> = ({ appsessionId }) => {
       const GODOT_CONFIG = {
         args: [],
         canvasResizePolicy: 0,
-        executable: "index",
+        executable: 'index',
         experimentalVK: false,
         focusCanvas: true,
         unloadAfterInit: false,
-        gdnativeLibs: [],    
-    
+        gdnativeLibs: [],
       };
       const engine = new window.Engine(GODOT_CONFIG);
       engineRef.current = engine;
 
-      
-
       script2 = loadScript('/simulator.js', () => {
         // Ensure simulator.js has loaded
-        const ws_port = "5000";
-        const ws_ip = "localhost";
-        const sio_namespace = "/godot";
+        const ws_port = '5000';
+        const ws_ip = 'localhost';
+        const sio_namespace = '/godot';
 
+        script3 = loadScript(
+          'https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js',
+          () => {
+            // socket.io-client is now loaded
+            if (window.initGodotSocket) {
+              window.initGodotSocket(ws_ip, ws_port, sio_namespace);
+            } else {
+              console.error('initGodotSocket is not defined');
+            }
+          },
+        );
 
-        script3 = loadScript('https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js', () => {
-          // socket.io-client is now loaded
-          if (window.initGodotSocket) {
-            window.initGodotSocket(ws_ip, ws_port, sio_namespace);
-          } else {
-            console.error("initGodotSocket is not defined");
-          }
-        });
-
-        engine.startGame().then(() => {
-          console.log("Game started");
-        }).catch((error) => {
-          console.error("Failed to start the game:", error);
-        });
+        engine
+          .startGame()
+          .then(() => {
+            console.log('Game started');
+          })
+          .catch((error) => {
+            console.error('Failed to start the game:', error);
+          });
       });
     });
 
     return () => {
-      
       window.appsessionId = undefined;
       if (engineRef.current) {
-        
-        
         engineRef.current = null; // Clear the ref
       }
       //delete window.Engine;
@@ -110,17 +110,16 @@ const WebGLApp: React.FC<WebGLAppProps> = ({ appsessionId }) => {
 
   return (
     <Box width={'100%'}>
-
-    <div className={styles.godotGameContainer}>
-      <canvas id="canvas">
-        HTML5 canvas appears to be unsupported in the current browser.<br />
-        Please try updating or use a different browser.
-      </canvas>
-      {/* Other HTML elements can be added here if needed */}
-    </div>
+      <div className={styles.godotGameContainer}>
+        <canvas id="canvas">
+          {t('simulator-int.unsupported')}
+          <br />
+          {t('simulator-int.tryAgain')}
+        </canvas>
+        {/* Other HTML elements can be added here if needed */}
+      </div>
     </Box>
   );
 };
 
 export default WebGLApp;
-

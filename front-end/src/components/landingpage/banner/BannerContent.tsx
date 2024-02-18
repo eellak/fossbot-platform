@@ -1,12 +1,8 @@
- 
 import React from 'react';
 import { Typography, Box, Button, Stack, styled, useMediaQuery, Theme } from '@mui/material';
 import { IconRocket } from '@tabler/icons-react';
-
-
-// third party
-
 import { motion } from 'framer-motion';
+import { useTranslation } from 'react-i18next';
 
 const StyledButton = styled(Button)(() => ({
   padding: '13px 48px',
@@ -14,9 +10,10 @@ const StyledButton = styled(Button)(() => ({
 }));
 
 const BannerContent = () => {
+  const { t } = useTranslation();
 
   const lgDown = useMediaQuery((theme: Theme) => theme.breakpoints.down('lg'));
-  
+
   return (
     <Box mt={lgDown ? 8 : 0}>
       <motion.div
@@ -49,12 +46,13 @@ const BannerContent = () => {
         >
           {/* Most powerful &{' '} */}
           <Typography component={'span'} variant="inherit" color={'primary'}>
-            FOSS
-          </Typography>{''}
+            {t('banner-content.foss')}
+          </Typography>
+          {''}
           <Typography component={'span'} variant="inherit" color={'orange'}>
-            Bot
+            {t('banner-content.bot')}
           </Typography>{' '}
-          an open technologies robot for education.
+          {t('banner-content.openTechnologies')}
         </Typography>
       </motion.div>
       <Box pt={4} pb={3}>
@@ -69,7 +67,7 @@ const BannerContent = () => {
           }}
         >
           <Typography variant="h5" fontWeight={300}>
-            Let's democratize robotics education! 
+            {t('banner-content.democratizeEducation')}
           </Typography>
         </motion.div>
       </Box>
@@ -85,7 +83,7 @@ const BannerContent = () => {
       >
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} mt={3}>
           <StyledButton variant="contained" color="primary" href="/dashboard">
-            Try it now
+            {t('banner-content.tryItNow')}
           </StyledButton>
 
           {/* <StyledButton variant="outlined" href="/dashboards/modern">

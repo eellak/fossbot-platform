@@ -1,46 +1,45 @@
- 
 import React, { useState } from 'react';
-import { Box, Button, Divider, Grid, styled, Paper } from '@mui/material';
-import { IconChevronDown } from '@tabler/icons-react';
 import AppLinks from 'src/layouts/full/vertical/header/AppLinks';
 import QuickLinks from 'src/layouts/full/vertical/header/QuickLinks';
 import DemosDD from './DemosDD';
+import { Box, Button, Divider, Grid, styled, Paper } from '@mui/material';
+import { IconChevronDown } from '@tabler/icons-react';
+import { useTranslation } from 'react-i18next';
 
 const Navigations = () => {
+  const { t } = useTranslation();
 
-    const StyledButton = styled(Button)(({ theme }) => ({
-        fontSize: '16px',
-        color: theme.palette.text.secondary
-    }));
+  const StyledButton = styled(Button)(({ theme }) => ({
+    fontSize: '16px',
+    color: theme.palette.text.secondary,
+  }));
 
-    // demos
-    const [open, setOpen] = useState(false);
+  // demos
+  const [open, setOpen] = useState(false);
 
-    const handleOpen = () => {
-        setOpen(true);
-    };
+  const handleOpen = () => {
+    setOpen(true);
+  };
 
-    const handleClose = () => {
-        setOpen(false);
-    };
+  const handleClose = () => {
+    setOpen(false);
+  };
 
-    // pages
+  // pages
 
-    const [open2, setOpen2] = useState(false);
+  const [open2, setOpen2] = useState(false);
 
-    const handleOpen2 = () => {
-        setOpen2(true);
-    };
+  const handleOpen2 = () => {
+    setOpen2(true);
+  };
 
-    const handleClose2 = () => {
-        setOpen2(false);
-    };
+  const handleClose2 = () => {
+    setOpen2(false);
+  };
 
-
-
-    return (
-        <>
-            {/* <StyledButton
+  return (
+    <>
+      {/* <StyledButton
                 color="inherit"
                 variant="text"
                 aria-expanded={open ? 'true' : undefined}
@@ -68,7 +67,7 @@ const Navigations = () => {
                     <DemosDD />
                 </Paper>
             )} */}
-            {/* <Box>
+      {/* <Box>
                 <StyledButton
                     color="inherit"
                     variant="text"
@@ -109,23 +108,23 @@ const Navigations = () => {
                     </Paper>
                 )}
             </Box> */}
-            <StyledButton color="inherit"  variant="text" href="https://github.com/eellak/fossbot">
-                Github
-            </StyledButton>
-            <StyledButton color="inherit" variant="text" href="/hua-page">
-                Harokopio University
-            </StyledButton>
-            <StyledButton color="inherit" variant="text" href="/gfoss-page">
-                GFOSS
-            </StyledButton>
-            <StyledButton color="inherit" variant="text" href="/about-page">
-                About us
-            </StyledButton>
-            <Button color="primary"  variant="contained" href="/dashboard">
-                Try Now
-            </Button>
-        </>
-    );
+      <StyledButton color="inherit" variant="text" href="https://github.com/eellak/fossbot">
+        {t('github')}
+      </StyledButton>
+      <StyledButton color="inherit" variant="text" href="/hua-page">
+        {t('harokopioUniversity')}
+      </StyledButton>
+      <StyledButton color="inherit" variant="text" href="/gfoss-page">
+        {t('gfoss')}
+      </StyledButton>
+      <StyledButton color="inherit" variant="text" href="/about-page">
+        {t('aboutUs')}
+      </StyledButton>
+      <Button color="primary" variant="contained" href="/dashboard">
+        {t('tryNow')}
+      </Button>
+    </>
+  );
 };
 
 export default Navigations;

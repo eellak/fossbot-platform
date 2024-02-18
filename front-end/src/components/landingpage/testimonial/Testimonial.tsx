@@ -1,6 +1,4 @@
- 
 import React from 'react';
-import { Avatar, Box, CardContent, Container, Typography, Rating, Stack } from '@mui/material';
 import TestimonialTitle from './TestimonialTitle';
 import BlankCard from '../../shared/BlankCard';
 import img1 from 'src/assets/images/profile/user-1.jpg';
@@ -13,6 +11,8 @@ import Slider from 'react-slick';
 import 'slick-carousel/slick/slick.css';
 import 'slick-carousel/slick/slick-theme.css';
 import './testimonial.css';
+
+import { Avatar, Box, CardContent, Container, Typography, Rating, Stack } from '@mui/material';
 
 interface SliderType {
   title: string;

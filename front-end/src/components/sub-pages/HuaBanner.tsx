@@ -1,27 +1,13 @@
- 
 import React from 'react';
-import {
-  Box,
-  Typography,
-  CardMedia,
-  styled,
-} from '@mui/material';
+import BlankCard from 'src/components/shared/BlankCard';
 import huabuilding from 'src/assets/images/backgrounds/hua_building.jpg';
 import userimg from 'src/assets/images/profile/user-1.jpg';
-// import {
-//   IconBrandDribbble,
-//   IconBrandFacebook,
-//   IconBrandTwitter,
-//   IconBrandYoutube,
-//   IconFileDescription,
-//   IconUserCheck,
-//   IconUserCircle,
-// } from '@tabler/icons-react';
-// import ProfileTab from './ProfileTab';
-import BlankCard from 'src/components/shared/BlankCard';
+import { Box, Typography, CardMedia, styled } from '@mui/material';
 import { motion } from 'framer-motion';
+import { useTranslation } from 'react-i18next';
 
 const HuaBanner = () => {
+  const { t } = useTranslation();
   const ProfileImage = styled(Box)(() => ({
     backgroundImage: 'linear-gradient(#50b2fc,#f44c66)',
     borderRadius: '50%',
@@ -30,29 +16,32 @@ const HuaBanner = () => {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    margin: '0 auto'
+    margin: '0 auto',
   }));
 
   return (
-    
     <motion.div
-            initial={{ opacity: 0, translateY: 550 }}
-            animate={{ opacity: 1, translateY: 0 }}
-            transition={{
-              type: 'spring',
-              stiffness: 150,
-              damping: 10,
-            }}>
+      initial={{ opacity: 0, translateY: 550 }}
+      animate={{ opacity: 1, translateY: 0 }}
+      transition={{
+        type: 'spring',
+        stiffness: 150,
+        damping: 10,
+      }}
+    >
       <BlankCard>
-      
-        <CardMedia component="img" image={huabuilding} alt={huabuilding} width="100%"  sx={{
-                mb: '-500px',
-                mt: '-100px',
+        <CardMedia
+          component="img"
+          image={huabuilding}
+          alt={huabuilding}
+          width="100%"
+          sx={{
+            mb: '-500px',
+            mt: '-100px',
+          }}
+        />
 
-              }}/>
-                
-
-          {/* <Box
+        {/* <Box
                 display="absolute"
                 alignItems="center"
                 textAlign="center"
@@ -64,41 +53,33 @@ const HuaBanner = () => {
           
             
           </Box> */}
-         
-      
-        
-      <Box
-      bgcolor={'dark blue'}
-      border={"10px"}
-      width={"100%"}
-      height={"100px"}
-      >
-      <Typography
-          variant="h1"
-          fontWeight={900}
-          color={'white'}
-          sx={{
-            pl: '10px',
-            fontSize: {
-              md: '54px',
-            },
-            lineHeight: {
-              md: '60px',
-            },
-          }} >
-          Harokopio University of Athens
-    
+
+        <Box bgcolor={'dark blue'} border={'10px'} width={'100%'} height={'100px'}>
+          <Typography
+            variant="h1"
+            fontWeight={900}
+            color={'white'}
+            sx={{
+              pl: '10px',
+              fontSize: {
+                md: '54px',
+              },
+              lineHeight: {
+                md: '60px',
+              },
+            }}
+          >
+            {t('hua-banner.harokopioUniversityOfAthens')}
           </Typography>
-          </Box>
-          </BlankCard>
-
+        </Box>
+      </BlankCard>
       <Box
-      sx={{
-        pt: '10px',
-        pl: '10%',
-        pr: '10%'
-      }}>
-
+        sx={{
+          pt: '10px',
+          pl: '10%',
+          pr: '10%',
+        }}
+      >
         <Typography
           variant="body1"
           fontWeight={400}
@@ -116,23 +97,12 @@ const HuaBanner = () => {
             letterSpacing: '0.05em',
             textAlign: 'justify',
             textJustify: 'inter-word',
-          }}>
-          Harokopio University of Athens is a public university dedicated to promoting research
-          and learning in a small, well focused set of intellectual areas. The university,
-          situated in the centre of Athens and close to the Unesco World Heritage Centre of the Acropolis,
-          originates from an educational institution that was first established in 1929 and
-          gained the status of University in 1990. It takes its name from the national benefactor
-          Panagis Harokopos. The University’s excellent campus facilities houses four academic
-          departments, the central administration, the library, the IT centre and student advisory
-          services. Harokopio University of Athens is located close to many important cultural
-          sites of interest such as the Acropolis Museum, Thissio, Panathenaic Stadium (Kallimarmaron),
-          Keramikos and the Benaki Museum.
+          }}
+        >
+          {t('hua-banner.haorkopioUniversityDescription')}
         </Typography>
       </Box>
-      </motion.div>
-          
-
-
+    </motion.div>
   );
 };
 

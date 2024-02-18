@@ -1,8 +1,8 @@
- 
 import React from 'react';
-import { Grid, Typography, Box, Button, styled, Container, Stack } from '@mui/material';
 import fossbotImg from 'src/assets/images/landingpage/background/fossbot.png';
 import GuaranteeCard from './GuaranteeCard';
+import { Grid, Typography, Box, Button, styled, Container, Stack } from '@mui/material';
+import { useTranslation } from 'react-i18next';
 
 const StyledButton = styled(Button)(({ theme }) => ({
   padding: '13px 34px',
@@ -25,6 +25,8 @@ const StyledButton2 = styled(Button)(({ theme }) => ({
 }));
 
 const C2a2 = () => {
+  const { t } = useTranslation();
+
   return (
     <Box>
       <Box
@@ -38,8 +40,7 @@ const C2a2 = () => {
           <Grid container justifyContent="space-between" spacing={3}>
             <Grid item xs={12} sm={12} lg={5}>
               <Typography variant="h2" color="background.paper" fontWeight={700} mt={4}>
-                Let's start your journey with us, build your own application using blocks or native
-                Python code.
+                {t('c2a2.description')}
               </Typography>
 
               <Stack
@@ -49,10 +50,10 @@ const C2a2 = () => {
                 mt={3}
               >
                 <StyledButton variant="contained" color="inherit" href="/auth/login">
-                  Login
+                  {t('login')}
                 </StyledButton>
                 <StyledButton2 variant="outlined" color="inherit" href="/auth/register">
-                  Register
+                  {t('register')}
                 </StyledButton2>
               </Stack>
             </Grid>
