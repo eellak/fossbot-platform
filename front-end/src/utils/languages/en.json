@@ -72,7 +72,7 @@
         "authLogin": {
             "username": "Username",
             "password": "Password",
-            "rememberDevice": "Remeber this Device",
+            "rememberDevice": "Remember this Device",
             "forgotPassword": "Forgot Password?",
             "singIn": "Sign In"
         },

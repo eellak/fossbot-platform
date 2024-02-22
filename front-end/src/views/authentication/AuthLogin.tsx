@@ -132,7 +132,7 @@ return (
         <FormGroup>
           <FormControlLabel
             control={<CustomCheckbox defaultChecked />}
-            label="Remeber this Device"
+            label="Remember this Device"
           />
         </FormGroup>
         <Typography
