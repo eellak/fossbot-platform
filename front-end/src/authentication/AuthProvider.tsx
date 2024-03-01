@@ -40,6 +40,7 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
                 setToken(res.access_token);
                 localStorage.setItem(localStorageName, res.access_token);
                 navigate('/dashboard');
+                return;
             }
             throw new Error(res.message);
         } catch (err) {
