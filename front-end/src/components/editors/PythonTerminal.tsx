@@ -31,7 +31,7 @@ const PythonTerminal: React.FC<PythonTerminalProps> = ({ pythonScript, onRunScri
     
     const runPythonScript = useCallback(async () => {
       if (pythonScript == '') {
-        alert('Please write a command in the Monaco Editor!');
+        alert('Please write a command in the Editor!');
         return;
       }
       const scriptWithSession = {
