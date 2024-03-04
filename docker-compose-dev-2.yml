@@ -29,3 +29,16 @@ services:
       - ./simulator:/usr/src/app/simulator   
     depends_on:
       - backend
+
+  frontend:
+    image: fsbt-front
+    container_name: fsbt-front
+    build: ./front-end
+    networks:
+      - fossbot-net
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./front-end:/usr/src/app/front-end
+    depends_on:
+      - simulator

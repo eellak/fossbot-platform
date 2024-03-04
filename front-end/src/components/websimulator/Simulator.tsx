@@ -12,6 +12,7 @@ const WebGLApp: React.FC<WebGLAppProps> = ({ appsessionId, onMountChange }) => {
   };
 
   const SimUrl = 'http://localhost:5000/' + appsessionId;
+  console.log('sim url ', SimUrl)
   return (
     <Box width={'100%'}>
       <iframe

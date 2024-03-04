@@ -2,9 +2,9 @@
 FROM python:3.9
 
 # Set the working directory in the container
-WORKDIR /usr/src/app
+WORKDIR /usr/src/app/simulator
 
-# Copy the current directory contents into the container at /usr/src/app
+# Copy the current directory contents into the container at /usr/src/app/simulator
 COPY main.py .
 COPY requirements.txt .
 COPY static/ ./static

@@ -41,6 +41,11 @@ docker-compose up
 ```
 
 Backend servers (2nd way)
+The first time you have to create the network: 
+```
+docker network create fossbot-net
+```
+
 ```
 docker-compose -f docker-compose-dev.yml up --build
 ```

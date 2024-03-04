@@ -8,7 +8,9 @@ type PythonTerminalProps = {
   
 const PythonTerminal: React.FC<PythonTerminalProps> = ({ pythonScript, onRunScript, sessionId }) => {
     const [results, setResults] = useState<string[]>([]);
-  
+    const localStorageName = 'fossbot-platform';
+    const [session_token, setSessionToken] = useState<string>(localStorage.getItem(localStorageName) || '');
+
     // Create a new web worker
     const pyodideWorker = new Worker(new URL('../../workers/pyodideWorker.ts', import.meta.url));
   
@@ -34,10 +36,15 @@ const PythonTerminal: React.FC<PythonTerminalProps> = ({ pythonScript, onRunScri
         alert('Please write a command in the Editor!');
         return;
       }
+       
+      // Get the session ID from local storage
+      console.log('session_token: ', session_token);
+
       const scriptWithSession = {
         command: "RUN_SCRIPT",
         script: pythonScript,
         sessionId: sessionId,
+        session_token: session_token
       };
   
       pyodideWorker.postMessage(JSON.stringify(scriptWithSession));
