@@ -65,6 +65,10 @@ Test database
 username : test1
 password : 123456
 
+
+Docs running here : http://0.0.0.0:8000/docs
+ 
+ 
 ## Software Development Team
 * Christos Chronis
 * Eleftheria Papageorgiou
