@@ -21,8 +21,8 @@ const BlocklyPage = () => {
   const [editorPythonValue, setEditorPythonValue] = useState('');
   const [sessionId, setSessionId] = useState('');
 
-  const [projectTitle, setProjectTitle] = useState('New Project');
-  const [projectDescription, setProjectDescription] = useState('New Project Description');
+  const [projectTitle, setProjectTitle] = useState(t('newProject'));
+  const [projectDescription, setProjectDescription] = useState(t('newProjectDescription'));
   const [loading, setLoading] = useState(true); // Loading state of Blockly project
   const [isSimulatorLoading, setIsSimulatorLoading] = useState(true); // Loading state of Simulator
 

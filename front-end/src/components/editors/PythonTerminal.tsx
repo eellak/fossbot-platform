@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 
 type PythonTerminalProps = {
   pythonScript: string;
@@ -8,7 +9,8 @@ type PythonTerminalProps = {
   
 const PythonTerminal: React.FC<PythonTerminalProps> = ({ pythonScript, onRunScript, sessionId }) => {
     const [results, setResults] = useState<string[]>([]);
-  
+    const { t } = useTranslation();
+
     // Create a new web worker
     const pyodideWorker = new Worker(new URL('../../workers/pyodideWorker.ts', import.meta.url));
   
@@ -31,7 +33,7 @@ const PythonTerminal: React.FC<PythonTerminalProps> = ({ pythonScript, onRunScri
     
     const runPythonScript = useCallback(async () => {
       if (pythonScript == '') {
-        alert('Please write a command in the Editor!');
+        alert(t('errors.noCommandError'));
         return;
       }
       const scriptWithSession = {

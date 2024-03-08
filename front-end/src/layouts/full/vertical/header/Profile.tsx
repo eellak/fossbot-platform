@@ -11,15 +11,19 @@ import {
   IconButton,
   Stack
 } from '@mui/material';
+
 import * as dropdownData from './data';
-
- 
-import { IconMail } from '@tabler/icons-react';
-
 import ProfileImg from 'src/assets/images/profile/user-1.jpg';
 import unlimitedImg from 'src/assets/images/backgrounds/unlimited-bg.png';
+
+import { IconMail } from '@tabler/icons-react';
 import { useAuth } from "src/authentication/AuthProvider";
+import { useTranslation } from 'react-i18next';
+
+
 const Profile = () => {
+  const { t } = useTranslation();
+
   const [anchorEl2, setAnchorEl2] = useState(null);
   const handleClick2 = (event: any) => {
     setAnchorEl2(event.currentTarget);
@@ -70,7 +74,7 @@ const Profile = () => {
           },
         }}
       >
-        <Typography variant="h5">User Profile</Typography>
+        <Typography variant="h5">{t('userProfile')}</Typography>
         <Stack direction="row" py={3} spacing={2} alignItems="center">
           <Avatar src={ProfileImg} alt={ProfileImg} sx={{ width: 95, height: 95 }} />
           <Box>
@@ -161,7 +165,7 @@ const Profile = () => {
             </Box>
           </Box> */}
           <Button  variant="outlined" color="primary" onClick={() => auth.logOutAction()} fullWidth>
-            Logout
+            {t('logOut')}
           </Button>
         </Box>
       </Menu>

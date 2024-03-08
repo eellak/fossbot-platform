@@ -16,6 +16,7 @@
   "firstname": "Όνομα",
   "lastname": "Επίθετο",
   "emailAddress": "Ηλ. Διεύθυνση",
+  "userProfile": "Προφίλ χρήστη",
   "foss": "FOSS",
   "bot": "Bot",
   "platform": "Πλατφόρμα",
@@ -38,6 +39,11 @@
   "documentation": "Τεκμηρίωση",
   "pages": "Σελίδες",
   "demos": "Demos",
+  "newProject": "Νέο πρότζεκτ",
+  "newProjectDescription": "Περιγραφή νέου πρότζεκτ",
+  "errors": {
+    "noCommandError": "Παρακαλώ γράψτε μία εντολή στον Editor!"
+  },
   "menu": {
     "home": "Αρχική",
     "fossbotHome": "FOSSBot Αρχική",
@@ -155,7 +161,9 @@
     "title": "Οριζόντια Φόρμα",
     "description": "Αυτή είναι η σελίδα Οριζόντιας Φόρμας",
     "createNewProject": "Δημιουργία Νέου Έργου",
-    "newProjectForm": "Φόρμα Νέου Έργου"
+    "newProjectForm": "Φόρμα Νέου Έργου",
+    "giveYourProjectAName": "Δώστε ένα όνομα για το πρότζεκτ σας",
+    "describeYourProject": "Δώστε μια περιγραφή για το πρότζεκτ σας"
   },
   "monaco-page": {
     "title": "Σελίδα Monaco",

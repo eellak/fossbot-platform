@@ -1,12 +1,16 @@
 import React from 'react';
-import { useDispatch } from 'react-redux';
-import { ToggleButton, ToggleButtonGroup } from '@mui/material';
 import WbSunnyTwoToneIcon from '@mui/icons-material/WbSunnyTwoTone';
 import DarkModeTwoToneIcon from '@mui/icons-material/DarkModeTwoTone';
+
+import { useDispatch } from 'react-redux';
+import { ToggleButton, ToggleButtonGroup } from '@mui/material';
 import { toggleSidebar, toggleMobileSidebar } from 'src/store/customizer/CustomizerSlice';
 import { setDarkMode} from 'src/store/customizer/CustomizerSlice';
+import { useTranslation } from 'react-i18next';
 
 const ModeToggle = () => {
+    const { t } = useTranslation();
+
     const dispatch = useDispatch();
     let mode = String('light');
 
@@ -28,11 +32,11 @@ const ModeToggle = () => {
         >
             <ToggleButton value="light" aria-label="left aligned">
                 <WbSunnyTwoToneIcon color={mode === 'light' ? 'primary' : 'inherit'} />
-                Light
+                {t('theme.light')}
             </ToggleButton>
             <ToggleButton value="dark" aria-label="centered">
                 <DarkModeTwoToneIcon color={mode === 'dark' ? 'primary' : 'inherit'} />
-                Dark
+                {t('theme.dark')}
             </ToggleButton>
         </ToggleButtonGroup>
     );

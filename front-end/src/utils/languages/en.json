@@ -16,6 +16,7 @@
   "firstname": "Firstname",
   "lastname": "Lastname",
   "emailAddress": "Email Adddress",
+  "userProfile": "User Profile",
   "foss": "FOSS",
   "bot": "Bot",
   "platform": "Platform",
@@ -38,6 +39,11 @@
   "documentation": "Documentation",
   "pages": "Pages",
   "demos": "Demos",
+  "newProject": "New Project",
+  "newProjectDescription": "New Project Description",
+  "errors": {
+    "noCommandError": "Please write a command in the Editor!"
+  },
   "menu": {
     "home": "Home",
     "fossbotHome": "FOSSBot Home",
@@ -155,7 +161,9 @@
     "title": "Horizontal Form",
     "description": "This is the Horizontal Form page",
     "createNewProject": "Create New Project",
-    "newProjectForm": "New Project Form"
+    "newProjectForm": "New Project Form",
+    "giveYourProjectAName": "Give your project a name",
+    "describeYourProject": "Describe your project"
   },
   "monaco-page": {
     "title": "Monaco Page",

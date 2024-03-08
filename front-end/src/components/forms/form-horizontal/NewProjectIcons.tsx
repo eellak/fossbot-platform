@@ -81,7 +81,7 @@ const NewProjectIcons = () => {
                 <IconFileTypography size="20" />
               </InputAdornment>
             }
-            placeholder="Give your project a name"
+            placeholder={t('project-form.giveYourProjectAName')}
             fullWidth
             onChange={handleProjectNameChange}
           />
@@ -99,7 +99,7 @@ const NewProjectIcons = () => {
                 <IconFileDescription size="20" />
               </InputAdornment>
             }
-            placeholder="Describe your project"
+            placeholder={t('project-form.describeYourProject')}
             fullWidth
             onChange={handleDescriptionChange}
           />

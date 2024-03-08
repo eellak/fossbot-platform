@@ -1,5 +1,6 @@
 import { Button } from '@mui/material';
 import React, { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 
 type PythonExecutorProps = {
   pythonScript: string;
@@ -9,6 +10,7 @@ type PythonExecutorProps = {
 
 const PythonExecutor: React.FC<PythonExecutorProps> = ({ pythonScript, onRunScript, sessionId }) => {
   const [results, setResults] = useState<string[]>([]);
+  const { t } = useTranslation();
 
   // Create a new web worker
   const pyodideWorker = new Worker(new URL('../../workers/pyodideWorker.ts', import.meta.url));
@@ -32,7 +34,7 @@ const PythonExecutor: React.FC<PythonExecutorProps> = ({ pythonScript, onRunScri
   
   const runPythonScript = useCallback(async () => {
     if (pythonScript == '') {
-      alert('Please write a command in the Editor!');
+      alert(t('errors.noCommandError'));
       return;
     }
     const scriptWithSession = {

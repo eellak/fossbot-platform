@@ -19,8 +19,8 @@ const MonacoPage = () => {
 
   //Editor get set value
   const [editorValue, setEditorValue] = useState('');
-  const [projectTitle, setProjectTitle] = useState('New Project');
-  const [projectDescription, setProjectDescription] = useState('New Project Description');
+  const [projectTitle, setProjectTitle] = useState(t('newProject'));
+  const [projectDescription, setProjectDescription] = useState(t('newProjectDescription'));
   const [sessionId, setSessionId] = useState('');
 
   const [loading, setLoading] = useState(true); // Loading state of Python project
