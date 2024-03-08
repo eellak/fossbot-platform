@@ -39,14 +39,14 @@
   "pages": "Σελίδες",
   "demos": "Demos",
   "menu": {
-    "home": "Home",
-    "fossbotHome": "FOSSBot Home",
+    "home": "Αρχική",
+    "fossbotHome": "FOSSBot Αρχική",
     "dashboard": "Διαχειριστικό",
     "monacoEditor": "Monaco Editor",
-    "editors": "Editors",
-    "pythonBased": "Python based",
+    "editors": "Επεξεργασία",
+    "pythonBased": "Βασισμένο σε Python",
     "blocklyEditor": "Blockly Editor",
-    "blocksBased": "Blocks based",
+    "blocksBased": "Βασισμένο σε Blocks",
     "kindergarten": "Νηπιαγωγείο",
     "simplyBlocks": "Απλά Blocks",
     "educationalMaterial": "Εκπαιδευτικό υλικό",
@@ -55,130 +55,126 @@
     "externalLinks": "Εξωτερικοί Σύνδεσμοι"
   },
   "projects-card": {
-    "card-title": "FOSSBot Projects",
-    "subtitle": "What kind of project will you create today?",
-    "type": "Type",
-    "title": "Title",
-    "description": "Description",
-    "edit": "Edit",
-    "delete": "Delete",
-    "noProjectsFound": "No projects found"
+    "card-title": "FOSSBot πρότζεκτς",
+    "subtitle": "Ποιο είδος έργου θα δημιουργήσετε σήμερα;",
+    "type": "Τύπος",
+    "title": "Τίτλος",
+    "description": "Περιγραφή",
+    "edit": "Επεξεργασία",
+    "delete": "Διαγραφή",
+    "noProjectsFound": "Δεν βρέθηκαν πρότζεκτς"
   },
   "banner-content": {
-    "foss": "FOSS",
-    "bot": "Bot",
-    "openTechnologies": "an open technologies robot for education.",
-    "democratizeEducation": "Let's democratize robotics education! ",
-    "tryItNow": "Try it now"
+    "openTechnologies": "ένα ρομπότ ανοικτών τεχνολογιών για εκπαίδευση.",
+    "democratizeEducation": "Ας δημοκρατοποιήσουμε την εκπαίδευση στη ρομποτική!",
+    "tryItNow": "Δοκιμάστε το τώρα"
   },
   "c2a2": {
-    "description": "Let's start your journey with us, build your own application using blocks or native Python code."
+    "description": "Ας ξεκινήσουμε το ταξίδι σας μαζί μας, κατασκευάστε τη δική σας εφαρμογή χρησιμοποιώντας τους τομείς ή τον φυσικό κώδικα Python."
   },
   "card-fossbot": {
-    "fossbot": "FOSSBot is an open source and open design DIY robot that has been developed by Greek Free and Open Source Software (GFOSS) and Harokopio University of Athens (HUA) for educational purposes. The robot does not come alone, but comprises multiple software and system solutions that provide a holistic approach for STEM education at all educational levels."
+    "fossbot": "Το FOSSBot είναι ένα ανοικτού κώδικα και σχεδιασμού ρομπότ DIY που έχει αναπτυχθεί από το Greek Free and Open Source Software (GFOSS) και το Πανεπιστήμιο Χαροκοπίου (HUA) για εκπαιδευτικούς σκοπούς. Το ρομπότ δεν έρχεται μόνο του, αλλά αποτελείται από πολλές λογισμικές και συστηματικές λύσεις που παρέχουν μια ολοκληρωμένη προσέγγιση για την εκπαίδευση STEM σε όλα τα επίπεδα εκπαίδευσης."
   },
   "title-fossbot": {
-    "introduceFossbot": "Introducing FOSSBot"
+    "introduceFossbot": "Παρουσίαση του FOSSBot"
   },
   "footer": {
-    "rights": "All rights reserved by Harokopio University of Athens and GFOSS. Designed & Developed by",
-    "fossbotTeam": "FOSSBot team."
+    "rights": "Όλα τα δικαιώματα κατοχυρωμένα από το Χαροκόπειο Πανεπιστήμιο και το GFOSS. Σχεδιασμένο & αναπτυγμένο από",
+    "fossbotTeam": "την ομάδα του FOSSBot"
   },
   "mobile-sidebar": {
     "demos": "Demos",
-    "pages": "Pages",
-    "documentation": "Documentation",
-    "support": "Support"
+    "pages": "Σελίδες",
+    "documentation": "Τεκμηρίωση",
+    "support": "Υποστήριξη"
   },
   "navigations": {
     "github": "Github",
-    "hua": "Harokopio University",
-    "gfoss": "GFOSS",
-    "aboutUs": "About us",
-    "tryNow": "Try Now"
+    "aboutUs": "Σχετικά με εμάς",
+    "tryNow": "Δοκιμάστε Τώρα"
   },
   "demosDD": {
-    "differentDemos": "Different Demos",
-    "includedWithThePackage": "Included with the package",
-    "livePreview": "Live Preview",
-    "differentApps": " Different Apps"
+    "differentDemos": "Διάφορες Επιδείξεις",
+    "includedWithThePackage": "Συμπεριλαμβάνονται στο πακέτο",
+    "livePreview": "Ζωντανή προεπισκόπηση",
+    "differentApps": "Διάφορες Εφαρμογές"
   },
   "monaco-search-bar": {
-    "quickCommandLinks": "Quick Command Links",
-    "clickToCopy": "Click to copy",
-    "searchHere": "Search here"
+    "quickCommandLinks": "Σύνδεσμοι Γρήγορων Εντολών",
+    "clickToCopy": "Κλικ για αντιγραφή",
+    "searchHere": "Αναζήτηση εδώ"
   },
   "monaco-functions": {
-    "copied": "Copied!"
+    "copied": "Αντιγράφηκε!"
   },
   "hua-banner": {
-    "haorkopioUniversity": "Harokopio University of Athens",
-    "haorkopioUniversityDescription": "Harokopio University of Athens is a public university dedicated to promoting research and learning in a small, well focused set of intellectual areas. The university, situated in the centre of Athens and close to the Unesco World Heritage Centre of the Acropolis, originates from an educational institution that was first established in 1929 and gained the status of University in 1990. It takes its name from the national benefactor Panagis Harokopos. The University/’s excellent campus facilities houses four academic departments, the central administration, the library, the IT centre and student advisory services. Harokopio University of Athens is located close to many important cultural sites of interest such as the Acropolis Museum, Thissio, Panathenaic Stadium (Kallimarmaron), Keramikos and the Benaki Museum."
+    "haorkopioUniversity": "Χαροκόπειο Πανεπιστήμιο Αθηνών",
+    "haorkopioUniversityDescription": "Το Πανεπιστήμιο Χαροκοπίου Αθηνών είναι ένα δημόσιο πανεπιστήμιο που αφιερώνεται στην προώθηση της έρευνας και της μάθησης σε ένα μικρό, καλά εστιασμένο σύνολο εννοιών. Το πανεπιστήμιο, που βρίσκεται στο κέντρο της Αθήνας και κοντά στο Παγκόσμιο Πολιτιστικό Κέντρο UNESCO της Ακρόπολης, προέρχεται από μια εκπαιδευτική ίδρυση που ιδρύθηκε πρώτη φορά το 1929 και απέκτησε το καθεστώς πανεπιστημίου το 1990. Πήρε το όνομά του από τον εθνικό ευεργέτη Παναγή Χαροκόπο. Ο εξαιρετικός χώρος του πανεπιστημίου φιλοξενεί τέσσερα ακαδημαϊκά τμήματα, την κεντρική διοίκηση, τη βιβλιοθήκη, το κέντρο πληροφορικής και τις υπηρεσίες συμβουλών προς τους φοιτητές. Το Πανεπιστήμιο Χαροκοπίου Αθηνών βρίσκεται κοντά σε πολλά σημαντικά πολιτιστικά αξιοθέατα όπως το Μουσείο της Ακρόπολης, το Θησείο, το Παναθηναϊκό Στάδιο (Καλλιμάρμαρο), το Κεραμεικό και το Μουσείο Μπενάκη."
   },
   "theme": {
-    "light": "Light",
-    "dark": "Dark"
+    "light": "Ανοιχτό",
+    "dark": "Σκούρο"
   },
   "authentication": {
     "authLogin": {
-      "rememberDevice": "Remember this Device",
-      "forgotPassword": "Forgot Password ?"
+      "rememberDevice": "Θυμήσου αυτή τη Συσκευή",
+      "forgotPassword": "Ξεχάσατε τον Κωδικό;"
     },
     "error": {
-      "oops": "Opps!!!",
-      "pageNotFound": "This page you are looking for could not be found.",
-      "gobackHome": "Go Back to Home"
+      "oops": "Ωχ!",
+      "pageNotFound": "Η σελίδα που ψάχνετε δε βρέθηκε.",
+      "gobackHome": "Επιστροφή στην Αρχική Σελίδα"
     },
     "login": {
-      "title": "Login Page",
-      "description": "This is the Login page",
-      "welcome": "Welcome to FOSSBot-Platform",
-      "robotsCodingCreativity": "Robotics, Coding, Creativity. All in one place.",
-      "newToPlatform": " New to FOSSBot-Platform?",
-      "createAccount": "Create an account"
+      "title": "Σελίδα Σύνδεσης",
+      "description": "Αυτή είναι η σελίδα σύνδεσης",
+      "welcome": "Καλώς ήλθατε στην πλατφόρμα FOSSBot",
+      "robotsCodingCreativity": "Ρομποτική, Κωδικοποίηση, Δημιουργικότητα. Όλα σε ένα μέρος.",
+      "newToPlatform": "Νέος στην πλατφόρμα FOSSBot;",
+      "createAccount": "Δημιουργία λογαριασμού"
     },
     "register": {
-      "title": "Register Page",
-      "description": "This is the Register page",
-      "welcome": "Welcome to FOSSBot-Platform",
-      "robotsCodingCreativity": "Robotics, Coding, Creativity. All in one place.",
-      "singIn": "Sign In",
-      "alreadyHaveAccount": "Already have an Account?"
+      "title": "Σελίδα Εγγραφής",
+      "description": "Αυτή είναι η σελίδα εγγραφής",
+      "welcome": "Καλώς ήλθατε στην πλατφόρμα FOSSBot",
+      "robotsCodingCreativity": "Ρομποτική, Κωδικοποίηση, Δημιουργικότητα. Όλα σε ένα μέρος.",
+      "singIn": "Σύνδεση",
+      "alreadyHaveAccount": "Έχετε ήδη λογαριασμό;"
     }
   },
   "blockly-page": {
-    "title": "Blockly Page",
-    "description": "This is the Blockly page",
-    "fossbot-terminal": "FOSSBot terminal"
+    "title": "Σελίδα Blockly",
+    "description": "Αυτή είναι η σελίδα Blockly",
+    "fossbot-terminal": "Τερματικό FOSSBot"
   },
   "dashboard-page": {
-    "title": "Modern Dashboard",
-    "description": "This is the Modern Dashboard page"
+    "title": "Σελίδα Διαχειριστικού",
+    "description": "Αυτή είναι η σελίδα του Διαχειριστικού"
   },
   "project-form": {
-    "title": "Horizontal Form",
-    "description": "This is the Horizontal Form page",
-    "createNewProject": "Create New Project",
-    "newProjectForm": "New Project Form"
+    "title": "Οριζόντια Φόρμα",
+    "description": "Αυτή είναι η σελίδα Οριζόντιας Φόρμας",
+    "createNewProject": "Δημιουργία Νέου Έργου",
+    "newProjectForm": "Φόρμα Νέου Έργου"
   },
   "monaco-page": {
-    "title": "Monaco Page",
-    "description": "This is the Monaco page",
-    "fossbot-terminal": "FOSSBot terminal"
+    "title": "Σελίδα Monaco",
+    "description": "Αυτή είναι η σελίδα Monaco",
+    "fossbot-terminal": "Τερματικό FOSSBot"
   },
   "hua-page": {
-    "title": "Landing Page",
-    "description": "This is the Landing page"
+    "title": "Σελίδα Landing",
+    "description": "Αυτή είναι η σελίδα Landing"
   },
   "welcome-home-page": {
-    "welcome": "Welcome To FOSSBot Home Page",
-    "manageProjects": " Here you can manage your projects!"
+    "welcome": "Καλώς ήλθατε στην Αρχική Σελίδα του FOSSBot",
+    "manageProjects": " Εδώ μπορείτε να διαχειρίζεστε τα πρότζεκτς σας!"
   },
   "simulator-int": {
-    "unsupported": "HTML5 canvas appears to be unsupported in the current browser.",
-    "tryAgain": "Please try updating or use a different browser."
+    "unsupported": "Ο καμβάς HTML5 φαίνεται να μην υποστηρίζεται στον τρέχοντα περιηγητή.",
+    "tryAgain": "Παρακαλούμε προσπαθήστε να ενημερώσετε ή χρησιμοποιήστε διαφορετικό περιηγητή."
   },
   "testimonial-title": {
-    "description": "Don’t just take our words for it, See what developers like you are saying"
+    "description": "Μην λαμβανετε υπόψιν μόνο την δική μας άποψη για αυτό. Δείτε τι λένε οι προγραμματιστές σαν και εσάς."
   }
 }

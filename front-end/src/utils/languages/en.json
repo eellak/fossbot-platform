@@ -65,8 +65,6 @@
     "noProjectsFound": "No projects found"
   },
   "banner-content": {
-    "foss": "FOSS",
-    "bot": "Bot",
     "openTechnologies": "an open technologies robot for education.",
     "democratizeEducation": "Let's democratize robotics education! ",
     "tryItNow": "Try it now"
@@ -82,7 +80,7 @@
   },
   "footer": {
     "rights": "All rights reserved by Harokopio University of Athens and GFOSS. Designed & Developed by",
-    "fossbotTeam": "FOSSBot team."
+    "fossbotTeam": "FOSSBot team"
   },
   "mobile-sidebar": {
     "demos": "Demos",
@@ -92,8 +90,6 @@
   },
   "navigations": {
     "github": "Github",
-    "hua": "Harokopio University",
-    "gfoss": "GFOSS",
     "aboutUs": "About us",
     "tryNow": "Try Now"
   },

@@ -66,7 +66,7 @@ const Menuitems: MenuitemsType[] = [
   {
     id: uniqueId(),
     title: 'menu.monacoEditor',
-    subtitle: 'Python based',
+    subtitle: 'menu.pythonBased',
     chip: 'new',
     chipColor: 'primary',
     icon: IconCode,
