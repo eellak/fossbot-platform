@@ -69,7 +69,7 @@ const HuaBanner = () => {
               },
             }}
           >
-            {t('hua-banner.harokopioUniversityOfAthens')}
+            {t('harokopioUniversityOfAthens')}
           </Typography>
         </Box>
       </BlankCard>
