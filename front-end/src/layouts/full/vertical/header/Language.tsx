@@ -3,25 +3,10 @@ import React from 'react';
 import { Avatar, IconButton, Menu, MenuItem, Typography, Stack } from '@mui/material';
 import { useSelector, useDispatch } from 'src/store/Store';
 import { setLanguage } from 'src/store/customizer/CustomizerSlice';
-import FlagEn from 'src/assets/images/flag/icon-flag-en.svg';
-import FlagGr from 'src/assets/images/flag/icon-flag-gr.svg';
-
 import { useTranslation } from 'react-i18next';
 import { useEffect } from 'react';
 import { AppState } from 'src/store/Store';
-
-const Languages = [
-  {
-    flagname: 'english',
-    icon: FlagEn,
-    value: 'en',
-  },
-  {
-    flagname: 'greek',
-    icon: FlagGr,
-    value: 'gr',
-  },
-];
+import { Languages } from 'src/utils/languages/Languages';
 
 const Language = () => {
   const [anchorEl, setAnchorEl] = React.useState(null);

@@ -1,11 +1,17 @@
 import { BlocklyWorkspace } from 'react-blockly';
-import './blockly.css';
-import TOOLBOX_JSON from '../../utils/toolboxBlockly/toolbox_en.ts';
-import { useCallback } from 'react';
 
 import Blockly from 'blockly';
+import TOOLBOX_JSON_EN from '../../utils/toolboxBlockly/toolbox_en.ts';
+import TOOLBOX_JSON_GR from '../../utils/toolboxBlockly/toolbox_gr.ts';
+
+import { AppState } from 'src/store/Store';
+import { useSelector, useDispatch } from 'src/store/Store';
+import { Languages } from 'src/utils/languages/Languages.ts';
+import { useCallback } from 'react';
 import { pythonGenerator } from 'blockly/python';
 import "../../utils/blocksBlockly/customBlocks.ts";
+import './blockly.css';
+
 
 type BlocklyEditorProps = {
   code: string;
@@ -28,10 +34,16 @@ const BlocklyEditorComponent = ({
     [handleGetValue, handleGetPythonCodeValue],
   );
 
+  const customizer = useSelector((state: AppState) => state.customizer);
+  const currentLang =
+    Languages.find((_lang) => _lang.value === customizer.isLanguage) || Languages[1];
+
+  const toolboxJSON = currentLang.value == 'en' ? TOOLBOX_JSON_EN : TOOLBOX_JSON_GR;
+
   return (
     <BlocklyWorkspace
       className={'blocklyDiv'}
-      toolboxConfiguration={TOOLBOX_JSON}
+      toolboxConfiguration={toolboxJSON}
       initialXml={code}
       onXmlChange={onWorkspaceChange}
     />
