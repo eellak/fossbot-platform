@@ -6,17 +6,16 @@ import PageContainer from 'src/components/container/PageContainer';
 import MonacoEditorComponent from 'src/components/editors/MonacoEditor';
 import Buttons from 'src/components/editors/RightColButtons';
 import PythonExecutor from 'src/components/editors/PythonExecutor';
-import WebGLApp from 'src/components/websimulator/Simulator';
-import SearchBar from 'src/components/monaco-functions/MonacoSearchBar';
-
-import { Box, Grid, Stack, DialogContent, alertTitleClasses, Typography } from '@mui/material';
 import { useAuth } from 'src/authentication/AuthProvider'; // Assuming AuthProvider is in the same directory
+import WebGLApp from 'src/components/websimulator/Simulator';
 import { useParams, useNavigate } from 'react-router-dom';
-import SearchBar from 'src/components/monaco-functions/MonacoSearchBar';
 import { v4 as uuidv4 } from 'uuid';
 import { useTranslation } from 'react-i18next';
+import SearchBar from 'src/components/monaco-functions/MonacoSearchBar';
 
 const MonacoPage = () => {
+  const { t } = useTranslation();
+
   const [editorValue, setEditorValue] = useState('');
   const [projectTitle, setProjectTitle] = useState(t('newProject'));
   const [projectDescription, setProjectDescription] = useState(t('newProjectDescription'));
@@ -27,6 +26,7 @@ const MonacoPage = () => {
   const auth = useAuth();
   const navigate = useNavigate();
   const { projectId } = useParams();
+  const [showSaveButton, setShowSaveButton] = useState(false);
 
   const handlePlayClick = () => {
     if (runScriptRef.current) {
@@ -131,7 +131,11 @@ const MonacoPage = () => {
                 <DialogContent className="testdialog">
                   <Stack direction="row" spacing={3} alignItems="center" justifyContent="center">
                     <SearchBar />
-                    <Buttons handlePlayClick={handlePlayClick} handleSaveClick={handleSaveClick} showSaveButton={showSaveButton} />
+                    <Buttons
+                      handlePlayClick={handlePlayClick}
+                      handleSaveClick={handleSaveClick}
+                      showSaveButton={showSaveButton}
+                    />
                   </Stack>
                 </DialogContent>
               </Box>
