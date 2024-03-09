@@ -59,7 +59,7 @@ pythonGenerator.forBlock['just_move'] = function (block) {
   return code;
 };
 
-// STOP  ok
+// STOP 
 Blockly.Blocks['stop'] = {
   init: function () {
     this.appendDummyInput().appendField(i18n.t('blocklyBlocks.stopMoving'));
@@ -286,7 +286,7 @@ pythonGenerator.forBlock['get_gyroscope'] = function (block) {
   return [code, Order.NONE];
 };
 
-//SET COLOR ok
+//SET COLOR 
 Blockly.Blocks['set_color'] = {
   init: function () {
     this.appendDummyInput()
