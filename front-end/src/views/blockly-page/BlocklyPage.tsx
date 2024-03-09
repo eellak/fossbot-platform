@@ -26,6 +26,8 @@ const BlocklyPage = () => {
   const [loading, setLoading] = useState(true); // Loading state of Blockly project
   const [isSimulatorLoading, setIsSimulatorLoading] = useState(true); // Loading state of Simulator
 
+  const [showSaveButton, setShowSaveButton] = useState(false);
+
   const runScriptRef = useRef<() => Promise<void>>();
   const auth = useAuth();
   const navigate = useNavigate();
@@ -52,6 +54,8 @@ const BlocklyPage = () => {
     const fetchProject = async () => {
       try {
         if (projectId != '' && projectId != undefined) {
+          setShowSaveButton(true);
+
           const fetchedProject = await auth.getProjectByIdAction(Number(projectId));
           if (fetchedProject) {
             if (fetchedProject.code != '') {
@@ -150,7 +154,7 @@ const BlocklyPage = () => {
               <Box mt={2}>
                 <DialogContent className="testdialog">
                   <Stack direction="row" spacing={3} alignItems="center" justifyContent="center">
-                    <Buttons handlePlayClick={handlePlayClick} handleSaveClick={handleSaveClick} />
+                    <Buttons handlePlayClick={handlePlayClick} handleSaveClick={handleSaveClick} showSaveButton={showSaveButton} />
                   </Stack>
                 </DialogContent>
               </Box>
