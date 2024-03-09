@@ -51,10 +51,12 @@ const MonacoPage = () => {
   useEffect(() => {
     const fetchProject = async () => {
       try {
-        const fetchedProject = await auth.getProjectByIdAction(Number(projectId));
-        if (fetchedProject) {
-          setEditorValue(fetchedProject.code);
-          setProjectTitle(fetchedProject.name);
+        if (projectId != '' && projectId != undefined) {
+          const fetchedProject = await auth.getProjectByIdAction(Number(projectId));
+          if (fetchedProject) {
+            setEditorValue(fetchedProject.code);
+            setProjectTitle(fetchedProject.name);
+          }
         }
       } catch (error) {
         console.error('Error fetching project:', error);
@@ -87,8 +89,7 @@ const MonacoPage = () => {
   };
 
   const handleMountChange = (isMounted: boolean) => {
-    // Do something with the updated value of isMounted
-    console.log('isMounted:', isMounted);
+    // Updated value of isMounted is set to show if simulator is loading
     setIsSimulatorLoading(false);
   };
 

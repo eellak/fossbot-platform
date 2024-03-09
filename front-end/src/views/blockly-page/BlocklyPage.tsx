@@ -51,12 +51,14 @@ const BlocklyPage = () => {
   useEffect(() => {
     const fetchProject = async () => {
       try {
-        const fetchedProject = await auth.getProjectByIdAction(Number(projectId));
-        if (fetchedProject) {
-          if (fetchedProject.code != '') {
-            setEditorValue(fetchedProject.code);
+        if (projectId != '' && projectId != undefined) {
+          const fetchedProject = await auth.getProjectByIdAction(Number(projectId));
+          if (fetchedProject) {
+            if (fetchedProject.code != '') {
+              setEditorValue(fetchedProject.code);
+            }
+            setProjectTitle(fetchedProject.name);
           }
-          setProjectTitle(fetchedProject.name);
         }
       } catch (error) {
         console.error('Error fetching project:', error);
@@ -71,13 +73,13 @@ const BlocklyPage = () => {
 
   // Function to be called when the value in the editor changes
   const handleGetValue = (getValueFunc) => {
-    //Save xml code
+    // Save xml code
     const value = getValueFunc();
     setEditorValue(value);
   };
 
   const handleGetPythonCodeValue = (getValueFunc) => {
-    //save Python code
+    // Save Python code
     const value = getValueFunc;
     setEditorPythonValue(value);
   };
@@ -96,8 +98,7 @@ const BlocklyPage = () => {
   };
 
   const handleMountChange = (isMounted: boolean) => {
-    // Do something with the updated value of isMounted
-    console.log('isMounted:', isMounted);
+    // Updated value of isMounted is set to show if simulator is loading
     setIsSimulatorLoading(false);
   };
 
@@ -144,7 +145,7 @@ const BlocklyPage = () => {
               </Box>
               <br></br>
               <Box>
-                <WebGLApp appsessionId={sessionId} onMountChange={handleMountChange}  />
+                <WebGLApp appsessionId={sessionId} onMountChange={handleMountChange} />
               </Box>
               <Box mt={2}>
                 <DialogContent className="testdialog">
