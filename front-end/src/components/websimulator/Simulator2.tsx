@@ -17,6 +17,8 @@ declare global {
   }
 }
 
+console.log('test')
+
 // Define props for WebGLApp component
 type WebGLAppProps = {
   appsessionId: string; // Add sessionId to the props
