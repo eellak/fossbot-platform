@@ -1,15 +1,17 @@
 import * as Blockly from 'blockly/core';
 import { pythonGenerator, Order } from 'blockly/python';
+import i18n from '../i18n'
+
 
 //MOVE DISTANCE # default forward, reverse
 Blockly.Blocks['move_distance'] = {
   init: function () {
     this.appendDummyInput()
-      .appendField('Move distance')
+      .appendField(i18n.t('blocklyBlocks.moveDistance'))
       .appendField(
         new Blockly.FieldDropdown([
-          ['forward', "'forward'"],
-          ['reverse', "'reverse'"],
+          [i18n.t('blocklyBlocks.forward'), "'forward'"],
+          [i18n.t('blocklyBlocks.reverse'), "'reverse'"],
         ]),
         'option',
       )
@@ -18,9 +20,7 @@ Blockly.Blocks['move_distance'] = {
     this.setPreviousStatement(true, null);
     this.setNextStatement(true, null);
     this.setColour(290);
-    this.setTooltip(
-      'Moves to input direction (default == forward) a specified - input distance (cm). <br> Param: dist: the distance to be moved (in cm). direction: the direction to be moved towards.',
-    );
+    this.setTooltip(i18n.t('blocklyBlocks.moveDistanceTooltip'));
     this.setHelpUrl('');
   },
 };
@@ -37,20 +37,18 @@ pythonGenerator.forBlock['move_distance'] = function (block) {
 Blockly.Blocks['just_move'] = {
   init: function () {
     this.appendDummyInput()
-      .appendField('Just move')
+      .appendField(i18n.t('blocklyBlocks.justMove'))
       .appendField(
         new Blockly.FieldDropdown([
-          ['forward', "'forward'"],
-          ['reverse', "'reverse'"],
+          [i18n.t('blocklyBlocks.forward'), "'forward'"],
+          [i18n.t('blocklyBlocks.reverse'), "'reverse'"],
         ]),
         'option',
       );
     this.setPreviousStatement(true, null);
     this.setNextStatement(true, null);
     this.setColour(290);
-    this.setTooltip(
-      'Moves forwards/backwords <br> Param: direction: the direction to be headed to.',
-    );
+    this.setTooltip(i18n.t('blocklyBlocks.justMoveTooltip'));
     this.setHelpUrl('');
   },
 };
@@ -64,11 +62,11 @@ pythonGenerator.forBlock['just_move'] = function (block) {
 // STOP  ok
 Blockly.Blocks['stop'] = {
   init: function () {
-    this.appendDummyInput().appendField('Stop moving');
+    this.appendDummyInput().appendField(i18n.t('blocklyBlocks.stopMoving'));
     this.setPreviousStatement(true, null);
     this.setNextStatement(true, null);
     this.setColour(290);
-    this.setTooltip('Robot stops moving');
+    this.setTooltip(i18n.t('blocklyBlocks.stopMovingTooltip'));
     this.setHelpUrl('');
   },
 };
@@ -82,15 +80,13 @@ pythonGenerator.forBlock['stop'] = function (block) {
 Blockly.Blocks['sleep'] = {
   init: function () {
     this.appendDummyInput()
-      .appendField('Sleep')
+      .appendField(i18n.t('blocklyBlocks.sleep'))
       .appendField(new Blockly.FieldNumber(0, null, null), 'wait_s')
       .appendField('seconds');
     this.setPreviousStatement(true, null);
     this.setNextStatement(true, null);
     this.setColour(290);
-    this.setTooltip(
-      'sleeps for an amount of time. <br> Param: time_s: the time (seconds) of sleep.',
-    );
+    this.setTooltip(i18n.t('blocklyBlocks.sleepTooltip') );
     this.setHelpUrl('');
   },
 };
@@ -109,17 +105,15 @@ Blockly.Blocks['just_rotate'] = {
       .appendField('Just rotate')
       .appendField(
         new Blockly.FieldDropdown([
-          ['right', '1'],
-          ['left', '0'],
+          [i18n.t('blocklyBlocks.right'), '1'],
+          [i18n.t('blocklyBlocks.left'), '0'],
         ]),
         'option',
       );
     this.setPreviousStatement(true, null);
     this.setNextStatement(true, null);
     this.setColour(290);
-    this.setTooltip(
-      'Rotates fossbot towards the specified direction id. <br> Param: dir_id: the direction id to rotate to: <br> - counterclockwise: dir_id == 0 <br> - clockwise: dir_id == 1',
-    );
+    this.setTooltip(i18n.t('blocklyBlocks.justRotateTooltip'));
     this.setHelpUrl('');
   },
 };
@@ -134,7 +128,7 @@ pythonGenerator.forBlock['just_rotate'] = function (block) {
 Blockly.Blocks['rotate_90'] = {
   init: function () {
     this.appendDummyInput()
-      .appendField('Rotate 90 degrees')
+      .appendField(i18n.t('blocklyBlocks.rotate9Degrees'))
       .appendField(
         new Blockly.FieldDropdown([
           ['right', '1'],
@@ -146,7 +140,7 @@ Blockly.Blocks['rotate_90'] = {
     this.setNextStatement(true, null);
     this.setColour(290);
     this.setTooltip(
-      'Rotates fossbot 90 degrees towards the specified direction id. <br> Param: dir_id: the direction id to rotate 90 degrees: <br> - counterclockwise: dir_id == 0 <br> - clockwise: dir_id == 1',
+      i18n.t('blocklyBlocks.rotate9DegreesTooltip')
     );
     this.setHelpUrl('');
   },
@@ -162,7 +156,7 @@ pythonGenerator.forBlock['rotate_90'] = function (block) {
 Blockly.Blocks['play_sound'] = {
   init: function () {
     this.appendDummyInput()
-      .appendField('Play sound')
+      .appendField(i18n.t('blocklyBlocks.playSound'))
       .appendField(
         new Blockly.FieldDropdown([
           ['empodio', "'res://soundfx/empodio.mp3'"],
@@ -181,7 +175,7 @@ Blockly.Blocks['play_sound'] = {
     this.setNextStatement(true, null);
     this.setColour(135);
     this.setTooltip(
-      'Plays mp3 file specified by input audio_path. <br> Param: audio_path: the path to the mp3 file to be played.',
+      i18n.t('blocklyBlocks.playSoundTooltip')
     );
     this.setHelpUrl('');
   },
@@ -196,10 +190,10 @@ pythonGenerator.forBlock['play_sound'] = function (block) {
 // DISTANCE
 Blockly.Blocks['distance'] = {
   init: function () {
-    this.appendDummyInput().appendField('Distance counter');
+    this.appendDummyInput().appendField(i18n.t('blocklyBlocks.distance'));
     this.setOutput(true, 'Number');
     this.setColour(45);
-    this.setTooltip('Returns distance of nearest obstacle in cm.');
+    this.setTooltip(i18n.t('blocklyBlocks.distanceTooltip'));
     this.setHelpUrl('');
   },
 };
@@ -215,16 +209,16 @@ Blockly.Blocks['floor_sensor'] = {
     this.appendDummyInput()
       .appendField(
         new Blockly.FieldDropdown([
-          ['Left sensor', '1'],
-          ['Middle sensor', '2'],
-          ['right_sensor', '3'],
+          [i18n.t('blocklyBlocks.leftSensor'), '1'],
+          [i18n.t('blocklyBlocks.middleSensor'), '2'],
+          [i18n.t('blocklyBlocks.rightSensor'), '3'],
         ]),
         'floor_sensor_option',
       )
-      .appendField('Floor sensor');
+      .appendField(i18n.t('blocklyBlocks.floorSensor'));
     this.setOutput(true, 'Number');
     this.setColour(45);
-    this.setTooltip('');
+    this.setTooltip(i18n.t('blocklyBlocks.floorSensorTooltip'));
     this.setHelpUrl('');
   },
 };
@@ -239,7 +233,7 @@ pythonGenerator.forBlock['floor_sensor'] = function (block) {
 Blockly.Blocks['get_acceleration'] = {
   init: function () {
     this.appendDummyInput()
-      .appendField('get_acceleration')
+      .appendField(i18n.t('blocklyBlocks.getAcceleration'))
       .appendField(
         new Blockly.FieldDropdown([
           ['χ', 'x'],
@@ -251,7 +245,7 @@ Blockly.Blocks['get_acceleration'] = {
     this.setOutput(true, 'Number');
     this.setColour(45);
     this.setTooltip(
-      'Gets acceleration of specified axis. <br> Param: axis: the axis to get the acceleration from. <br> Returns: the acceleration of specified axis.',
+      i18n.t('blocklyBlocks.getAccelerationTooltip')
     );
     this.setHelpUrl('');
   },
@@ -267,7 +261,8 @@ pythonGenerator.forBlock['get_acceleration'] = function (block) {
 Blockly.Blocks['get_gyroscope'] = {
   init: function () {
     this.appendDummyInput()
-      .appendField('Get gyroscope')
+      .appendField(      i18n.t('blocklyBlocks.getGyroscope')
+      )
       .appendField(
         new Blockly.FieldDropdown([
           ['χ', 'x'],
@@ -279,7 +274,7 @@ Blockly.Blocks['get_gyroscope'] = {
     this.setOutput(true, 'Number');
     this.setColour(45);
     this.setTooltip(
-      'Gets gyroscope of specified axis. <br> Param: axis: the axis to get the gyroscope from. <br> Returns: the gyroscope of specified axis.',
+      i18n.t('blocklyBlocks.getGyroscopeTooltip')
     );
     this.setHelpUrl('');
   },
@@ -295,25 +290,25 @@ pythonGenerator.forBlock['get_gyroscope'] = function (block) {
 Blockly.Blocks['set_color'] = {
   init: function () {
     this.appendDummyInput()
-      .appendField('Set')
+      .appendField( i18n.t('blocklyBlocks.set'))
       .appendField(
         new Blockly.FieldDropdown([
-          ["'red'", "'red'"],
-          ["'green'", "'green'"],
-          ["'blue'", "'blue'"],
-          ["'white'", "'white'"],
-          ["'violet'", "'violet'"],
-          ["'cyan'", "'cyan'"],
-          ["'yellow'", "'yellow'"],
-          ["'closed'", "'closed'"],
+          [i18n.t('blocklyBlocks.red'), "'red'"],
+          [i18n.t('blocklyBlocks.green'), "'green'"],
+          [i18n.t('blocklyBlocks.blue'), "'blue'"],
+          [i18n.t('blocklyBlocks.white'), "'white'"],
+          [i18n.t('blocklyBlocks.violet'), "'violet'"],
+          [i18n.t('blocklyBlocks.cyan'), "'cyan'"],
+          [i18n.t('blocklyBlocks.yellow'), "'yellow'"],
+          [i18n.t('blocklyBlocks.closed'), "'closed'"],
         ]),
         'color_option',
       )
-      .appendField('color');
+      .appendField(i18n.t('blocklyBlocks.color'));
     this.setPreviousStatement(true, null);
     this.setNextStatement(true, null);
     this.setColour(135);
-    this.setTooltip('Sets led to input color. <br> Param: color: the wanted color.');
+    this.setTooltip(i18n.t('blocklyBlocks.setColorTooltip'));
     this.setHelpUrl('');
   },
 };
@@ -326,10 +321,10 @@ pythonGenerator.forBlock['set_color'] = function (block) {
 // LIGHT SENSOR
 Blockly.Blocks['light_sensor'] = {
   init: function () {
-    this.appendDummyInput().appendField('Get light sensor');
+    this.appendDummyInput().appendField(i18n.t('blocklyBlocks.lighSensor'));
     this.setOutput(true, 'Number');
     this.setColour(45);
-    this.setTooltip('Returns the reading of the light sensor.');
+    this.setTooltip(i18n.t('blocklyBlocks.lighSensorTooltip'));
     this.setHelpUrl('');
   },
 };
@@ -342,10 +337,10 @@ pythonGenerator.forBlock['light_sensor'] = function (block) {
 // NOISE DETECTION
 Blockly.Blocks['noise_detection'] = {
   init: function () {
-    this.appendDummyInput().appendField('Get noise detection');
+    this.appendDummyInput().appendField(i18n.t('blocklyBlocks.noiseDetection'));
     this.setOutput(true, 'Boolean');
     this.setColour(45);
-    this.setTooltip('Returns True only if noise is detected.');
+    this.setTooltip(i18n.t('blocklyBlocks.noiseDetectionTooltip'));
     this.setHelpUrl('');
   },
 };
