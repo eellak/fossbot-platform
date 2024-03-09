@@ -17,7 +17,6 @@ declare global {
   }
 }
 
-console.log('test')
 
 // Define props for WebGLApp component
 type WebGLAppProps = {
