@@ -1,37 +1,32 @@
 import React, { useEffect, useState, useRef } from 'react';
 
 import Spinner from '../spinner/Spinner';
+import { Box, Grid, Stack, DialogContent, Typography } from '@mui/material'; // Removed 'alertTitleClasses' from imports
 import PageContainer from 'src/components/container/PageContainer';
 import MonacoEditorComponent from 'src/components/editors/MonacoEditor';
 import Buttons from 'src/components/editors/RightColButtons';
 import PythonExecutor from 'src/components/editors/PythonExecutor';
-import WebGLApp from 'src/components/websimulator/Simulator';
-import SearchBar from 'src/components/monaco-functions/MonacoSearchBar';
-
-import { Box, Grid, Stack, DialogContent, alertTitleClasses, Typography } from '@mui/material';
 import { useAuth } from 'src/authentication/AuthProvider'; // Assuming AuthProvider is in the same directory
+import WebGLApp from 'src/components/websimulator/Simulator';
 import { useParams, useNavigate } from 'react-router-dom';
 import { v4 as uuidv4 } from 'uuid';
 import { useTranslation } from 'react-i18next';
+import SearchBar from 'src/components/monaco-functions/MonacoSearchBar';
 
 const MonacoPage = () => {
   const { t } = useTranslation();
 
-  //Editor get set value
   const [editorValue, setEditorValue] = useState('');
   const [projectTitle, setProjectTitle] = useState(t('newProject'));
   const [projectDescription, setProjectDescription] = useState(t('newProjectDescription'));
   const [sessionId, setSessionId] = useState('');
-
-  const [loading, setLoading] = useState(true); // Loading state of Python project
-  const [isSimulatorLoading, setIsSimulatorLoading] = useState(true); // Loading state of Simulator
-
-  const [showSaveButton, setShowSaveButton] = useState(false);
-
+  const [loading, setLoading] = useState(true);
+  const [isSimulatorLoading, setIsSimulatorLoading] = useState(true);
   const runScriptRef = useRef<() => Promise<void>>();
   const auth = useAuth();
   const navigate = useNavigate();
-  const { projectId } = useParams(); // Get project ID from URL
+  const { projectId } = useParams();
+  const [showSaveButton, setShowSaveButton] = useState(false);
 
   const handlePlayClick = () => {
     if (runScriptRef.current) {
@@ -44,10 +39,9 @@ const MonacoPage = () => {
   };
 
   useEffect(() => {
-    // Generate a new session ID when the component mounts
     const newSessionId = uuidv4();
-    setSessionId(newSessionId); // Update the state
-    console.log('New Session ID:', newSessionId); // Log the new session ID directly
+    setSessionId(newSessionId);
+    console.log('New Session ID:', newSessionId);
   }, []);
 
   useEffect(() => {
@@ -65,14 +59,13 @@ const MonacoPage = () => {
         console.error('Error fetching project:', error);
         navigate('/auth/not-found');
       } finally {
-        setLoading(false); // Set loading to false once the data is fetched
+        setLoading(false);
       }
     };
 
     fetchProject();
-  }, [auth, projectId, navigate]); // Add necessary dependencies here
+  }, [auth, projectId, navigate]);
 
-  // Function to be called when the value in the editor changes
   const handleGetValue = (getValueFunc) => {
     const value = getValueFunc();
     setEditorValue(value);
@@ -92,7 +85,7 @@ const MonacoPage = () => {
   };
 
   const handleMountChange = (isMounted: boolean) => {
-    // Updated value of isMounted is set to show if simulator is loading
+    console.log('isMounted:', isMounted);
     setIsSimulatorLoading(false);
   };
 
@@ -108,11 +101,9 @@ const MonacoPage = () => {
           <Spinner />
         ) : (
           <Grid container spacing={1}>
-            {/* column */}
             <Grid item xs={12} lg={7}>
               <MonacoEditorComponent code={editorValue} handleGetValue={handleGetValue} />
             </Grid>
-            {/* column */}
             <Grid item xs={12} lg={5}>
               <Box
                 height={'400px'}
@@ -121,8 +112,8 @@ const MonacoPage = () => {
                   color: 'white',
                   padding: '2px 20px 5px',
                   overflow: 'auto',
-                  fontFamily: 'monospace', // setting the font to monospace for a console-like appearance
-                  lineHeight: '0.2', // adjusting line height for closer lines
+                  fontFamily: 'monospace',
+                  lineHeight: '0.2',
                 }}
               >
                 <p>{t('monaco-page.fossbot-terminal')} 🐍</p>
@@ -132,7 +123,7 @@ const MonacoPage = () => {
                   onRunScript={setRunScriptFunction}
                 />
               </Box>
-              <br></br>
+              <br />
               <Box>
                 <WebGLApp appsessionId={sessionId} onMountChange={handleMountChange} />
               </Box>
@@ -140,7 +131,11 @@ const MonacoPage = () => {
                 <DialogContent className="testdialog">
                   <Stack direction="row" spacing={3} alignItems="center" justifyContent="center">
                     <SearchBar />
-                    <Buttons handlePlayClick={handlePlayClick} handleSaveClick={handleSaveClick} showSaveButton={showSaveButton} />
+                    <Buttons
+                      handlePlayClick={handlePlayClick}
+                      handleSaveClick={handleSaveClick}
+                      showSaveButton={showSaveButton}
+                    />
                   </Stack>
                 </DialogContent>
               </Box>

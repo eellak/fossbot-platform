@@ -67,3 +67,14 @@ button:focus-visible {
     background-color: #f9f9f9;
   }
 }
+
+@media (prefers-color-scheme: dark) {
+  #landing-page {
+    background-color: #fff;
+  }
+}
+
+.errorText {
+  color: red;
+  font-weight: bold;
+}

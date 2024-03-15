@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Box, Grid, Stack, DialogContent, Typography } from '@mui/material';
 import { useAuth } from 'src/authentication/AuthProvider'; // Assuming AuthProvider is in the same directory
 import { v4 as uuidv4 } from 'uuid';

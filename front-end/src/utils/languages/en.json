@@ -123,7 +123,7 @@
   },
   "authentication": {
     "authLogin": {
-      "rememberDevice": "Remember this Device",
+      "rememberDevice": "Rememmber this Device",
       "forgotPassword": "Forgot Password ?"
     },
     "error": {
