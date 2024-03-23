@@ -91,7 +91,7 @@ const MonacoPage = () => {
 
   return (
     <PageContainer title={t('monaco-page.title')} description={t('monaco-page.description')}>
-      <Box flexGrow={1}>
+      <Box id="monaco-container" flexGrow={1}>
         <Box mb={3}>
           <Typography variant="h1" mt={2} color={'primary'}>
             🐍 {projectTitle}{' '}
@@ -100,7 +100,7 @@ const MonacoPage = () => {
         {loading && isSimulatorLoading ? (
           <Spinner />
         ) : (
-          <Grid container spacing={1}>
+          <Grid container spacing={1} paddingTop={"3rem"} paddingBottom={"3rem"}>
             <Grid item xs={12} lg={7}>
               <MonacoEditorComponent code={editorValue} handleGetValue={handleGetValue} />
             </Grid>

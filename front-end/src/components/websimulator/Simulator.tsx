@@ -18,7 +18,8 @@ const WebGLApp: React.FC<WebGLAppProps> = ({ appsessionId, onMountChange }) => {
       <iframe
         src={SimUrl}
         width={'100%'}
-        height={'370px'}
+        height={'100%'}
+        id="simulatorIframe"
         frameBorder="0"
         allowFullScreen
         onLoad={handleIframeLoad}

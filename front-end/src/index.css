@@ -78,3 +78,15 @@ button:focus-visible {
   color: red;
   font-weight: bold;
 }
+
+#simulatorIframe{
+  min-height: 370px;
+}
+
+.darkbg{
+  background-color: #2a3447;
+}
+
+.lightbg{
+  background: #fff;
+}

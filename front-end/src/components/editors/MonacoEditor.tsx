@@ -26,12 +26,12 @@ const MonacoEditorComponent = ({ code, handleGetValue }: MonacoEditorProps) => {
 
   return (
     <MonacoEditor
-      height="90vh"
+      height="100%"
       language="python"
       theme="vs-dark"
       value={code}
       onMount={handleEditorDidMount}
-      onChange={handleEditorChange} 
+      onChange={handleEditorChange}
     />
   );
 };
