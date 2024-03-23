@@ -117,7 +117,7 @@ const BlocklyPage = () => {
         {loading && isSimulatorLoading ? (
           <Spinner />
         ) : (
-          <Grid container spacing={1}>
+          <Grid container spacing={1} paddingTop={"3rem"} paddingBottom={"3rem"}>
             <Grid item xs={12} lg={7}>
               {/* column */}
               <BlocklyEditorComponent
