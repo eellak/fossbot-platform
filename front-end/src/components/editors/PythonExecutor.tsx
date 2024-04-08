@@ -1,14 +1,22 @@
 import { Button } from '@mui/material';
 import React, { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 
 type PythonExecutorProps = {
   pythonScript: string;
   onRunScript: (runScript: () => Promise<void>) => void;
-  sessionId: string; 
+  sessionId: string;
 };
 
-const PythonExecutor: React.FC<PythonExecutorProps> = ({ pythonScript, onRunScript, sessionId }) => {
+const PythonExecutor: React.FC<PythonExecutorProps> = ({
+  pythonScript,
+  onRunScript,
+  sessionId,
+}) => {
   const [results, setResults] = useState<string[]>([]);
+  const { t } = useTranslation();
+
+  const [error, setError] = useState('');
 
   // Create a new web worker
   const pyodideWorker = new Worker(new URL('../../workers/pyodideWorker.ts', import.meta.url));
@@ -29,19 +37,20 @@ const PythonExecutor: React.FC<PythonExecutorProps> = ({ pythonScript, onRunScri
       setResults([]);
     }
   };
-  
+
   const runPythonScript = useCallback(async () => {
     if (pythonScript == '') {
-      alert('Please write a command in the Editor!');
+      setError(t('errors.noCommandError'));
       return;
     }
     const scriptWithSession = {
-      command: "RUN_SCRIPT",
+      command: 'RUN_SCRIPT',
       script: pythonScript,
       sessionId: sessionId,
     };
 
     pyodideWorker.postMessage(JSON.stringify(scriptWithSession));
+    setError('');
   }, [pythonScript]);
 
   useEffect(() => {
@@ -56,7 +65,12 @@ const PythonExecutor: React.FC<PythonExecutorProps> = ({ pythonScript, onRunScri
 
   return (
     <div>
-       {/* <Button variant="contained" onClick={testinput}>Test</Button> */}
+      {/* <Button variant="contained" onClick={testinput}>Test</Button> */}
+      {error && (
+        <>
+          <p className="errorText">{error}</p>
+        </>
+      )}
       {results.map((result, index) => (
         <p key={index}>{result}</p>
       ))}

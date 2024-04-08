@@ -46,11 +46,11 @@ const BannerContent = () => {
         >
           {/* Most powerful &{' '} */}
           <Typography component={'span'} variant="inherit" color={'primary'}>
-            {t('banner-content.foss')}
+            {t('foss')}
           </Typography>
           {''}
           <Typography component={'span'} variant="inherit" color={'orange'}>
-            {t('banner-content.bot')}
+            {t('bot')}
           </Typography>{' '}
           {t('banner-content.openTechnologies')}
         </Typography>

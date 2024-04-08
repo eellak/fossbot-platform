@@ -6,13 +6,16 @@ import { faSave, faPlay, faStop } from '@fortawesome/free-solid-svg-icons';
 interface ButtonsProps {
   handlePlayClick: () => void;
   handleSaveClick: () => void;
+  showSaveButton: boolean;
 }
 
-const Buttons: React.FC<ButtonsProps> = ({ handlePlayClick, handleSaveClick }) => (
+const Buttons: React.FC<ButtonsProps> = ({ handlePlayClick, handleSaveClick, showSaveButton}) => (
   <Stack direction="row" spacing={3}>
-    <Fab color="primary" aria-label="save" onClick={handleSaveClick}>
-      <FontAwesomeIcon icon={faSave} size="1x" />
-    </Fab>
+    {showSaveButton && (
+      <Fab color="primary" aria-label="save" onClick={handleSaveClick}>
+        <FontAwesomeIcon icon={faSave} size="1x" />
+      </Fab>
+    )}
     <Fab color="success" aria-label="play" onClick={handlePlayClick}>
       <FontAwesomeIcon icon={faPlay} size="1x" />
     </Fab>

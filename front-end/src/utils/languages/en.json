@@ -16,6 +16,7 @@
   "firstname": "Firstname",
   "lastname": "Lastname",
   "emailAddress": "Email Adddress",
+  "userProfile": "User Profile",
   "foss": "FOSS",
   "bot": "Bot",
   "platform": "Platform",
@@ -38,6 +39,11 @@
   "documentation": "Documentation",
   "pages": "Pages",
   "demos": "Demos",
+  "newProject": "New Project",
+  "newProjectDescription": "New Project Description",
+  "errors": {
+    "noCommandError": "Please write a command in the Editor!"
+  },
   "menu": {
     "home": "Home",
     "fossbotHome": "FOSSBot Home",
@@ -65,8 +71,6 @@
     "noProjectsFound": "No projects found"
   },
   "banner-content": {
-    "foss": "FOSS",
-    "bot": "Bot",
     "openTechnologies": "an open technologies robot for education.",
     "democratizeEducation": "Let's democratize robotics education! ",
     "tryItNow": "Try it now"
@@ -82,7 +86,7 @@
   },
   "footer": {
     "rights": "All rights reserved by Harokopio University of Athens and GFOSS. Designed & Developed by",
-    "fossbotTeam": "FOSSBot team."
+    "fossbotTeam": "FOSSBot team"
   },
   "mobile-sidebar": {
     "demos": "Demos",
@@ -92,8 +96,6 @@
   },
   "navigations": {
     "github": "Github",
-    "hua": "Harokopio University",
-    "gfoss": "GFOSS",
     "aboutUs": "About us",
     "tryNow": "Try Now"
   },
@@ -121,7 +123,7 @@
   },
   "authentication": {
     "authLogin": {
-      "rememberDevice": "Remember this Device",
+      "rememberDevice": "Rememmber this Device",
       "forgotPassword": "Forgot Password ?"
     },
     "error": {
@@ -159,7 +161,9 @@
     "title": "Horizontal Form",
     "description": "This is the Horizontal Form page",
     "createNewProject": "Create New Project",
-    "newProjectForm": "New Project Form"
+    "newProjectForm": "New Project Form",
+    "giveYourProjectAName": "Give your project a name",
+    "describeYourProject": "Describe your project"
   },
   "monaco-page": {
     "title": "Monaco Page",
@@ -180,5 +184,50 @@
   },
   "testimonial-title": {
     "description": "Don’t just take our words for it, See what developers like you are saying"
+  },
+  "blocklyBlocks": {
+    "forward": "forward",
+    "reverse": "reverse",
+    "rigth": "right",
+    "left": "left",
+    "moveDistance": "Move distance",
+    "moveDistanceTooltip": "Moves to input direction (default == forward) a specified - input distance (cm). <br> Param: dist: the distance to be moved (in cm). direction: the direction to be moved towards.",
+    "justMove": "Just move",
+    "justMoveTooltip": "Moves forwards/backwords <br> Param: direction: the direction to be headed to.",
+    "stopMoving": "Stop moving",
+    "stopMovingTooltip": "Robot stops moving",
+    "sleep": "Sleep",
+    "sleepTooltip": "Sleeps for an amount of time. <br> Param: time_s: the time (seconds) of sleep.",
+    "justRotate": "Just rotate",
+    "justRotateTooltip": "Rotates fossbot towards the specified direction id. <br> Param: dir_id: the direction id to rotate to: <br> - counterclockwise: dir_id == 0 <br> - clockwise: dir_id == 1",
+    "rotate9Degrees": "Rotate 90 degrees",
+    "rotate9DegreesTooltip": "Rotates fossbot 90 degrees towards the specified direction id. <br> Param: dir_id: the direction id to rotate 90 degrees: <br> - counterclockwise: dir_id == 0 <br> - clockwise: dir_id == 1",
+    "playSound": "Play sound",
+    "playSoundTooltip": "Plays mp3 file specified by input audio_path. <br> Param: audio_path: the path to the mp3 file to be played.",
+    "distance": "Distance counter",
+    "distanceTooltip": "Returns distance of nearest obstacle in cm.",
+    "floorSensor": "Floor sensor",
+    "floorSensorTooltip": "",
+    "leftSensor": "Left sensor",
+    "middleSensor": "Middle sensor",
+    "rightSensor": "Right sensor",
+    "getAcceleration": "Get acceleration",
+    "getAccelerationTooltip": "Gets acceleration of specified axis. <br> Param: axis: the axis to get the acceleration from. <br> Returns: the acceleration of specified axis.",
+    "getGyroscope": "Get gyroscope",
+    "getGyroscopeTooltip": "Gets gyroscope of specified axis. <br> Param: axis: the axis to get the gyroscope from. <br> Returns: the gyroscope of specified axis.",
+    "set": "Set",
+    "color": "color",
+    "red": "'red'",
+    "green": "'green'",
+    "blue": "'white'",
+    "violet": "'violet'",
+    "cyan": "'cyan'",
+    "yellow": "'yellow'",
+    "closed": "'closed'",
+    "setColorTooltip": "Sets led to input color. <br> Param: color: the wanted color.",
+    "lighSensor": "Get light sensor",
+    "lightSensorTooltip": "Returns the reading of the light sensor.",
+    "noiseDetection": "Get noise detection",
+    "noiseDetectionTooltip": "Returns True only if noise is detected."
   }
 }

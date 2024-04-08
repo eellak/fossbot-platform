@@ -2,10 +2,7 @@ import React from 'react';
 import DashboardCard from '../../shared/DashboardCardWithChildren';
 import ProjectForm from 'src/views/forms/ProjectForm';
 import Fab from '@mui/material/Fab';
-import PlatformUsersData from './PlatformUsersData';
 import PageContainer from 'src/components/container/PageContainer';
-import python from 'src/assets/images/dashboard/python.png';
-import blockly from 'src/assets/images/dashboard/blockly.png';
 
 import { useState, useEffect } from 'react';
 import {
@@ -22,7 +19,6 @@ import {
   Stack,
 } from '@mui/material';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faDownload } from '@fortawesome/free-solid-svg-icons';
 import { faAdd } from '@fortawesome/free-solid-svg-icons';
 import { faPencil } from '@fortawesome/free-solid-svg-icons';
 import { faTrash } from '@fortawesome/free-solid-svg-icons';
@@ -86,8 +82,8 @@ const ProjectsCard = () => {
   return (
     <PageContainer>
       <DashboardCard
-        title="FOSSBot Projects"
-        subtitle="What kind of project will you create today?"
+        title={t('projects-card.card-title')}
+        subtitle={t('projects-card.subtitle')}
         action={
           <Fab color="success" aria-label="add" onClick={() => setShowDrawer(true)}>
             <FontAwesomeIcon icon={faAdd} />

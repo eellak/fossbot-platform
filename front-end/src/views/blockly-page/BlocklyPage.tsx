@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Box, Grid, Stack, DialogContent, Typography } from '@mui/material';
 import { useAuth } from 'src/authentication/AuthProvider'; // Assuming AuthProvider is in the same directory
 import { v4 as uuidv4 } from 'uuid';
@@ -21,10 +21,12 @@ const BlocklyPage = () => {
   const [editorPythonValue, setEditorPythonValue] = useState('');
   const [sessionId, setSessionId] = useState('');
 
-  const [projectTitle, setProjectTitle] = useState('New Project');
-  const [projectDescription, setProjectDescription] = useState('New Project Description');
+  const [projectTitle, setProjectTitle] = useState(t('newProject'));
+  const [projectDescription, setProjectDescription] = useState(t('newProjectDescription'));
   const [loading, setLoading] = useState(true); // Loading state of Blockly project
   const [isSimulatorLoading, setIsSimulatorLoading] = useState(true); // Loading state of Simulator
+
+  const [showSaveButton, setShowSaveButton] = useState(false);
 
   const runScriptRef = useRef<() => Promise<void>>();
   const auth = useAuth();
@@ -51,12 +53,16 @@ const BlocklyPage = () => {
   useEffect(() => {
     const fetchProject = async () => {
       try {
-        const fetchedProject = await auth.getProjectByIdAction(Number(projectId));
-        if (fetchedProject) {
-          if (fetchedProject.code != '') {
-            setEditorValue(fetchedProject.code);
+        if (projectId != '' && projectId != undefined) {
+          setShowSaveButton(true);
+
+          const fetchedProject = await auth.getProjectByIdAction(Number(projectId));
+          if (fetchedProject) {
+            if (fetchedProject.code != '') {
+              setEditorValue(fetchedProject.code);
+            }
+            setProjectTitle(fetchedProject.name);
           }
-          setProjectTitle(fetchedProject.name);
         }
       } catch (error) {
         console.error('Error fetching project:', error);
@@ -71,13 +77,13 @@ const BlocklyPage = () => {
 
   // Function to be called when the value in the editor changes
   const handleGetValue = (getValueFunc) => {
-    //Save xml code
+    // Save xml code
     const value = getValueFunc();
     setEditorValue(value);
   };
 
   const handleGetPythonCodeValue = (getValueFunc) => {
-    //save Python code
+    // Save Python code
     const value = getValueFunc;
     setEditorPythonValue(value);
   };
@@ -96,8 +102,7 @@ const BlocklyPage = () => {
   };
 
   const handleMountChange = (isMounted: boolean) => {
-    // Do something with the updated value of isMounted
-    console.log('isMounted:', isMounted);
+    // Updated value of isMounted is set to show if simulator is loading
     setIsSimulatorLoading(false);
   };
 
@@ -112,7 +117,7 @@ const BlocklyPage = () => {
         {loading && isSimulatorLoading ? (
           <Spinner />
         ) : (
-          <Grid container spacing={1}>
+          <Grid container spacing={1} paddingTop={"3rem"} paddingBottom={"3rem"}>
             <Grid item xs={12} lg={7}>
               {/* column */}
               <BlocklyEditorComponent
@@ -144,12 +149,12 @@ const BlocklyPage = () => {
               </Box>
               <br></br>
               <Box>
-                <WebGLApp appsessionId={sessionId} onMountChange={handleMountChange}  />
+                <WebGLApp appsessionId={sessionId} onMountChange={handleMountChange} />
               </Box>
               <Box mt={2}>
                 <DialogContent className="testdialog">
                   <Stack direction="row" spacing={3} alignItems="center" justifyContent="center">
-                    <Buttons handlePlayClick={handlePlayClick} handleSaveClick={handleSaveClick} />
+                    <Buttons handlePlayClick={handlePlayClick} handleSaveClick={handleSaveClick} showSaveButton={showSaveButton} />
                   </Stack>
                 </DialogContent>
               </Box>

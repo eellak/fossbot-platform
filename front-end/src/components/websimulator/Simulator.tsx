@@ -7,18 +7,24 @@ type WebGLAppProps = {
 };
 
 const WebGLApp: React.FC<WebGLAppProps> = ({ appsessionId, onMountChange }) => {
+
   const handleIframeLoad = () => {
     onMountChange(true); // Call the callback function with the updated value
   };
 
+
   const SimUrl = 'http://localhost:5000/' + appsessionId;
   console.log('sim url ', SimUrl)
+
+<!--   const SimUrl = "http://localhost:5000/" + appsessionId; -->
+
   return (
     <Box width={'100%'}>
       <iframe
         src={SimUrl}
         width={'100%'}
-        height={'370px'}
+        height={'100%'}
+        id="simulatorIframe"
         frameBorder="0"
         allowFullScreen
         onLoad={handleIframeLoad}
