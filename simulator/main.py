@@ -3,6 +3,8 @@ import os
 import uuid
 from flask_socketio import join_room, leave_room, SocketIO, emit
 import json
+import requests
+
 server_ip = os.getenv("SOCKETIO_IP", "0.0.0.0")
 server_port = int(os.getenv("SOCKETIO_PORT", "5000"))
 socketio_namespace = os.getenv("SOCKETIO_NAMESPACE", "/godot")
@@ -20,6 +22,7 @@ def generate_session_id():
 #---- Simulation Serve  ----
 @app.route('/<session_id>')
 def index(session_id):
+    print('session_id: ', session_id)
     session.clear()
     if session_id == None:
         session_id = "123" #generate_session_id()
@@ -98,6 +101,14 @@ def clientConnect(data):
     session_id = session.get("session_id")
     join_room(session_id)
     print('Client connected: ',session_id)
+
+    session_token = session.get("session_token")
+    print('session token : ', session_token)
+
+    #check that the session token is valid
+    headers = {"Authorization": f"Bearer {session_token}"}
+    response = requests.get("http://localhost:8000/users/me", headers=headers)
+    print('reponse : ' + response)
 
 @socketio.on("clientMessage", namespace=socketio_namespace)
 def clientMessage(data):

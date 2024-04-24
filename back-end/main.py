@@ -27,8 +27,6 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()
 
-
-
 class LoginRequest(BaseModel):
     username: str
     password: str
@@ -46,6 +44,8 @@ class ProjectsCreate(BaseModel):
     project_type: str    
     code: str
 
+class SessionTokenRequest(BaseModel):
+    session_token: str
 
 # User model
 class User(Base):
@@ -76,7 +76,7 @@ app = FastAPI()
 
 # Configure CORS
 origins = [
-    "http://localhost:3000",  # Add other origins as needed
+    "http://localhost:3000", "http://localhost:5000" # Add other origins as needed
 ]
 
 app.add_middleware(
@@ -118,6 +118,10 @@ def create_access_token(data: dict):
     encoded_jwt = jwt.encode(data, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
+# def verify_access_token(data: str):
+#     decoded_jwt = jwt.decode(data, SECRET_KEY, algorithm=ALGORITHM)
+#     return decoded_jwt
+
 async def get_current_user(token: str = Depends(oauth2_scheme), db: SessionLocal = Depends(get_db)):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -136,6 +140,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: SessionLocal
         raise credentials_exception
     return user
 
+
 @app.post("/token")
 async def login_for_access_token( login_request: LoginRequest,  db: SessionLocal = Depends(get_db)):
     
@@ -150,6 +155,31 @@ async def login_for_access_token( login_request: LoginRequest,  db: SessionLocal
         )
     access_token = create_access_token(data={"sub": user.username})
     return {"user":user.username, "access_token": access_token, "token_type": "bearer"}
+
+# @app.post("/token/verify")
+# async def login_for_access_token(session_token_request: SessionTokenRequest):
+    
+#     logger.info(f"Request body: {session_token_request}")
+#     decoded_token = verify_access_token(data=session_token_request.session_token)
+#     print('decoded_token: ')
+#     print(decoded_token)
+    
+#     credentials_exception = HTTPException(
+#         status_code=status.HTTP_401_UNAUTHORIZED,
+#         detail="Could not validate credentials",
+#         headers={"WWW-Authenticate": "Bearer"},
+#     )
+
+#     try:
+#         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+#         username: str = payload.get("sub")
+#         if username is None:
+#             raise credentials_exception
+#     except jwt.PyJWTError:
+#         raise credentials_exception
+    
+
+#     return {"verified_token":}
 
 @app.get("/users/me")
 async def read_users_me(token: str = Depends(oauth2_scheme), db: SessionLocal = Depends(get_db)):

@@ -12,6 +12,7 @@ var callbackGodot;
 function initGodotSocket(ws_ip, ws_port, sio_namespace) {
     godotSocket = io.connect('http://' + ws_ip + ':' + ws_port + sio_namespace);
     godotSocket.on('connect', function () {
+        console.log('godot socket connects')
         //godotSocket.emit('browserConnect', JSON.stringify({'session_id': "{{ session_id }}"}));
         godotSocket.emit('godotConnect', JSON.stringify({ 'session_id': window.appsessionId }));
 

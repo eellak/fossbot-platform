@@ -2,7 +2,7 @@
 FROM python:3.9
 
 # Set the working directory in the container
-WORKDIR /usr/src/app
+WORKDIR /usr/src/app/back-end
 
 # Copy the current directory contents into the container at /usr/src/app
 COPY main.py .

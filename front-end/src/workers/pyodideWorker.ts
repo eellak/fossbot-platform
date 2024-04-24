@@ -53,7 +53,7 @@ const setUpSocket = async () => {
   return newSocket;
 };
 
-const setUpPyodide = async (socket: any,sessionId:string) => {
+const setUpPyodide = async (socket: any,sessionId:string, session_token:string) => {
   //Inintialize Pyodide
   const pyodideModule = await import('pyodide');
   const loadedPyodide = await pyodideModule.loadPyodide({
@@ -67,8 +67,9 @@ const setUpPyodide = async (socket: any,sessionId:string) => {
   loadedPyodide.setStderr({ batched: (msg: string) => postMessage('CMD:' + msg) });
   //loadedPyodide.setStdin( { stdin: () => requestInputFromMainThread()});
   
+
   const RobotJS = await import ('../components/editors/RobotJS');
-  const robot = new RobotJS.Fossbot(socket, 'fossbot', '1',sessionId);
+  const robot = new RobotJS.Fossbot(socket, 'fossbot', '1',sessionId, session_token);
   
 
   try {
@@ -101,10 +102,12 @@ const closeSocket = () => {
 const runPythonCode = async (data) => {
   const pythonScript = data.script;
   const sessionId  = data.sessionId;
-
+  const session_token = data.session_token;
+  
   console.log('runPythonCode..');
+
   const socket = await setUpSocket();
-  if (socket) pyodide = await setUpPyodide(socket,sessionId);
+  if (socket) pyodide = await setUpPyodide(socket,sessionId, session_token);
   // if (!pyodide) {
   //   console.log('Pyodide not already loaded ..');
   //   pyodide = await setUpPyodide(socket);

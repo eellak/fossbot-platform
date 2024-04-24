@@ -41,6 +41,11 @@ docker-compose up
 ```
 
 Backend servers (2nd way)
+The first time you have to create the network: 
+```
+docker network create fossbot-net
+```
+
 ```
 docker-compose -f docker-compose-dev.yml up --build
 ```
@@ -60,6 +65,10 @@ Test database
 username : test1
 password : 123456
 
+
+Docs running here : http://0.0.0.0:8000/docs
+ 
+ 
 ## Software Development Team
 * Christos Chronis
 * Eleftheria Papageorgiou

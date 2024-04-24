@@ -4,3 +4,4 @@ flask
 flask-socketio
 gunicorn
 gevent
+requests

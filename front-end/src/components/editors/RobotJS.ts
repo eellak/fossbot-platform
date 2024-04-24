@@ -8,12 +8,14 @@ export class Fossbot {
     private responseHandler: { [key: string]: (message: any) => void } = {};
     public velocity_right: number = 100;
     public velocity_left: number = 100;
+    public session_token: string;
 
-    constructor(socket: Socket, fossbot_name: string, user_id: string,session_id:string) {
+    constructor(socket: Socket, fossbot_name: string, user_id: string, session_id: string, session_token: string) {
         this.socket = socket;
         this.fossbot_name = fossbot_name;
-        this.user_id = user_id;        
+        this.user_id = user_id;
         this.session_id = session_id;
+        this.session_token = session_token;
         this.connect();
     }
 
@@ -21,9 +23,11 @@ export class Fossbot {
         const param = {
             user_id: this.user_id,
             fossbot_name: this.fossbot_name,
-            session_id: this.session_id
+            session_id: this.session_id,
+            session_token: this.session_token
         };
         
+
         let serializedDict = JSON.stringify(param);
         this.socket.emit('clientConnect', serializedDict);
 
@@ -32,7 +36,7 @@ export class Fossbot {
             // Handle incoming messages
             const messageData = message;
             const responseData = messageData.data; 
-            console.log(messageData);
+            console.log('messageData: ', messageData);
             if (this.responseHandler[messageData.function]) {
                 this.responseHandler[messageData.function](responseData);
                 delete this.responseHandler[messageData.function];
