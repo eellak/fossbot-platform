@@ -97,37 +97,37 @@ const PythonTerminal: React.FC<PythonTerminalProps> = ({ pythonScript, onRunScri
 
   };
 
-  const runPythonScript = useCallback(async () => {
-    if (pythonScript == '') {
-      setError(t('errors.noCommandError'));
-      return;
-    }
-    const scriptWithSession = {
-      command: 'RUN_SCRIPT',
-      script: pythonScript,
-      sessionId: sessionId,
-    };
+//   const runPythonScript = useCallback(async () => {
+//     if (pythonScript == '') {
+//       setError(t('errors.noCommandError'));
+//       return;
+//     }
+//     const scriptWithSession = {
+//       command: 'RUN_SCRIPT',
+//       script: pythonScript,
+//       sessionId: sessionId,
+//     };
 
-    pyodideWorker.postMessage(JSON.stringify(scriptWithSession));
-    setError('');
-  }, [pythonScript]);
+//     pyodideWorker.postMessage(JSON.stringify(scriptWithSession));
+//     setError('');
+//   }, [pythonScript]);
 
-  useEffect(() => {
-    onRunScript(runPythonScript);
-  }, [runPythonScript, onRunScript]);
+//   useEffect(() => {
+//     onRunScript(runPythonScript);
+//   }, [runPythonScript, onRunScript]);
 
-  return (
-    <div>
-      {error && (
-        <>
-          <p className="errorText">{error}</p>
-        </>
-      )}
-      {results.map((result, index) => (
-        <p key={index}>{result}</p>
-      ))}
-    </div>
-  );
-};
+//   return (
+//     <div>
+//       {error && (
+//         <>
+//           <p className="errorText">{error}</p>
+//         </>
+//       )}
+//       {results.map((result, index) => (
+//         <p key={index}>{result}</p>
+//       ))}
+//     </div>
+//   );
+// };
 
 export default PythonTerminal;
