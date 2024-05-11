@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Box } from '@mui/material';
-// import 'dotenv/config';
 
-// const simUrl = process.env.SIM_URL;
+
 
 type WebGLAppProps = {
   appsessionId: string;
@@ -16,8 +15,8 @@ const WebGLApp: React.FC<WebGLAppProps> = ({ appsessionId, onMountChange }) => {
   };
 
 
-  const SimUrl = 'http://localhost:5000/' + appsessionId;
-  console.log('sim url ', SimUrl)
+  const SimUrl = process.env.REACT_APP_SIM_URL + appsessionId;
+  // console.log('sim url ', SimUrl)
 
 // <!--   const SimUrl = "http://localhost:5000/" + appsessionId; -->
 

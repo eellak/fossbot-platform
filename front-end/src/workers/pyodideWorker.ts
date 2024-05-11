@@ -26,7 +26,7 @@ onmessage = async function (event: MessageEvent<string>) {
 const setUpSocket = async () => {
   // Function to establish WebSocket connection
   const socketIOClient = await import('socket.io-client');
-  const newSocket = socketIOClient.io('http://localhost:5000/godot');
+  const newSocket = socketIOClient.io(process.env.REACT_APP_GODOT_URL);
 
   newSocket.on('connect', () => {
     console.log('Socket.io connected');

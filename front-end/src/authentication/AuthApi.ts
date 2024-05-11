@@ -1,6 +1,6 @@
 import { LoginData, NewProjectData, RegisterData } from './AuthInterfaces';
 
-const backendUrl: string = 'http://localhost:8000';
+const backendUrl: string = process.env.REACT_APP_BACKEND_URL;
 
 export async function login(data: LoginData) {
     const response = await fetch(backendUrl + '/token', {

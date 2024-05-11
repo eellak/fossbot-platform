@@ -12,7 +12,7 @@ fossbot_simapp_route = os.getenv("FOSSBOT_APP_ROUTE", "/godot")
 fossbot_simcode_route = os.getenv("FOSSBOT_APP_ROUTE", "/godotcode")
 
 app = Flask(__name__)
-app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "this_is_a_secret")
+app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "your-secret-key")
 socketio = SocketIO(app, cors_allowed_origins="*")
 
 def generate_session_id():

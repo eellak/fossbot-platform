@@ -5,6 +5,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "start": "react-scripts start",
     "dev": "react-scripts start",
     "build": "react-scripts build",
     "format": "prettier --write './**/*.{js,jsx,ts,tsx,css,md,json}' --config ./.prettierrc"
@@ -30,7 +31,6 @@
     "axios": "0.27.2",
     "blockly": "^10.4.3",
     "crypto-browserify": "^3.12.0",
-    "dotenv": "^16.4.5",
     "formik": "^2.4.5",
     "framer-motion": "^10.16.4",
     "i18next": "22.0.6",
@@ -40,6 +40,7 @@
     "monaco-editor": "^0.44.0",
     "node-fecth": "^0.0.1-security",
     "os-browserify": "^0.3.0",
+    "path-browserify": "^1.0.1",
     "postcss": "^8.4.33",
     "pyodide": "^0.23.4",
     "react": "^18.2.0",

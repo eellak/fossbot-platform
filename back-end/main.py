@@ -14,10 +14,12 @@ from fastapi.middleware.cors import CORSMiddleware
 import logging
 from pydantic import BaseModel
 from typing import Optional
+import os
 
 logger = logging.getLogger("uvicorn")
 # Constants for JWT
-SECRET_KEY = "your-secret-key"
+
+SECRET_KEY = os.getenv('SECRET_KEY', 'your-secret-key')
 ALGORITHM = "HS256"
 
 # Database setup
