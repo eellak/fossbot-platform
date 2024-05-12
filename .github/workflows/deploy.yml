@@ -1,0 +1,28 @@
+name: Deploy to SSH Server
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Install SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
+
+      - name: SSH and Deploy
+        run: |
+          ssh  -i ~/.ssh/id_rsa ${{ secrets.SSH_USERNAME }}@${{ secrets.SSH_HOST }}
+          cd /home/christoclis/fossbot-platform
+          git pull origin master
+          sudo docker compose -f docker-compose-production.yml down
+          sudo docker compose -f docker-compose-production.yml build
+          sudo docker compose -f docker-compose-production.yml up -d
+  
