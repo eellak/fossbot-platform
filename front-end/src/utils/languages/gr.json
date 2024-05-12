@@ -171,8 +171,8 @@
     "description": "Αυτή είναι η σελίδα Monaco",
     "fossbot-terminal": "Τερματικό FOSSBot"
   },
-  "hua-page": {
-    "title": "Σελίδα Landing",
+  "landing-title": {
+    "title": "FOSSBot Platform",
     "description": "Αυτή είναι η σελίδα Landing"
   },
   "welcome-home-page": {

@@ -155,7 +155,7 @@
     "fossbot-terminal": "FOSSBot terminal"
   },
   "dashboard-page": {
-    "title": "Modern Dashboard",
+    "title": "FOSSBot Platform",
     "description": "This is the Modern Dashboard page"
   },
   "project-form": {
@@ -171,8 +171,8 @@
     "description": "This is the Monaco page",
     "fossbot-terminal": "FOSSBot terminal"
   },
-  "hua-page": {
-    "title": "Landing Page",
+  "landing-title": {
+    "title": "FOSSBot Platform",
     "description": "This is the Landing page"
   },
   "welcome-home-page": {

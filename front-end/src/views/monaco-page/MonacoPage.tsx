@@ -13,6 +13,14 @@ import { v4 as uuidv4 } from 'uuid';
 import { useTranslation } from 'react-i18next';
 import SearchBar from 'src/components/monaco-functions/MonacoSearchBar';
 
+const textart = ` 
+#___   __   __   __   __   __  ___     __      ___       __       
+#|__  /  \\ /__\` /__\` |__) /  \\  |     |__) \\ /  |  |__| /  \\ |\\ | 
+#|    \\__/ .__/ .__/ |__) \\__/  |     |     |   |  |  | \\__/ | \\| 
+
+print("hello world")`;
+
+
 const MonacoPage = () => {
   const { t } = useTranslation();
 
@@ -53,7 +61,9 @@ const MonacoPage = () => {
           if (fetchedProject) {
             setEditorValue(fetchedProject.code);
             setProjectTitle(fetchedProject.name);
-          }
+          } 
+        }else {
+          setEditorValue(textart);
         }
       } catch (error) {
         console.error('Error fetching project:', error);
@@ -92,19 +102,43 @@ const MonacoPage = () => {
   return (
     <PageContainer title={t('monaco-page.title')} description={t('monaco-page.description')}>
       <Box id="monaco-container" flexGrow={1}>
-        <Box mb={3}>
-          <Typography variant="h1" mt={2} color={'primary'}>
-            🐍 {projectTitle}{' '}
-          </Typography>
-        </Box>
+        <Grid container spacing={3} justifyContent="center" alignItems="center">
+          <Grid item xs={12} lg={8}>  {/* This item spans 8 columns on large screens */}
+            <Box mb={3}>
+              <Typography variant="h1" mt={6} color={'primary'} >
+              🐍 {projectTitle}{' '}
+              </Typography>
+            </Box>
+          </Grid>
+          <Grid item xs={12} lg={4}>  {/* This item spans 4 columns on large screens */}
+            <Box mt={2}>
+                <DialogContent className="testdialog">
+                  <Stack direction="row" spacing={3} alignItems="center" justifyContent="flex-end">
+                    <SearchBar />
+                    <Buttons
+                      handlePlayClick={handlePlayClick}
+                      handleSaveClick={handleSaveClick}
+                      showSaveButton={showSaveButton}
+                    />
+                  </Stack>
+                </DialogContent>
+              </Box>
+          </Grid>
+        </Grid>
         {loading && isSimulatorLoading ? (
           <Spinner />
         ) : (
-          <Grid container spacing={1} paddingTop={"3rem"} paddingBottom={"3rem"}>
+          <Grid container spacing={1} paddingTop={"0rem"} paddingBottom={"0rem"}>
             <Grid item xs={12} lg={7}>
               <MonacoEditorComponent code={editorValue} handleGetValue={handleGetValue} />
             </Grid>
             <Grid item xs={12} lg={5}>
+              
+              
+              <Box>
+                <WebGLApp appsessionId={sessionId} onMountChange={handleMountChange} />
+              </Box>
+           
               <Box
                 height={'400px'}
                 style={{
@@ -122,22 +156,6 @@ const MonacoPage = () => {
                   sessionId={sessionId}
                   onRunScript={setRunScriptFunction}
                 />
-              </Box>
-              <br />
-              <Box>
-                <WebGLApp appsessionId={sessionId} onMountChange={handleMountChange} />
-              </Box>
-              <Box mt={2}>
-                <DialogContent className="testdialog">
-                  <Stack direction="row" spacing={3} alignItems="center" justifyContent="center">
-                    <SearchBar />
-                    <Buttons
-                      handlePlayClick={handlePlayClick}
-                      handleSaveClick={handleSaveClick}
-                      showSaveButton={showSaveButton}
-                    />
-                  </Stack>
-                </DialogContent>
               </Box>
             </Grid>
           </Grid>

@@ -109,15 +109,30 @@ const BlocklyPage = () => {
   return (
     <PageContainer title={t('blockly-page.title')} description={t('blockly-page.description')}>
       <Box flexGrow={1}>
-        <Box mb={3}>
-          <Typography variant="h1" mt={2} color={'primary'}>
-            🐍 {projectTitle}{' '}
-          </Typography>
-        </Box>
+        <Grid container spacing={3} justifyContent="center" alignItems="center">
+          <Grid item xs={12} lg={8}>  {/* This item spans 8 columns on large screens */}
+            <Box mb={3}>
+              <Typography variant="h1" mt={6} color={'primary'}>
+              🎮 {projectTitle}{' '}
+              </Typography>
+            </Box>
+          </Grid>
+          <Grid item xs={12} lg={4}>  {/* This item spans 4 columns on large screens */}
+            <Box mt={2} sx={{ display: 'flex', justifyContent: 'flex-end' }}> {/* Aligns content to the left */}
+              <DialogContent className="testdialog">
+                <Stack direction="row" spacing={3} alignItems="center" justifyContent="flex-end"> {/* Aligns buttons to the left */}
+                  <Buttons handlePlayClick={handlePlayClick} handleSaveClick={handleSaveClick} showSaveButton={showSaveButton} />
+                </Stack>
+              </DialogContent>
+            </Box>
+          </Grid>
+        </Grid>
+
+
         {loading && isSimulatorLoading ? (
           <Spinner />
         ) : (
-          <Grid container spacing={1} paddingTop={"3rem"} paddingBottom={"3rem"}>
+          <Grid container spacing={1} paddingTop={"0rem"} paddingBottom={"0rem"}>
             <Grid item xs={12} lg={7}>
               {/* column */}
               <BlocklyEditorComponent
@@ -129,6 +144,12 @@ const BlocklyPage = () => {
             </Grid>
 
             <Grid item xs={12} lg={5}>
+
+              <Box>
+                <WebGLApp appsessionId={sessionId} onMountChange={handleMountChange} />
+              </Box>
+
+    
               <Box
                 height={'400px'}
                 style={{
@@ -147,17 +168,8 @@ const BlocklyPage = () => {
                   onRunScript={setRunScriptFunction}
                 />
               </Box>
-              <br></br>
-              <Box>
-                <WebGLApp appsessionId={sessionId} onMountChange={handleMountChange} />
-              </Box>
-              <Box mt={2}>
-                <DialogContent className="testdialog">
-                  <Stack direction="row" spacing={3} alignItems="center" justifyContent="center">
-                    <Buttons handlePlayClick={handlePlayClick} handleSaveClick={handleSaveClick} showSaveButton={showSaveButton} />
-                  </Stack>
-                </DialogContent>
-              </Box>
+
+
             </Grid>
           </Grid>
         )}

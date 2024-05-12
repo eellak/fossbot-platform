@@ -24,6 +24,7 @@ const Login = Loadable(lazy(() => import('../views/authentication/Login')));
 const Error = Loadable(lazy(() => import('../views/authentication/Error')));
 import AuthProvider from '../authentication/AuthProvider'; // Update with actual path
 import PrivateRoute from './PrivateRoute'; // Update with actual path
+import { title } from 'process';
 
 const Router = [
   {
@@ -67,6 +68,7 @@ const Router = [
   },
   {
     path: '/blockly-page',
+    title: 'Blockly Editor',
     element: <FullLayout />,
     children: [
       { path: '/blockly-page', exact: true, element: <BlocklyPage /> },
@@ -75,6 +77,7 @@ const Router = [
   },
   {
     path: '/monaco-page',
+    title: 'Monaco Editor',
     element: <FullLayout />,
     children: [
       { path: '/monaco-page/:projectId', exact: true, element: <MonacoPage /> },

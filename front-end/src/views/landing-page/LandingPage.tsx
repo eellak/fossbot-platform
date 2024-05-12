@@ -11,7 +11,7 @@ const Landingpage = () => {
   const { t } = useTranslation();
 
   return (
-    <PageContainer title={t('hua-page.title')} description={t('hua-page.description')}>
+    <PageContainer title={t('landing-title.title')} description={t('landing-title.description')}>
       <LpHeader />
       <Banner />
       <FossbotCard />
