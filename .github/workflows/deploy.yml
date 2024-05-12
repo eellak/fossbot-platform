@@ -1,9 +1,7 @@
 name: Deploy to SSH Server
 
 on:
-  push:
-    branches:
-      - main  # Adjust this to match your deployment branch
+  workflow_dispatch:
 
 jobs:
   deploy:
