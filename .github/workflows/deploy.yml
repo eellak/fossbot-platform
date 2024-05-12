@@ -20,7 +20,8 @@ jobs:
       - name: SSH and Deploy
         run: |
           ssh  -i ~/.ssh/id_rsa ${{ secrets.SSH_USERNAME }}@${{ secrets.SSH_HOST }}
-          cd ~/home/christoclis/fossbot-platform
+          pwd
+          cd /home/christoclis/fossbot-platform
           git pull origin master
           sudo docker compose -f docker-compose-production.yml down
           sudo docker compose -f docker-compose-production.yml build
