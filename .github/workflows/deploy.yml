@@ -23,6 +23,6 @@ jobs:
             cd /home/christoclis/fossbot-platform 
             git pull origin master 
             sudo docker compose -f docker-compose-production.yml down 
-            sudo docker compose -f docker-compose-production.yml build 
+            sudo docker compose -f docker-compose-production.yml build --no-cache
             sudo docker compose -f docker-compose-production.yml up -d
           EOF
