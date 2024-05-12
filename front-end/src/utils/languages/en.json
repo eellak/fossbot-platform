@@ -58,7 +58,8 @@
     "educationalMaterial": "Educational Material",
     "elementary": "Elementary",
     "fossbotRepository": "FOSSBot Repository",
-    "externalLinks": "External Links"
+    "externalLinks": "External Links",
+    "tutorials": "Tutorials"
   },
   "projects-card": {
     "card-title": "FOSSBot Projects",
@@ -85,7 +86,7 @@
     "introduceFossbot": "Introducing FOSSBot"
   },
   "footer": {
-    "rights": "All rights reserved by Harokopio University of Athens and GFOSS. Designed & Developed by",
+    "rights": "All rights reserved by",
     "fossbotTeam": "FOSSBot team"
   },
   "mobile-sidebar": {

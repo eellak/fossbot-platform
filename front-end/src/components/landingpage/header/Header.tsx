@@ -96,7 +96,7 @@ const LpHeader = () => {
             boxShadow: (theme) => theme.shadows[8],
           },
         }}
-      >
+      > 
         <MobileSidebar />
       </Drawer>
     </AppBarStyled>

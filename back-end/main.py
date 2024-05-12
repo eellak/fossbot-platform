@@ -1,6 +1,6 @@
 from fastapi import FastAPI, Depends, HTTPException, status,Form
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from sqlalchemy import create_engine, Column, Integer, String,ForeignKey,DateTime
+from sqlalchemy import create_engine, Column, Integer, String,ForeignKey,DateTime,Enum
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker,relationship
 import datetime
@@ -15,6 +15,7 @@ import logging
 from pydantic import BaseModel
 from typing import Optional
 import os
+from enum import Enum as PyEnum
 
 logger = logging.getLogger("uvicorn")
 # Constants for JWT
@@ -49,6 +50,11 @@ class ProjectsCreate(BaseModel):
 class SessionTokenRequest(BaseModel):
     session_token: str
 
+class UserRole(PyEnum):
+    ADMIN = 'admin'
+    TUTOR = 'tutor'
+    USER = 'user'
+
 # User model
 class User(Base):
     __tablename__ = "users"
@@ -57,7 +63,9 @@ class User(Base):
     firstname = Column(String, nullable=False)
     lastname = Column(String, nullable=False)
     email = Column(String, unique=True, nullable=False)
-    hashed_password = Column(String , nullable=False)
+    hashed_password = Column(String, nullable=False)
+    role = Column(Enum(UserRole), default=UserRole.USER)
+    image_url = Column(String)  # Added field for user's profile image URL
 
 class Projects(Base):
     __tablename__ = "projects"
@@ -69,7 +77,26 @@ class Projects(Base):
     code = Column(String)
     user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
     user = relationship("User")
+    
+class Curriculum(Base):
+    __tablename__ = "curriculums"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False)
+    description = Column(String)
+    image_url = Column(String)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    user = relationship("User")
+    lessons = relationship("Lesson", back_populates="curriculum")
 
+class Lesson(Base):
+    __tablename__ = "lessons"
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String, nullable=False)
+    description = Column(String)
+    image_url = Column(String)
+    video_url = Column(String)
+    curriculum_id = Column(Integer, ForeignKey('curriculums.id'), nullable=False)
+    curriculum = relationship("Curriculum", back_populates="lessons")
 
 Base.metadata.create_all(bind=engine)
 

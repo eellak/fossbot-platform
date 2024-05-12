@@ -22,6 +22,7 @@ import {
   IconBrandOpenSource,
   IconMoodHappy,
   IconLayoutDashboard,
+  IconAlbum,
 } from '@tabler/icons-react';
 
 interface MenuitemsType {
@@ -40,18 +41,18 @@ interface MenuitemsType {
 }
 
 const Menuitems: MenuitemsType[] = [
-  {
-    navlabel: true,
-    subheader: 'menu.home',
-  },
+  // {
+  //   navlabel: true,
+  //   subheader: 'menu.home',
+  // },
 
-  {
-    id: uniqueId(),
-    title: 'menu.fossbotHome',
-    icon: IconHome,
-    href: '/',
-    chipColor: 'secondary',
-  },
+  // {
+  //   id: uniqueId(),
+  //   title: 'menu.fossbotHome',
+  //   icon: IconHome,
+  //   href: '/',
+  //   chipColor: 'secondary',
+  // },
   {
     id: uniqueId(),
     title: 'menu.dashboard',
@@ -97,6 +98,15 @@ const Menuitems: MenuitemsType[] = [
   },
   {
     id: uniqueId(),
+    title: 'menu.tutorials',
+    icon: IconAlbum,
+    chip: 'soon',
+    // chipColor: 'primary',
+    href: '/material-page',
+    disabled: true,
+  },
+  {
+    id: uniqueId(),
     title: 'menu.kindergarten',
     icon: IconMoodKid,
     chip: 'soon',
@@ -112,35 +122,35 @@ const Menuitems: MenuitemsType[] = [
     href: '/material-page',
     disabled: true,
   },
-  {
-    navlabel: true,
-    subheader: 'menu.externalLinks',
-  },
+  // {
+  //   navlabel: true,
+  //   subheader: 'menu.externalLinks',
+  // },
 
-  {
-    id: uniqueId(),
-    title: 'menu.fossbotRepository',
-    external: true,
-    icon: IconBrandGithub,
-    href: 'https://github.com/eellak/fossbot',
-    newWindow: true,
-  },
-  {
-    id: uniqueId(),
-    title: 'harokopioUniversity',
-    icon: IconSchool,
-    external: true,
-    href: 'https://www.hua.gr/index.php/en/',
-    newWindow: true,
-  },
-  {
-    id: uniqueId(),
-    title: 'gfoss',
-    icon: IconBrandOpenSource,
-    external: true,
-    href: 'https://gfoss.eu/',
-    newWindow: true,
-  },
+  // {
+  //   id: uniqueId(),
+  //   title: 'menu.fossbotRepository',
+  //   external: true,
+  //   icon: IconBrandGithub,
+  //   href: 'https://github.com/eellak/fossbot',
+  //   newWindow: true,
+  // },
+  // {
+  //   id: uniqueId(),
+  //   title: 'harokopioUniversity',
+  //   icon: IconSchool,
+  //   external: true,
+  //   href: 'https://www.hua.gr/index.php/en/',
+  //   newWindow: true,
+  // },
+  // {
+  //   id: uniqueId(),
+  //   title: 'gfoss',
+  //   icon: IconBrandOpenSource,
+  //   external: true,
+  //   href: 'https://gfoss.eu/',
+  //   newWindow: true,
+  // },
 ];
 
 export default Menuitems;

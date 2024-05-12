@@ -3,8 +3,32 @@ import AppLinks from 'src/layouts/full/vertical/header/AppLinks';
 import QuickLinks from 'src/layouts/full/vertical/header/QuickLinks';
 import DemosDD from './DemosDD';
 import { Box, Button, Divider, Grid, styled, Paper } from '@mui/material';
-import { IconChevronDown } from '@tabler/icons-react';
+import { IconChevronDown, IconInfoSmall } from '@tabler/icons-react';
 import { useTranslation } from 'react-i18next';
+import {
+  IconAward,
+  IconBoxMultiple,
+  IconPoint,
+  IconBan,
+  IconStar,
+  IconMoodSmile,
+  IconAperture,
+  IconBrandGithub,
+  IconHome,
+  IconCode,
+  IconBlockquote,
+  IconPuzzle2,
+  IconPuzzle,
+  IconMoodKid,
+  IconArrowMerge,
+  IconSchool,
+  IconBrandGoogle,
+  IconBrandOpenSource,
+  IconMoodHappy,
+  IconLayoutDashboard,
+} from '@tabler/icons-react';
+import { IconInfoCircle } from '@tabler/icons-react';
+
 
 const Navigations = () => {
   const { t } = useTranslation();
@@ -109,20 +133,21 @@ const Navigations = () => {
                 )}
             </Box> */}
       <StyledButton color="inherit" variant="text" href="https://github.com/eellak/fossbot">
-        {t('github')}
+      <IconBrandGithub style={{ marginRight: '8px' }} />{t('github')}
       </StyledButton>
-      <StyledButton color="inherit" variant="text" href="/hua-page">
-        {t('harokopioUniversity')}
+      {/* /hua-page */}
+      <StyledButton color="inherit" variant="text" href="https://www.hua.gr/index.php/en/">
+      <IconSchool style={{ marginRight: '8px' }} />  {t('harokopioUniversity')}
       </StyledButton>
-      <StyledButton color="inherit" variant="text" href="/gfoss-page">
-        {t('gfoss')}
+      <StyledButton color="inherit" variant="text" href="https://gfoss.eu/">
+      <IconBrandOpenSource style={{ marginRight: '8px' }} /> {t('gfoss')}
       </StyledButton>
       <StyledButton color="inherit" variant="text" href="/about-page">
-        {t('aboutUs')}
+      <IconInfoCircle style={{ marginRight: '8px' }} /> {t('aboutUs')} 
       </StyledButton>
-      <Button color="primary" variant="contained" href="/dashboard">
+      {/* <Button color="primary" variant="contained" href="/dashboard">
         {t('tryNow')}
-      </Button>
+      </Button> */}
     </>
   );
 };

@@ -58,7 +58,8 @@
     "educationalMaterial": "Εκπαιδευτικό υλικό",
     "elementary": "Δημοτικό",
     "fossbotRepository": "FOSSBot Repository",
-    "externalLinks": "Εξωτερικοί Σύνδεσμοι"
+    "externalLinks": "Εξωτερικοί Σύνδεσμοι",
+    "tutorials": "Οδηγοί"
   },
   "projects-card": {
     "card-title": "FOSSBot πρότζεκτς",

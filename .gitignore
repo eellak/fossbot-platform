@@ -12,3 +12,4 @@ data/
 **/alembic.ini
 **/alembic/
 **/old*
+**/versions/*.py

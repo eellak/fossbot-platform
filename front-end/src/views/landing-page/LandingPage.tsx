@@ -5,7 +5,6 @@ import C2a2 from 'src/components/landingpage/c2a/C2a2';
 import Footer from 'src/components/landingpage/footer/Footer';
 import LpHeader from 'src/components/landingpage/header/Header';
 import FossbotCard from 'src/components/landingpage/card_fossbot/CardFossbot';
-
 import { useTranslation } from 'react-i18next';
 
 const Landingpage = () => {
