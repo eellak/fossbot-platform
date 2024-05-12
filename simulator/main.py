@@ -107,7 +107,7 @@ def clientConnect(data):
 
     #check that the session token is valid
     headers = {"Authorization": f"Bearer {session_token}"}
-    response = requests.get("http://localhost:8000/users/me", headers=headers)
+    response = requests.get(f"http://{server_ip}:8000/users/me", headers=headers)
     print('reponse : ' + response)
 
 @socketio.on("clientMessage", namespace=socketio_namespace)
@@ -174,4 +174,4 @@ def disconnect():
     print(f"Client from room {session_id} was removed.")
 
 if __name__ == '__main__':
-    socketio.run(app=app, debug=True, host=server_ip, port=server_port)
+    socketio.run(app=app, debug=True, host="0.0.0.0", port=server_port)

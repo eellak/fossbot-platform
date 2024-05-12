@@ -1,32 +1,23 @@
 version: '3.8'
 
-# networks:
-#   fossbot-net:
-#     external: true
-
 services:
   backend:
     image: fsbt-back
     container_name: fsbt-back
     build: ./back-end
-    # networks:
-    #   - fossbot-net
     ports:
       - "8000:8000"
     volumes:
       - ./back-end/test.db:/usr/src/app/back-end/test.db
-      - ./back-end/main.py:/usr/src/app/back-end/main.py
    
   simulator:
     image: fsbt-sim
     container_name: fsbt-sim
     build: ./simulator
-    # networks:
-    #   - fossbot-net
+    environment:
+      SOCKETIO_IP: 34.141.148.0
     ports:
       - "5000:5000"
-    volumes:
-      - ./simulator:/usr/src/app/simulator   
     depends_on:
       - backend
 
@@ -34,11 +25,7 @@ services:
     image: fsbt-front
     container_name: fsbt-front
     build: ./front-end
-    # networks:
-    #   - fossbot-net
     ports:
-      - "3000:3000"
-    volumes:
-      - ./front-end:/usr/src/app/front-end
+      - "80:80"
     depends_on:
       - simulator

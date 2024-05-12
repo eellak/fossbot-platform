@@ -1,16 +1,9 @@
 version: '3.8'
-
-networks:
-  fossbot-net:
-    external: true
-
 services:
   backend:
     image: fsbt-back
     container_name: fsbt-back
     build: ./back-end
-    networks:
-      - fossbot-net
     ports:
       - "8000:8000"
     volumes:
@@ -21,8 +14,6 @@ services:
     image: fsbt-sim
     container_name: fsbt-sim
     build: ./simulator
-    networks:
-      - fossbot-net
     ports:
       - "5000:5000"
     volumes:
