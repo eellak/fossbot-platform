@@ -23,6 +23,9 @@ jobs:
             cd /home/christoclis/fossbot-platform 
             git pull origin master 
             sudo docker compose -f docker-compose-production.yml down 
+            sudo docker rmi -f fsbt-front
+            sudo docker rmi -f fsbt-sim
+            sudo docker rmi -f fsbt-back
             sudo docker compose -f docker-compose-production.yml build --no-cache --force-recreate
             sudo docker compose -f docker-compose-production.yml up -d
           EOF
