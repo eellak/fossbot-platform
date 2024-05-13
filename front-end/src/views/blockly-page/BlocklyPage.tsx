@@ -110,14 +110,14 @@ const BlocklyPage = () => {
     <PageContainer title={t('blockly-page.title')} description={t('blockly-page.description')}>
       <Box flexGrow={1}>
         <Grid container spacing={3} justifyContent="center" alignItems="center">
-          <Grid item xs={12} lg={8}>  {/* This item spans 8 columns on large screens */}
+          <Grid item xs={8} lg={8}>  {/* This item spans 8 columns on large screens */}
             <Box mb={3}>
               <Typography variant="h1" mt={6} color={'primary'}>
               🎮 {projectTitle}{' '}
               </Typography>
             </Box>
           </Grid>
-          <Grid item xs={12} lg={4}>  {/* This item spans 4 columns on large screens */}
+          <Grid item xs={4} lg={4}>  {/* This item spans 4 columns on large screens */}
             <Box mt={2} sx={{ display: 'flex', justifyContent: 'flex-end' }}> {/* Aligns content to the left */}
               <DialogContent className="testdialog">
                 <Stack direction="row" spacing={3} alignItems="center" justifyContent="flex-end"> {/* Aligns buttons to the left */}
@@ -133,7 +133,7 @@ const BlocklyPage = () => {
           <Spinner />
         ) : (
           <Grid container spacing={1} paddingTop={"0rem"} paddingBottom={"0rem"}>
-            <Grid item xs={12} lg={7}>
+            <Grid item xs={7} lg={7}>
               {/* column */}
               <BlocklyEditorComponent
                 code={editorValue}
@@ -143,7 +143,7 @@ const BlocklyPage = () => {
               {/* column */}
             </Grid>
 
-            <Grid item xs={12} lg={5}>
+            <Grid item xs={5} lg={5}>
 
               <Box>
                 <WebGLApp appsessionId={sessionId} onMountChange={handleMountChange} />

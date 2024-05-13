@@ -103,14 +103,14 @@ const MonacoPage = () => {
     <PageContainer title={t('monaco-page.title')} description={t('monaco-page.description')}>
       <Box id="monaco-container" flexGrow={1}>
         <Grid container spacing={3} justifyContent="center" alignItems="center">
-          <Grid item xs={12} lg={8}>  {/* This item spans 8 columns on large screens */}
+          <Grid item xs={8} lg={8}>  {/* This item spans 8 columns on large screens */}
             <Box mb={3}>
               <Typography variant="h1" mt={6} color={'primary'} >
               🐍 {projectTitle}{' '}
               </Typography>
             </Box>
           </Grid>
-          <Grid item xs={12} lg={4}>  {/* This item spans 4 columns on large screens */}
+          <Grid item xs={4} lg={4}>  {/* This item spans 4 columns on large screens */}
             <Box mt={2}>
                 <DialogContent className="testdialog">
                   <Stack direction="row" spacing={3} alignItems="center" justifyContent="flex-end">
@@ -129,10 +129,10 @@ const MonacoPage = () => {
           <Spinner />
         ) : (
           <Grid container spacing={1} paddingTop={"0rem"} paddingBottom={"0rem"}>
-            <Grid item xs={12} lg={7}>
+            <Grid item xs={7} lg={7}>
               <MonacoEditorComponent code={editorValue} handleGetValue={handleGetValue} />
             </Grid>
-            <Grid item xs={12} lg={5}>
+            <Grid item xs={5} lg={5}>
               
               
               <Box>
