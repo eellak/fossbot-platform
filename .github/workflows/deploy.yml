@@ -26,6 +26,6 @@ jobs:
             sudo docker rmi -f fsbt-front
             sudo docker rmi -f fsbt-sim
             sudo docker rmi -f fsbt-back
-            sudo docker-compose -f docker-compose-production.yml build --no-cache
+            sudo docker compose -f docker-compose-production.yml build --no-cache
             sudo docker compose -f docker-compose-production.yml up -d --force-recreate
           EOF
