@@ -1,4 +1,4 @@
-import React, { useContext, createContext, useState, ReactNode } from 'react';
+import React, { useContext, createContext, useEffect, useState, ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
     LoginData,
@@ -15,6 +15,7 @@ import {
     login,
     register,
     updateProjectById,
+    getUserData,
 } from './AuthApi';
 
 // Create the context with an initial undefined value
@@ -29,6 +30,20 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
     const [user, setUser] = useState<string | null>(null);
     const [token, setToken] = useState<string>(localStorage.getItem(localStorageName) || '');
     const navigate = useNavigate();
+
+    useEffect(() => {
+        const fetchUserData = async () => {
+            try {
+                const response = await getUserData(token);
+                const userData = await response.json(); // Extract the user data from the response
+                setUser(userData); // Set the user data in the state
+            } catch (error) {
+                console.error('Error fetching user data:', error);
+            }
+        };
+
+        fetchUserData();
+    }, []);
 
     const loginAction = async (data: LoginData) => {
         try {
@@ -150,6 +165,22 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
         }
     };
 
+    const getUserDataAction = async () => {
+        try {
+            const response = await getUserData(token);
+            const userData = await response.json();
+
+            if (response.status === 200) {
+                return userData;
+            } else {
+                throw new Error('Failed to fetch user data');
+            }
+        } catch (error) {
+            console.error('Error fetching user data:', error);
+            throw error;
+        }
+    };
+
     return (
         <AuthContext.Provider
             value={{
@@ -163,6 +194,7 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
                 getProjectByIdAction,
                 updateProjectByIdAction,
                 logOutAction,
+                getUserDataAction,
             }}
         >
             {children}
