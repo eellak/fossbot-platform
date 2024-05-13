@@ -26,6 +26,12 @@ jobs:
             sudo docker rmi -f fsbt-front
             sudo docker rmi -f fsbt-sim
             sudo docker rmi -f fsbt-back
-            sudo docker compose -f docker-compose-production.yml build --no-cache
-            sudo docker compose -f docker-compose-production.yml up -d --force-recreate
+            cd /home/christoclis/fossbot-platform/front-end
+            sudo docker build --no-cache -t fsbt-front .
+            cd /home/christoclis/fossbot-platform/back-end
+            sudo docker build --no-cache -t fsbt-back .
+            cd /home/christoclis/fossbot-platform/simulator
+            sudo docker build --no-cache -t fsbt-sim .
+            cd /home/christoclis/fossbot-platform 
+            sudo docker compose -f docker-compose-production.yml up -d
           EOF
