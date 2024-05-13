@@ -19,10 +19,19 @@ jobs:
 
       - name: SSH and Deploy
         run: |
-          ssh  -i ~/.ssh/id_rsa ${{ secrets.SSH_USERNAME }}@${{ secrets.SSH_HOST }}
-          cd /home/christoclis/fossbot-platform
-          git pull origin master
-          sudo docker compose -f docker-compose-production.yml down
-          sudo docker compose -f docker-compose-production.yml build
-          sudo docker compose -f docker-compose-production.yml up -d
-  
+          ssh  -i ~/.ssh/id_rsa ${{ secrets.SSH_USERNAME }}@${{ secrets.SSH_HOST }} << EOF
+            cd /home/christoclis/fossbot-platform 
+            git pull origin master 
+            sudo docker compose -f docker-compose-production.yml down 
+            sudo docker rmi -f fsbt-front
+            sudo docker rmi -f fsbt-sim
+            sudo docker rmi -f fsbt-back
+            cd /home/christoclis/fossbot-platform/front-end
+            sudo docker build --no-cache -t fsbt-front .
+            cd /home/christoclis/fossbot-platform/back-end
+            sudo docker build --no-cache -t fsbt-back .
+            cd /home/christoclis/fossbot-platform/simulator
+            sudo docker build --no-cache -t fsbt-sim .
+            cd /home/christoclis/fossbot-platform 
+            sudo docker compose -f docker-compose-production.yml up -d
+          EOF
