@@ -32,7 +32,7 @@ export async function createProject(data: NewProjectData, token: string) {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`, 
+            Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify(data),
     });
@@ -55,7 +55,7 @@ export async function deleteProjectById(projectId: number, token: string) {
         method: 'DELETE',
         headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`, 
+            Authorization: `Bearer ${token}`,
         },
     });
     return response;
@@ -66,7 +66,7 @@ export async function getProjectById(projectId: number, token: string) {
         method: 'GET',
         headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`, 
+            Authorization: `Bearer ${token}`,
         },
     });
     return response;
@@ -80,6 +80,17 @@ export async function updateProjectById(data: NewProjectData, projectId: number,
             Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify(data),
+    });
+    return response;
+}
+
+export async function getUserData(token: string) {
+    const response = await fetch(backendUrl + '/users/me', {
+        method: 'GET',
+        headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+        },
     });
     return response;
 }

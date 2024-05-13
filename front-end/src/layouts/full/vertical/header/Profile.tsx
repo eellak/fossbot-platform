@@ -1,5 +1,5 @@
- 
-import React, { useState } from 'react';
+
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Box,
@@ -23,15 +23,31 @@ import { useTranslation } from 'react-i18next';
 
 const Profile = () => {
   const { t } = useTranslation();
-
+  const auth = useAuth();
+  const [user, setUser] = useState(null);
   const [anchorEl2, setAnchorEl2] = useState(null);
+
   const handleClick2 = (event: any) => {
     setAnchorEl2(event.currentTarget);
   };
   const handleClose2 = () => {
     setAnchorEl2(null);
   };
-  const auth = useAuth();
+
+  useEffect(() => {
+    const fetchUserData = async () => {
+      try {
+        const userData = await auth.getUserDataAction();
+        setUser(userData);
+        setUser(userData);
+      } catch (error) {
+        console.error('Error fetching user data:', error);
+      }
+    };
+
+    fetchUserData();
+  }, []);
+
   return (
     <Box>
       <IconButton
@@ -48,8 +64,8 @@ const Profile = () => {
         onClick={handleClick2}
       >
         <Avatar
-          src={ProfileImg}
-          alt={ProfileImg}
+          src={user?.image_url}
+          alt={user?.username}
           sx={{
             width: 35,
             height: 35,
@@ -76,13 +92,13 @@ const Profile = () => {
       >
         <Typography variant="h5">{t('userProfile')}</Typography>
         <Stack direction="row" py={3} spacing={2} alignItems="center">
-          <Avatar src={ProfileImg} alt={ProfileImg} sx={{ width: 95, height: 95 }} />
+          <Avatar src={user?.image_url} alt={user?.username} sx={{ width: 95, height: 95 }} />
           <Box>
             <Typography variant="subtitle2" color="textPrimary" fontWeight={600}>
-              Mathew Anderson
+              {`${user?.firstname} ${user?.lastname}`}
             </Typography>
             <Typography variant="subtitle2" color="textSecondary">
-            Designer
+              {user?.role}
             </Typography>
             <Typography
               variant="subtitle2"
@@ -92,7 +108,7 @@ const Profile = () => {
               gap={1}
             >
               <IconMail width={15} height={15} />
-              info@modernize.com
+                {user?.email}
             </Typography>
           </Box>
         </Stack>
