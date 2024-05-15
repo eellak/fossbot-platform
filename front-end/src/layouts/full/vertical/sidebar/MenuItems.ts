@@ -87,7 +87,7 @@ const Menuitems: MenuitemsType[] = [
     icon: IconAlbum,
     chip: 'soon',
     // chipColor: 'primary',
-    href: '/material-page',
+    href: '/tutorials-page',
     disabled: false,
   },
   {
