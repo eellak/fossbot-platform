@@ -88,7 +88,7 @@ const Menuitems: MenuitemsType[] = [
     chip: 'soon',
     // chipColor: 'primary',
     href: '/material-page',
-    disabled: true,
+    disabled: false,
   },
   {
     id: uniqueId(),
