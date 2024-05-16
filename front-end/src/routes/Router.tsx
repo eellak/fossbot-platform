@@ -13,6 +13,8 @@ const BlankLayout = Loadable(lazy(() => import('../layouts/blank/BlankLayout')))
 const SamplePage = Loadable(lazy(() => import('../views/sample-page/SamplePage')));
 const Dashboard = Loadable(lazy(() => import('../views/dashboard/Dashboard')));
 const LandingPage = Loadable(lazy(() => import('../views/landing-page/LandingPage')));
+const AccountsSettingsPage = Loadable(lazy(() => import('../views/account-settings-page/AccountsSettingsPage')));
+
 //const BlocklyPage = Loadable(lazy(() => import('../views/blockly-page/BlocklyPage')));
 //const BlocklyPage =  '../views/blockly-page/BlocklyPage';
 import BlocklyPage from '../views/blockly-page/BlocklyPage';
@@ -89,6 +91,17 @@ const Router = [
     element: <BlankLayout />,
     children: [{ path: '404', element: <Error /> }],
   },
+  {
+    path: '/accountSettings',
+    title: 'Account Settings',
+    element: <PrivateRoute />,
+    children: [
+      {
+        path: '',
+        element: <FullLayout />,
+        children: [{ path: '', exact: true, element: <AccountsSettingsPage /> }],
+      },
+    ],  },
 ];
 
 export default Router;

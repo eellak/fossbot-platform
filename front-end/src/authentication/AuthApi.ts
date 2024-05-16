@@ -1,4 +1,4 @@
-import { LoginData, NewProjectData, RegisterData } from './AuthInterfaces';
+import { LoginData, NewProjectData, RegisterData, UserData } from './AuthInterfaces';
 
 const backendUrl: string = process.env.REACT_APP_BACKEND_URL;
 
@@ -91,6 +91,19 @@ export async function getUserData(token: string) {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${token}`,
         },
+    });
+    return response;
+}
+
+
+export async function updateUserData(data: UserData, token: string) {
+    const response = await fetch(backendUrl + '/users/me', {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(data),
     });
     return response;
 }

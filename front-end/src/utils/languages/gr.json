@@ -16,6 +16,7 @@
   "firstname": "Όνομα",
   "lastname": "Επίθετο",
   "emailAddress": "Ηλ. Διεύθυνση",
+  "changeYourPassword": "Άλλαξε τον κωδικό",
   "userProfile": "Προφίλ χρήστη",
   "foss": "FOSS",
   "bot": "Bot",
@@ -27,6 +28,7 @@
   "gfoss": "GFOSS",
   "back": "Πίσω",
   "submit": "Υποβολή",
+  "update": "Update",
   "projectName": "Όνομα πρότζεκτ",
   "description": "Περιγραφή",
   "editor": "Editor",
@@ -186,6 +188,10 @@
   "testimonial-title": {
     "description": "Μην λαμβανετε υπόψιν μόνο την δική μας άποψη για αυτό. Δείτε τι λένε οι προγραμματιστές σαν και εσάς."
   },
+  "acccount-settings": {
+    "title": "Account Settings",
+    "description": "Αυτή είναι η σελίδα των ρυθμίσεων των πληροφοριών του χρήστη"
+  },
   "blocklyBlocks": {
     "forward": "προς τα εμπρός",
     "reverse": "αντίστροφα",
@@ -230,5 +236,9 @@
     "lightSensorTooltip": "Επιστρέφει την ανάγνωση του αισθητήρα φωτός.",
     "noiseDetection": "Λήψη ανίχνευσης θορύβου",
     "noiseDetectionTooltip": "Επιστρέφει True μόνο εάν ανιχνευθεί θόρυβος."
+  },
+  "alertMessages": {
+    "userDataUpdated": "Τα δεδομένα του χρήστη ενημερώθηκαν με επιτυχία!",
+    "userDataUpdateError": "Προέκυψε κάποιο πρόβλημα κατά την ενημέρωση των δεδομένων του χρήστη!"
   }
 }

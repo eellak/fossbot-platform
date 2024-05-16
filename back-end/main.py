@@ -41,6 +41,12 @@ class RegisterRequest(BaseModel):
     lastname: str
     email: str
 
+class UpdateUserRequest(BaseModel):
+    firstname: str
+    lastname: str
+    username: str
+    email: str
+
 class ProjectsCreate(BaseModel):
     name: str
     description: str
@@ -228,6 +234,29 @@ async def read_users_me(token: str = Depends(oauth2_scheme), db: SessionLocal = 
     if user is None:
         raise credentials_exception
     return user
+
+@app.put("/users/me")
+async def update_user_info(user_update: UpdateUserRequest, current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):
+    # Fetch the current user from the database
+    db_user = db.query(User).filter(User.id == current_user.id).first()
+    if db_user is None:
+        raise HTTPException(status_code=404, detail="User not found in database")
+
+    # Update the user information if provided
+    if user_update.firstname:
+        db_user.firstname = user_update.firstname
+    if user_update.lastname:
+        db_user.lastname = user_update.lastname
+    if user_update.username:
+        db_user.username = user_update.username
+    if user_update.email:
+        db_user.email = user_update.email
+
+    # Commit the changes to the database and refresh
+    db.commit()
+    db.refresh(db_user)
+
+    return db_user
 
 @app.post("/register")
 async def register_user(register_request: RegisterRequest, db: SessionLocal = Depends(get_db)):

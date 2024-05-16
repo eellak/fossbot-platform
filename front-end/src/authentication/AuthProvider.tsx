@@ -6,6 +6,8 @@ import {
     NewProjectData,
     AuthContextType,
     Project,
+    UserData,
+    User,
 } from './AuthInterfaces';
 import {
     createProject,
@@ -16,6 +18,7 @@ import {
     register,
     updateProjectById,
     getUserData,
+    updateUserData
 } from './AuthApi';
 
 // Create the context with an initial undefined value
@@ -181,6 +184,22 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
         }
     };
 
+    const updateUser = async (data: UserData) : Promise<User | undefined> => {
+        try {
+            const response = await updateUserData(data, token);
+
+            if (response.status == 200) {
+                const user: User = await response.json();
+                return user;
+            } else {
+                throw new Error('User data update failed');
+            }
+        } catch (error) {
+            console.error(error);
+            throw error;
+        }
+    };
+
     return (
         <AuthContext.Provider
             value={{
@@ -195,6 +214,7 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
                 updateProjectByIdAction,
                 logOutAction,
                 getUserDataAction,
+                updateUser
             }}
         >
             {children}

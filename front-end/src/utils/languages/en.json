@@ -15,7 +15,8 @@
   "signUp": "Sign up",
   "firstname": "Firstname",
   "lastname": "Lastname",
-  "emailAddress": "Email Adddress",
+  "emailAddress": "Email Address",
+  "changeYourPassword": "Change your password",
   "userProfile": "User Profile",
   "foss": "FOSS",
   "bot": "Bot",
@@ -27,6 +28,7 @@
   "gfoss": "GFOSS",
   "back": "Back",
   "submit": "Submit",
+  "update": "Update",
   "projectName": "Project Name",
   "description": "Description",
   "editor": "Editor",
@@ -186,6 +188,10 @@
   "testimonial-title": {
     "description": "Don’t just take our words for it, See what developers like you are saying"
   },
+  "acccount-settings": {
+    "title": "Account Settings",
+    "description": "This is the user account settings page"
+  },
   "blocklyBlocks": {
     "forward": "forward",
     "reverse": "reverse",
@@ -230,5 +236,9 @@
     "lightSensorTooltip": "Returns the reading of the light sensor.",
     "noiseDetection": "Get noise detection",
     "noiseDetectionTooltip": "Returns True only if noise is detected."
+  },
+  "alertMessages": {
+    "userDataUpdated": "User data updated successfully!",
+    "userDataUpdateError": "Error occured when updating user data!"
   }
 }
