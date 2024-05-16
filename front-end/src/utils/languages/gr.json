@@ -16,7 +16,7 @@
   "firstname": "Όνομα",
   "lastname": "Επίθετο",
   "emailAddress": "Ηλ. Διεύθυνση",
-  "changeYourPassword": "Άλλαξε τον κωδικό",
+  "resetYourPassword": "Επανέφερε τον κωδικό",
   "userProfile": "Προφίλ χρήστη",
   "foss": "FOSS",
   "bot": "Bot",
