@@ -1,7 +1,8 @@
 import * as React from 'react';
 import { Snackbar, Alert, AlertTitle } from '@mui/material';
+import { AlertDetails } from './AlertDetails';
 
-const Welcome = () => {
+const ErrorAlert = ({title, description}: AlertDetails) => {
   const [open, setOpen] = React.useState(false);
 
   const handleClick = () => {
@@ -27,22 +28,22 @@ const Welcome = () => {
     <React.Fragment>
       <Snackbar
         open={open}
-        anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
         autoHideDuration={6000}
         onClose={handleClose}
       >
         <Alert
           onClose={handleClose}
-          severity="info"
+          severity="error"
           variant="filled"
           sx={{ width: '100%', color: 'white' }}
         >
-          <AlertTitle>Welcome To Modernize</AlertTitle>
-          Easy to customize the Template!!!
+          <AlertTitle>{title}</AlertTitle>
+          {description}
         </Alert>
       </Snackbar>
     </React.Fragment>
   );
 };
 
-export default Welcome;
+export default ErrorAlert;
