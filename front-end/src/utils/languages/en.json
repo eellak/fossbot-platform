@@ -16,6 +16,7 @@
   "firstname": "Firstname",
   "lastname": "Lastname",
   "emailAddress": "Email Address",
+  "changeYourPassword": "Change your password",
   "resetYourPassword": "Reset your password",
   "userProfile": "User Profile",
   "foss": "FOSS",

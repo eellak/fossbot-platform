@@ -102,7 +102,7 @@ const AccountSettingsForm = ({ user }: AccountSettingsFormType) => {
         </Grid>
         <Grid item xs={12} sm={9}>
           <Button variant="contained" color="primary">
-            {t('resetYourPassword')}
+            {t('changeYourPassword')}
           </Button>
         </Grid>
         {/* 5 */}
