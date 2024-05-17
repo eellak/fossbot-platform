@@ -12,7 +12,7 @@ class VideoComponent extends React.Component {
         width: '100%',
         height: '100%'
       }}>
-        <ReactPlayer url={require('../../assets/videos/ComputerScience.mp4')} controls={true} width='100%' height='100%' />
+        <ReactPlayer url={require('../../assets/videos/fossbot-presentation.mp4')} controls={true} width='100%' height='100%' />
       </div>
     );
   }

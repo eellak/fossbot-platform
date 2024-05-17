@@ -8,10 +8,12 @@ import Buttons from 'src/components/editors/RightColButtons';
 import PythonExecutor from 'src/components/editors/PythonExecutor';
 import { useAuth } from 'src/authentication/AuthProvider'; // Assuming AuthProvider is in the same directory
 import WebGLApp from 'src/components/websimulator/Simulator';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { v4 as uuidv4 } from 'uuid';
 import { useTranslation } from 'react-i18next';
 import SearchBar from 'src/components/monaco-functions/MonacoSearchBar';
+import VideoPlayer from 'src/components/videoplayer/VideoPlayer';
+
 
 const textart = ` 
 #___   __   __   __   __   __  ___     __      ___       __       
@@ -23,13 +25,14 @@ print("hello world")`;
 
 const MonacoPage = () => {
   const { t } = useTranslation();
-
+  const location = useLocation();
   const [editorValue, setEditorValue] = useState('');
   const [projectTitle, setProjectTitle] = useState(t('newProject'));
   const [projectDescription, setProjectDescription] = useState(t('newProjectDescription'));
   const [sessionId, setSessionId] = useState('');
   const [loading, setLoading] = useState(true);
   const [isSimulatorLoading, setIsSimulatorLoading] = useState(true);
+  const [showVideoPlayer, setShowVideoPlayer] = useState(false);
   const runScriptRef = useRef<() => Promise<void>>();
   const auth = useAuth();
   const navigate = useNavigate();
@@ -75,6 +78,12 @@ const MonacoPage = () => {
 
     fetchProject();
   }, [auth, projectId, navigate]);
+
+  useEffect(() => {
+    if (location.pathname.endsWith('/monaco-tutorial-page')) {
+      setShowVideoPlayer(true);
+    }
+  }, [location.pathname]);
 
   const handleGetValue = (getValueFunc) => {
     const value = getValueFunc();
@@ -134,6 +143,19 @@ const MonacoPage = () => {
             </Grid>
             <Grid item xs={5} lg={5}>
               
+            {showVideoPlayer && (
+                <Box height={'400px'} style={{ 
+                      position: 'relative',
+                      backgroundColor: 'black',
+                      color: 'white',
+                      padding: '2px 20px 5px',
+                      overflow: 'auto',
+                      fontFamily: 'monospace',
+                      lineHeight: '0.2'
+                    }}>
+                  <VideoPlayer />
+                </Box>
+              )}
               
               <Box>
                 <WebGLApp appsessionId={sessionId} onMountChange={handleMountChange} />

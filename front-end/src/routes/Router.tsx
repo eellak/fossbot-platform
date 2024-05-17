@@ -77,12 +77,30 @@ const Router = [
     ],
   },
   {
+    path: '/blockly-tutorial-page',
+    title: 'Blockly Tutorial Editor',
+    element: <FullLayout />,
+    children: [
+      { path: '/blockly-tutorial-page', exact: true, element: <BlocklyPage /> },
+      { path: '/blockly-tutorial-page/', exact: true, element: <BlocklyPage /> },
+    ],
+  },
+  {
     path: '/monaco-page',
     title: 'Monaco Editor',
     element: <FullLayout />,
     children: [
       { path: '/monaco-page/:projectId', exact: true, element: <MonacoPage /> },
       { path: '/monaco-page', exact: true, element: <MonacoPage /> },
+    ],
+  },
+  {
+    path: '/monaco-tutorial-page',
+    title: 'Monaco Tutorial Editor',
+    element: <FullLayout />,
+    children: [
+      { path: '/monaco-tutorial-page/', exact: true, element: <MonacoPage /> },
+      { path: '/monaco-tutorial-page', exact: true, element: <MonacoPage /> },
     ],
   },
   {

@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { Box, Grid, Stack, DialogContent, Typography } from '@mui/material';
 import { useAuth } from 'src/authentication/AuthProvider'; // Assuming AuthProvider is in the same directory
 import { v4 as uuidv4 } from 'uuid';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
 import PythonTerminal from 'src/components/editors/PythonTerminal';
@@ -11,10 +11,11 @@ import Buttons from 'src/components/editors/RightColButtons';
 import PageContainer from '../../components/container/PageContainer';
 import BlocklyEditorComponent from '../../components/editors/BlocklyEditor';
 import Spinner from '../spinner/Spinner';
+import VideoPlayer from 'src/components/videoplayer/VideoPlayer';
 
 const BlocklyPage = () => {
   const { t } = useTranslation();
-
+  const location = useLocation();
   const [editorValue, setEditorValue] = useState(
     '<xml xmlns="http://www.w3.org/1999/xhtml"></xml>',
   );
@@ -25,7 +26,7 @@ const BlocklyPage = () => {
   const [projectDescription, setProjectDescription] = useState(t('newProjectDescription'));
   const [loading, setLoading] = useState(true); // Loading state of Blockly project
   const [isSimulatorLoading, setIsSimulatorLoading] = useState(true); // Loading state of Simulator
-
+  const [showVideoPlayer, setShowVideoPlayer] = useState(false);
   const [showSaveButton, setShowSaveButton] = useState(false);
 
   const runScriptRef = useRef<() => Promise<void>>();
@@ -74,6 +75,12 @@ const BlocklyPage = () => {
 
     fetchProject();
   }, [auth, projectId, navigate]); // Add necessary dependencies here
+
+  useEffect(() => {
+    if (location.pathname.endsWith('/blockly-tutorial-page')) {
+      setShowVideoPlayer(true);
+    }
+  }, [location.pathname]);
 
   // Function to be called when the value in the editor changes
   const handleGetValue = (getValueFunc) => {
@@ -144,6 +151,20 @@ const BlocklyPage = () => {
             </Grid>
 
             <Grid item xs={5} lg={5}>
+
+            {showVideoPlayer && (
+                <Box height={'400px'} style={{ 
+                      position: 'relative',
+                      backgroundColor: 'black',
+                      color: 'white',
+                      padding: '2px 20px 5px',
+                      overflow: 'auto',
+                      fontFamily: 'monospace',
+                      lineHeight: '0.2'
+                    }}>
+                  <VideoPlayer />
+                </Box>
+              )}
 
               <Box>
                 <WebGLApp appsessionId={sessionId} onMountChange={handleMountChange} />
