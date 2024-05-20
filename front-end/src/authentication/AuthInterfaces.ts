@@ -9,9 +9,10 @@ export interface AuthContextType {
     deleteProjectByIdAction: (projectId: number) => Promise<boolean>;
     getProjectByIdAction: (projectId: number) => Promise<Project | undefined>;
     updateProjectByIdAction: (projectId: number, data: NewProjectData) => Promise<void>;
-    getUserDataAction: () => Promise<User | undefined>; 
+    getUserDataAction: () => Promise<User | undefined>;
     logOutAction: () => void;
     updateUser: (data: UserData) => Promise<User | undefined>;
+    updateUserPassword: (data: PassswordData) => Promise<User | undefined>;
 }
 
 // Registration data
@@ -65,4 +66,8 @@ export interface UserData {
     firstname: string;
     lastname: string;
     email: string;
+}
+
+export interface PassswordData {
+    password: string;
 }

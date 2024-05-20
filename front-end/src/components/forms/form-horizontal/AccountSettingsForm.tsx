@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import CustomFormLabel from '../theme-elements/CustomFormLabel';
 import CustomOutlinedInput from '../theme-elements/CustomOutlinedInput';
+import SuccessAlert from 'src/components/alerts/SuccessAlert';
+import ErrorAlert from 'src/components/alerts/ErrorAlert';
+import ChangePassword from 'src/components/alerts/ChangePassword';
 import { IconMail, IconUser } from '@tabler/icons-react';
 import { Grid, InputAdornment, Button } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from "src/authentication/AuthProvider";
-import SuccessAlert from 'src/components/alerts/SuccessAlert';
-import ErrorAlert from 'src/components/alerts/ErrorAlert';
 
 interface AccountSettingsFormType {
   user?: any
@@ -15,8 +16,10 @@ interface AccountSettingsFormType {
 const AccountSettingsForm = ({ user }: AccountSettingsFormType) => {
   const { t } = useTranslation();
   const auth = useAuth();
+
   const [showSuccessAlert, setShowSuccessAlert] = useState(false);
   const [showErrorAlert, setShowErrorAlert] = useState(false);
+  const [showChangePasswordSnackbar, setShowChangePasswordSnackbar] = useState(false);
 
   const [formData, setFormData] = useState({
     firstname: user?.firstname,
@@ -40,6 +43,19 @@ const AccountSettingsForm = ({ user }: AccountSettingsFormType) => {
     setFormData({ ...formData, [name]: value });
   };
 
+  const showChangeYourPassswordSnackbar = () => {
+    setShowChangePasswordSnackbar(true);
+  }
+
+  const handlePasswordUpdate = (success) => {
+    setShowChangePasswordSnackbar(false);
+    if (success) {
+      setShowSuccessAlert(true);
+    } else {
+      setShowErrorAlert(true);
+    }
+  };
+
   return (
     <div>
       {/* ------------------------------------------------------------------------------------------------ */}
@@ -48,7 +64,7 @@ const AccountSettingsForm = ({ user }: AccountSettingsFormType) => {
       <Grid container spacing={3} xs={12} sm={12} md={10} lg={8} xl={8} alignItems="center">
         {/* 1 */}
         <Grid item xs={12} sm={3} display="flex" alignItems="center">
-          <CustomFormLabel htmlFor="bi-name" sx={{ mt: 0, mb: { xs: '-10px', sm: 0 } }}>
+          <CustomFormLabel htmlFor="bi-firstname" sx={{ mt: 0, mb: { xs: '-10px', sm: 0 } }}>
             {t('firstname')}
           </CustomFormLabel>
         </Grid>
@@ -64,7 +80,7 @@ const AccountSettingsForm = ({ user }: AccountSettingsFormType) => {
         </Grid>
         {/* 2 */}
         <Grid item xs={12} sm={3} display="flex" alignItems="center">
-          <CustomFormLabel htmlFor="bi-company" sx={{ mt: 0, mb: { xs: '-10px', sm: 0 } }}>
+          <CustomFormLabel htmlFor="bi-lastname" sx={{ mt: 0, mb: { xs: '-10px', sm: 0 } }}>
             {t('lastname')}
           </CustomFormLabel>
         </Grid>
@@ -80,7 +96,7 @@ const AccountSettingsForm = ({ user }: AccountSettingsFormType) => {
         </Grid>
         {/* 3 */}
         <Grid item xs={12} sm={3} display="flex" alignItems="center">
-          <CustomFormLabel htmlFor="bi-email" sx={{ mt: 0, mb: { xs: '-10px', sm: 0 } }}>
+          <CustomFormLabel htmlFor="bi-username" sx={{ mt: 0, mb: { xs: '-10px', sm: 0 } }}>
             {t('username')}
           </CustomFormLabel>
         </Grid>
@@ -101,13 +117,13 @@ const AccountSettingsForm = ({ user }: AccountSettingsFormType) => {
           </CustomFormLabel>
         </Grid>
         <Grid item xs={12} sm={9}>
-          <Button variant="contained" color="primary">
+          <Button variant="contained" color="primary" onClick={showChangeYourPassswordSnackbar}>
             {t('changeYourPassword')}
           </Button>
         </Grid>
         {/* 5 */}
         <Grid item xs={12} sm={3} display="flex" alignItems="center">
-          <CustomFormLabel htmlFor="bi-phone" sx={{ mt: 0, mb: { xs: '-10px', sm: 0 } }}>
+          <CustomFormLabel htmlFor="bi-emailAddress" sx={{ mt: 0, mb: { xs: '-10px', sm: 0 } }}>
             {t('emailAddress')}
           </CustomFormLabel>
         </Grid>
@@ -134,6 +150,13 @@ const AccountSettingsForm = ({ user }: AccountSettingsFormType) => {
 
       {showErrorAlert && (
         <ErrorAlert title={t('alertMessages.userDataUpdateError')} description={""} />
+      )}
+
+      {showChangePasswordSnackbar && (
+        <ChangePassword
+          isOpen={showChangePasswordSnackbar}
+          onClose={() => setShowChangePasswordSnackbar(false)}
+          onPasswordUpdate={handlePasswordUpdate} />
       )}
     </div>
   );

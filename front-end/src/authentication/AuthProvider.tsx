@@ -8,6 +8,7 @@ import {
     Project,
     UserData,
     User,
+    PassswordData,
 } from './AuthInterfaces';
 import {
     createProject,
@@ -18,7 +19,8 @@ import {
     register,
     updateProjectById,
     getUserData,
-    updateUserData
+    updateUserData,
+    updateUserPasswordData
 } from './AuthApi';
 
 // Create the context with an initial undefined value
@@ -200,6 +202,23 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
         }
     };
 
+
+    const updateUserPassword = async (data: PassswordData) : Promise<User | undefined> => {
+        try {
+            const response = await updateUserPasswordData(data, token);
+
+            if (response.status == 200) {
+                const user: User = await response.json();
+                return user;
+            } else {
+                throw new Error('User password data update failed');
+            }
+        } catch (error) {
+            console.error(error);
+            throw error;
+        }
+    };
+
     return (
         <AuthContext.Provider
             value={{
@@ -214,7 +233,8 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
                 updateProjectByIdAction,
                 logOutAction,
                 getUserDataAction,
-                updateUser
+                updateUser,
+                updateUserPassword
             }}
         >
             {children}
