@@ -19,10 +19,13 @@ import {
     Skeleton,
     Alert,
     AlertTitle,
+    Card,
+    CardContent
 } from '@mui/material';
 import { useAuth } from "src/authentication/AuthProvider";
 import { useTranslation } from 'react-i18next';
 import InfoAlert from 'src/components/alerts/InfoAlert';
+import AccountSettingsInfo from './AccountSettingsInfo';
 
 const AccountsSettingsPage = () => {
     const { t } = useTranslation();
@@ -110,7 +113,17 @@ const AccountsSettingsPage = () => {
                                     </Box>
                                 </Grid>
                                 <Grid item xs={12} sm={12} md={12} lg={12}>
-                                    <AccountSettingsForm user={user} />
+                                    <Grid container justifyContent="center" mt={4} mb={5} paddingLeft={5} paddingRight={5}>
+
+                                        <Grid item xs={12} md={6} paddingRight={2} >
+                                            <AccountSettingsForm user={user} />
+                                        </Grid>
+
+                                        <Grid item xs={12} md={6} spacing={3} paddingLeft={2} >
+                                            <AccountSettingsInfo />
+                                        </Grid>
+
+                                    </Grid>
                                 </Grid>
                             </Grid>
                         )}
