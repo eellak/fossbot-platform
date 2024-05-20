@@ -244,5 +244,10 @@
     "userDataUpdated": "Τα δεδομένα του χρήστη ενημερώθηκαν με επιτυχία!",
     "userDataUpdateError": "Προέκυψε κάποιο πρόβλημα κατά την ενημέρωση των δεδομένων του χρήστη!",
     "passwordConfirmationError": "Τα πεδία: κωδικός και επιβεβαίωση κωδικού πρέπει να είναι ίδια."
+  },
+  "accountSettings": {
+    "blocklyProjects": "Blockly πρότζεκτς",
+    "monacoProjects": "Monaco πρότζεκτς",
+    "tutorials": "Οδηγοί"
   }
 }

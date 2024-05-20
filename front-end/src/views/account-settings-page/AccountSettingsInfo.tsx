@@ -15,11 +15,11 @@ const AccountSettingsInfo = () => {
         <Grid item xs={12} sm={6}>
           <Card>
             <CardContent>
-              <Typography variant="h6" fontWeight="bold" gutterBottom>
-                Title 1
+              <Typography variant="h6" fontWeight="bold" gutterBottom align="center">
+                {t("accountSettings.monacoProjects")}
               </Typography>
-              <Typography variant="body1">
-                Your text for card 1 here
+              <Typography variant="body1" align="center">
+                Number
               </Typography>
             </CardContent>
           </Card>
@@ -27,11 +27,11 @@ const AccountSettingsInfo = () => {
         <Grid item xs={12} sm={6}>
           <Card>
             <CardContent>
-              <Typography variant="h6" fontWeight="bold" gutterBottom>
-                Title 2
+              <Typography variant="h6" fontWeight="bold" gutterBottom align="center">
+                {t("accountSettings.blocklyProjects")}
               </Typography>
-              <Typography variant="body1">
-                Your text for card 2 here
+              <Typography variant="body1" align="center">
+                Number
               </Typography>
             </CardContent>
           </Card>
@@ -42,11 +42,12 @@ const AccountSettingsInfo = () => {
         <Grid item xs={12} sm={6}>
           <Card>
             <CardContent>
-              <Typography variant="h6" fontWeight="bold" gutterBottom>
-                Title 3
+              <Typography variant="h6" fontWeight="bold" gutterBottom align="center">
+                {t("accountSettings.tutorials")}
+
               </Typography>
-              <Typography variant="body1">
-                Your text for card 3 here
+              <Typography variant="body1" align="center" >
+                Number
               </Typography>
             </CardContent>
           </Card>
