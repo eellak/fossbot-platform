@@ -47,6 +47,9 @@ class UpdateUserRequest(BaseModel):
     username: str
     email: str
 
+class UpdateUserPasswordRequest(BaseModel): 
+    password: str
+
 class ProjectsCreate(BaseModel):
     name: str
     description: str
@@ -251,6 +254,24 @@ async def update_user_info(user_update: UpdateUserRequest, current_user: User = 
         db_user.username = user_update.username
     if user_update.email:
         db_user.email = user_update.email
+
+    # Commit the changes to the database and refresh
+    db.commit()
+    db.refresh(db_user)
+
+    return db_user
+
+@app.put("/users/me/password")
+async def update_user_info(user_password_update: UpdateUserPasswordRequest, current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):
+    # Fetch the current user from the database
+    db_user = db.query(User).filter(User.id == current_user.id).first()
+    if db_user is None:
+        raise HTTPException(status_code=404, detail="User not found in database")
+
+    # Update the user information if provided
+    if user_password_update.password:
+        hashed_password = get_password_hash(user_password_update.password)
+        db_user.password = hashed_password
 
     # Commit the changes to the database and refresh
     db.commit()
