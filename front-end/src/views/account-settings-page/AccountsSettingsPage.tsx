@@ -38,7 +38,6 @@ const AccountsSettingsPage = () => {
             try {
                 const userData = await auth.getUserDataAction();
                 setUser(userData);
-                console.log(userData)
             } catch (error) {
                 console.error('Error fetching user data:', error);
             } finally {
@@ -119,7 +118,7 @@ const AccountsSettingsPage = () => {
                                             <AccountSettingsForm user={user} />
                                         </Grid>
 
-                                        <Grid item xs={12} md={6} spacing={3} paddingLeft={2} >
+                                        <Grid item xs={12} md={6} paddingLeft={2} >
                                             <AccountSettingsInfo />
                                         </Grid>
 
