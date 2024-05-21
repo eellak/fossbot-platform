@@ -26,12 +26,37 @@ import { useAuth } from "src/authentication/AuthProvider";
 import { useTranslation } from 'react-i18next';
 import InfoAlert from 'src/components/alerts/InfoAlert';
 import AccountSettingsInfo from './AccountSettingsInfo';
+import { Project } from 'src/authentication/AuthInterfaces';
 
 const AccountsSettingsPage = () => {
     const { t } = useTranslation();
     const auth = useAuth();
     const [user, setUser] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
+
+    const [monacoProjectsNumber, setMonacoProjectsNumber] = useState(0);
+    const [blocklyProjectsNumber, setBlocklyProjectsNumber] = useState(0);
+    const [tutorialsNumber, setTutorialsNumber] = useState(0);
+
+    useEffect(() => {
+        const fetchProjects = async () => {
+            try {
+                const fetchedProjects: Project[] = await auth.getProjectsAction();
+
+                if (fetchedProjects.length != 0) {
+                    const blocklyProjects = fetchedProjects.filter(project => project.project_type == 'python')
+                    const monacoProjects = fetchedProjects.filter(project => project.project_type == 'blockly')
+                    setMonacoProjectsNumber(monacoProjects.length)
+                    setBlocklyProjectsNumber(blocklyProjects.length)
+                }
+            } catch (error) {
+                console.error('Error fetching projects:', error);
+            }
+        };
+
+        fetchProjects();
+    }, []);
+
 
     useEffect(() => {
         const fetchUserData = async () => {
@@ -119,7 +144,10 @@ const AccountsSettingsPage = () => {
                                         </Grid>
 
                                         <Grid item xs={12} md={6} paddingLeft={2} >
-                                            <AccountSettingsInfo />
+                                            <AccountSettingsInfo
+                                                monacoProjectsNumber={monacoProjectsNumber}
+                                                blocklyProjectsNumber={blocklyProjectsNumber}
+                                                tutorialsNumber={tutorialsNumber} />
                                         </Grid>
 
                                     </Grid>

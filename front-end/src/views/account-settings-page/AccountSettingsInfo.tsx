@@ -1,13 +1,15 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Grid, Card, CardContent, Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
-import { useAuth } from "src/authentication/AuthProvider";
 
-const AccountSettingsInfo = () => {
+interface AccountSettingsInfoProps {
+  monacoProjectsNumber: number,
+  blocklyProjectsNumber: number,
+  tutorialsNumber: number
+}
+
+const AccountSettingsInfo = ({ monacoProjectsNumber, blocklyProjectsNumber, tutorialsNumber }: AccountSettingsInfoProps) => {
   const { t } = useTranslation();
-  const auth = useAuth();
-
-
 
   return (
     <div>
@@ -19,7 +21,7 @@ const AccountSettingsInfo = () => {
                 {t("accountSettings.monacoProjects")}
               </Typography>
               <Typography variant="body1" align="center">
-                Number
+                {monacoProjectsNumber.toString()}
               </Typography>
             </CardContent>
           </Card>
@@ -31,7 +33,7 @@ const AccountSettingsInfo = () => {
                 {t("accountSettings.blocklyProjects")}
               </Typography>
               <Typography variant="body1" align="center">
-                Number
+                {blocklyProjectsNumber.toString()}
               </Typography>
             </CardContent>
           </Card>
@@ -44,10 +46,9 @@ const AccountSettingsInfo = () => {
             <CardContent>
               <Typography variant="h6" fontWeight="bold" gutterBottom align="center">
                 {t("accountSettings.tutorials")}
-
               </Typography>
               <Typography variant="body1" align="center" >
-                Number
+                {tutorialsNumber.toString()}
               </Typography>
             </CardContent>
           </Card>
