@@ -40,7 +40,7 @@ const AccountSettingsInfo = ({ monacoProjectsNumber, blocklyProjectsNumber, tuto
         </Grid>
       </Grid>
 
-      <Grid container spacing={2} paddingRight={5} sx={{ marginTop: 2 }}>
+      <Grid container spacing={2} sx={{ marginTop: 2 }}>
         <Grid item xs={12} sm={6}>
           <Card>
             <CardContent>
