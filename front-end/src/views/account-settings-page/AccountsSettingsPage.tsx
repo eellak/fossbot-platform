@@ -2,29 +2,19 @@ import React, { useState, useEffect } from 'react';
 import PageContainer from 'src/components/container/PageContainer';
 import Footer from 'src/components/landingpage/footer/Footer';
 import AccountSettingsForm from 'src/components/forms/form-horizontal/AccountSettingsForm';
-import Breadcrumb from 'src/layouts/full/shared/breadcrumb/Breadcrumb';
 import BlankCard from 'src/components/shared/BlankCard';
 import profilecover from 'src/assets/images/backgrounds/profilebg.jpg';
-import userimg from 'src/assets/images/profile/user-1.jpg';
 import {
     Grid,
     Box,
     Typography,
-    Button,
     Avatar,
-    Stack,
     CardMedia,
     styled,
-    Fab,
     Skeleton,
-    Alert,
-    AlertTitle,
-    Card,
-    CardContent
 } from '@mui/material';
 import { useAuth } from "src/authentication/AuthProvider";
 import { useTranslation } from 'react-i18next';
-import InfoAlert from 'src/components/alerts/InfoAlert';
 import AccountSettingsInfo from './AccountSettingsInfo';
 import { Project } from 'src/authentication/AuthInterfaces';
 import SuccessAlert from 'src/components/alerts/SuccessAlert';
