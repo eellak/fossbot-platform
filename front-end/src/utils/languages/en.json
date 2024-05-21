@@ -243,7 +243,9 @@
   "alertMessages": {
     "userDataUpdated": "User data updated successfully!",
     "userDataUpdateError": "Error occured when updating user data!",
-    "passwordConfirmationError": "The fields: password and password confirmation must be identical."
+    "passwordConfirmationError": "The fields: password and password confirmation must be identical.",
+    "userDataFetchError": "Error fetching user data.",
+    "projectsFetchError": "Error fetching projects."
   },
   "accountSettings": {
     "blocklyProjects": "Blockly projects",

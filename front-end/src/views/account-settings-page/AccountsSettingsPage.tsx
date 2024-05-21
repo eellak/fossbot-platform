@@ -27,6 +27,8 @@ import { useTranslation } from 'react-i18next';
 import InfoAlert from 'src/components/alerts/InfoAlert';
 import AccountSettingsInfo from './AccountSettingsInfo';
 import { Project } from 'src/authentication/AuthInterfaces';
+import SuccessAlert from 'src/components/alerts/SuccessAlert';
+import ErrorAlert from 'src/components/alerts/ErrorAlert';
 
 const AccountsSettingsPage = () => {
     const { t } = useTranslation();
@@ -37,6 +39,12 @@ const AccountsSettingsPage = () => {
     const [monacoProjectsNumber, setMonacoProjectsNumber] = useState(0);
     const [blocklyProjectsNumber, setBlocklyProjectsNumber] = useState(0);
     const [tutorialsNumber, setTutorialsNumber] = useState(0);
+
+    const [showSuccessAlert, setShowSuccessAlert] = useState(false);
+    const [showErrorAlert, setShowErrorAlert] = useState(false);
+
+    const [showSuccessAlertText, setShowSuccessAlertText] = useState("");
+    const [showErrorAlertText, setShowErrorAlertText] = useState("");
 
     useEffect(() => {
         const fetchProjects = async () => {
@@ -51,6 +59,9 @@ const AccountsSettingsPage = () => {
                 }
             } catch (error) {
                 console.error('Error fetching projects:', error);
+                setShowErrorAlert(true);
+                const text = t('alertMessages.projectsFetchError');
+                setShowErrorAlertText(text);
             }
         };
 
@@ -65,6 +76,9 @@ const AccountsSettingsPage = () => {
                 setUser(userData);
             } catch (error) {
                 console.error('Error fetching user data:', error);
+                setShowErrorAlert(true);
+                const text = t('alertMessages.userDataFetchError');
+                setShowErrorAlertText(text);
             } finally {
                 setIsLoading(false);
             }
@@ -159,6 +173,14 @@ const AccountsSettingsPage = () => {
             </Grid>
 
             <Footer />
+
+            {showSuccessAlert && (
+                <SuccessAlert title={showSuccessAlertText} description={""} />
+            )}
+
+            {showErrorAlert && (
+                <ErrorAlert title={showErrorAlertText} description={""} />
+            )}
         </PageContainer>
     );
 };
