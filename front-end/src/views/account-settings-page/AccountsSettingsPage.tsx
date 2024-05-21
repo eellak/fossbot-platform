@@ -87,6 +87,16 @@ const AccountsSettingsPage = () => {
         fetchUserData();
     }, []);
 
+    const handleFormSubmitResult = (result) => {
+        if (result) {
+            setShowSuccessAlert(true);
+            setShowSuccessAlertText(t('alertMessages.userDataUpdated'));
+        } else {
+            setShowErrorAlert(true);
+            setShowErrorAlertText(t('alertMessages.userDataUpdateError'));
+        }
+    };
+
     const ProfileImage = styled(Box)(() => ({
         borderRadius: '50%',
         width: '140px',
@@ -154,7 +164,9 @@ const AccountsSettingsPage = () => {
                                     <Grid container justifyContent="center" mt={4} mb={5} paddingLeft={5} paddingRight={5}>
 
                                         <Grid item xs={12} md={6} paddingRight={2} >
-                                            <AccountSettingsForm user={user} />
+                                            <AccountSettingsForm
+                                                user={user}
+                                                onFormSubmit={handleFormSubmitResult} />
                                         </Grid>
 
                                         <Grid item xs={12} md={6} paddingLeft={2} >
@@ -184,5 +196,6 @@ const AccountsSettingsPage = () => {
         </PageContainer>
     );
 };
+
 
 export default AccountsSettingsPage;

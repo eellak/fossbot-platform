@@ -1,18 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import CustomFormLabel from '../forms/theme-elements/CustomFormLabel';
 import CustomOutlinedInput from '../forms/theme-elements/CustomOutlinedInput';
-import { Snackbar, Alert, AlertTitle, Typography } from '@mui/material';
-import { Grid, InputAdornment, Button } from '@mui/material';
+import { Snackbar, Alert, Typography } from '@mui/material';
+import { Grid, Button } from '@mui/material';
 import { useAuth } from "src/authentication/AuthProvider";
 import { useTranslation } from 'react-i18next';
 
-interface AChangePasswordProps {
+interface ChangePasswordProps {
   isOpen: boolean;
   onClose: () => void;
   onPasswordUpdate: (success: boolean) => void;
 }
 
-const ChangePassword = ({ isOpen, onClose, onPasswordUpdate }: AChangePasswordProps) => {
+const ChangePassword = ({ isOpen, onClose, onPasswordUpdate }: ChangePasswordProps) => {
   const { t } = useTranslation();
   const auth = useAuth();
 

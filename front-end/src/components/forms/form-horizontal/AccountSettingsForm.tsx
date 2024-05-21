@@ -1,23 +1,20 @@
 import React, { useState } from 'react';
 import CustomFormLabel from '../theme-elements/CustomFormLabel';
 import CustomOutlinedInput from '../theme-elements/CustomOutlinedInput';
-import SuccessAlert from 'src/components/alerts/SuccessAlert';
-import ErrorAlert from 'src/components/alerts/ErrorAlert';
 import ChangePassword from 'src/components/alerts/ChangePassword';
 import { Grid, Button } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from "src/authentication/AuthProvider";
 
 interface AccountSettingsFormType {
-  user?: any
+  user?: any,
+  onFormSubmit: (success: boolean) => void;
 }
 
-const AccountSettingsForm = ({ user }: AccountSettingsFormType) => {
+const AccountSettingsForm = ({ user, onFormSubmit }: AccountSettingsFormType) => {
   const { t } = useTranslation();
   const auth = useAuth();
 
-  const [showSuccessAlert, setShowSuccessAlert] = useState(false);
-  const [showErrorAlert, setShowErrorAlert] = useState(false);
   const [showChangePasswordSnackbar, setShowChangePasswordSnackbar] = useState(false);
 
   const [formData, setFormData] = useState({
@@ -30,9 +27,9 @@ const AccountSettingsForm = ({ user }: AccountSettingsFormType) => {
   const handleFormSubmit = async () => {
     const user = await auth.updateUser(formData);
     if (user) {
-      setShowSuccessAlert(true);
+      if (onFormSubmit) onFormSubmit(true); // Notify parent component about the success
     } else {
-      setShowErrorAlert(true);
+      if (onFormSubmit) onFormSubmit(false); // Notify parent component about the failure
     }
   }
 
@@ -48,9 +45,9 @@ const AccountSettingsForm = ({ user }: AccountSettingsFormType) => {
   const handlePasswordUpdate = (success) => {
     setShowChangePasswordSnackbar(false);
     if (success) {
-      setShowSuccessAlert(true);
+      onFormSubmit(true); // Notify parent component about the success
     } else {
-      setShowErrorAlert(true);
+      onFormSubmit(false); // Notify parent component about the failure
     }
   };
 
@@ -134,14 +131,6 @@ const AccountSettingsForm = ({ user }: AccountSettingsFormType) => {
           </Button>
         </Grid>
       </Grid>
-
-      {showSuccessAlert && (
-        <SuccessAlert title={t('alertMessages.userDataUpdated')} description={""} />
-      )}
-
-      {showErrorAlert && (
-        <ErrorAlert title={t('alertMessages.userDataUpdateError')} description={""} />
-      )}
 
       {showChangePasswordSnackbar && (
         <ChangePassword

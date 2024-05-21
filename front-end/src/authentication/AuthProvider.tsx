@@ -186,7 +186,7 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
         }
     };
 
-    const updateUser = async (data: UserData) : Promise<User | undefined> => {
+    const updateUser = async (data: UserData): Promise<User | undefined> => {
         try {
             const response = await updateUserData(data, token);
 
@@ -198,12 +198,12 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
             }
         } catch (error) {
             console.error(error);
-            throw error;
+            return undefined;
         }
     };
 
 
-    const updateUserPassword = async (data: PassswordData) : Promise<User | undefined> => {
+    const updateUserPassword = async (data: PassswordData): Promise<User | undefined> => {
         try {
             const response = await updateUserPasswordData(data, token);
 
@@ -215,7 +215,7 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
             }
         } catch (error) {
             console.error(error);
-            throw error;
+            return undefined;
         }
     };
 
