@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import CustomFormLabel from '../theme-elements/CustomFormLabel';
-import CustomOutlinedInput from '../theme-elements/CustomOutlinedInput';
-import ChangePassword from 'src/components/alerts/ChangePassword';
+import CustomFormLabel from '../forms/theme-elements/CustomFormLabel';
+import CustomOutlinedInput from '../forms/theme-elements/CustomOutlinedInput';
+import ChangePassword from 'src/components/account-settings-page/ChangePassword';
 import { Grid, Button } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from "src/authentication/AuthProvider";
