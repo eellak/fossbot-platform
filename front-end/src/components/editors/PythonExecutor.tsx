@@ -5,67 +5,149 @@ import { useTranslation } from 'react-i18next';
 type PythonExecutorProps = {
   pythonScript: string;
   onRunScript: (runScript: () => Promise<void>) => void;
+  onStopScript: (stopScript: () => void) => void;
   sessionId: string;
+  moveStep: (distance: number) => Promise<void>;
+  rotateStep: (angle: number) => Promise<void>;
+  getdistance: () => number;
+  rgbsetcolor: (color: string) => void;
+  getacceleration: (axis: string) => number[];
+  getgyroscope: (axis: string) => number[];
+  getfloorsensor: (sensor_id: number) => boolean;
+  justRotate: (direction: string) => void;
+  justMove: (direction: string) => void;
+  stopMotion: () => void;
+  getLightSensor: () => number;
+  drawLine: (status: boolean) => void;
 };
 
-const PythonExecutor: React.FC<PythonExecutorProps> = ({
+const PythonExecutor = ({
   pythonScript,
-  onRunScript,
   sessionId,
-}) => {
+  onRunScript,
+  onStopScript,
+  moveStep,
+  rotateStep,
+  getdistance,
+  rgbsetcolor,
+  getacceleration,
+  getgyroscope,
+  getfloorsensor,
+  justRotate,
+  justMove,
+  stopMotion,
+  getLightSensor,
+  drawLine
+}: PythonExecutorProps) => {
   const [results, setResults] = useState<string[]>([]);
   const { t } = useTranslation();
-
   const [error, setError] = useState('');
+  const [pyodideWorker, setPyodideWorker] = useState<Worker | null>(null);
 
-  // Create a new web worker
-  const pyodideWorker = new Worker(new URL('../../workers/pyodideWorker.ts', import.meta.url));
+  const createWorker = () => {
+    const worker = new Worker(new URL('../../workers/pyodideWorker.ts', import.meta.url));
 
-  // Set up event listener for messages from the worker
-  pyodideWorker.onmessage = function (event: MessageEvent<string>) {
-    console.log('Received result from worker:', event.data);
+    worker.onmessage = async function (event: MessageEvent<string>) {
+      console.log('Received result from worker:', event.data);
+      const data = JSON.parse(event.data);
 
-    if (event.data.includes('CMD:')) {
-      let result = event.data.split('CMD:')[1];
-      setResults((prevResults) => [...prevResults, result]);
+      if (data.command === 'stdout' || data.command === 'stderr') {
+        setResults((prevResults) => [...prevResults, data.data]);
 
-      //After receiving the result, close socket connection
-      pyodideWorker.postMessage(JSON.stringify({ command: 'CLOSE' }));
-    }
+        worker.postMessage(JSON.stringify({ command: 'exit' }));
+      }
+      if (data.command === 'move') {
+        await moveStep(data.distance);
+        worker.postMessage(JSON.stringify({ command: 'move_done' }));
+      } else if (data.command === 'rotate') {
+        await rotateStep(data.angle);
+        worker.postMessage(JSON.stringify({ command: 'rotate_done' }));
+      } else if (data.command === 'getdistance') {
+        const distance = getdistance();
+        worker.postMessage(JSON.stringify({ command: 'getdistance_done', distance }));
+      } else if (data.command === 'rgbsetcolor') {
+        await rgbsetcolor(data.color);
+        worker.postMessage(JSON.stringify({ command: 'rgbsetcolor_done' }));
+      } else if (data.command === 'getacceleration') {
+        const acceleration = await getacceleration(data.axis);
+        worker.postMessage(JSON.stringify({ command: 'getacceleration_done', acceleration }));
+      } else if (data.command === 'getgyroscope') {
+        const gyroscope = await getgyroscope(data.axis);
+        worker.postMessage(JSON.stringify({ command: 'getgyroscope_done', gyroscope }));
+      } else if (data.command === 'getfloorsensor') {
+        const floorsensor = await getfloorsensor(data.sensor_id);
+        worker.postMessage(JSON.stringify({ command: 'getfloorsensor_done', floorsensor }));
+      } else if (data.command === 'justRotate') {
+        await justRotate(data.direction);
+        worker.postMessage(JSON.stringify({ command: 'just_rotate_done' }));
+      } else if (data.command === 'justMove') {
+        await justMove(data.direction);
+        worker.postMessage(JSON.stringify({ command: 'just_move_done' }));
+      } else if (data.command === 'stopMotion') {
+        stopMotion();
+        worker.postMessage(JSON.stringify({ command: 'stop_motion_done' }));
+      }else if (data.command === 'getlightsensor') {
+        const lightsensor = await getLightSensor();
+        worker.postMessage(JSON.stringify({ command: 'getlightsensor_done', lightsensor }));
+      }else if (data.command === 'drawLine') {
+        await drawLine(data.status);
+        worker.postMessage(JSON.stringify({ command: 'drawLine_done' }));
+      }
 
-    if (event.data == 'EMPTY_RESULTS') {
-      setResults([]);
-    }
+      if (data.command === 'clear_results') {
+        setResults([]);
+      }
+    };
+
+    return worker;
   };
 
+  useEffect(() => {
+    const worker = createWorker();
+    setPyodideWorker(worker);
+
+    return () => {
+      worker.terminate();
+    };
+  }, []);
+
   const runPythonScript = useCallback(async () => {
-    if (pythonScript == '') {
+    if (pythonScript === '') {
       setError(t('errors.noCommandError'));
       return;
     }
+
+    if (!pyodideWorker) {
+      const worker = createWorker();
+      setPyodideWorker(worker);
+    }
+
     const scriptWithSession = {
-      command: 'RUN_SCRIPT',
+      command: 'run',
       script: pythonScript,
       sessionId: sessionId,
     };
 
-    pyodideWorker.postMessage(JSON.stringify(scriptWithSession));
+    pyodideWorker?.postMessage(JSON.stringify(scriptWithSession));
     setError('');
-  }, [pythonScript]);
+  }, [pythonScript, sessionId, t, pyodideWorker]);
+
+  const stopPythonScript = useCallback(() => {
+    pyodideWorker?.terminate();
+    const newWorker = createWorker();
+    setPyodideWorker(newWorker);
+  }, [pyodideWorker]);
 
   useEffect(() => {
     onRunScript(runPythonScript);
   }, [runPythonScript, onRunScript]);
 
-  // const testinput= useCallback(async () => {
-  //   const packet = { command: 'INPUT_RESPONSE',
-  //                    inputdata:'testinput'};
-  //   pyodideWorker.postMessage(JSON.stringify(packet));
-  // },[]);
+  useEffect(() => {
+    onStopScript(stopPythonScript);
+  }, [stopPythonScript, onStopScript]);
 
   return (
     <div>
-      {/* <Button variant="contained" onClick={testinput}>Test</Button> */}
       {error && (
         <>
           <p className="errorText">{error}</p>

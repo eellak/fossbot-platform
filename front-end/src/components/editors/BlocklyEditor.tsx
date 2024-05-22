@@ -9,10 +9,11 @@ import { BlocklyWorkspace } from 'react-blockly';
 import { AppState } from 'src/store/Store';
 import { useSelector } from 'src/store/Store';
 import { Languages } from 'src/utils/languages/Languages.ts';
-import { createContext, useCallback, useEffect } from 'react';
+import { createContext, useCallback, useEffect, useState } from 'react';
 import { pythonGenerator } from 'blockly/python';
 import { useTranslation } from 'react-i18next';
-
+import LightTheme from './LightTheme.js'; // Import the custom theme
+import DarkTheme from './DarkTheme.js'; // Import the custom theme
 import "../../utils/blocksBlockly/customBlocks.ts";
 import './blockly.css';
 
@@ -37,24 +38,38 @@ const BlocklyEditorComponent = ({
 
   currentLang.value == 'gr' ? Blockly.setLocale(localeEl) : Blockly.setLocale(localeEn);
 
+  // Define the custom Python generator within the component
+  const customPythonGenerator = Object.create(pythonGenerator);
+
+  // Override the workspaceToCode method to add import statements
+  customPythonGenerator.workspaceToCode = function(workspace) {
+    const code = pythonGenerator.workspaceToCode(workspace);
+    const imports = 'import time\n'; // Add any other libraries here
+    return imports + code;
+  };
+
   const onWorkspaceChange = useCallback(
     (xml: string) => {
       handleGetValue(() => xml);
 
-      const pythonCode = pythonGenerator.workspaceToCode(Blockly.getMainWorkspace());
+      const pythonCode = customPythonGenerator.workspaceToCode(Blockly.getMainWorkspace());
       handleGetPythonCodeValue(pythonCode);
     },
     [handleGetValue, handleGetPythonCodeValue],
   );
 
+  const [theme, setTheme] = useState(customizer.activeMode === 'dark' ? DarkTheme : LightTheme);
+
   useEffect(() => {
+    console.log('Current Color:', customizer.activeMode);
+
     const handleLanguageChange = () => {
       const currentLanguage = i18n.language;
 
       currentLanguage == 'gr' ? Blockly.setLocale(localeEl) : Blockly.setLocale(localeEn);
 
       const workspaceXml = Blockly.Xml.workspaceToDom(Blockly.getMainWorkspace(), true);
-      Blockly.getMainWorkspace().clear()
+      Blockly.getMainWorkspace().clear();
       Blockly.Xml.domToWorkspace(workspaceXml, Blockly.getMainWorkspace());
     };
 
@@ -67,12 +82,18 @@ const BlocklyEditorComponent = ({
     };
   }, [i18n]);
 
+  useEffect(() => {
+    setTheme(customizer.activeMode === 'light' ? DarkTheme : LightTheme);
+  }, [customizer.activeMode]);
+
   return (
     <BlocklyWorkspace
+      key={customizer.activeMode} // Use key to force re-render
       className={'blocklyDiv'}
       toolboxConfiguration={toolboxJSON}
       initialXml={code}
       onXmlChange={onWorkspaceChange}
+      workspaceConfiguration={{ theme }} 
     />
   );
 };
