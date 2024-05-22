@@ -7,7 +7,7 @@ const TutorialsPage = () => {
   
 
   return (
-    <PageContainer title="Elementary Page" description="This is the Elementary page">
+    <PageContainer title="Tutorials" description="Coding Tutorials Page">
       <Cards/>
     </PageContainer>
   );

@@ -176,18 +176,22 @@ const BlocklyPage = () => {
             <Grid item xs={5} lg={5}>
 
             {showVideoPlayer && (
-                <Box height={'400px'} style={{ 
+                <Box height={'350px'} style={{ 
                       position: 'relative',
                       backgroundColor: 'black',
                       color: 'white',
                       padding: '2px 20px 5px',
                       overflow: 'auto',
                       fontFamily: 'monospace',
-                      lineHeight: '0.2'
+                      lineHeight: '0.2',
+                      marginBottom: '20px'
                     }}>
                   <VideoPlayer />
+  
                 </Box>
-              )}
+                
+              )              
+              }
 
               <Box>
                 <WebGLApp appsessionId={sessionId} 

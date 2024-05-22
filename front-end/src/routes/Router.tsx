@@ -107,7 +107,7 @@ const Router = [
   },
   {
     path: '/tutorials-page',
-    element: <BoxedLayout />,
+    element: <FullLayout />,
     children: [
       { path: '/tutorials-page', exact: true, element: <TutorialsPage /> },
       { path: '/tutorials-page', exact: true, element: <TutorialsPage /> },

@@ -8,7 +8,7 @@ import PythonExecutor from 'src/components/editors/PythonExecutor';
 import { useAuth } from 'src/authentication/AuthProvider';
 import { WebGLApp, moveStep, rotateStep, stopMotion,get_distance, rgb_set_color, get_acceleration, get_gyroscope,get_floor_sensor,just_move,just_rotate, get_light_sensor,drawLine } from 'src/components/js-simulator/Simulator';
 import { useParams, useNavigate } from 'react-router-dom';
-
+import { useLocation } from 'react-router-dom';
 import { v4 as uuidv4 } from 'uuid';
 import { useTranslation } from 'react-i18next';
 import SearchBar from 'src/components/monaco-functions/MonacoSearchBar';
@@ -162,16 +162,18 @@ const MonacoPage = () => {
             <Grid item xs={5} lg={5}>
               
             {showVideoPlayer && (
-                <Box height={'400px'} style={{ 
+                <Box height={'350px'} style={{ 
                       position: 'relative',
                       backgroundColor: 'black',
                       color: 'white',
                       padding: '2px 20px 5px',
                       overflow: 'auto',
                       fontFamily: 'monospace',
-                      lineHeight: '0.2'
+                      lineHeight: '0.2',
+                      marginBottom: '20px'
                     }}>
                   <VideoPlayer />
+  
                 </Box>
               )}
               

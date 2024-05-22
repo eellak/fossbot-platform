@@ -8,7 +8,7 @@ import Sidebar from './vertical/sidebar/Sidebar';
 import Customizer from './shared/customizer/Customizer';
 import Navigation from '../full/horizontal/navbar/Navigation';
 import HorizontalHeader from '../full/horizontal/header/Header';
-
+import Footer from 'src/components/landingpage/footer/Footer';
 const MainWrapper = styled('div')(() => ({
   display: 'flex',
   minHeight: '100vh',
@@ -70,10 +70,14 @@ const FullLayout: FC = () => {
           {/* ------------------------------------------- */}
           {/* End Page */}
           {/* ------------------------------------------- */}
+          
         </Container>
+        <Footer />
         {/* <Customizer /> */}
       </PageWrapper>
+      
     </MainWrapper>
+    
   );
 };
 
