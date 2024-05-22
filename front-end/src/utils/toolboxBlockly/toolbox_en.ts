@@ -603,6 +603,10 @@ const TOOLBOX_JSON = {
           kind: 'block',
           type: 'sleep',
         },
+        {
+          kind: 'block',
+          type: 'draw',
+        },
       ],
     },
   ],

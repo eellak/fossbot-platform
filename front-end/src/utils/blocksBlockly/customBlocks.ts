@@ -347,6 +347,32 @@ pythonGenerator.forBlock['light_sensor'] = function (block) {
   return [code, Order.NONE];
 };
 
+// DRAW COMPONENT
+Blockly.Blocks['draw'] = {
+  init: function () {
+    this.appendDummyInput()
+      .appendField(i18n.t('blocklyBlocks.draw'))
+      .appendField(
+        new Blockly.FieldDropdown([
+          [i18n.t('blocklyBlocks.true'), 'True'],
+          [i18n.t('blocklyBlocks.false'), 'False'],
+        ]),
+        'option',
+      );
+    this.setPreviousStatement(true, null);
+    this.setNextStatement(true, null);
+    this.setColour(160);
+    this.setTooltip(i18n.t('blocklyBlocks.drawTooltip'));
+    this.setHelpUrl('');
+  },
+};
+
+pythonGenerator.forBlock['draw'] = function (block) {
+  var input_value = block.getFieldValue('option');
+  var code = `draw(${input_value})\n`;
+  return code;
+};
+
 // // NOISE DETECTION
 // Blockly.Blocks['noise_detection'] = {
 //   init: function () {
