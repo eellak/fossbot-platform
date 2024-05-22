@@ -19,6 +19,7 @@ const AccountsSettingsPage = Loadable(lazy(() => import('../views/account-settin
 //const BlocklyPage =  '../views/blockly-page/BlocklyPage';
 import BlocklyPage from '../views/blockly-page/BlocklyPage';
 import MonacoPage from '../views/monaco-page/MonacoPage';
+import TutorialsPage from '../views/tutorials/TutorialsPage';
 // const MonacoPage = Loadable(lazy(() => import('../views/monaco-page/MonacoPage')));
 const HuaPage = Loadable(lazy(() => import('../views/sub-pages/HuaPage')));
 const Register = Loadable(lazy(() => import('../views/authentication/Register')));
@@ -78,12 +79,38 @@ const Router = [
     ],
   },
   {
+    path: '/blockly-tutorial-page',
+    title: 'Blockly Tutorial Editor',
+    element: <FullLayout />,
+    children: [
+      { path: '/blockly-tutorial-page', exact: true, element: <BlocklyPage /> },
+      { path: '/blockly-tutorial-page/', exact: true, element: <BlocklyPage /> },
+    ],
+  },
+  {
     path: '/monaco-page',
     title: 'Monaco Editor',
     element: <FullLayout />,
     children: [
       { path: '/monaco-page/:projectId', exact: true, element: <MonacoPage /> },
       { path: '/monaco-page', exact: true, element: <MonacoPage /> },
+    ],
+  },
+  {
+    path: '/monaco-tutorial-page',
+    title: 'Monaco Tutorial Editor',
+    element: <FullLayout />,
+    children: [
+      { path: '/monaco-tutorial-page/', exact: true, element: <MonacoPage /> },
+      { path: '/monaco-tutorial-page', exact: true, element: <MonacoPage /> },
+    ],
+  },
+  {
+    path: '/tutorials-page',
+    element: <BoxedLayout />,
+    children: [
+      { path: '/tutorials-page', exact: true, element: <TutorialsPage /> },
+      { path: '/tutorials-page', exact: true, element: <TutorialsPage /> },
     ],
   },
   {

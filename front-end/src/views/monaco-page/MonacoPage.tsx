@@ -5,12 +5,16 @@ import PageContainer from 'src/components/container/PageContainer';
 import MonacoEditorComponent from 'src/components/editors/MonacoEditor';
 import Buttons from 'src/components/editors/RightColButtons';
 import PythonExecutor from 'src/components/editors/PythonExecutor';
+
 import { useAuth } from 'src/authentication/AuthProvider';
 import { WebGLApp, moveStep, rotateStep, stopMotion,get_distance, rgb_set_color, get_acceleration, get_gyroscope,get_floor_sensor,just_move,just_rotate, get_light_sensor,drawLine } from 'src/components/js-simulator/Simulator';
 import { useParams, useNavigate } from 'react-router-dom';
+
 import { v4 as uuidv4 } from 'uuid';
 import { useTranslation } from 'react-i18next';
 import SearchBar from 'src/components/monaco-functions/MonacoSearchBar';
+import VideoPlayer from 'src/components/videoplayer/VideoPlayer';
+
 
 const textart = ` 
 #___   __   __   __   __   __  ___     __      ___       __       
@@ -21,13 +25,14 @@ print("hello world")`;
 
 const MonacoPage = () => {
   const { t } = useTranslation();
-
+  const location = useLocation();
   const [editorValue, setEditorValue] = useState('');
   const [projectTitle, setProjectTitle] = useState(t('newProject'));
   const [projectDescription, setProjectDescription] = useState(t('newProjectDescription'));
   const [sessionId, setSessionId] = useState('');
   const [loading, setLoading] = useState(true);
   const [isSimulatorLoading, setIsSimulatorLoading] = useState(true);
+  const [showVideoPlayer, setShowVideoPlayer] = useState(false);
   const runScriptRef = useRef<() => Promise<void>>();
   const stopScriptRef = useRef<() => void>(); // Added stop script ref
   const auth = useAuth();
@@ -90,6 +95,12 @@ const MonacoPage = () => {
     fetchProject();
   }, [auth, projectId, navigate]);
 
+  useEffect(() => {
+    if (location.pathname.endsWith('/monaco-tutorial-page')) {
+      setShowVideoPlayer(true);
+    }
+  }, [location.pathname]);
+
   const handleGetValue = (getValueFunc) => {
     const value = getValueFunc();
     setEditorValue(value);
@@ -150,6 +161,21 @@ const MonacoPage = () => {
               <MonacoEditorComponent code={editorValue} handleGetValue={handleGetValue} />
             </Grid>
             <Grid item xs={5} lg={5}>
+              
+            {showVideoPlayer && (
+                <Box height={'400px'} style={{ 
+                      position: 'relative',
+                      backgroundColor: 'black',
+                      color: 'white',
+                      padding: '2px 20px 5px',
+                      overflow: 'auto',
+                      fontFamily: 'monospace',
+                      lineHeight: '0.2'
+                    }}>
+                  <VideoPlayer />
+                </Box>
+              )}
+              
               <Box>
                 <WebGLApp appsessionId={sessionId} onMountChange={handleMountChange} />
               </Box>
