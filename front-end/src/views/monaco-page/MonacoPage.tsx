@@ -1,13 +1,12 @@
 import React, { useEffect, useState, useRef } from 'react';
-
+import { Box, Grid, Stack, DialogContent, Typography, Button } from '@mui/material'; // Added Button
 import Spinner from '../spinner/Spinner';
-import { Box, Grid, Stack, DialogContent, Typography } from '@mui/material'; // Removed 'alertTitleClasses' from imports
 import PageContainer from 'src/components/container/PageContainer';
 import MonacoEditorComponent from 'src/components/editors/MonacoEditor';
 import Buttons from 'src/components/editors/RightColButtons';
 import PythonExecutor from 'src/components/editors/PythonExecutor';
-import { useAuth } from 'src/authentication/AuthProvider'; // Assuming AuthProvider is in the same directory
-import WebGLApp from 'src/components/websimulator/Simulator';
+import { useAuth } from 'src/authentication/AuthProvider';
+import { WebGLApp, moveStep, rotateStep, stopMotion,get_distance, rgb_set_color, get_acceleration, get_gyroscope,get_floor_sensor,just_move,just_rotate, get_light_sensor,drawLine } from 'src/components/js-simulator/Simulator';
 import { useParams, useNavigate } from 'react-router-dom';
 import { v4 as uuidv4 } from 'uuid';
 import { useTranslation } from 'react-i18next';
@@ -20,7 +19,6 @@ const textart = `
 
 print("hello world")`;
 
-
 const MonacoPage = () => {
   const { t } = useTranslation();
 
@@ -31,19 +29,35 @@ const MonacoPage = () => {
   const [loading, setLoading] = useState(true);
   const [isSimulatorLoading, setIsSimulatorLoading] = useState(true);
   const runScriptRef = useRef<() => Promise<void>>();
+  const stopScriptRef = useRef<() => void>(); // Added stop script ref
   const auth = useAuth();
   const navigate = useNavigate();
   const { projectId } = useParams();
   const [showSaveButton, setShowSaveButton] = useState(false);
 
   const handlePlayClick = () => {
+    
     if (runScriptRef.current) {
       runScriptRef.current();
     }
   };
 
+  const handleStopClick = () => { // Added handle stop click
+    
+    if (stopScriptRef.current) {
+      
+      stopScriptRef.current();
+      stopMotion();
+    }
+  };
+
   const setRunScriptFunction = (runScript: () => Promise<void>) => {
     runScriptRef.current = runScript;
+  };
+
+  const setStopScriptFunction = (stopScript: () => void) => { // Added set stop script function
+    stopScriptRef.current = stopScript;
+   
   };
 
   useEffect(() => {
@@ -55,14 +69,14 @@ const MonacoPage = () => {
   useEffect(() => {
     const fetchProject = async () => {
       try {
-        if (projectId != '' && projectId != undefined) {
+        if (projectId && projectId !== '') {
           setShowSaveButton(true);
           const fetchedProject = await auth.getProjectByIdAction(Number(projectId));
           if (fetchedProject) {
             setEditorValue(fetchedProject.code);
             setProjectTitle(fetchedProject.name);
-          } 
-        }else {
+          }
+        } else {
           setEditorValue(textart);
         }
       } catch (error) {
@@ -103,44 +117,45 @@ const MonacoPage = () => {
     <PageContainer title={t('monaco-page.title')} description={t('monaco-page.description')}>
       <Box id="monaco-container" flexGrow={1}>
         <Grid container spacing={3} justifyContent="center" alignItems="center">
-          <Grid item xs={8} lg={8}>  {/* This item spans 8 columns on large screens */}
+          <Grid item xs={8} lg={8}>
             <Box mb={3}>
-              <Typography variant="h1" mt={6} color={'primary'} >
-              🐍 {projectTitle}{' '}
+              <Typography variant="h1" mt={6} color={'primary'}>
+                🐍 {projectTitle}{' '}
               </Typography>
             </Box>
           </Grid>
-          <Grid item xs={4} lg={4}>  {/* This item spans 4 columns on large screens */}
+          <Grid item xs={4} lg={4}>
             <Box mt={2}>
-                <DialogContent className="testdialog">
-                  <Stack direction="row" spacing={3} alignItems="center" justifyContent="flex-end">
-                    <SearchBar />
-                    <Buttons
-                      handlePlayClick={handlePlayClick}
-                      handleSaveClick={handleSaveClick}
-                      showSaveButton={showSaveButton}
-                    />
-                  </Stack>
-                </DialogContent>
-              </Box>
+              <DialogContent className="testdialog">
+                <Stack direction="row" spacing={3} alignItems="center" justifyContent="flex-end">
+                  <SearchBar />
+                  <Buttons
+                    handlePlayClick={handlePlayClick}
+                    handleSaveClick={handleSaveClick}
+                    handleStopClick={handleStopClick}
+                    showSaveButton={showSaveButton}
+                    
+                  />
+                  {/* <Button onClick={handleStopClick} variant="contained" color="secondary">Stop</Button> Added stop button */}
+                </Stack>
+              </DialogContent>
+            </Box>
           </Grid>
         </Grid>
         {loading && isSimulatorLoading ? (
           <Spinner />
         ) : (
-          <Grid container spacing={1} paddingTop={"0rem"} paddingBottom={"0rem"}>
+          <Grid container spacing={1} paddingTop="0rem" paddingBottom="0rem">
             <Grid item xs={7} lg={7}>
               <MonacoEditorComponent code={editorValue} handleGetValue={handleGetValue} />
             </Grid>
             <Grid item xs={5} lg={5}>
-              
-              
               <Box>
                 <WebGLApp appsessionId={sessionId} onMountChange={handleMountChange} />
               </Box>
-           
+              <br />
               <Box
-                height={'400px'}
+                height="350px"
                 style={{
                   backgroundColor: 'black',
                   color: 'white',
@@ -155,6 +170,20 @@ const MonacoPage = () => {
                   pythonScript={editorValue}
                   sessionId={sessionId}
                   onRunScript={setRunScriptFunction}
+                  onStopScript={setStopScriptFunction} // Pass set stop script function
+                  moveStep={moveStep} // Pass move function as prop
+                  rotateStep={rotateStep} // Pass rotate function as prop
+                  getdistance={get_distance}
+                  rgbsetcolor={rgb_set_color}
+                  getacceleration={get_acceleration}
+                  getgyroscope={get_gyroscope}
+                  getfloorsensor={get_floor_sensor}
+                  justRotate={just_rotate}
+                  justMove={just_move}
+                  stopMotion={stopMotion}
+                  getLightSensor={get_light_sensor}
+                  drawLine={drawLine}
+                
                 />
               </Box>
             </Grid>

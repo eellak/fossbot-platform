@@ -4,13 +4,16 @@ import { useAuth } from 'src/authentication/AuthProvider'; // Assuming AuthProvi
 import { v4 as uuidv4 } from 'uuid';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-
+import PythonExecutor from 'src/components/editors/PythonExecutor';
 import PythonTerminal from 'src/components/editors/PythonTerminal';
-import WebGLApp from 'src/components/websimulator/Simulator';
+// import WebGLApp from 'src/components/websimulator/Simulator';
+import { WebGLApp, moveStep, rotateStep, stopMotion,get_distance, rgb_set_color, get_acceleration, get_gyroscope,get_floor_sensor,just_move,just_rotate, get_light_sensor,drawLine } from 'src/components/js-simulator/Simulator';
 import Buttons from 'src/components/editors/RightColButtons';
 import PageContainer from '../../components/container/PageContainer';
 import BlocklyEditorComponent from '../../components/editors/BlocklyEditor';
 import Spinner from '../spinner/Spinner';
+
+
 
 const BlocklyPage = () => {
   const { t } = useTranslation();
@@ -32,6 +35,7 @@ const BlocklyPage = () => {
   const auth = useAuth();
   const navigate = useNavigate();
   const { projectId } = useParams(); // Get project ID from URL
+  const stopScriptRef = useRef<() => void>(); // Added stop script ref
 
   const handlePlayClick = () => {
     if (runScriptRef.current) {
@@ -41,6 +45,11 @@ const BlocklyPage = () => {
 
   const setRunScriptFunction = (runScript: () => Promise<void>) => {
     runScriptRef.current = runScript;
+  };
+
+  const setStopScriptFunction = (stopScript: () => void) => { // Added set stop script function
+    stopScriptRef.current = stopScript;
+   
   };
 
   useEffect(() => {
@@ -82,6 +91,16 @@ const BlocklyPage = () => {
     setEditorValue(value);
   };
 
+
+  const handleStopClick = () => { // Added handle stop click
+    
+    if (stopScriptRef.current) {
+      
+      stopScriptRef.current();
+      stopMotion();
+    }
+  };
+
   const handleGetPythonCodeValue = (getValueFunc) => {
     // Save Python code
     const value = getValueFunc;
@@ -93,7 +112,7 @@ const BlocklyPage = () => {
       await auth.updateProjectByIdAction(Number(projectId), {
         name: projectTitle,
         description: projectDescription,
-        project_type: 'python',
+        project_type: 'blockly',
         code: editorValue,
       });
     } catch (error) {
@@ -121,7 +140,11 @@ const BlocklyPage = () => {
             <Box mt={2} sx={{ display: 'flex', justifyContent: 'flex-end' }}> {/* Aligns content to the left */}
               <DialogContent className="testdialog">
                 <Stack direction="row" spacing={3} alignItems="center" justifyContent="flex-end"> {/* Aligns buttons to the left */}
-                  <Buttons handlePlayClick={handlePlayClick} handleSaveClick={handleSaveClick} showSaveButton={showSaveButton} />
+                  <Buttons 
+                    handlePlayClick={handlePlayClick} 
+                    handleSaveClick={handleSaveClick} 
+                    handleStopClick={handleStopClick}
+                    showSaveButton={showSaveButton} />
                 </Stack>
               </DialogContent>
             </Box>
@@ -146,9 +169,12 @@ const BlocklyPage = () => {
             <Grid item xs={5} lg={5}>
 
               <Box>
-                <WebGLApp appsessionId={sessionId} onMountChange={handleMountChange} />
+                <WebGLApp appsessionId={sessionId} 
+                onMountChange={handleMountChange} />
               </Box>
-
+              <br/>
+              
+                {/* Terminal */}
     
               <Box
                 height={'400px'}
@@ -162,11 +188,33 @@ const BlocklyPage = () => {
                 }}
               >
                 <p>{t('blockly-page.fossbot-terminal')} 🐍</p>
+                <PythonExecutor
+                  pythonScript={editorPythonValue}
+                  sessionId={sessionId}
+                  onRunScript={setRunScriptFunction}
+                  onStopScript={setStopScriptFunction} // Pass set stop script function
+                  moveStep={moveStep} // Pass move function as prop
+                  rotateStep={rotateStep} // Pass rotate function as prop
+                  getdistance={get_distance}
+                  rgbsetcolor={rgb_set_color}
+                  getacceleration={get_acceleration}
+                  getgyroscope={get_gyroscope}
+                  getfloorsensor={get_floor_sensor}
+                  justRotate={just_rotate}
+                  justMove={just_move}
+                  stopMotion={stopMotion}
+                  getLightSensor={get_light_sensor}
+                  drawLine={drawLine}
+                
+                />
+                
+{/*                 
                 <PythonTerminal
                   pythonScript={editorPythonValue}
                   sessionId={sessionId}
                   onRunScript={setRunScriptFunction}
-                />
+
+                /> */}
               </Box>
 
 

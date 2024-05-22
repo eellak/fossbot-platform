@@ -535,10 +535,7 @@ const TOOLBOX_JSON = {
           kind: 'block',
           type: 'just_move',
         },
-        {
-          kind: 'block',
-          type: 'sleep',
-        },
+
 
         {
           kind: 'block',
@@ -551,6 +548,10 @@ const TOOLBOX_JSON = {
         {
           kind: 'block',
           type: 'rotate_90',
+        },
+        {
+          kind: 'block',
+          type: 'rotate_45',
         },
       ],
     },
@@ -567,10 +568,10 @@ const TOOLBOX_JSON = {
           kind: 'block',
           type: 'floor_sensor',
         },
-        {
-          kind: 'block',
-          type: 'noise_detection',
-        },
+        // {
+        //   kind: 'block',
+        //   type: 'noise_detection',
+        // },
         {
           kind: 'block',
           type: 'get_acceleration',
@@ -594,9 +595,13 @@ const TOOLBOX_JSON = {
           kind: 'block',
           type: 'set_color',
         },
+        // {
+        //   kind: 'block',
+        //   type: 'play_sound',
+        // },
         {
           kind: 'block',
-          type: 'play_sound',
+          type: 'sleep',
         },
       ],
     },
