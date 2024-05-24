@@ -8,6 +8,7 @@ import {
   IconMoodHappy,
   IconLayoutDashboard,
   IconAlbum,
+  IconSquarePlus,
 } from '@tabler/icons-react';
 
 interface MenuitemsType {
@@ -88,6 +89,15 @@ const Menuitems: MenuitemsType[] = [
     chip: 'new',
     chipColor: 'primary',
     href: '/tutorials-page',
+    disabled: false,
+  },
+  {
+    id: uniqueId(),
+    title: 'menu.createTutorial',
+    icon: IconSquarePlus,
+    chip: 'new',
+    chipColor: 'primary',
+    href: '/create-tutorial',
     disabled: false,
   },
   {

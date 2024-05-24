@@ -64,7 +64,8 @@
     "elementary": "Δημοτικό",
     "fossbotRepository": "FOSSBot Repository",
     "externalLinks": "Εξωτερικοί Σύνδεσμοι",
-    "tutorials": "Οδηγοί"
+    "tutorials": "Οδηγοί",
+    "createTutorial": "Δημιουργία Οδηγού"
   },
   "projects-card": {
     "card-title": "FOSSBot πρότζεκτς",
@@ -75,6 +76,16 @@
     "edit": "Επεξεργασία",
     "delete": "Διαγραφή",
     "noProjectsFound": "Δεν βρέθηκαν πρότζεκτς"
+  },
+  "tutorial-projects-card": {
+    "card-title": "FOSSBot εκπαιδευτικά πρότζεκτς",
+    "subtitle": "Δημιουργήστε το σενάριο του προγράμματος σπουδών σας εδώ",
+    "type": "Τύπος",
+    "title": "Τίτλος",
+    "description": "Περιγραφή",
+    "edit": "Επεξεργασία",
+    "delete": "Διαγραφή",
+    "noProjectsFound": "Δεν βρέθηκαν εκπαιδευτικά σενάρια"
   },
   "banner-content": {
     "openTechnologies": "ένα ρομπότ ανοικτών τεχνολογιών για εκπαίδευση.",
@@ -256,6 +267,7 @@
   "accountSettings": {
     "blocklyProjects": "Blockly πρότζεκτς",
     "monacoProjects": "Monaco πρότζεκτς",
-    "tutorials": "Οδηγοί"
+    "tutorials": "Οδηγοί",
+    "createTutorial": "Δημιουργία Οδηγού"
   }
 }

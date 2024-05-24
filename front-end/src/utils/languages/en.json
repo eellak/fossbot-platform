@@ -64,7 +64,8 @@
     "elementary": "Elementary",
     "fossbotRepository": "FOSSBot Repository",
     "externalLinks": "External Links",
-    "tutorials": "Tutorials"
+    "tutorials": "Tutorials",
+    "createTutorial": "Create Tutorial"
   },
   "projects-card": {
     "card-title": "FOSSBot Projects",
@@ -75,6 +76,16 @@
     "edit": "Edit",
     "delete": "Delete",
     "noProjectsFound": "No projects found"
+  },
+  "tutorial-projects-card": {
+    "card-title": "FOSSBot Tutorial Projects",
+    "subtitle": "Create your curriculum tutorial here!",
+    "type": "Type",
+    "title": "Title",
+    "description": "Description",
+    "edit": "Edit",
+    "delete": "Delete",
+    "noProjectsFound": "No tutorials found"
   },
   "banner-content": {
     "openTechnologies": "an open technologies robot for education.",
@@ -257,6 +268,7 @@
   "accountSettings": {
     "blocklyProjects": "Blockly projects",
     "monacoProjects": "Monaco projects",
-    "tutorials": "Tutorials"
+    "tutorials": "Tutorials",
+    "createTutorial": "Create Tutorial"
   }
 }

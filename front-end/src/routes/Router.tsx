@@ -20,6 +20,7 @@ const AccountsSettingsPage = Loadable(lazy(() => import('../views/account-settin
 import BlocklyPage from '../views/blockly-page/BlocklyPage';
 import MonacoPage from '../views/monaco-page/MonacoPage';
 import TutorialsPage from '../views/tutorials/TutorialsPage';
+import CreateTutorial from '../views/tutorials/CreateTutorial';
 // const MonacoPage = Loadable(lazy(() => import('../views/monaco-page/MonacoPage')));
 const HuaPage = Loadable(lazy(() => import('../views/sub-pages/HuaPage')));
 const Register = Loadable(lazy(() => import('../views/authentication/Register')));
@@ -111,6 +112,14 @@ const Router = [
     children: [
       { path: '/tutorials-page', exact: true, element: <TutorialsPage /> },
       { path: '/tutorials-page', exact: true, element: <TutorialsPage /> },
+    ],
+  },
+  {
+    path: '/create-tutorial',
+    element: <FullLayout />,
+    children: [
+      { path: '/create-tutorial', exact: true, element: <CreateTutorial /> },
+      { path: '/create-tutorial', exact: true, element: <CreateTutorial /> },
     ],
   },
   {
