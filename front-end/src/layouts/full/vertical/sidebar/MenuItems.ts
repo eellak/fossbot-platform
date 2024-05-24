@@ -73,8 +73,8 @@ const Menuitems: MenuitemsType[] = [
     icon: IconMoodKid,
     chip: 'soon',
     // chipColor: 'primary',
-    href: '/blockly-simply-page',
-    disabled: true,
+    href: '/kindergarten-page',
+    disabled: false,
   },
 
   {

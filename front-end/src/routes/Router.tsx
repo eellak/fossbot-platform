@@ -18,6 +18,7 @@ const AccountsSettingsPage = Loadable(lazy(() => import('../views/account-settin
 //const BlocklyPage = Loadable(lazy(() => import('../views/blockly-page/BlocklyPage')));
 //const BlocklyPage =  '../views/blockly-page/BlocklyPage';
 import BlocklyPage from '../views/blockly-page/BlocklyPage';
+import KindergartenPage from '../views/kindergarten-page/KindergartenPage';
 import MonacoPage from '../views/monaco-page/MonacoPage';
 // const MonacoPage = Loadable(lazy(() => import('../views/monaco-page/MonacoPage')));
 const HuaPage = Loadable(lazy(() => import('../views/sub-pages/HuaPage')));
@@ -84,6 +85,15 @@ const Router = [
     children: [
       { path: '/monaco-page/:projectId', exact: true, element: <MonacoPage /> },
       { path: '/monaco-page', exact: true, element: <MonacoPage /> },
+    ],
+  },
+  {
+    path: '/kindergarten-page',
+    title: 'Kindergarten Editor',
+    element: <FullLayout />,
+    children: [
+      { path: '/kindergarten-page/:projectId', exact: true, element: <KindergartenPage /> },
+      { path: '/kindergarten-page', exact: true, element: <KindergartenPage /> },
     ],
   },
   {
