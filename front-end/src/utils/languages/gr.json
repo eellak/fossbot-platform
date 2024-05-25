@@ -181,6 +181,14 @@
     "newProjectForm": "Φόρμα Νέου Έργου",
     "giveYourProjectAName": "Δώστε ένα όνομα για το πρότζεκτ σας",
     "describeYourProject": "Δώστε μια περιγραφή για το πρότζεκτ σας"
+  },  
+  "tutorial-project-form": {
+    "title": "Οριζόντια Φόρμα",
+    "description": "Αυτή είναι η σελίδα Οριζόντιας Φόρμας",
+    "createNewProject": "Δημιουργία νέου εκπαιδευτικού σεναρίου",
+    "newProjectForm": "Φόρμα νέου εκπαιδευτικού σεναρίου",
+    "giveYourProjectAName": "Δώστε ένα όνομα για το εκπαιδευτικό σας σενάριο",
+    "describeYourProject": "Δώστε μια περιγραφή για το εκπαιδευτικό σας σενάριο"
   },
   "monaco-page": {
     "title": "Σελίδα Monaco",

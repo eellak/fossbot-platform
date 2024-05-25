@@ -1,6 +1,6 @@
 import React from 'react';
 import DashboardCard from 'src/components//shared/DashboardCardWithChildren';
-import ProjectForm from 'src/views/forms/ProjectForm';
+import TutorialProjectForm from 'src/views/tutorials/TutorialProjectForm';
 import Fab from '@mui/material/Fab';
 import PageContainer from 'src/components/container/PageContainer';
 
@@ -27,7 +27,7 @@ import { useAuth } from 'src/authentication/AuthProvider';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
-const CreateTutorial = () => {
+const TutorialProjectsCard = () => {
   const { t } = useTranslation();
 
   const auth = useAuth();
@@ -73,9 +73,9 @@ const CreateTutorial = () => {
 
   const handleEditProject = async (projectId, project_type) => {
     if (project_type === 'python') {
-      navigate(`/monaco-page/${projectId}`);
+      navigate(`/monaco-tutorial-page/${projectId}`);
     } else {
-      navigate(`/blockly-page/${projectId}`);
+      navigate(`/blockly-tutorial-page/${projectId}`);
     }
   };
 
@@ -100,7 +100,7 @@ const CreateTutorial = () => {
             aria-describedby="alert-dialog-description"
             PaperProps={{ sx: { position: 'fixed', top: 30, m: 0 } }}
           >
-            <ProjectForm />
+            <TutorialProjectForm />
           </Dialog>
           <TableContainer>
             <Table
@@ -212,4 +212,4 @@ const CreateTutorial = () => {
   );
 };
 
-export default CreateTutorial;
+export default TutorialProjectsCard;

@@ -181,6 +181,14 @@
     "newProjectForm": "New Project Form",
     "giveYourProjectAName": "Give your project a name",
     "describeYourProject": "Describe your project"
+  },  
+  "tutorial-project-form": {
+    "title": "Horizontal Form",
+    "description": "This is the Horizontal Form page",
+    "createNewProject": "Create New Curriculum Tutorial",
+    "newProjectForm": "New Tutorial Form",
+    "giveYourProjectAName": "Give your tutorial a name",
+    "describeYourProject": "Describe your tutorial"
   },
   "monaco-page": {
     "title": "Monaco Page",
