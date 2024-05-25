@@ -56,6 +56,28 @@ class ProjectsCreate(BaseModel):
     project_type: str    
     code: str
 
+class CurriculumCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    image_url: Optional[str] = None
+
+class CurriculumUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    image_url: Optional[str] = None
+
+class LessonUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    image_url: Optional[str] = None
+    video_url: Optional[str] = None
+
+class LessonUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    image_url: Optional[str] = None
+    video_url: Optional[str] = None
+
 class SessionTokenRequest(BaseModel):
     session_token: str
 
@@ -343,6 +365,106 @@ async def update_project(project_id: int, project_update: ProjectsCreate, curren
     db.refresh(db_project)
     return db_project
 
+@app.post("/curriculums/")
+async def create_curriculum(curriculum: CurriculumCreate, current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):
+    db_curriculum = Curriculum(name=curriculum.name, description=curriculum.description, image_url=curriculum.image_url, user_id=current_user.id)
+    db.add(db_curriculum)
+    db.commit()
+    db.refresh(db_curriculum)
+    return db_curriculum
+
+@app.get("/curriculums/")
+async def read_curriculums(current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):
+    return db.query(Curriculum).filter(Curriculum.user_id == current_user.id).all()
+
+@app.get("/curriculums/{curriculum_id}")
+async def read_curriculum(curriculum_id: int, current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):
+    curriculum = db.query(Curriculum).filter(Curriculum.id == curriculum_id, Curriculum.user_id == current_user.id).first()
+    if curriculum is None:
+        raise HTTPException(status_code=404, detail="Curriculum not found")
+    return curriculum
+
+@app.put("/curriculums/{curriculum_id}")
+async def update_curriculum(curriculum_id: int, curriculum_update: CurriculumUpdate, current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):
+    db_curriculum = db.query(Curriculum).filter(Curriculum.id == curriculum_id, Curriculum.user_id == current_user.id).first()
+    if db_curriculum is None:
+        raise HTTPException(status_code=404, detail="Curriculum not found")
+
+    if curriculum_update.name:
+        db_curriculum.name = curriculum_update.name
+    if curriculum_update.description:
+        db_curriculum.description = curriculum_update.description
+    if curriculum_update.image_url:
+        db_curriculum.image_url = curriculum_update.image_url
+
+    db.commit()
+    db.refresh(db_curriculum)
+    return db_curriculum
+
+@app.delete("/curriculums/{curriculum_id}")
+async def delete_curriculum(curriculum_id: int, current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):
+    db_curriculum = db.query(Curriculum).filter(Curriculum.id == curriculum_id, Curriculum.user_id == current_user.id).first()
+    if db_curriculum is None:
+        raise HTTPException(status_code=404, detail="Curriculum not found")
+    db.delete(db_curriculum)
+    db.commit()
+    return {"detail": "Curriculum deleted"}
+
+
+@app.post("/curriculums/{curriculum_id}/lessons/")
+async def create_lesson(curriculum_id: int, lesson: LessonCreate, current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):
+    db_curriculum = db.query(Curriculum).filter(Curriculum.id == curriculum_id, Curriculum.user_id == current_user.id).first()
+    if db_curriculum is None:
+        raise HTTPException(status_code=404, detail="Curriculum not found")
+    
+    db_lesson = Lesson(title=lesson.title, description=lesson.description, image_url=lesson.image_url, video_url=lesson.video_url, curriculum_id=curriculum_id)
+    db.add(db_lesson)
+    db.commit()
+    db.refresh(db_lesson)
+    return db_lesson
+
+@app.get("/curriculums/{curriculum_id}/lessons/")
+async def read_lessons(curriculum_id: int, current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):
+    db_curriculum = db.query(Curriculum).filter(Curriculum.id == curriculum_id, Curriculum.user_id == current_user.id).first()
+    if db_curriculum is None:
+        raise HTTPException(status_code=404, detail="Curriculum not found")
+    
+    return db.query(Lesson).filter(Lesson.curriculum_id == curriculum_id).all()
+
+@app.get("/lessons/{lesson_id}")
+async def read_lesson(lesson_id: int, current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):
+    lesson = db.query(Lesson).filter(Lesson.id == lesson_id).first()
+    if lesson is None or lesson.curriculum.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Lesson not found")
+    return lesson
+
+@app.put("/lessons/{lesson_id}")
+async def update_lesson(lesson_id: int, lesson_update: LessonUpdate, current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):
+    db_lesson = db.query(Lesson).filter(Lesson.id == lesson_id).first()
+    if db_lesson is None or db_lesson.curriculum.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Lesson not found")
+
+    if lesson_update.title:
+        db_lesson.title = lesson_update.title
+    if lesson_update.description:
+        db_lesson.description = lesson_update.description
+    if lesson_update.image_url:
+        db_lesson.image_url = lesson_update.image_url
+    if lesson_update.video_url:
+        db_lesson.video_url = lesson_update.video_url
+
+    db.commit()
+    db.refresh(db_lesson)
+    return db_lesson
+
+@app.delete("/lessons/{lesson_id}")
+async def delete_lesson(lesson_id: int, current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):
+    db_lesson = db.query(Lesson).filter(Lesson.id == lesson_id).first()
+    if db_lesson is None or db_lesson.curriculum.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Lesson not found")
+    db.delete(db_lesson)
+    db.commit()
+    return {"detail": "Lesson deleted"}
 
 # Run the application
 if __name__ == "__main__":
