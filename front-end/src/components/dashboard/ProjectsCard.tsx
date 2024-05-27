@@ -1,22 +1,18 @@
 import React from 'react';
-import DashboardCard from '../../shared/DashboardCardWithChildren';
-import ProjectForm from 'src/views/forms/ProjectForm';
+import DashboardCard from '../shared/DashboardCardWithChildren';
 import Fab from '@mui/material/Fab';
 import PageContainer from 'src/components/container/PageContainer';
+import NewProjectDialog from './NewProjectDialog';
 
 import { useState, useEffect } from 'react';
 import {
-  Dialog,
   Typography,
-  Box,
   Table,
   TableBody,
   TableCell,
   TableHead,
   TableRow,
-  Avatar,
   TableContainer,
-  Stack,
 } from '@mui/material';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faAdd } from '@fortawesome/free-solid-svg-icons';
@@ -91,17 +87,12 @@ const ProjectsCard = () => {
         }
       >
         <>
-          <Dialog
-            open={showDrawer}
-            onClose={handleDrawerClose}
-            fullWidth
-            maxWidth={'sm'}
-            aria-labelledby="alert-dialog-title"
-            aria-describedby="alert-dialog-description"
-            PaperProps={{ sx: { position: 'fixed', top: 30, m: 0 } }}
-          >
-            <ProjectForm />
-          </Dialog>
+          <NewProjectDialog
+            showDrawer={showDrawer}
+            handleDrawerClose={handleDrawerClose}
+            isDescriptionDisabled={false}
+            editorInitialValue='python'
+          />
           <TableContainer>
             <Table
               aria-label="simple table"
