@@ -7,7 +7,6 @@ const FullLayout = Loadable(lazy(() => import('../layouts/full/FullLayout')));
 const FullFillLayout = Loadable(lazy(() => import('../layouts/full/FullFillLayout')));
 const BoxedLayout = Loadable(lazy(() => import('../layouts/full/BoxedLayout')));
 const BlankLayout = Loadable(lazy(() => import('../layouts/blank/BlankLayout')));
-// const MonacoLayout = Loadable(lazy(() => import('../layouts/MonacoLayout')));
 
 /* ****Pages***** */
 const SamplePage = Loadable(lazy(() => import('../views/sample-page/SamplePage')));
@@ -15,20 +14,17 @@ const Dashboard = Loadable(lazy(() => import('../views/dashboard/Dashboard')));
 const LandingPage = Loadable(lazy(() => import('../views/landing-page/LandingPage')));
 const AccountsSettingsPage = Loadable(lazy(() => import('../views/account-settings-page/AccountsSettingsPage')));
 
-//const BlocklyPage = Loadable(lazy(() => import('../views/blockly-page/BlocklyPage')));
-//const BlocklyPage =  '../views/blockly-page/BlocklyPage';
 import BlocklyPage from '../views/blockly-page/BlocklyPage';
 import MonacoPage from '../views/monaco-page/MonacoPage';
 import TutorialsPage from '../views/tutorials/TutorialsPage';
-// const MonacoPage = Loadable(lazy(() => import('../views/monaco-page/MonacoPage')));
 const HuaPage = Loadable(lazy(() => import('../views/sub-pages/HuaPage')));
 const Register = Loadable(lazy(() => import('../views/authentication/Register')));
 const Login = Loadable(lazy(() => import('../views/authentication/Login')));
 const Error = Loadable(lazy(() => import('../views/authentication/Error')));
-import AuthProvider from '../authentication/AuthProvider'; // Update with actual path
+
+// import AuthProvider from '../authentication/AuthProvider'; // Update with actual path
 import PrivateRoute from './PrivateRoute'; // Update with actual path
 import RoleBasedRoute from './RoleBasedRoute'; // Import the new component
-import { title } from 'process';
 
 const Router = [
   {
@@ -38,15 +34,15 @@ const Router = [
   },
   {
     path: '/dashboard',
-    element: (
-      <PrivateRoute>       
-          <FullLayout />       
-      </PrivateRoute>
-    ),
+    element: <PrivateRoute />,
     children: [
       {
         path: '',
-        element: <Dashboard />
+        element: (
+          // <RoleBasedRoute roles={['admin']}>
+            <Dashboard />
+          // </RoleBasedRoute>
+        ),
       },
     ],
   },
@@ -77,8 +73,10 @@ const Router = [
     path: '/blockly-page',
     title: 'Blockly Editor',
     element: (
-      <PrivateRoute>       
-          <FullLayout />       
+      <PrivateRoute>
+        {/* <RoleBasedRoute betaTesterOnly> */}
+          <FullLayout />
+        {/* </RoleBasedRoute> */}
       </PrivateRoute>
     ),
     children: [
@@ -89,7 +87,13 @@ const Router = [
   {
     path: '/blockly-tutorial-page',
     title: 'Blockly Tutorial Editor',
-    element: <FullLayout />,
+    element: (
+      <PrivateRoute>
+        <RoleBasedRoute betaTesterOnly>
+          <FullLayout />
+        </RoleBasedRoute>
+      </PrivateRoute>
+    ),
     children: [
       { path: '/blockly-tutorial-page', exact: true, element: <BlocklyPage /> },
       { path: '/blockly-tutorial-page/', exact: true, element: <BlocklyPage /> },
@@ -99,8 +103,10 @@ const Router = [
     path: '/monaco-page',
     title: 'Monaco Editor',
     element: (
-      <PrivateRoute>       
-          <FullLayout />       
+      <PrivateRoute>
+        <RoleBasedRoute betaTesterOnly>
+          <FullLayout />
+        </RoleBasedRoute>
       </PrivateRoute>
     ),
     children: [
@@ -111,7 +117,13 @@ const Router = [
   {
     path: '/monaco-tutorial-page',
     title: 'Monaco Tutorial Editor',
-    element: <FullLayout />,
+    element: (
+      <PrivateRoute>
+        <RoleBasedRoute betaTesterOnly>
+          <FullLayout />
+        </RoleBasedRoute>
+      </PrivateRoute>
+    ),
     children: [
       { path: '/monaco-tutorial-page/', exact: true, element: <MonacoPage /> },
       { path: '/monaco-tutorial-page', exact: true, element: <MonacoPage /> },
@@ -119,27 +131,11 @@ const Router = [
   },
   {
     path: '/tutorials-page',
-    element: (
-      <PrivateRoute>
-        <RoleBasedRoute  betaTesterOnly={true}>
-          <FullLayout />
-        </RoleBasedRoute>
-      </PrivateRoute>
-    ),
+    element: <FullLayout />,
     children: [
-      {
-        path: '',
-        element: <TutorialsPage />,
-      },
+      { path: '/tutorials-page', exact: true, element: <TutorialsPage /> },
+      { path: '/tutorials-page', exact: true, element: <TutorialsPage /> },
     ],
-  },
-  
-
-
-  {
-    path: '/auth',
-    element: <BlankLayout />,
-    children: [{ path: '404', element: <Error /> }],
   },
   {
     path: '/accountSettings',
@@ -148,10 +144,19 @@ const Router = [
     children: [
       {
         path: '',
-        element: <FullLayout />,
-        children: [{ path: '', exact: true, element: <AccountsSettingsPage /> }],
+        element: (
+          <RoleBasedRoute>
+            <AccountsSettingsPage />
+          </RoleBasedRoute>
+        ),
       },
-    ],  },
+    ],
+  },
+  {
+    path: '/auth',
+    element: <BlankLayout />,
+    children: [{ path: '404', element: <Error /> }],
+  },
 ];
 
 export default Router;

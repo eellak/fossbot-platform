@@ -8,6 +8,7 @@ import {
   IconMoodHappy,
   IconLayoutDashboard,
   IconAlbum,
+  IconHandGrab
 } from '@tabler/icons-react';
 
 interface MenuitemsType {
@@ -68,9 +69,9 @@ const Menuitems: MenuitemsType[] = [
 
   {
     id: uniqueId(),
-    title: 'menu.kindergarten',
-    subtitle: 'menu.simplyBlocks',
-    icon: IconMoodKid,
+    title: 'menu.interactive',
+    subtitle: 'menu.interactiveBased',
+    icon: IconHandGrab,
     chip: 'soon',
     // chipColor: 'primary',
     href: '/blockly-simply-page',
@@ -85,8 +86,8 @@ const Menuitems: MenuitemsType[] = [
     id: uniqueId(),
     title: 'menu.tutorials',
     icon: IconAlbum,
-    chip: 'new',
-    chipColor: 'primary',
+    chip: 'Soon',
+    // chipColor: 'primary',
     href: '/tutorials-page',
     disabled: false,
   },

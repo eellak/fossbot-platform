@@ -1,6 +1,6 @@
 // Define the shape of your context data
 export interface AuthContextType {
-    user: string | null;
+    user: User | null;
     token: string;
     loginAction: (data: LoginData) => Promise<void>;
     registerAction: (data: RegisterData) => Promise<void>;
@@ -58,7 +58,10 @@ export interface User {
     email: string;
     role: string;
     image_url?: string;
+    beta_tester: boolean;
 }
+
+
 
 
 export interface UserData {

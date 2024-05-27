@@ -1,6 +1,6 @@
 from fastapi import FastAPI, Depends, HTTPException, status,Form
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from sqlalchemy import create_engine, Column, Integer, String,ForeignKey,DateTime,Enum
+from sqlalchemy import create_engine, Column, Integer, String,ForeignKey,DateTime,Enum,Boolean
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker,relationship
 import datetime
@@ -74,6 +74,7 @@ class User(Base):
     email = Column(String, unique=True, nullable=False)
     hashed_password = Column(String, nullable=False)
     role = Column(Enum(UserRole), default=UserRole.USER)
+    beta_tester = Column(Boolean, default=False)
     image_url = Column(String)  # Added field for user's profile image URL
 
 class Projects(Base):
