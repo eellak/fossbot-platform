@@ -129,7 +129,7 @@
   },
   "authentication": {
     "authLogin": {
-      "rememberDevice": "Rememmber this Device",
+      "rememberDevice": "Remember this Device",
       "forgotPassword": "Forgot Password ?"
     },
     "error": {
