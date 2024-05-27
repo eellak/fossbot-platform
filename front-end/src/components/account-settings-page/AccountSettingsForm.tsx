@@ -96,7 +96,7 @@ const AccountSettingsForm = ({ user, onFormSubmit }: AccountSettingsFormType) =>
             placeholder="john.deo"
             fullWidth
             value={formData.username}
-            onChange={handleInputChange}
+            disabled={true}
           />
         </Grid>
         <Grid item xs={12} sm={3} display="flex" alignItems="center">
@@ -121,7 +121,7 @@ const AccountSettingsForm = ({ user, onFormSubmit }: AccountSettingsFormType) =>
             fullWidth
             value={formData.email}
             name="email"
-            onChange={handleInputChange}
+            disabled={true}
           />
         </Grid>
         <Grid item xs={12} sm={3}></Grid>
