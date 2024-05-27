@@ -158,7 +158,7 @@ const TutorialProjectsCard = () => {
                 ) : (
                   projects.map((project) => (
                     <TableRow key={project.id}>
-                      <TableCell align="center">
+                      <TableCell align="left">
                         {project.project_type === 'python' ? (
                           <Typography color="primary">
                             <IconCode />
