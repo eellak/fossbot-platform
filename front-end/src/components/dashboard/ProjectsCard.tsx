@@ -77,6 +77,12 @@ const ProjectsCard = () => {
 
   return (
     <PageContainer>
+      <NewProjectDialog
+        showDrawer={showDrawer}
+        handleDrawerClose={handleDrawerClose}
+        isDescriptionDisabled={false}
+        editorInitialValue='python'
+      />
       <DashboardCard
         title={t('projects-card.card-title')}
         subtitle={t('projects-card.subtitle')}
@@ -86,118 +92,95 @@ const ProjectsCard = () => {
           </Fab>
         }
       >
-        <>
-          <NewProjectDialog
-            showDrawer={showDrawer}
-            handleDrawerClose={handleDrawerClose}
-            isDescriptionDisabled={false}
-            editorInitialValue='python'
-          />
-          <TableContainer>
-            <Table
-              aria-label="simple table"
-              sx={{
-                whiteSpace: 'nowrap',
-              }}
-            >
-              <TableHead>
+        <TableContainer>
+          <Table
+            aria-label="simple table"
+            sx={{
+              whiteSpace: 'nowrap',
+            }}
+          >
+            <TableHead>
+              <TableRow>
+                <TableCell align="center">
+                  <Typography variant="subtitle2" fontWeight={600}>
+                    {t('projects-card.type')}
+                  </Typography>
+                </TableCell>
+                <TableCell align="center">
+                  <Typography variant="subtitle2" fontWeight={600}>
+                    {t('projects-card.title')}
+                  </Typography>
+                </TableCell>
+                <TableCell align="center">
+                  <Typography variant="subtitle2" fontWeight={600}>
+                    {t('projects-card.description')}
+                  </Typography>
+                </TableCell>
+                <TableCell align="center">
+                  <Typography variant="subtitle2" fontWeight={600}>
+                    {t('projects-card.edit')}
+                  </Typography>
+                </TableCell>
+                <TableCell align="center">
+                  <Typography variant="subtitle2" fontWeight={600}>
+                    {t('projects-card.delete')}
+                  </Typography>
+                </TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {projects.length === 0 ? (
                 <TableRow>
                   <TableCell>
-                    <Typography variant="subtitle2" fontWeight={600}>
-                      {t('projects-card.type')}
-                    </Typography>
-                  </TableCell>
-                  <TableCell>
-                    <Typography variant="subtitle2" fontWeight={600}>
-                      {t('projects-card.title')}
-                    </Typography>
-                  </TableCell>
-                  <TableCell>
-                    <Typography variant="subtitle2" fontWeight={600}>
-                      {t('projects-card.description')}
-                    </Typography>
-                  </TableCell>
-                  {/* <TableCell>
-                  <Typography variant="subtitle2" fontWeight={600}>
-                    Editor
-                  </Typography>
-                </TableCell> */}
-                  {/* <TableCell align="center">
-                  <Typography variant="subtitle2" fontWeight={600}>
-                    Extract
-                  </Typography>
-                </TableCell>  */}
-                  <TableCell align="center">
-                    <Typography variant="subtitle2" fontWeight={600}>
-                      {t('projects-card.edit')}
-                    </Typography>
-                  </TableCell>
-                  <TableCell align="center">
-                    <Typography variant="subtitle2" fontWeight={600}>
-                      {t('projects-card.delete')}
-                    </Typography>
+                    <Typography>{t('projects-card.noProjectsFound')} </Typography>
                   </TableCell>
                 </TableRow>
-              </TableHead>
-              <TableBody>
-                {projects.length === 0 ? (
-                  <TableRow>
-                    <TableCell>
-                      <Typography>{t('projects-card.noProjectsFound')} </Typography>
+              ) : (
+                projects.map((project) => (
+                  <TableRow key={project.id}>
+                    <TableCell align="center">
+                      {project.project_type === 'python' ? (
+                        <Typography color="primary">
+                          <IconCode />
+                        </Typography>
+                      ) : (
+                        <Typography color="secondary">
+                          <IconPuzzle />
+                        </Typography>
+                      )}
+                    </TableCell>
+                    <TableCell align="center">
+                      <Typography>{project.name}</Typography>
+                    </TableCell>
+                    <TableCell align="center">
+                      <Typography>{project.description}</Typography>
+                    </TableCell>
+                    <TableCell align="center">
+                      <Fab
+                        color="primary"
+                        size="small"
+                        aria-label="pencil"
+                        onClick={() => handleEditProject(project.id, project.project_type)}
+                      >
+                        <FontAwesomeIcon icon={faPencil} />
+                      </Fab>
+                    </TableCell>
+                    <TableCell align="center">
+                      <Fab
+                        color="error"
+                        size="small"
+                        aria-label="trash"
+                        onClick={() => handleDeleteProject(project.id)}
+                      >
+                        <FontAwesomeIcon icon={faTrash} />
+                      </Fab>
                     </TableCell>
                   </TableRow>
-                ) : (
-                  projects.map((project) => (
-                    <TableRow key={project.id}>
-                      <TableCell align="center">
-                        {project.project_type === 'python' ? (
-                          <Typography color="primary">
-                            <IconCode />
-                          </Typography>
-                        ) : (
-                          <Typography color="secondary">
-                            <IconPuzzle />
-                          </Typography>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <Typography>{project.name}</Typography>
-                      </TableCell>
-                      <TableCell>
-                        <Typography>{project.description}</Typography>
-                      </TableCell>
-                      {/* <TableCell align="center">
-                    <Fab color="primary" size="small" aria-label="download">
-                      <FontAwesomeIcon icon={faDownload} />
-                    </Fab>
-                  </TableCell> */}
-                      <TableCell align="center">
-                        <Fab
-                          color="primary"
-                          size="small"
-                          aria-label="pencil"
-                          onClick={() => handleEditProject(project.id, project.project_type)}
-                        >
-                          <FontAwesomeIcon icon={faPencil} />
-                        </Fab>
-                      </TableCell>
-                      <TableCell align="center">
-                        <Fab
-                          color="error"
-                          size="small"
-                          aria-label="trash"
-                          onClick={() => handleDeleteProject(project.id)}
-                        >
-                          <FontAwesomeIcon icon={faTrash} />
-                        </Fab>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        </>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </TableContainer>
       </DashboardCard>
     </PageContainer>
   );
