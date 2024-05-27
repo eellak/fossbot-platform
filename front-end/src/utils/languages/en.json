@@ -252,7 +252,10 @@
     "userDataUpdateError": "Error occured when updating user data!",
     "passwordConfirmationError": "The fields: password and password confirmation must be identical.",
     "userDataFetchError": "Error fetching user data.",
-    "projectsFetchError": "Error fetching projects."
+    "projectsFetchError": "Error fetching projects.",
+    "projectDeleted": "Project was just deleted successfully.",
+    "projectDeleteError": "Error deleting project. Please try again."
+
   },
   "accountSettings": {
     "blocklyProjects": "Blockly projects",

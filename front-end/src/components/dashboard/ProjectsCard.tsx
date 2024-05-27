@@ -22,6 +22,8 @@ import { IconCode, IconPuzzle } from '@tabler/icons-react';
 import { useAuth } from 'src/authentication/AuthProvider';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import SuccessAlert from '../alerts/SuccessAlert';
+import ErrorAlert from '../alerts/ErrorAlert';
 
 const ProjectsCard = () => {
   const { t } = useTranslation();
@@ -29,6 +31,12 @@ const ProjectsCard = () => {
   const auth = useAuth();
   const navigate = useNavigate();
   const [showDrawer, setShowDrawer] = useState(false);
+
+  const [showSuccessAlert, setShowSuccessAlert] = useState(false);
+  const [showErrorAlert, setShowErrorAlert] = useState(false);
+
+  const [showSuccessAlertText, setShowSuccessAlertText] = useState("");
+  const [showErrorAlertText, setShowErrorAlertText] = useState("");
 
   const handleDrawerClose = () => {
     setShowDrawer(false);
@@ -45,6 +53,8 @@ const ProjectsCard = () => {
           setProjects(fetchedProjects);
         }
       } catch (error) {
+        setShowErrorAlert(true);
+        setShowErrorAlertText(t('alertMessages.projectsFetchError'));
         console.error('Error fetching projects:', error);
       }
     };
@@ -56,10 +66,13 @@ const ProjectsCard = () => {
     try {
       const success = await auth.deleteProjectByIdAction(projectId);
       if (success) {
-        console.log('Project deleted');
+        setShowSuccessAlert(true);
+        setShowSuccessAlertText(t('alertMessages.projectDeleted'));
         // Update the projects state to reflect the deletion
         setProjects((prevProjects) => prevProjects.filter((project) => project.id !== projectId));
       } else {
+        setShowErrorAlert(true);
+        setShowErrorAlertText(t('alertMessages.projectDeleteError'));
         console.error('Error deleting project');
       }
     } catch (error) {
@@ -182,6 +195,13 @@ const ProjectsCard = () => {
           </Table>
         </TableContainer>
       </DashboardCard>
+      {showSuccessAlert && (
+        <SuccessAlert title={showSuccessAlertText} description={""} />
+      )}
+
+      {showErrorAlert && (
+        <ErrorAlert title={showErrorAlertText} description={""} />
+      )}
     </PageContainer>
   );
 };
