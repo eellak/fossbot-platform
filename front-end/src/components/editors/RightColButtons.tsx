@@ -7,16 +7,13 @@ interface ButtonsProps {
   handlePlayClick: () => void;
   handleSaveClick: () => void;
   handleStopClick: () => void;
-  showSaveButton: boolean;
 }
 
-const Buttons: React.FC<ButtonsProps> = ({ handlePlayClick, handleSaveClick, handleStopClick, showSaveButton}) => (
+const Buttons: React.FC<ButtonsProps> = ({ handlePlayClick, handleSaveClick, handleStopClick}) => (
   <Stack direction="row" spacing={3}>
-    {showSaveButton && (
       <Fab color="primary" aria-label="save" onClick={handleSaveClick}>
         <FontAwesomeIcon icon={faSave} size="1x" />
       </Fab>
-    )}
     <Fab color="success" aria-label="play" onClick={handlePlayClick}>
       <FontAwesomeIcon icon={faPlay} size="1x" />
     </Fab>

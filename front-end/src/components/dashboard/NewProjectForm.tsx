@@ -14,21 +14,23 @@ import {
   IconFileTypography,
 } from '@tabler/icons-react';
 import { useAuth } from 'src/authentication/AuthProvider';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
 interface NewProjectFormProps {
-  isDescriptionDisabled: boolean, 
+  isDescriptionDisabled: boolean,
   editorInitialValue: string
 }
 
-const NewProjectForm = ({isDescriptionDisabled, editorInitialValue}: NewProjectFormProps)  => {
+const NewProjectForm = ({ isDescriptionDisabled, editorInitialValue }: NewProjectFormProps) => {
   const { t } = useTranslation();
 
   const [selectedOption, setSelectedOption] = useState(editorInitialValue);
   const [projectName, setProjectName] = useState('');
   const [description, setDescription] = useState('');
   const navigate = useNavigate();
+
+  const location = useLocation();
 
   const handleProjectNameChange = (event: any) => {
     setProjectName(event.target.value);
@@ -45,7 +47,6 @@ const NewProjectForm = ({isDescriptionDisabled, editorInitialValue}: NewProjectF
   const handleSubmit = async (event) => {
     event.preventDefault();
     try {
-      // Call the login function
       if (projectName !== '' && description !== '' && selectedOption !== '') {
         const projectID = await auth.createProjectAction({
           name: projectName,
@@ -53,15 +54,26 @@ const NewProjectForm = ({isDescriptionDisabled, editorInitialValue}: NewProjectF
           project_type: selectedOption,
           code: '',
         });
+
+        const monacoPageUrl = `/monaco-page/${projectID}`;
+        const blocklyPageUrl = `/blockly-page/${projectID}`;
+
         if (selectedOption === 'python') {
-          navigate('/monaco-page/' + projectID);
+          if (location.pathname === `/monaco-page` || location.pathname === monacoPageUrl) {
+            window.location.href = monacoPageUrl;
+          } else {
+            navigate(monacoPageUrl);
+          }
         } else {
-          navigate('/blockly-page/' + projectID);
+          if (location.pathname === `/blockly-page` || location.pathname === blocklyPageUrl) {
+            window.location.href = blocklyPageUrl;
+          } else {
+            navigate(blocklyPageUrl);
+          }
         }
       }
     } catch (error) {
-      // Handle errors (e.g., show an error message to the user)
-      console.error('Login error:', error);
+      console.error('While creating a new project, an error occcured :', error);
     }
   };
 
