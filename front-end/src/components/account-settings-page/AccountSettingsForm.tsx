@@ -125,7 +125,7 @@ const AccountSettingsForm = ({ user, onFormSubmit }: AccountSettingsFormType) =>
           />
         </Grid>
         <Grid item xs={12} sm={3}></Grid>
-        <Grid item xs={12} sm={9} mt={5}>
+        <Grid item xs={12} sm={9} mt={5} mb={3}>
           <Button variant="contained" color="primary" onClick={handleFormSubmit}>
             {t('update')}
           </Button>
