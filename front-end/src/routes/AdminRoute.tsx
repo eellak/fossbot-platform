@@ -5,11 +5,17 @@ import { User } from 'src/authentication/AuthInterfaces';
 
 const AdminRoute = () => {
   const auth = useAuth();
+  const token = auth.token;
   const user: User = auth.user;
 
-  if(user != null) {
-    if(user.role != "admin")
-      return <Navigate to="/auth/login" />;
+  if (!token) {
+    return <Navigate to="/auth/login" />;
+  }
+
+  if (user != null) {
+    console.log(user)
+    if (user.role != "admin")
+      return <Navigate to="/dashboard" />;
   }
   return <Outlet />;
 };

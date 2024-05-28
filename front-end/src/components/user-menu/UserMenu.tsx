@@ -160,8 +160,8 @@ const UserMenu = () => {
             </Box>
           </Box>
         ))}
-        {user && user.role === 'admin' && (
-          <>
+        {user && user.role === 'admin' ? (
+          <div>
             {dropdownData.adminPages.map((profile) => (
               <Box key={profile.title}>
                 <Box sx={{ py: 2, px: 0 }} className="hover-text-primary">
@@ -214,8 +214,8 @@ const UserMenu = () => {
                 </Box>
               </Box>
             ))}
-          </>
-        )}
+          </div>
+        ) : <div> </div>}
         <Box mt={2}>
           <Button variant="outlined" color="primary" onClick={() => auth.logOutAction()} fullWidth>
             {t('logOut')}
