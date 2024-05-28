@@ -32,7 +32,7 @@ const SidebarItems = () => {
   // Modify menu items based on beta tester status
   const modifiedMenuItems = Menuitems.map(item => {
 
-    if (betaFeatures.includes(item.href) && !user?.beta_tester && user.role != UserRole.ADMIN) {
+    if (betaFeatures.includes(item.href) && !user?.beta_tester && user?.role != UserRole.ADMIN) {
       return { ...item, disabled: true };
     } else if (betaFeatures.includes(item.href)) {
       return { ...item, disabled: false };

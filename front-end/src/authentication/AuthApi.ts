@@ -1,4 +1,4 @@
-import { LoginData, NewProjectData, PassswordData, RegisterData, RoleData, UserData } from './AuthInterfaces';
+import { BetaTesterData, LoginData, NewProjectData, PassswordData, RegisterData, RoleData, User, UserData } from './AuthInterfaces';
 
 const backendUrl: string = process.env.REACT_APP_BACKEND_URL;
 
@@ -144,6 +144,18 @@ export async function deleteUserById(userId: number, token: string) {
 
 export async function updateUserRoleById(userId: number, data: RoleData, token: string) {
     const response = await fetch(`${backendUrl}/users/${userId}/role`, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(data),
+    });
+    return response;
+}
+
+export async function updateUserBetaTesterStatusById(userId: number, data: BetaTesterData, token: string) {
+    const response = await fetch(`${backendUrl}/users/${userId}/beta_tester`, {
         method: 'PUT',
         headers: {
             'Content-Type': 'application/json',

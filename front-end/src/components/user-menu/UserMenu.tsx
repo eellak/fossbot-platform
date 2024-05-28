@@ -15,6 +15,7 @@ import {
 import { IconMail } from '@tabler/icons-react';
 import { useAuth } from "src/authentication/AuthProvider";
 import { useTranslation } from 'react-i18next';
+import { UserRole } from 'src/authentication/AuthInterfaces';
 
 
 const UserMenu = () => {
@@ -160,7 +161,7 @@ const UserMenu = () => {
             </Box>
           </Box>
         ))}
-        {user && user.role === 'admin' ? (
+        {user && user.role === UserRole.ADMIN ? (
           <div>
             {dropdownData.adminPages.map((profile) => (
               <Box key={profile.title}>

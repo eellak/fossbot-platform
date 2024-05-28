@@ -46,6 +46,7 @@
   "demos": "Demos",
   "newProject": "Νέο πρότζεκτ",
   "newProjectDescription": "Περιγραφή νέου πρότζεκτ",
+  "betaTester": "Beta Tester",
   "errors": {
     "noCommandError": "Παρακαλώ γράψτε μία εντολή στον Editor!"
   },

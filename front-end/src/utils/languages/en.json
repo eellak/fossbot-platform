@@ -46,6 +46,7 @@
   "demos": "Demos",
   "newProject": "New Project",
   "newProjectDescription": "New Project Description",
+  "betaTester": "Beta Tester",
   "errors": {
     "noCommandError": "Please write a command in the Editor!"
   },

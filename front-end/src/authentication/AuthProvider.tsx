@@ -10,6 +10,7 @@ import {
     User,
     PassswordData,
     RoleData,
+    BetaTesterData,
 } from './AuthInterfaces';
 import {
     createProject,
@@ -24,7 +25,8 @@ import {
     updateUserPasswordData,
     getUsers,
     deleteUserById,
-    updateUserRoleById
+    updateUserRoleById,
+    updateUserBetaTesterStatusById
 } from './AuthApi';
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -270,6 +272,22 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
         }
     };
 
+    const updateUserBetaTesterStatus = async (userId: number, data: BetaTesterData) => {
+        try {
+            const response = await updateUserBetaTesterStatusById(userId, data, token);
+
+            if (response.status == 200) {
+                await response.json();
+                return true; // Indicating success
+            } else {
+                throw new Error(`Failed to delete user. Status: ${response.status}`);
+            }
+        } catch (err) {
+            console.error(err);
+            return false; // Indicating failure
+        }
+    };
+
     return (
         <AuthContext.Provider
             value={{
@@ -288,6 +306,7 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
                 updateUserPassword,
                 getAllUsers,
                 deleteUserByIdAction,
+                updateUserBetaTesterStatus,
                 updateUserRole
             }}
         >
