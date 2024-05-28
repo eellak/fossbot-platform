@@ -8,7 +8,7 @@ export interface AuthContextType {
     getProjectsAction: () => Promise<Project[] | undefined>;
     deleteProjectByIdAction: (projectId: number) => Promise<boolean>;
     getProjectByIdAction: (projectId: number) => Promise<Project | undefined>;
-    updateProjectByIdAction: (projectId: number, data: NewProjectData) => Promise<void>;
+    updateProjectByIdAction: (projectId: number, data: NewProjectData) => Promise<Project | undefined>;
     getUserDataAction: () => Promise<User | undefined>;
     logOutAction: () => void;
     updateUser: (data: UserData) => Promise<User | undefined>;

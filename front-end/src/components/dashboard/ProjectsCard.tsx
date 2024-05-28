@@ -95,6 +95,7 @@ const ProjectsCard = () => {
         handleDrawerClose={handleDrawerClose}
         isDescriptionDisabled={false}
         editorInitialValue='python'
+        code=''
       />
       <DashboardCard
         title={t('projects-card.card-title')}

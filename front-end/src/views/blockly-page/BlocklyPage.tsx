@@ -118,7 +118,7 @@ const BlocklyPage = () => {
       } catch (error) {
         console.error('Error updating project:', error);
       }
-    }    
+    }
   };
 
   const handleMountChange = (isMounted: boolean) => {
@@ -137,6 +137,7 @@ const BlocklyPage = () => {
         handleDrawerClose={handleDrawerClose}
         isDescriptionDisabled={true}
         editorInitialValue='blockly'
+        code={editorValue}
       />
       <Box flexGrow={1}>
         <Grid container spacing={3} justifyContent="center" alignItems="center">
