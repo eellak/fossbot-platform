@@ -10,6 +10,7 @@ import { toggleMobileSidebar } from 'src/store/customizer/CustomizerSlice';
 import { AppState } from 'src/store/Store';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from 'src/authentication/AuthProvider'; // Ensure this import path is correct
+import { UserRole } from 'src/authentication/AuthInterfaces';
 
 const betaFeatures = [
   '/tutorials-page',
@@ -19,7 +20,7 @@ const betaFeatures = [
 const SidebarItems = () => {
   const { t } = useTranslation();
   const { pathname } = useLocation();
-  
+
   const pathDirect = pathname;
   const pathWithoutLastPart = pathname.slice(0, pathname.lastIndexOf('/'));
   const customizer = useSelector((state: AppState) => state.customizer);
@@ -30,10 +31,12 @@ const SidebarItems = () => {
 
   // Modify menu items based on beta tester status
   const modifiedMenuItems = Menuitems.map(item => {
-    // if (betaFeatures.includes(item.href) && !user?.beta_tester ) {
-      return { ...item, disabled: false };
+
+    if (betaFeatures.includes(item.href) && !user?.beta_tester && user.role != UserRole.ADMIN) {
       return { ...item, disabled: true };
-    // }
+    } else if (betaFeatures.includes(item.href)) {
+      return { ...item, disabled: false };
+    }
     return item;
   });
 
@@ -45,7 +48,7 @@ const SidebarItems = () => {
           if (item.subheader) {
             return <NavGroup item={item} hideMenu={hideMenu} key={t(item.subheader)} />;
 
-          // {/********If Sub Menu**********/}
+            // {/********If Sub Menu**********/}
           } else if (item.children) {
             return (
               <NavCollapse
@@ -59,7 +62,7 @@ const SidebarItems = () => {
               />
             );
 
-          // {/********If No Sub Menu**********/}
+            // {/********If No Sub Menu**********/}
           } else {
             return (
               <NavItem

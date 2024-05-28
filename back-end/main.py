@@ -18,8 +18,8 @@ import os
 from enum import Enum as PyEnum
 
 logger = logging.getLogger("uvicorn")
-# Constants for JWT
 
+# Constants for JWT
 SECRET_KEY = os.getenv('SECRET_KEY', 'your-secret-key')
 ALGORITHM = "HS256"
 
@@ -72,6 +72,7 @@ class UserResponse(BaseModel):
     email: str
     role: UserRole
     image_url: Optional[str]
+    beta_tester: bool
 
 class UpdateUserRoleRequest(BaseModel):
     role: UserRole
@@ -149,6 +150,36 @@ def get_db():
         yield db
     finally:
         db.close()
+
+# Function to create admin user if not exists
+def create_admin_user():
+    db = SessionLocal()
+    admin_username = os.getenv('ADMIN_USERNAME', 'admin')
+    admin_password = os.getenv('ADMIN_PASSWORD', 'admin')  
+    admin_email =  os.getenv('ADMIN_EMAIL', 'admin@gmail.com')  
+    admin_user = get_user(db, admin_username)
+    if not admin_user:
+        hashed_password = get_password_hash(admin_password)
+        new_admin = User(
+            username=admin_username,
+            hashed_password=hashed_password,
+            firstname= os.getenv('ADMIN_FIRSTNAME', 'Admin'),
+            lastname= os.getenv('ADMIN_LASTNAME', 'Admin'),
+            email=admin_email,
+            role=UserRole.ADMIN
+        )
+        db.add(new_admin)
+        db.commit()
+        db.refresh(new_admin)
+        logger.info("Admin user created")
+    else:
+        logger.info("Admin user already exists")
+    db.close()
+
+@app.on_event("startup")
+def on_startup():
+    create_admin_user()
+
 
 def verify_password(plain_password, hashed_password):
     return pwd_context.verify(plain_password, hashed_password)

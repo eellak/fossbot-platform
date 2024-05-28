@@ -114,7 +114,7 @@ const Router = [
     path: '/interactive-page',
     element: (
       <PrivateRoute>
-        <RoleBasedRoute  betaTesterOnly={false}>
+        <RoleBasedRoute betaTesterOnly={true}>
           <FullLayout />
         </RoleBasedRoute>
       </PrivateRoute>
@@ -143,7 +143,7 @@ const Router = [
     path: '/tutorials-page',
     element: (
       <PrivateRoute>
-        <RoleBasedRoute  betaTesterOnly={false}>
+        <RoleBasedRoute  betaTesterOnly={true}>
           <FullLayout />
         </RoleBasedRoute>
       </PrivateRoute>
