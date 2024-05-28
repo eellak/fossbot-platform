@@ -126,8 +126,6 @@ const Router = [
       },
     ],
   },
-
-
   {
     path: '/monaco-tutorial-page',
     title: 'Monaco Tutorial Editor',
@@ -137,8 +135,6 @@ const Router = [
       { path: '/monaco-tutorial-page', exact: true, element: <MonacoPage /> },
     ],
   },
-
-  
   {
     path: '/tutorials-page',
     element: (
