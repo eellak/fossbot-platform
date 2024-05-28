@@ -21,23 +21,19 @@ const AdminPanelPage = () => {
     const [showErrorAlertText, setShowErrorAlertText] = useState("");
 
     return (
-
         <PageContainer title={t('admin-panel.title')} description={t('admin-panel.description')}>
 
-            <Box sx={{ mt: 4, mb: 4, mr: 2, ml: 2 }}>
-                <Typography variant="h5">{t('admin-panel.title')}</Typography>
-                <Typography variant="subtitle2" color="textSecondary">
-                    {t('admin-panel.usageDescription')}
-                </Typography>
-            </Box>
-
-            <Box sx={{ mt: 4, mb: 4, mr: 2, ml: 2 }}>
-                <Grid container spacing={3}>
-                    <Grid item xs={12} lg={12}>
-                        <UsersCard />
-                    </Grid>
+            <Grid container>
+                <Grid item xs={12} sm={12} mt={2}>
+                    <Typography variant="h5">{t('admin-panel.title')}</Typography>
+                    <Typography variant="subtitle2" color="textSecondary">
+                        {t('admin-panel.usageDescription')}
+                    </Typography>
                 </Grid>
-            </Box>
+                <Grid item xs={12} sm={12} mt={3}>
+                    <UsersCard />
+                </Grid>
+            </Grid>
 
             <Footer />
 

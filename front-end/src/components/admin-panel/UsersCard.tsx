@@ -95,7 +95,7 @@ const UsersCard = () => {
   };
 
   return (
-    <>
+    <PageContainer>
       <DashboardCard>
         <TableContainer>
           <Table
@@ -195,7 +195,7 @@ const UsersCard = () => {
         <ErrorAlert title={showErrorAlertText} description={""} />
       )}
       {/* // </PageContainer> */}
-    </>
+    </PageContainer>
   );
 };
 

@@ -17,8 +17,10 @@ const MainWrapper = styled('div')(() => ({
 const PageWrapper = styled('div')(({theme}) => ({
   display: 'flex',
   flexGrow: 1,
+  // paddingBottom: '60px',
   flexDirection: 'column',
   zIndex: 1,
+  width: '100%',
   backgroundColor: 'transparent'
 }));
 
