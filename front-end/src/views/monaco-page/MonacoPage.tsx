@@ -24,7 +24,6 @@ print("hello world")`;
 
 const MonacoPage: React.FC = () => {
   const { t } = useTranslation();
-  const { projectId } = useParams();
   const location = useLocation();
   const [editorValue, setEditorValue] = useState('');
   const [projectTitle, setProjectTitle] = useState(t('newProject'));
@@ -40,9 +39,7 @@ const MonacoPage: React.FC = () => {
   const stopScriptRef = useRef<() => void>();
   const auth = useAuth();
   const navigate = useNavigate();
-  const { projectId } = useParams<{ projectId: string }>();
-  const [showSaveButton, setShowSaveButton] = useState(false);
-  
+  const { projectId } = useParams<{ projectId: string }>();  
 
   const handlePlayClick = () => {
     if (runScriptRef.current) {
