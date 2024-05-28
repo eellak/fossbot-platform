@@ -1,6 +1,6 @@
 // Define the shape of your context data
 export interface AuthContextType {
-    user: string | null;
+    user: User | null;
     token: string;
     loginAction: (data: LoginData) => Promise<void>;
     registerAction: (data: RegisterData) => Promise<void>;
@@ -13,6 +13,9 @@ export interface AuthContextType {
     logOutAction: () => void;
     updateUser: (data: UserData) => Promise<User | undefined>;
     updateUserPassword: (data: PassswordData) => Promise<User | undefined>;
+    getAllUsers: () => Promise<User[] | undefined>;
+    deleteUserByIdAction: (projectId: number) => Promise<boolean>;
+    updateUserRole: (userId: number, data: RoleData) => Promise<User | undefined>;
 }
 
 // Registration data
@@ -49,7 +52,6 @@ export interface LoginData {
     password: string;
 }
 
-
 export interface User {
     id: number;
     username: string;
@@ -58,8 +60,8 @@ export interface User {
     email: string;
     role: string;
     image_url?: string;
+    hashed_password?: string;
 }
-
 
 export interface UserData {
     username: string;
@@ -70,4 +72,14 @@ export interface UserData {
 
 export interface PassswordData {
     password: string;
+}
+
+export enum UserRole {
+    ADMIN = 'admin',
+    TUTOR = 'tutor',
+    USER = 'user',
+}
+
+export interface RoleData {
+    role: UserRole;
 }

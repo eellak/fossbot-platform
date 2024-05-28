@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
+import * as dropdownData from './data';
 import { Link } from 'react-router-dom';
 import {
   Box,
@@ -11,17 +12,12 @@ import {
   IconButton,
   Stack
 } from '@mui/material';
-
-import * as dropdownData from './data';
-import ProfileImg from 'src/assets/images/profile/user-1.jpg';
-import unlimitedImg from 'src/assets/images/backgrounds/unlimited-bg.png';
-
 import { IconMail } from '@tabler/icons-react';
 import { useAuth } from "src/authentication/AuthProvider";
 import { useTranslation } from 'react-i18next';
 
 
-const Profile = () => {
+const UserMenu = () => {
   const { t } = useTranslation();
   const auth = useAuth();
   const [user, setUser] = useState(null);
@@ -108,12 +104,64 @@ const Profile = () => {
               gap={1}
             >
               <IconMail width={15} height={15} />
-                {user?.email}
+              {user?.email}
             </Typography>
           </Box>
         </Stack>
         <Divider />
-        {dropdownData.profile.map((profile) => (
+        {dropdownData.profileMenuPages.map((profile) => (
+          <Box key={profile.title}>
+            <Box sx={{ py: 2, px: 0 }} className="hover-text-primary">
+              <Link to={profile.href}>
+                <Stack direction="row" spacing={2}>
+                  <Box
+                    width="45px"
+                    height="45px"
+                    bgcolor="primary.light"
+                    display="flex"
+                    alignItems="center"
+                    justifyContent="center"
+                  >
+                    <Avatar
+                      src={profile.icon}
+                      alt={profile.icon}
+                      sx={{
+                        width: 24,
+                        height: 24,
+                        borderRadius: 0,
+                      }}
+                    />
+                  </Box>
+                  <Box>
+                    <Typography
+                      variant="subtitle2"
+                      fontWeight={600}
+                      color="textPrimary"
+                      className="text-hover"
+                      noWrap
+                      sx={{
+                        width: '240px',
+                      }}
+                    >
+                      {profile.title}
+                    </Typography>
+                    <Typography
+                      color="textSecondary"
+                      variant="subtitle2"
+                      sx={{
+                        width: '240px',
+                      }}
+                      noWrap
+                    >
+                      {profile.subtitle}
+                    </Typography>
+                  </Box>
+                </Stack>
+              </Link>
+            </Box>
+          </Box>
+        ))}
+        {dropdownData.adminPages.map((profile) => (
           <Box key={profile.title}>
             <Box sx={{ py: 2, px: 0 }} className="hover-text-primary">
               <Link to={profile.href}>
@@ -166,21 +214,7 @@ const Profile = () => {
           </Box>
         ))}
         <Box mt={2}>
-          {/* <Box bgcolor="primary.light" p={3} mb={3} overflow="hidden" position="relative">
-            <Box display="flex" justifyContent="space-between">
-              <Box>
-                <Typography variant="h5" mb={2}>
-                  Unlimited <br />
-                  Access
-                </Typography>
-                <Button variant="contained" color="primary">
-                  Upgrade
-                </Button>
-              </Box>
-              <img src={unlimitedImg} alt="unlimited" className="signup-bg"></img>
-            </Box>
-          </Box> */}
-          <Button  variant="outlined" color="primary" onClick={() => auth.logOutAction()} fullWidth>
+          <Button variant="outlined" color="primary" onClick={() => auth.logOutAction()} fullWidth>
             {t('logOut')}
           </Button>
         </Box>
@@ -189,4 +223,4 @@ const Profile = () => {
   );
 };
 
-export default Profile;
+export default UserMenu;

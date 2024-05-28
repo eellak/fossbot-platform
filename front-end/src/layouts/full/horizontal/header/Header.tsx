@@ -1,7 +1,7 @@
 import * as React from 'react';
 import Notifications from 'src/layouts/full/vertical/header/Notification';
 import Cart from 'src/layouts/full/vertical/header/Cart';
-import Profile from 'src/layouts/full/vertical/header/Profile';
+import UserMenu from 'src/components/user-menu/UserMenu';
 import Search from 'src/layouts/full/vertical/header/Search';
 import Language from 'src/layouts/full/vertical/header/Language';
 import Logo from 'src/layouts/full/shared/logo/Logo';
@@ -71,15 +71,7 @@ const Header = () => {
         <Box flexGrow={1} />
         <Stack spacing={1} direction="row" alignItems="center">
           <Language />
-          {/* ------------------------------------------- */}
-          {/* Ecommerce Dropdown */}
-          {/* ------------------------------------------- */}
-          <Cart />
-          {/* ------------------------------------------- */}
-          {/* End Ecommerce Dropdown */}
-          {/* ------------------------------------------- */}
-          <Notifications />
-          <Profile />
+          <UserMenu />
         </Stack>
       </ToolbarStyled>
     </AppBarStyled>

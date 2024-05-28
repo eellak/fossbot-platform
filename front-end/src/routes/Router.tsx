@@ -7,7 +7,6 @@ const FullLayout = Loadable(lazy(() => import('../layouts/full/FullLayout')));
 const FullFillLayout = Loadable(lazy(() => import('../layouts/full/FullFillLayout')));
 const BoxedLayout = Loadable(lazy(() => import('../layouts/full/BoxedLayout')));
 const BlankLayout = Loadable(lazy(() => import('../layouts/blank/BlankLayout')));
-// const MonacoLayout = Loadable(lazy(() => import('../layouts/MonacoLayout')));
 
 /* ****Pages***** */
 const SamplePage = Loadable(lazy(() => import('../views/sample-page/SamplePage')));
@@ -26,7 +25,8 @@ const Login = Loadable(lazy(() => import('../views/authentication/Login')));
 const Error = Loadable(lazy(() => import('../views/authentication/Error')));
 import AuthProvider from '../authentication/AuthProvider'; // Update with actual path
 import PrivateRoute from './PrivateRoute'; // Update with actual path
-import { title } from 'process';
+import AdminPanelPage from 'src/views/admin-panel-page/AdminPanelPage';
+import AdminRoute from './AdminRoute';
 
 const Router = [
   {
@@ -101,7 +101,20 @@ const Router = [
         element: <FullLayout />,
         children: [{ path: '', exact: true, element: <AccountsSettingsPage /> }],
       },
-    ],  },
+    ],
+  },
+  {
+    path: '/admin-panel',
+    title: 'Admin Panel',
+    element: <AdminRoute />,
+    children: [
+      {
+        path: '',
+        element: <FullLayout />,
+        children: [{ path: '', exact: true, element: <AdminPanelPage /> }],
+      },
+    ],
+  },
 ];
 
 export default Router;

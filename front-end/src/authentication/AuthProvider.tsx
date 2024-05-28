@@ -9,6 +9,7 @@ import {
     UserData,
     User,
     PassswordData,
+    RoleData,
 } from './AuthInterfaces';
 import {
     createProject,
@@ -20,7 +21,10 @@ import {
     updateProjectById,
     getUserData,
     updateUserData,
-    updateUserPasswordData
+    updateUserPasswordData,
+    getUsers,
+    deleteUserById,
+    updateUserRoleById
 } from './AuthApi';
 
 // Create the context with an initial undefined value
@@ -32,7 +36,7 @@ interface AuthProviderProps {
 
 const AuthProvider = ({ children }: AuthProviderProps) => {
     const localStorageName = 'fossbot-platform';
-    const [user, setUser] = useState<string | null>(null);
+    const [user, setUser] = useState<User | null>(null);
     const [token, setToken] = useState<string>(localStorage.getItem(localStorageName) || '');
     const navigate = useNavigate();
 
@@ -40,7 +44,7 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
         const fetchUserData = async () => {
             try {
                 const response = await getUserData(token);
-                const userData = await response.json(); // Extract the user data from the response
+                const userData: User = await response.json(); // Extract the user data from the response
                 setUser(userData); // Set the user data in the state
             } catch (error) {
                 console.error('Error fetching user data:', error);
@@ -87,6 +91,23 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
             }
         } catch (err) {
             console.error(err);
+        }
+    };
+
+    const getAllUsers = async (): Promise<User[] | undefined> => {
+        try {
+            const response = await getUsers(token);
+
+            if (response.status == 200) {
+                const users: User[] = await response.json();
+
+                return users;
+            } else {
+                throw new Error('Failed to fetch users');
+            }
+        } catch (err) {
+            console.error(err);
+            return undefined; // Return undefined in case of an error
         }
     };
 
@@ -202,6 +223,21 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
         }
     };
 
+    const updateUserRole = async (userId: number, data: RoleData): Promise<User | undefined> => {
+        try {
+            const response = await updateUserRoleById(userId, data, token);
+
+            if (response.status == 200) {
+                const user: User = await response.json();
+                return user;
+            } else {
+                throw new Error('User role data update failed');
+            }
+        } catch (error) {
+            console.error(error);
+            return undefined;
+        }
+    };
 
     const updateUserPassword = async (data: PassswordData): Promise<User | undefined> => {
         try {
@@ -216,6 +252,22 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
         } catch (error) {
             console.error(error);
             return undefined;
+        }
+    };
+
+    const deleteUserByIdAction = async (projectId: number) => {
+        try {
+            const response = await deleteUserById(projectId, token);
+
+            if (response.status == 200) {
+                await response.json();
+                return true; // Indicating success
+            } else {
+                throw new Error(`Failed to delete user. Status: ${response.status}`);
+            }
+        } catch (err) {
+            console.error(err);
+            return false; // Indicating failure
         }
     };
 
@@ -234,7 +286,10 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
                 logOutAction,
                 getUserDataAction,
                 updateUser,
-                updateUserPassword
+                updateUserPassword,
+                getAllUsers,
+                deleteUserByIdAction,
+                updateUserRole
             }}
         >
             {children}

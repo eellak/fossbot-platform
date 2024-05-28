@@ -13,7 +13,7 @@ from fastapi import Body
 from fastapi.middleware.cors import CORSMiddleware
 import logging
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 import os
 from enum import Enum as PyEnum
 
@@ -63,6 +63,18 @@ class UserRole(PyEnum):
     ADMIN = 'admin'
     TUTOR = 'tutor'
     USER = 'user'
+
+class UserResponse(BaseModel):
+    id: int
+    username: str
+    firstname: str
+    lastname: str
+    email: str
+    role: UserRole
+    image_url: Optional[str]
+
+class UpdateUserRoleRequest(BaseModel):
+    role: UserRole
 
 # User model
 class User(Base):
@@ -114,7 +126,7 @@ app = FastAPI()
 
 # Configure CORS
 origins = [
-    "http://localhost:3000", "http://localhost:5000" # Add other origins as needed
+    "http://localhost:3000", "http://localhost:5001" # Add other origins as needed
 ]
 
 app.add_middleware(
@@ -262,7 +274,7 @@ async def update_user_info(user_update: UpdateUserRequest, current_user: User = 
     return db_user
 
 @app.put("/users/me/password")
-async def update_user_info(user_password_update: UpdateUserPasswordRequest, current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):
+async def update_user_password(user_password_update: UpdateUserPasswordRequest, current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):
     # Fetch the current user from the database
     db_user = db.query(User).filter(User.id == current_user.id).first()
     if db_user is None:
@@ -274,6 +286,22 @@ async def update_user_info(user_password_update: UpdateUserPasswordRequest, curr
         db_user.password = hashed_password
 
     # Commit the changes to the database and refresh
+    db.commit()
+    db.refresh(db_user)
+
+    return db_user
+
+@app.put("/users/{user_id}/role")
+async def update_user_role(user_id: int, user_role_update: UpdateUserRoleRequest, current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Not authorized for this action: UPDATE USER ROLE")
+
+    db_user = db.query(User).filter(User.id == user_id).first()
+    if db_user is None:
+        raise HTTPException(status_code=404, detail="User not found in database")
+
+    db_user.role = user_role_update.role
+
     db.commit()
     db.refresh(db_user)
 
@@ -300,6 +328,28 @@ async def register_user(register_request: RegisterRequest, db: SessionLocal = De
     db.commit()
     db.refresh(new_user)
     return {"username": new_user.username,"email":new_user.email, "id": new_user.id}
+
+@app.get("/users/", response_model=List[UserResponse])
+async def read_users(current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Not authorized to access this resource: GET USERS")
+    
+    users = db.query(User).all()
+    print(users)
+    return users
+
+@app.delete("/users/{user_id}")
+async def delete_user(user_id: int, current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Not authorized for this action: DELETE USER")
+    
+    db_user = db.query(User).filter(User.id == user_id).first()
+    if db_user is None:
+        raise HTTPException(status_code=404, detail="User not found in database")
+
+    db.delete(db_user)
+    db.commit()
+    return {"detail": "User deleted"}
 
 @app.get("/projects/")
 async def read_own_projects(current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):
