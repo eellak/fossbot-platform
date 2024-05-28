@@ -35,7 +35,6 @@ const UserMenu = () => {
       try {
         const userData = await auth.getUserDataAction();
         setUser(userData);
-        setUser(userData);
       } catch (error) {
         console.error('Error fetching user data:', error);
       }
@@ -161,58 +160,62 @@ const UserMenu = () => {
             </Box>
           </Box>
         ))}
-        {dropdownData.adminPages.map((profile) => (
-          <Box key={profile.title}>
-            <Box sx={{ py: 2, px: 0 }} className="hover-text-primary">
-              <Link to={profile.href}>
-                <Stack direction="row" spacing={2}>
-                  <Box
-                    width="45px"
-                    height="45px"
-                    bgcolor="primary.light"
-                    display="flex"
-                    alignItems="center"
-                    justifyContent="center"
-                  >
-                    <Avatar
-                      src={profile.icon}
-                      alt={profile.icon}
-                      sx={{
-                        width: 24,
-                        height: 24,
-                        borderRadius: 0,
-                      }}
-                    />
-                  </Box>
-                  <Box>
-                    <Typography
-                      variant="subtitle2"
-                      fontWeight={600}
-                      color="textPrimary"
-                      className="text-hover"
-                      noWrap
-                      sx={{
-                        width: '240px',
-                      }}
-                    >
-                      {profile.title}
-                    </Typography>
-                    <Typography
-                      color="textSecondary"
-                      variant="subtitle2"
-                      sx={{
-                        width: '240px',
-                      }}
-                      noWrap
-                    >
-                      {profile.subtitle}
-                    </Typography>
-                  </Box>
-                </Stack>
-              </Link>
-            </Box>
-          </Box>
-        ))}
+        {user && user.role === 'admin' && (
+          <>
+            {dropdownData.adminPages.map((profile) => (
+              <Box key={profile.title}>
+                <Box sx={{ py: 2, px: 0 }} className="hover-text-primary">
+                  <Link to={profile.href}>
+                    <Stack direction="row" spacing={2}>
+                      <Box
+                        width="45px"
+                        height="45px"
+                        bgcolor="primary.light"
+                        display="flex"
+                        alignItems="center"
+                        justifyContent="center"
+                      >
+                        <Avatar
+                          src={profile.icon}
+                          alt={profile.icon}
+                          sx={{
+                            width: 24,
+                            height: 24,
+                            borderRadius: 0,
+                          }}
+                        />
+                      </Box>
+                      <Box>
+                        <Typography
+                          variant="subtitle2"
+                          fontWeight={600}
+                          color="textPrimary"
+                          className="text-hover"
+                          noWrap
+                          sx={{
+                            width: '240px',
+                          }}
+                        >
+                          {profile.title}
+                        </Typography>
+                        <Typography
+                          color="textSecondary"
+                          variant="subtitle2"
+                          sx={{
+                            width: '240px',
+                          }}
+                          noWrap
+                        >
+                          {profile.subtitle}
+                        </Typography>
+                      </Box>
+                    </Stack>
+                  </Link>
+                </Box>
+              </Box>
+            ))}
+          </>
+        )}
         <Box mt={2}>
           <Button variant="outlined" color="primary" onClick={() => auth.logOutAction()} fullWidth>
             {t('logOut')}
