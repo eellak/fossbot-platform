@@ -106,7 +106,7 @@ const Router = [
   {
     path: '/admin-panel',
     title: 'Admin Panel',
-    element: <AdminRoute />,
+    element: <PrivateRoute />,
     children: [
       {
         path: '',
