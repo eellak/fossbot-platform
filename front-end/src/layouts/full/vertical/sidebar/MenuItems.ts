@@ -74,7 +74,7 @@ const Menuitems: MenuitemsType[] = [
     icon: IconHandGrab,
     chip: 'soon',
     // chipColor: 'primary',
-    href: '/kindergarten-page',
+    href: '/interactive-page',
     disabled: false,
   },
 

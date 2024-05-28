@@ -1,12 +1,12 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Box, Grid, Stack, DialogContent, Typography, Button } from '@mui/material'; // Added Button
+import { Box, Grid, Stack, DialogContent, Typography, Button } from '@mui/material';
 import Spinner from '../spinner/Spinner';
 import PageContainer from 'src/components/container/PageContainer';
 import MonacoEditorComponent from 'src/components/editors/MonacoEditor';
 import Buttons from 'src/components/editors/RightColButtons';
 import PythonExecutor from 'src/components/editors/PythonExecutor';
 import { useAuth } from 'src/authentication/AuthProvider';
-import { WebGLApp, moveStep, rotateStep, stopMotion,get_distance, rgb_set_color, get_acceleration, get_gyroscope,get_floor_sensor,just_move,just_rotate, get_light_sensor,drawLine } from 'src/components/js-simulator/Simulator';
+import { WebGLApp, moveStep, rotateStep, stopMotion, get_distance, rgb_set_color, get_acceleration, get_gyroscope, get_floor_sensor, just_move, just_rotate, get_light_sensor, drawLine } from 'src/components/js-simulator/Simulator';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useLocation } from 'react-router-dom';
 import { v4 as uuidv4 } from 'uuid';
@@ -14,15 +14,14 @@ import { useTranslation } from 'react-i18next';
 import SearchBar from 'src/components/monaco-functions/MonacoSearchBar';
 import VideoPlayer from 'src/components/videoplayer/VideoPlayer';
 
-
 const textart = ` 
 #___   __   __   __   __   __  ___     __      ___       __       
 #|__  /  \\ /__\` /__\` |__) /  \\  |     |__) \\ /  |  |__| /  \\ |\\ | 
-#|    \\__/ .__/ .__/ |__) \\__/  |     |     |   |  |  | \\__/ | \\| 
+#|    \\__/ .__/ .__/ |__) \\__/  |     |   |  |  | \\__/ | \\| 
 
 print("hello world")`;
 
-const MonacoPage = () => {
+const MonacoPage: React.FC = () => {
   const { t } = useTranslation();
   const location = useLocation();
   const [editorValue, setEditorValue] = useState('');
@@ -33,23 +32,21 @@ const MonacoPage = () => {
   const [isSimulatorLoading, setIsSimulatorLoading] = useState(true);
   const [showVideoPlayer, setShowVideoPlayer] = useState(false);
   const runScriptRef = useRef<() => Promise<void>>();
-  const stopScriptRef = useRef<() => void>(); // Added stop script ref
+  const stopScriptRef = useRef<() => void>();
   const auth = useAuth();
   const navigate = useNavigate();
-  const { projectId } = useParams();
+  const { projectId } = useParams<{ projectId: string }>();
   const [showSaveButton, setShowSaveButton] = useState(false);
+  
 
   const handlePlayClick = () => {
-    
     if (runScriptRef.current) {
       runScriptRef.current();
     }
   };
 
-  const handleStopClick = () => { // Added handle stop click
-    
+  const handleStopClick = () => {
     if (stopScriptRef.current) {
-      
       stopScriptRef.current();
       stopMotion();
     }
@@ -59,9 +56,8 @@ const MonacoPage = () => {
     runScriptRef.current = runScript;
   };
 
-  const setStopScriptFunction = (stopScript: () => void) => { // Added set stop script function
+  const setStopScriptFunction = (stopScript: () => void) => {
     stopScriptRef.current = stopScript;
-   
   };
 
   useEffect(() => {
@@ -100,7 +96,7 @@ const MonacoPage = () => {
     }
   }, [location.pathname]);
 
-  const handleGetValue = (getValueFunc) => {
+  const handleGetValue = (getValueFunc: () => string) => {
     const value = getValueFunc();
     setEditorValue(value);
   };
@@ -144,9 +140,7 @@ const MonacoPage = () => {
                     handleSaveClick={handleSaveClick}
                     handleStopClick={handleStopClick}
                     showSaveButton={showSaveButton}
-                    
                   />
-                  {/* <Button onClick={handleStopClick} variant="contained" color="secondary">Stop</Button> Added stop button */}
                 </Stack>
               </DialogContent>
             </Box>
@@ -160,27 +154,31 @@ const MonacoPage = () => {
               <MonacoEditorComponent code={editorValue} handleGetValue={handleGetValue} />
             </Grid>
             <Grid item xs={5} lg={5}>
-              
-            {showVideoPlayer && (
-                <Box height={'350px'} style={{ 
-                      position: 'relative',
-                      backgroundColor: 'black',
-                      color: 'white',
-                      padding: '2px 20px 5px',
-                      overflow: 'auto',
-                      fontFamily: 'monospace',
-                      lineHeight: '0.2',
-                      marginBottom: '20px'
-                    }}>
+              {showVideoPlayer && (
+                <Box
+                  height={'350px'}
+                  style={{
+                    position: 'relative',
+                    backgroundColor: 'black',
+                    color: 'white',
+                    padding: '2px 20px 5px',
+                    overflow: 'auto',
+                    fontFamily: 'monospace',
+                    lineHeight: '0.2',
+                    marginBottom: '20px'
+                  }}
+                >
                   <VideoPlayer />
-  
                 </Box>
               )}
-              
-              <Box>
-                <WebGLApp appsessionId={sessionId} onMountChange={handleMountChange} />
+            
+              <Box height="400px">
+                <WebGLApp
+                  appsessionId={sessionId}
+                  onMountChange={handleMountChange}
+                />
               </Box>
-              <br />
+              
               <Box
                 height="350px"
                 style={{
@@ -190,6 +188,7 @@ const MonacoPage = () => {
                   overflow: 'auto',
                   fontFamily: 'monospace',
                   lineHeight: '0.2',
+                  marginTop: '20px'
                 }}
               >
                 <p>{t('monaco-page.fossbot-terminal')} 🐍</p>
@@ -197,9 +196,9 @@ const MonacoPage = () => {
                   pythonScript={editorValue}
                   sessionId={sessionId}
                   onRunScript={setRunScriptFunction}
-                  onStopScript={setStopScriptFunction} // Pass set stop script function
-                  moveStep={moveStep} // Pass move function as prop
-                  rotateStep={rotateStep} // Pass rotate function as prop
+                  onStopScript={setStopScriptFunction}
+                  moveStep={moveStep}
+                  rotateStep={rotateStep}
                   getdistance={get_distance}
                   rgbsetcolor={rgb_set_color}
                   getacceleration={get_acceleration}
@@ -210,13 +209,14 @@ const MonacoPage = () => {
                   stopMotion={stopMotion}
                   getLightSensor={get_light_sensor}
                   drawLine={drawLine}
-                
                 />
               </Box>
             </Grid>
           </Grid>
         )}
       </Box>
+
+    
     </PageContainer>
   );
 };

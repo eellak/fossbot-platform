@@ -18,7 +18,7 @@ const AccountsSettingsPage = Loadable(lazy(() => import('../views/account-settin
 //const BlocklyPage = Loadable(lazy(() => import('../views/blockly-page/BlocklyPage')));
 //const BlocklyPage =  '../views/blockly-page/BlocklyPage';
 import BlocklyPage from '../views/blockly-page/BlocklyPage';
-import KindergartenPage from '../views/kindergarten-page/KindergartenPage';
+import InteractivePage from '../views/interactive-page/InteractivePage';
 import MonacoPage from '../views/monaco-page/MonacoPage';
 import TutorialsPage from '../views/tutorials/TutorialsPage';
 // const MonacoPage = Loadable(lazy(() => import('../views/monaco-page/MonacoPage')));
@@ -109,6 +109,25 @@ const Router = [
       { path: '/monaco-page', exact: true, element: <MonacoPage /> },
     ],
   },
+
+  {
+    path: '/interactive-page',
+    element: (
+      <PrivateRoute>
+        <RoleBasedRoute  betaTesterOnly={false}>
+          <FullLayout />
+        </RoleBasedRoute>
+      </PrivateRoute>
+    ),
+    children: [
+      {
+        path: '',
+        element: <  InteractivePage />,
+      },
+    ],
+  },
+
+
   {
     path: '/monaco-tutorial-page',
     title: 'Monaco Tutorial Editor',
@@ -118,11 +137,13 @@ const Router = [
       { path: '/monaco-tutorial-page', exact: true, element: <MonacoPage /> },
     ],
   },
+
+  
   {
     path: '/tutorials-page',
     element: (
       <PrivateRoute>
-        <RoleBasedRoute  betaTesterOnly={true}>
+        <RoleBasedRoute  betaTesterOnly={false}>
           <FullLayout />
         </RoleBasedRoute>
       </PrivateRoute>
@@ -134,9 +155,6 @@ const Router = [
       },
     ],
   },
-  
-
-
   {
     path: '/auth',
     element: <BlankLayout />,

@@ -13,6 +13,7 @@ import { useAuth } from 'src/authentication/AuthProvider'; // Ensure this import
 
 const betaFeatures = [
   '/tutorials-page',
+  '/interactive-page',
 ];
 
 const SidebarItems = () => {
@@ -29,9 +30,10 @@ const SidebarItems = () => {
 
   // Modify menu items based on beta tester status
   const modifiedMenuItems = Menuitems.map(item => {
-    if (betaFeatures.includes(item.href) && !user?.beta_tester) {
+    // if (betaFeatures.includes(item.href) && !user?.beta_tester ) {
+      return { ...item, disabled: false };
       return { ...item, disabled: true };
-    }
+    // }
     return item;
   });
 

@@ -71,6 +71,17 @@ const setUpPyodide = async () => {
     await waitForAction();
   });
 
+  loadedPyodide.globals.set('move_step', async (direction: string) => {
+    if (isStopped) return;
+    if (isStopped) return;
+    let dir_value = -1;
+    if (direction === 'backward') {
+      dir_value = 1;
+    }
+    postMessage(JSON.stringify({ command: 'move', distance: dir_value * 0.315 }));
+    await waitForAction();
+  });
+
   loadedPyodide.globals.set('move_reverse_distance', async (distance: number) => {
     if (isStopped) return;
     postMessage(JSON.stringify({ command: 'move', distance: Math.abs(distance) }));

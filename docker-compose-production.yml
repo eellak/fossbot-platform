@@ -10,16 +10,16 @@ services:
     volumes:
       - ./back-end/test.db:/usr/src/app/back-end/test.db
    
-  simulator:
-    image: fsbt-sim
-    container_name: fsbt-sim
-    build: ./simulator
-    environment:
-      SOCKETIO_IP: 34.141.148.0
-    ports:
-      - "5000:5000"
-    depends_on:
-      - backend
+  # simulator:
+  #   image: fsbt-sim
+  #   container_name: fsbt-sim
+  #   build: ./simulator
+  #   environment:
+  #     SOCKETIO_IP: 34.141.148.0
+  #   ports:
+  #     - "5000:5000"
+  #   depends_on:
+  #     - backend
 
   frontend:
     image: fsbt-front

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
 import { MTLLoader } from 'three/examples/jsm/loaders/MTLLoader.js';
+import { robot_position } from './stage_loader.js';
 // import { rayLine } from './utils.js';
 
 let baseObject;
@@ -78,8 +79,10 @@ function loadBaseObject(scene) {
             // sensorLine.position.set(-0.07, 0.052, -0.08);
             // baseObject.add(sensorLine);
 
-      
+            
             loadWheels(object);
+            baseObject.position.set(robot_position[0], robot_position[1], robot_position[2]);
+          
             // scene.add(rayLine);
 
         });
@@ -120,4 +123,12 @@ function loadWheels(object) {
     });
 }
 
-export { loadBaseObject, baseObject, wheels, rgbLED, rgbLEDVisual,photoresistor };
+function setPosition(position){
+    if (baseObject) {
+        baseObject.position.set(position.x, position.y, position.z);
+    } else {
+        console.error('Base object is not defined yet. Cannot set position.');
+    }
+}
+
+export { loadBaseObject,setPosition, baseObject, wheels, rgbLED, rgbLEDVisual,photoresistor };

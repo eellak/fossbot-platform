@@ -15,7 +15,6 @@ import Spinner from '../spinner/Spinner';
 import VideoPlayer from 'src/components/videoplayer/VideoPlayer';
 
 
-
 const BlocklyPage = () => {
   const { t } = useTranslation();
   const location = useLocation();
@@ -37,6 +36,8 @@ const BlocklyPage = () => {
   const navigate = useNavigate();
   const { projectId } = useParams(); // Get project ID from URL
   const stopScriptRef = useRef<() => void>(); // Added stop script ref
+  const [openDialog, setOpenDialog] = useState(false); // New state for dialog
+
 
   const handlePlayClick = () => {
     if (runScriptRef.current) {
@@ -132,6 +133,8 @@ const BlocklyPage = () => {
     setIsSimulatorLoading(false);
   };
 
+
+
   return (
     <PageContainer title={t('blockly-page.title')} description={t('blockly-page.description')}>
       <Box flexGrow={1}>
@@ -193,9 +196,9 @@ const BlocklyPage = () => {
               )              
               }
 
-              <Box>
+            <Box height="400px">    
                 <WebGLApp appsessionId={sessionId} 
-                onMountChange={handleMountChange} />
+                  onMountChange={handleMountChange}/>
               </Box>
               <br/>
               
@@ -247,6 +250,7 @@ const BlocklyPage = () => {
           </Grid>
         )}
       </Box>
+     
     </PageContainer>
   );
 };

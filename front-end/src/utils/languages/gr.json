@@ -246,7 +246,9 @@
     "lightSensor": "Λάβετε τον αισθητήρα φωτός",
     "lightSensorTooltip": "Επιστρέφει την ανάγνωση του αισθητήρα φωτός.",
     "noiseDetection": "Λήψη ανίχνευσης θορύβου",
-    "noiseDetectionTooltip": "Επιστρέφει True μόνο εάν ανιχνευθεί θόρυβος."
+    "noiseDetectionTooltip": "Επιστρέφει True μόνο εάν ανιχνευθεί θόρυβος.",
+    "move_step": "Κινήσου ένα βήμα",
+    "move_step_description": "Κινεί το ρομπότ για ένα βήμα."
   },
   "alertMessages": {
     "userDataUpdated": "Τα δεδομένα του χρήστη ενημερώθηκαν με επιτυχία!",

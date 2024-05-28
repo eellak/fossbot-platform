@@ -1,6 +1,16 @@
 import React, { useRef, useEffect, useState } from 'react';
 import * as handTrack from 'handtrackjs';
-// import soundFile from '../../../assets/sfx/achive-sound-132273.mp3';
+import { library, dom } from '@fortawesome/fontawesome-svg-core';
+import { faArrowUp, faArrowDown, faArrowLeft, faArrowRight, faLightbulb, faPencilAlt } from '@fortawesome/free-solid-svg-icons';
+import arrowUpIcon from '../../assets/icons-svg/arrow-up-1-svgrepo-com.svg';
+import arrowDownIcon from '../../assets/icons-svg/arrow-down-1-svgrepo-com.svg';
+import arrowLeftIcon from '../../assets/icons-svg/arrow-left-svgrepo-com.svg';
+import arrowRightIcon from '../../assets/icons-svg/arrow-right-svgrepo-com.svg';
+import lightbulbIcon from '../../assets/icons-svg/light-bulb-svgrepo-com.svg';
+import pencilAltIcon from '../../assets/icons-svg/pencil-svgrepo-com.svg'
+
+library.add(faArrowUp, faArrowDown, faArrowLeft, faArrowRight, faLightbulb, faPencilAlt);
+dom.watch();
 
 const defaultParams = {
   flipHorizontal: true,
@@ -16,12 +26,12 @@ const defaultParams = {
 };
 
 const buttonRegions = [
-  { name: 'up', x: 270, y: 10, width: 100, height: 100 },
-  { name: 'down', x: 270, y: 350, width: 100, height: 100 },
-  { name: 'left', x: 50, y: 250, width: 100, height: 100 },
-  { name: 'right', x: 480, y: 250, width: 100, height: 100 },
-  { name: 'light', x: 10, y: 50, width: 100, height: 100 },
-  { name: 'draw', x: 530, y: 50, width: 100, height: 100 },
+  { name: 'up', x: 270, y: 10, width: 100, height: 100, icon: arrowUpIcon },
+  { name: 'down', x: 270, y: 350, width: 100, height: 100, icon: arrowDownIcon },
+  { name: 'left', x: 50, y: 250, width: 100, height: 100, icon: arrowLeftIcon },
+  { name: 'right', x: 480, y: 250, width: 100, height: 100, icon: arrowRightIcon },
+  { name: 'light', x: 10, y: 50, width: 100, height: 100, icon: lightbulbIcon },
+  { name: 'draw', x: 530, y: 50, width: 100, height: 100, icon: pencilAltIcon },
 ];
 
 interface VideoBoxProps {
@@ -43,54 +53,82 @@ const VideoBox: React.FC<VideoBoxProps> = ({
   const [cameraAvailable, setCameraAvailable] = useState<boolean>(true);
   const [lightOn, setLightOn] = useState<boolean>(false);
   const [drawOn, setDrawOn] = useState<boolean>(false);
+  const [selectedButton, setSelectedButton] = useState<string | null>(null);
   const cooldownRef = useRef<boolean>(false);
   const actionInProgressRef = useRef<boolean>(false);
+  const [buttonImages, setButtonImages] = useState<{ [key: string]: HTMLImageElement }>({});
   const soundFile = require('../../assets/sfx/achive-sound-132273.mp3');
 
   useEffect(() => {
-    // Load the handtrack.js model
+    let isMounted = true;
+
     handTrack.load(defaultParams).then(loadedModel => {
-      setModel(loadedModel);
+      if (isMounted) {
+        setModel(loadedModel);
+      }
     });
 
-    // Start the video stream
     const startVideo = () => {
       if (videoRef.current) {
         navigator.mediaDevices.getUserMedia({ video: {} })
           .then(stream => {
-            videoRef.current!.srcObject = stream;
-            videoRef.current!.play();
-            setCameraAvailable(true);
+            if (isMounted) {
+              videoRef.current!.srcObject = stream;
+              videoRef.current!.play();
+              setCameraAvailable(true);
+            }
           })
           .catch(err => {
-            console.error("Error accessing webcam:", err);
-            setCameraAvailable(false);
-            drawCameraNotFound();
+            if (isMounted) {
+              console.error("Error accessing webcam:", err);
+              setCameraAvailable(false);
+              drawCameraNotFound();
+            }
           });
       }
     };
 
     startVideo();
 
-    // Clean up the video stream on component unmount
     return () => {
+      isMounted = false;
       if (videoRef.current && videoRef.current.srcObject) {
         const stream = videoRef.current.srcObject as MediaStream;
         const tracks = stream.getTracks();
         tracks.forEach(track => track.stop());
+        videoRef.current.srcObject = null;
       }
     };
   }, []);
 
   useEffect(() => {
     if (videoRef.current) {
-      videoRef.current.addEventListener('loadeddata', () => {
+      const handleLoadedData = () => {
         if (model) {
           runDetection();
         }
-      });
+      };
+      videoRef.current.addEventListener('loadeddata', handleLoadedData);
+
+      return () => {
+        if (videoRef.current) {
+          videoRef.current.removeEventListener('loadeddata', handleLoadedData);
+        }
+      };
     }
   }, [model]);
+
+  useEffect(() => {
+    const images: { [key: string]: HTMLImageElement } = {};
+    buttonRegions.forEach(button => {
+      const img = new Image();
+      img.src = button.icon;
+      img.onload = () => {
+        images[button.name] = img;
+      };
+    });
+    setButtonImages(images);
+  }, []);
 
   const runDetection = () => {
     if (model && videoRef.current && canvasRef.current) {
@@ -101,11 +139,13 @@ const VideoBox: React.FC<VideoBoxProps> = ({
         context.translate(-canvasRef.current.width, 0);
 
         model.detect(videoRef.current).then((predictions: any) => {
-          context.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
-          model.renderPredictions(predictions, canvasRef.current, context, videoRef.current);
-          context.restore();
-          drawButtons(context);
-          checkButtonPress(predictions);
+          if (canvasRef.current && context) {
+            context.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+            model.renderPredictions(predictions, canvasRef.current, context, videoRef.current);
+            context.restore();
+            drawButtons(context);
+            checkButtonPress(predictions);
+          }
 
           requestAnimationFrame(runDetection);
         });
@@ -116,15 +156,15 @@ const VideoBox: React.FC<VideoBoxProps> = ({
   const drawButtons = (context: CanvasRenderingContext2D) => {
     context.fillStyle = 'rgba(255, 255, 255, 0.5)';
     context.strokeStyle = 'black';
-    context.lineWidth = 2;
+    context.lineWidth = 0;
 
     buttonRegions.forEach(button => {
+      context.fillStyle = selectedButton === button.name ? 'green' : 'rgba(128, 128, 128, 0.5)';
       context.fillRect(button.x, button.y, button.width, button.height);
-      context.strokeRect(button.x, button.y, button.width, button.height);
-      context.fillStyle = 'black';
-      context.font = '20px Arial';
-      context.fillText(button.name.toUpperCase(), button.x + 5, button.y + 30);
-      context.fillStyle = 'rgba(255, 255, 255, 0.5)';
+
+      if (buttonImages[button.name]) {
+        context.drawImage(buttonImages[button.name], button.x + button.width / 2 - 20, button.y + button.height / 2 - 20, 40, 40);
+      }
     });
   };
 
@@ -152,13 +192,14 @@ const VideoBox: React.FC<VideoBoxProps> = ({
             playSound();
             cooldownRef.current = true;
             actionInProgressRef.current = true;
+            setSelectedButton(button.name);
             try {
               switch (button.name) {
                 case 'up':
-                  await moveStep(-1);
+                  await moveStep(-0.315);
                   break;
                 case 'down':
-                  await moveStep(1);
+                  await moveStep(0.315);
                   break;
                 case 'left':
                   await rotateStep(Math.PI / 2);
@@ -185,9 +226,10 @@ const VideoBox: React.FC<VideoBoxProps> = ({
               }
             } finally {
               setTimeout(() => {
+                setSelectedButton(null);
                 cooldownRef.current = false;
                 actionInProgressRef.current = false;
-              }, 500); // Extended the cooldown period to 1000 milliseconds
+              }, 2000); // Change to 2 seconds
             }
             return;
           }

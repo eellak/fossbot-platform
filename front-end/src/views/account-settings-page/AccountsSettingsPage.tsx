@@ -174,7 +174,7 @@ const AccountsSettingsPage = () => {
                 </Grid>
             </Grid>
 
-            <Footer />
+           
 
             {showSuccessAlert && (
                 <SuccessAlert title={showSuccessAlertText} description={""} />

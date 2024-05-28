@@ -12,7 +12,7 @@ const isWebGLAvailable = () => {
 };
 
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(20, window.innerWidth / window.innerHeight, 0.1, 1000);
+const camera = new THREE.PerspectiveCamera(20, parent.innerWidth / parent.innerHeight, 0.1, 1000);
 
 let renderer;
 if (isWebGLAvailable()) {

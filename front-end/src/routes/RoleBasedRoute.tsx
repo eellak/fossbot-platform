@@ -15,11 +15,7 @@ const RoleBasedRoute: React.FC<RoleBasedRouteProps> = ({ children, roles, betaTe
     return <Navigate to="/auth/login" />;
   }
 
-  if (roles && !roles.includes(user.role)) {
-    return <Navigate to="/auth/403" />;
-  }
-
-  if (betaTesterOnly && !user.beta_tester) {
+  if (betaTesterOnly && !user.beta_tester || roles && !roles.includes(user.role)) {
     return <Navigate to="/auth/403" />;
   }
 
