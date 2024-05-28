@@ -129,9 +129,14 @@
     "light": "Light",
     "dark": "Dark"
   },
+  "roles": {
+    "user": "User",
+    "tutor": "Tutor",
+    "admin": "Admin"
+  },
   "authentication": {
     "authLogin": {
-      "rememberDevice": "Rememmber this Device",
+      "rememberDevice": "Remember this Device",
       "forgotPassword": "Forgot Password ?"
     },
     "error": {
@@ -197,6 +202,12 @@
     "title": "Account Settings",
     "description": "This is the user account settings page"
   },
+  "admin-panel": {
+    "title": "Admin Panel",
+    "description": "This is the admin panel page",
+    "usageDescription": "You can delete users or edit their role",
+    "noUsersFound": "No users found"
+  },
   "blocklyBlocks": {
     "forward": "forward",
     "reverse": "reverse",
@@ -255,7 +266,13 @@
     "userDataUpdateError": "Error occured when updating user data!",
     "passwordConfirmationError": "The fields: password and password confirmation must be identical.",
     "userDataFetchError": "Error fetching user data.",
-    "projectsFetchError": "Error fetching projects."
+    "projectsFetchError": "Error fetching projects.",
+    "projectDeleted": "Project was just deleted successfully.",
+    "projectDeleteError": "Error deleting project. Please try again.",
+    "usersFetchError": "Error fetching all usersfrom database.",
+    "userDeleted": "User was just deleted successfully.",
+    "userDeleteError": "Error deleting user. Please try again.",
+    "userRoleInvalid": "You have chosen an invalid user role. Please try again."
   },
   "accountSettings": {
     "blocklyProjects": "Blockly projects",

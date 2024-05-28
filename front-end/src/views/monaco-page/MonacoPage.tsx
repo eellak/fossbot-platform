@@ -6,13 +6,14 @@ import MonacoEditorComponent from 'src/components/editors/MonacoEditor';
 import Buttons from 'src/components/editors/RightColButtons';
 import PythonExecutor from 'src/components/editors/PythonExecutor';
 import { useAuth } from 'src/authentication/AuthProvider';
-import { WebGLApp, moveStep, rotateStep, stopMotion, get_distance, rgb_set_color, get_acceleration, get_gyroscope, get_floor_sensor, just_move, just_rotate, get_light_sensor, drawLine } from 'src/components/js-simulator/Simulator';
+import { WebGLApp, moveStep, rotateStep, stopMotion,get_distance, rgb_set_color, get_acceleration, get_gyroscope,get_floor_sensor,just_move,just_rotate, get_light_sensor,drawLine } from 'src/components/js-simulator/Simulator';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useLocation } from 'react-router-dom';
 import { v4 as uuidv4 } from 'uuid';
 import { useTranslation } from 'react-i18next';
 import SearchBar from 'src/components/monaco-functions/MonacoSearchBar';
 import VideoPlayer from 'src/components/videoplayer/VideoPlayer';
+import NewProjectDialog from 'src/components/dashboard/NewProjectDialog';
 
 const textart = ` 
 #___   __   __   __   __   __  ___     __      ___       __       
@@ -23,6 +24,7 @@ print("hello world")`;
 
 const MonacoPage: React.FC = () => {
   const { t } = useTranslation();
+  const { projectId } = useParams();
   const location = useLocation();
   const [editorValue, setEditorValue] = useState('');
   const [projectTitle, setProjectTitle] = useState(t('newProject'));
@@ -30,6 +32,9 @@ const MonacoPage: React.FC = () => {
   const [sessionId, setSessionId] = useState('');
   const [loading, setLoading] = useState(true);
   const [isSimulatorLoading, setIsSimulatorLoading] = useState(true);
+  const [showDrawer, setShowDrawer] = useState(false);
+
+
   const [showVideoPlayer, setShowVideoPlayer] = useState(false);
   const runScriptRef = useRef<() => Promise<void>>();
   const stopScriptRef = useRef<() => void>();
@@ -45,8 +50,10 @@ const MonacoPage: React.FC = () => {
     }
   };
 
-  const handleStopClick = () => {
+  const handleStopClick = () => { // Added handle stop click
+
     if (stopScriptRef.current) {
+
       stopScriptRef.current();
       stopMotion();
     }
@@ -58,6 +65,7 @@ const MonacoPage: React.FC = () => {
 
   const setStopScriptFunction = (stopScript: () => void) => {
     stopScriptRef.current = stopScript;
+
   };
 
   useEffect(() => {
@@ -70,7 +78,6 @@ const MonacoPage: React.FC = () => {
     const fetchProject = async () => {
       try {
         if (projectId && projectId !== '') {
-          setShowSaveButton(true);
           const fetchedProject = await auth.getProjectByIdAction(Number(projectId));
           if (fetchedProject) {
             setEditorValue(fetchedProject.code);
@@ -102,15 +109,19 @@ const MonacoPage: React.FC = () => {
   };
 
   const handleSaveClick = async () => {
-    try {
-      await auth.updateProjectByIdAction(Number(projectId), {
-        name: projectTitle,
-        description: projectDescription,
-        project_type: 'python',
-        code: editorValue,
-      });
-    } catch (error) {
-      console.error('Error updating project:', error);
+    if (projectId == '' || projectId == undefined) {
+      setShowDrawer(true);
+    } else {
+      try {
+        await auth.updateProjectByIdAction(Number(projectId), {
+          name: projectTitle,
+          description: projectDescription,
+          project_type: 'blockly',
+          code: editorValue,
+        });
+      } catch (error) {
+        console.error('Error updating project:', error);
+      }
     }
   };
 
@@ -119,8 +130,18 @@ const MonacoPage: React.FC = () => {
     setIsSimulatorLoading(false);
   };
 
+  const handleDrawerClose = () => {
+    setShowDrawer(false);
+  };
+
   return (
     <PageContainer title={t('monaco-page.title')} description={t('monaco-page.description')}>
+      <NewProjectDialog
+        showDrawer={showDrawer}
+        handleDrawerClose={handleDrawerClose}
+        isDescriptionDisabled={true}
+        editorInitialValue='python'
+      />
       <Box id="monaco-container" flexGrow={1}>
         <Grid container spacing={3} justifyContent="center" alignItems="center">
           <Grid item xs={8} lg={8}>
@@ -139,7 +160,6 @@ const MonacoPage: React.FC = () => {
                     handlePlayClick={handlePlayClick}
                     handleSaveClick={handleSaveClick}
                     handleStopClick={handleStopClick}
-                    showSaveButton={showSaveButton}
                   />
                 </Stack>
               </DialogContent>
@@ -209,6 +229,7 @@ const MonacoPage: React.FC = () => {
                   stopMotion={stopMotion}
                   getLightSensor={get_light_sensor}
                   drawLine={drawLine}
+
                 />
               </Box>
             </Grid>

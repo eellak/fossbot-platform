@@ -7,12 +7,12 @@ import { useTranslation } from 'react-i18next';
 import PythonExecutor from 'src/components/editors/PythonExecutor';
 import PythonTerminal from 'src/components/editors/PythonTerminal';
 // import WebGLApp from 'src/components/websimulator/Simulator';
-import { WebGLApp, moveStep, rotateStep, stopMotion,get_distance, rgb_set_color, get_acceleration, get_gyroscope,get_floor_sensor,just_move,just_rotate, get_light_sensor,drawLine } from 'src/components/js-simulator/Simulator';
+import { WebGLApp, moveStep, rotateStep, stopMotion, get_distance, rgb_set_color, get_acceleration, get_gyroscope, get_floor_sensor, just_move, just_rotate, get_light_sensor, drawLine } from 'src/components/js-simulator/Simulator';
 import Buttons from 'src/components/editors/RightColButtons';
 import PageContainer from '../../components/container/PageContainer';
 import BlocklyEditorComponent from '../../components/editors/BlocklyEditor';
 import Spinner from '../spinner/Spinner';
-import VideoPlayer from 'src/components/videoplayer/VideoPlayer';
+import VideoPlayer from 'src/components/videoplayer/VideoPlayer';import NewProjectDialog from 'src/components/dashboard/NewProjectDialog';
 
 
 const BlocklyPage = () => {
@@ -28,8 +28,8 @@ const BlocklyPage = () => {
   const [projectDescription, setProjectDescription] = useState(t('newProjectDescription'));
   const [loading, setLoading] = useState(true); // Loading state of Blockly project
   const [isSimulatorLoading, setIsSimulatorLoading] = useState(true); // Loading state of Simulator
-  const [showVideoPlayer, setShowVideoPlayer] = useState(false);
-  const [showSaveButton, setShowSaveButton] = useState(false);
+  const [showVideoPlayer, setShowVideoPlayer] = useState(false);  
+  const [showDrawer, setShowDrawer] = useState(false);
 
   const runScriptRef = useRef<() => Promise<void>>();
   const auth = useAuth();
@@ -51,7 +51,7 @@ const BlocklyPage = () => {
 
   const setStopScriptFunction = (stopScript: () => void) => { // Added set stop script function
     stopScriptRef.current = stopScript;
-   
+
   };
 
   useEffect(() => {
@@ -65,8 +65,6 @@ const BlocklyPage = () => {
     const fetchProject = async () => {
       try {
         if (projectId != '' && projectId != undefined) {
-          setShowSaveButton(true);
-
           const fetchedProject = await auth.getProjectByIdAction(Number(projectId));
           if (fetchedProject) {
             if (fetchedProject.code != '') {
@@ -101,9 +99,9 @@ const BlocklyPage = () => {
 
 
   const handleStopClick = () => { // Added handle stop click
-    
+
     if (stopScriptRef.current) {
-      
+
       stopScriptRef.current();
       stopMotion();
     }
@@ -116,16 +114,20 @@ const BlocklyPage = () => {
   };
 
   const handleSaveClick = async () => {
-    try {
-      await auth.updateProjectByIdAction(Number(projectId), {
-        name: projectTitle,
-        description: projectDescription,
-        project_type: 'blockly',
-        code: editorValue,
-      });
-    } catch (error) {
-      console.error('Error updating project:', error);
-    }
+    if (projectId == '' || projectId == undefined) {
+      setShowDrawer(true);
+    } else {
+      try {
+        await auth.updateProjectByIdAction(Number(projectId), {
+          name: projectTitle,
+          description: projectDescription,
+          project_type: 'blockly',
+          code: editorValue,
+        });
+      } catch (error) {
+        console.error('Error updating project:', error);
+      }
+    }    
   };
 
   const handleMountChange = (isMounted: boolean) => {
@@ -133,16 +135,24 @@ const BlocklyPage = () => {
     setIsSimulatorLoading(false);
   };
 
-
+  const handleDrawerClose = () => {
+    setShowDrawer(false);
+  };
 
   return (
     <PageContainer title={t('blockly-page.title')} description={t('blockly-page.description')}>
+      <NewProjectDialog
+        showDrawer={showDrawer}
+        handleDrawerClose={handleDrawerClose}
+        isDescriptionDisabled={true}
+        editorInitialValue='blockly'
+      />
       <Box flexGrow={1}>
         <Grid container spacing={3} justifyContent="center" alignItems="center">
           <Grid item xs={8} lg={8}>  {/* This item spans 8 columns on large screens */}
             <Box mb={3}>
               <Typography variant="h1" mt={6} color={'primary'}>
-              🎮 {projectTitle}{' '}
+                🎮 {projectTitle}{' '}
               </Typography>
             </Box>
           </Grid>
@@ -150,11 +160,10 @@ const BlocklyPage = () => {
             <Box mt={2} sx={{ display: 'flex', justifyContent: 'flex-end' }}> {/* Aligns content to the left */}
               <DialogContent className="testdialog">
                 <Stack direction="row" spacing={3} alignItems="center" justifyContent="flex-end"> {/* Aligns buttons to the left */}
-                  <Buttons 
-                    handlePlayClick={handlePlayClick} 
-                    handleSaveClick={handleSaveClick} 
-                    handleStopClick={handleStopClick}
-                    showSaveButton={showSaveButton} />
+                  <Buttons
+                    handlePlayClick={handlePlayClick}
+                    handleSaveClick={handleSaveClick}
+                    handleStopClick={handleStopClick} />
                 </Stack>
               </DialogContent>
             </Box>
@@ -200,10 +209,10 @@ const BlocklyPage = () => {
                 <WebGLApp appsessionId={sessionId} 
                   onMountChange={handleMountChange}/>
               </Box>
-              <br/>
-              
-                {/* Terminal */}
-    
+              <br />
+
+              {/* Terminal */}
+
               <Box
                 height={'400px'}
                 style={{
@@ -233,10 +242,10 @@ const BlocklyPage = () => {
                   stopMotion={stopMotion}
                   getLightSensor={get_light_sensor}
                   drawLine={drawLine}
-                
+
                 />
-                
-{/*                 
+
+                {/*                 
                 <PythonTerminal
                   pythonScript={editorPythonValue}
                   sessionId={sessionId}

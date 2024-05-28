@@ -3,10 +3,9 @@ import { styled, Container, Box, useTheme } from '@mui/material';
 import { useSelector } from 'src/store/Store';
 import { Outlet } from 'react-router-dom';
 import { AppState } from 'src/store/Store';
-import Header from './vertical/header/Header';
 import Sidebar from './vertical/sidebar/Sidebar';
-import Customizer from './shared/customizer/Customizer';
-import Navigation from './horizontal/navbar/Navigation';
+import Navigation from '../full/horizontal/navbar/Navigation';
+import Header from './vertical/header/Header';
 import HorizontalHeader from './horizontal/header/Header';
 
 const MainWrapper = styled('div')(() => ({
@@ -18,7 +17,6 @@ const MainWrapper = styled('div')(() => ({
 const PageWrapper = styled('div')(() => ({
   display: 'flex',
   flexGrow: 1,
-  // paddingBottom: '60px',
   flexDirection: 'column',
   zIndex: 1,
   backgroundColor: 'transparent',
@@ -51,7 +49,7 @@ const FullLayout: FC = () => {
         {/* ------------------------------------------- */}
         {/* Header */}
         {/* ------------------------------------------- */}
-        {customizer.isHorizontal ? <HorizontalHeader /> : <Header />}
+        {customizer.isHorizontal ? <HorizontalHeader/> : <Header />}
         {/* PageContent */}
         {customizer.isHorizontal ? <Navigation /> : ''}
         <Container
