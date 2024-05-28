@@ -20,6 +20,16 @@ const AdminPanelPage = () => {
     const [showSuccessAlertText, setShowSuccessAlertText] = useState("");
     const [showErrorAlertText, setShowErrorAlertText] = useState("");
 
+    const handleShowSuccessAlert = (message) => {
+        setShowSuccessAlertText(message);
+        setShowSuccessAlert(true);
+    };
+
+    const handleShowErrorAlert = (message) => {
+        setShowErrorAlertText(message);
+        setShowErrorAlert(true);
+    };
+
     return (
         <PageContainer title={t('admin-panel.title')} description={t('admin-panel.description')}>
 
@@ -31,7 +41,10 @@ const AdminPanelPage = () => {
                     </Typography>
                 </Grid>
                 <Grid item xs={12} sm={12} mt={3}>
-                    <UsersCard />
+                    <UsersCard 
+                     onShowSuccessAlert={handleShowSuccessAlert}
+                     onShowErrorAlert={handleShowErrorAlert}
+                     />
                 </Grid>
             </Grid>
 

@@ -2,8 +2,6 @@ import React from 'react';
 import DashboardCard from '../shared/DashboardCardWithChildren';
 import Fab from '@mui/material/Fab';
 import PageContainer from 'src/components/container/PageContainer';
-import SuccessAlert from '../alerts/SuccessAlert';
-import ErrorAlert from '../alerts/ErrorAlert';
 import MenuItem from '@mui/material/MenuItem';
 import { useState, useEffect } from 'react';
 import {
@@ -23,17 +21,15 @@ import { useAuth } from 'src/authentication/AuthProvider';
 import { useTranslation } from 'react-i18next';
 import { UserRole } from 'src/authentication/AuthInterfaces';
 
+interface UsersCardProps {
+  onShowSuccessAlert: (message: string) => void;
+  onShowErrorAlert: (message: string) => void;
+}
 
-const UsersCard = () => {
+const UsersCard = ({ onShowSuccessAlert, onShowErrorAlert }: UsersCardProps) => {
   const { t } = useTranslation();
 
   const auth = useAuth();
-
-  const [showSuccessAlert, setShowSuccessAlert] = useState(false);
-  const [showErrorAlert, setShowErrorAlert] = useState(false);
-
-  const [showSuccessAlertText, setShowSuccessAlertText] = useState("");
-  const [showErrorAlertText, setShowErrorAlertText] = useState("");
 
   const [users, setUsers] = useState([]);
 
@@ -45,8 +41,7 @@ const UsersCard = () => {
           setUsers(users);
         }
       } catch (error) {
-        setShowErrorAlert(true);
-        setShowErrorAlertText(t('alertMessages.usersFetchError'));
+        onShowErrorAlert(t('alertMessages.usersFetchError'));
         console.error('Error fetching users:', error);
       }
     };
@@ -61,8 +56,7 @@ const UsersCard = () => {
       if (success) {
         window.location.reload();
       } else {
-        setShowErrorAlert(true);
-        setShowErrorAlertText(t('alertMessages.userDeleteError'));
+        onShowErrorAlert(t('alertMessages.userDeleteError'));
         console.error('Error deleting project');
       }
     } catch (error) {
@@ -75,8 +69,7 @@ const UsersCard = () => {
 
     // Check if the new role is a valid UserRole
     if (!Object.values(UserRole).includes(newRole)) {
-      setShowErrorAlert(true);
-      setShowErrorAlertText(t('alertMessages.userRoleInvalid'));
+      onShowSuccessAlert(t('alertMessages.userRoleInvalid'));
       return;
     }
 
@@ -88,8 +81,7 @@ const UsersCard = () => {
         window.location.reload();
       }
     } catch (error) {
-      setShowErrorAlert(true);
-      setShowErrorAlertText(t('alertMessages.userDataUpdateError'));
+      onShowErrorAlert(t('alertMessages.userDataUpdateError'));
       console.error('Error updating user:', error);
     }
   };
@@ -187,14 +179,6 @@ const UsersCard = () => {
           </Table>
         </TableContainer>
       </DashboardCard>
-      {showSuccessAlert && (
-        <SuccessAlert title={showSuccessAlertText} description={""} />
-      )}
-
-      {showErrorAlert && (
-        <ErrorAlert title={showErrorAlertText} description={""} />
-      )}
-      {/* // </PageContainer> */}
     </PageContainer>
   );
 };
