@@ -1,6 +1,6 @@
 import React from 'react';
 import { Grid, Fab } from '@mui/material';
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'; 
 import { faSave, faPlay, faStop } from '@fortawesome/free-solid-svg-icons';
 
 type ButtonsProps = {

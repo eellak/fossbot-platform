@@ -10,6 +10,7 @@ import {
     User,
     PassswordData,
     RoleData,
+    BetaTesterData,
 } from './AuthInterfaces';
 import {
     createProject,
@@ -24,10 +25,10 @@ import {
     updateUserPasswordData,
     getUsers,
     deleteUserById,
-    updateUserRoleById
+    updateUserRoleById,
+    updateUserBetaTesterStatusById
 } from './AuthApi';
 
-// Create the context with an initial undefined value
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 interface AuthProviderProps {
@@ -51,8 +52,10 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
             }
         };
 
-        fetchUserData();
-    }, []);
+        if (token) {
+            fetchUserData();
+        }
+    }, [token]);
 
     const loginAction = async (data: LoginData) => {
         try {
@@ -84,8 +87,8 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
             const response = await register(data);
             const res = await response.json();
 
-            if (response.status == 200) {
-                navigate('/auth/login'); // Or another appropriate route
+            if (response.status === 200) {
+                navigate('/auth/login');
             } else {
                 throw new Error(res.message || 'Registration failed');
             }
@@ -116,8 +119,8 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
             const response = await createProject(data, token);
             const res = await response.json();
 
-            if (response.status == 200 && res.id) {
-                return res.id; // Return the project ID
+            if (response.status === 200 && res.id) {
+                return res.id;
             } else {
                 throw new Error(res.message || 'New project failed');
             }
@@ -130,16 +133,15 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
         try {
             const response = await getProjects(token);
 
-            if (response.status == 200) {
+            if (response.status === 200) {
                 const projects: Project[] = await response.json();
-
-                return projects; // Return the array of projects
+                return projects;
             } else {
                 throw new Error('Failed to fetch projects');
             }
         } catch (err) {
             console.error(err);
-            return undefined; // Return undefined in case of an error
+            return undefined;
         }
     };
 
@@ -147,15 +149,15 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
         try {
             const response = await deleteProjectById(projectId, token);
 
-            if (response.status == 200) {
+            if (response.status === 200) {
                 await response.json();
-                return true; // Indicating success
+                return true;
             } else {
                 throw new Error(`Failed to delete project. Status: ${response.status}`);
             }
         } catch (err) {
             console.error(err);
-            return false; // Indicating failure
+            return false;
         }
     };
 
@@ -163,9 +165,8 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
         try {
             const response = await getProjectById(projectId, token);
 
-            if (response.status == 200) {
+            if (response.status === 200) {
                 const project: Project = await response.json();
-
                 return project;
             } else {
                 throw new Error('Failed to fetch project');
@@ -180,9 +181,11 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
         try {
             const response = await updateProjectById(data, projectId, token);
 
+
             if (response.status == 200) {
                 const project: Project = await response.json();
                 return project;
+
             } else {
                 throw new Error('Update project failed');
             }
@@ -211,7 +214,7 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
         try {
             const response = await updateUserData(data, token);
 
-            if (response.status == 200) {
+            if (response.status === 200) {
                 const user: User = await response.json();
                 return user;
             } else {
@@ -243,7 +246,7 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
         try {
             const response = await updateUserPasswordData(data, token);
 
-            if (response.status == 200) {
+            if (response.status === 200) {
                 const user: User = await response.json();
                 return user;
             } else {
@@ -258,6 +261,22 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
     const deleteUserByIdAction = async (projectId: number) => {
         try {
             const response = await deleteUserById(projectId, token);
+
+            if (response.status == 200) {
+                await response.json();
+                return true; // Indicating success
+            } else {
+                throw new Error(`Failed to delete user. Status: ${response.status}`);
+            }
+        } catch (err) {
+            console.error(err);
+            return false; // Indicating failure
+        }
+    };
+
+    const updateUserBetaTesterStatus = async (userId: number, data: BetaTesterData) => {
+        try {
+            const response = await updateUserBetaTesterStatusById(userId, data, token);
 
             if (response.status == 200) {
                 await response.json();
@@ -289,6 +308,7 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
                 updateUserPassword,
                 getAllUsers,
                 deleteUserByIdAction,
+                updateUserBetaTesterStatus,
                 updateUserRole
             }}
         >

@@ -13,6 +13,7 @@ import {
   TableRow,
   TableContainer,
   Select,
+  Checkbox,
 } from '@mui/material';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faTrash } from '@fortawesome/free-solid-svg-icons';
@@ -86,6 +87,21 @@ const UsersCard = ({ onShowSuccessAlert, onShowErrorAlert }: UsersCardProps) => 
     }
   };
 
+  const handleBetaTesterChange = async (userId, event) => {
+    const isBetaTester = event.target.checked;
+
+    try {
+      const user = await auth.updateUserBetaTesterStatus(userId, { beta_tester: isBetaTester });
+      if (user) {
+        window.location.reload();
+      }
+    } catch (error) {
+      onShowErrorAlert(t('alertMessages.userDataUpdateError'));
+      console.error('Error updating user:', error);
+    }
+  };
+
+
   return (
     <PageContainer>
       <DashboardCard>
@@ -98,7 +114,10 @@ const UsersCard = ({ onShowSuccessAlert, onShowErrorAlert }: UsersCardProps) => 
           >
             <TableHead>
               <TableRow>
-                <TableCell align="center" size='small'>
+                <TableCell align="center">
+                  <Typography variant="subtitle2" fontWeight={600}>
+                    {t('username')}
+                  </Typography>
                 </TableCell>
                 <TableCell align="center">
                   <Typography variant="subtitle2" fontWeight={600}>
@@ -113,6 +132,11 @@ const UsersCard = ({ onShowSuccessAlert, onShowErrorAlert }: UsersCardProps) => 
                 <TableCell align="center">
                   <Typography variant="subtitle2" fontWeight={600}>
                     {t('emailAddress')}
+                  </Typography>
+                </TableCell>
+                <TableCell align="center">
+                  <Typography variant="subtitle2" fontWeight={600}>
+                    {t('betaTester')}
                   </Typography>
                 </TableCell>
                 <TableCell align="center">
@@ -138,9 +162,7 @@ const UsersCard = ({ onShowSuccessAlert, onShowErrorAlert }: UsersCardProps) => 
                 users.map((user) => (
                   <TableRow key={user.id}>
                     <TableCell align="center">
-                      <Typography color="black">
-                        <IconUserFilled />
-                      </Typography>
+                      {user.username}
                     </TableCell>
                     <TableCell align="center">
                       <Typography>{user.firstname}</Typography>
@@ -150,6 +172,12 @@ const UsersCard = ({ onShowSuccessAlert, onShowErrorAlert }: UsersCardProps) => 
                     </TableCell>
                     <TableCell align="center">
                       <Typography>{user.email}</Typography>
+                    </TableCell>
+                    <TableCell align="center">
+                      <Checkbox
+                        checked={user.beta_tester}
+                        onChange={(event) => handleBetaTesterChange(user.id, event)}
+                      />
                     </TableCell>
                     <TableCell align="center">
                       <Select

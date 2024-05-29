@@ -4,18 +4,28 @@ export interface AuthContextType {
     token: string;
     loginAction: (data: LoginData) => Promise<void>;
     registerAction: (data: RegisterData) => Promise<void>;
+
     createProjectAction: (data: NewProjectData) => Promise<number | undefined>;
     getProjectsAction: () => Promise<Project[] | undefined>;
     deleteProjectByIdAction: (projectId: number) => Promise<boolean>;
     getProjectByIdAction: (projectId: number) => Promise<Project | undefined>;
     updateProjectByIdAction: (projectId: number, data: NewProjectData) => Promise<Project | undefined>;
     getUserDataAction: () => Promise<User | undefined>;
+
     logOutAction: () => void;
+    getUserDataAction: () => Promise<User | undefined>;
     updateUser: (data: UserData) => Promise<User | undefined>;
     updateUserPassword: (data: PassswordData) => Promise<User | undefined>;
     getAllUsers: () => Promise<User[] | undefined>;
     deleteUserByIdAction: (projectId: number) => Promise<boolean>;
     updateUserRole: (userId: number, data: RoleData) => Promise<User | undefined>;
+    updateUserBetaTesterStatus: (userId: number, beta_tester: BetaTesterData) => Promise<boolean>;
+
+    createProjectAction: (data: NewProjectData) => Promise<number | undefined>;
+    deleteProjectByIdAction: (projectId: number) => Promise<boolean>;
+    getProjectByIdAction: (projectId: number) => Promise<Project | undefined>;
+    updateProjectByIdAction: (projectId: number, data: NewProjectData) => Promise<void>;
+    getProjectsAction: () => Promise<Project[] | undefined>;
 }
 
 // Registration data
@@ -61,6 +71,7 @@ export interface User {
     role: string;
     image_url?: string;
     hashed_password?: string;
+    beta_tester: boolean;
 }
 
 export interface UserData {
@@ -82,4 +93,8 @@ export enum UserRole {
 
 export interface RoleData {
     role: UserRole;
+}
+
+export interface BetaTesterData {
+    beta_tester: boolean;
 }

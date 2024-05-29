@@ -9,14 +9,3 @@ services:
     volumes:
       - ./back-end/test.db:/usr/src/app/back-end/test.db
       - ./back-end/main.py:/usr/src/app/back-end/main.py
-   
-  simulator:
-    image: fsbt-sim
-    container_name: fsbt-sim
-    build: ./simulator
-    ports:
-      - "5000:5000"
-    volumes:
-      - ./simulator:/usr/src/app/simulator   
-    depends_on:
-      - backend

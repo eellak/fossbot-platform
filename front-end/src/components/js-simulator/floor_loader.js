@@ -14,25 +14,48 @@ plane.renderOrder = 0;
 plane.receiveShadow = true;
 plane.userData.isPlane = true; // Custom property to identify the plane
 
-// Function to update the texture of the plane
-function updateTexture(texturePath) {
+function updateTexture(texturePath, color, repeat = { x: 25, y: 25 }, offset = { x: 0, y: 0 }) {
   const textureLoader = new THREE.TextureLoader();
-  textureLoader.load(texturePath, (texture) => {
-    // This function is called after the texture has loaded
-    console.log('Texture loaded', texture);
-    // Set texture properties
-    texture.wrapS = THREE.RepeatWrapping;
-    texture.wrapT = THREE.RepeatWrapping;
 
-    // Set how many times the texture repeats
-    texture.repeat.set(10, 10); // Adjust the values as needed
-    texture.offset.set(0, 0); // Adjust the values as needed
-
-    // Apply the texture to the plane material
-    planeMaterial.map = texture;
-    planeMaterial.color = null; // Reset color to use texture
+  if (texturePath === '') {
+    // Clear the texture and set the color
+    planeMaterial.map = null;
+    if (color) {
+      planeMaterial.color.set(color);
+    }
     planeMaterial.needsUpdate = true; // Ensure the material updates
-  });
+  } else {
+    // Load and apply the new texture
+    textureLoader.load(texturePath, (texture) => {
+      // This function is called after the texture has loaded
+      console.log('Texture loaded', texture);
+
+      // Set texture properties
+      texture.wrapS = THREE.RepeatWrapping;
+      texture.wrapT = THREE.RepeatWrapping;
+
+      // Set how many times the texture repeats
+      texture.repeat.set(repeat.x, repeat.y);
+
+      // Set texture offset
+      texture.offset.set(offset.x, offset.y);
+
+      // Apply the texture to the plane material
+      planeMaterial.map = texture;
+      if (color) {
+        planeMaterial.color.set(color);
+      }
+
+      planeMaterial.needsUpdate = true; // Ensure the material updates
+    });
+  }
 }
 
-export { plane, updateTexture };
+
+function updateDimensions(dimensions) {
+  plane.scale.set(dimensions[0], dimensions[1]);
+}
+
+
+export { plane, updateTexture, updateDimensions };
+

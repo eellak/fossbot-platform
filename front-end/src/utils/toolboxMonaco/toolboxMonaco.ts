@@ -13,6 +13,12 @@ const COMMANDS_JSON = {
         },
         {
           "kind": "command",
+          "name": "Move One Step",
+          "description": "Moves the robot for one step in the specified direction. Param: direction='forward' or 'backward'",
+          "command": "move_step()"
+        },
+        {
+          "kind": "command",
           "name": "Move Forward Distance",
           "description": "Moves forward a specified distance. Param: distance=<number>",
           "command": "move_forward_distance()"

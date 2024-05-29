@@ -1,25 +1,23 @@
 from fastapi import FastAPI, Depends, HTTPException, status,Form
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from sqlalchemy import create_engine, Column, Integer, String,ForeignKey,DateTime,Enum
+from sqlalchemy import create_engine, Column, Integer, String,ForeignKey,DateTime,Enum,Boolean
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker,relationship
-import datetime
-
-from jose import JWTError, jwt
-
-import uvicorn
-from passlib.context import CryptContext
-from fastapi import Body
 from fastapi.middleware.cors import CORSMiddleware
-import logging
-from pydantic import BaseModel
+from passlib.context import CryptContext
 from typing import Optional, List
-import os
 from enum import Enum as PyEnum
+from pydantic import BaseModel
+from jose import JWTError, jwt
+from fastapi import Body
+import datetime
+import logging
+import uvicorn
+import os
 
 logger = logging.getLogger("uvicorn")
-# Constants for JWT
 
+# Constants for JWT
 SECRET_KEY = os.getenv('SECRET_KEY', 'your-secret-key')
 ALGORITHM = "HS256"
 
@@ -72,9 +70,16 @@ class UserResponse(BaseModel):
     email: str
     role: UserRole
     image_url: Optional[str]
+    beta_tester: bool
+
+    class Config:
+        orm_mode = True
 
 class UpdateUserRoleRequest(BaseModel):
     role: UserRole
+
+class UpdateBetaTesterRequest(BaseModel):
+    beta_tester: bool
 
 # User model
 class User(Base):
@@ -86,6 +91,7 @@ class User(Base):
     email = Column(String, unique=True, nullable=False)
     hashed_password = Column(String, nullable=False)
     role = Column(Enum(UserRole), default=UserRole.USER)
+    beta_tester = Column(Boolean, default=False)
     image_url = Column(String)  # Added field for user's profile image URL
 
 class Projects(Base):
@@ -148,6 +154,37 @@ def get_db():
         yield db
     finally:
         db.close()
+
+# Function to create admin user if not exists
+def create_admin_user():
+    db = SessionLocal()
+    admin_username = os.getenv('ADMIN_USERNAME', 'admin')
+    admin_password = os.getenv('ADMIN_PASSWORD', 'admin')  
+    admin_email =  os.getenv('ADMIN_EMAIL', 'admin@gmail.com')  
+    admin_user = get_user(db, admin_username)
+    if not admin_user:
+        hashed_password = get_password_hash(admin_password)
+        new_admin = User(
+            username=admin_username,
+            hashed_password=hashed_password,
+            firstname= os.getenv('ADMIN_FIRSTNAME', 'Admin'),
+            lastname= os.getenv('ADMIN_LASTNAME', 'Admin'),
+            email=admin_email,
+            role=UserRole.ADMIN,
+            beta_tester=False
+        )
+        db.add(new_admin)
+        db.commit()
+        db.refresh(new_admin)
+        logger.info("Admin user created")
+    else:
+        logger.info("Admin user already exists")
+    db.close()
+
+@app.on_event("startup")
+def on_startup():
+    create_admin_user()
+
 
 def verify_password(plain_password, hashed_password):
     return pwd_context.verify(plain_password, hashed_password)
@@ -291,6 +328,22 @@ async def update_user_password(user_password_update: UpdateUserPasswordRequest, 
 
     return db_user
 
+@app.put("/users/{user_id}/beta_tester")
+async def update_beta_tester_status(user_id: int, beta_tester_update: UpdateBetaTesterRequest, current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Not authorized for this action: UPDATE BETA TESTER STATUS")
+
+    db_user = db.query(User).filter(User.id == user_id).first()
+    if db_user is None:
+        raise HTTPException(status_code=404, detail="User not found in database")
+
+    db_user.beta_tester = beta_tester_update.beta_tester
+
+    db.commit()
+    db.refresh(db_user)
+
+    return db_user
+
 @app.put("/users/{user_id}/role")
 async def update_user_role(user_id: int, user_role_update: UpdateUserRoleRequest, current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):
     if current_user.role != UserRole.ADMIN:
@@ -318,10 +371,11 @@ async def register_user(register_request: RegisterRequest, db: SessionLocal = De
     # Create new user instance
     hashed_password = get_password_hash(register_request.password)
     new_user = User(username=register_request.username,
-                     hashed_password=hashed_password,
-                     firstname=register_request.firstname,
-                     lastname=register_request.lastname,
-                     email=register_request.email)
+                    hashed_password=hashed_password,
+                    firstname=register_request.firstname,
+                    lastname=register_request.lastname,
+                    email=register_request.email
+                    )
 
     # Add new user to the database
     db.add(new_user)

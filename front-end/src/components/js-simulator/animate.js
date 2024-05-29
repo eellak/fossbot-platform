@@ -192,7 +192,7 @@ function animate() {
     // }
 
     moveBaseObject();
-    checkCollisions();
+    // checkCollisions();
 
     if (controls.enabled) {
         controls.update();

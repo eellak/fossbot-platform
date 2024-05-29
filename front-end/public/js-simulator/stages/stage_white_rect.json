@@ -1,0 +1,66 @@
+[
+    {
+        "type": "cylinder",
+        "dimensions": [0.05, 0.1, 0.2, 100],
+        "material": {"color": "orange"},
+        "position": [1, 0.08, 0],
+        "name": "cone",
+        "castShadow": true
+    },
+    {
+        "type": "cylinder",
+        "dimensions": [0.05, 0.1, 0.2, 100],
+        "material": {"color": "orange"},
+        "position": [-1, 0.08, 0],
+        "name": "cone",
+        "castShadow": true
+    },
+    {
+        "type": "cylinder",
+        "dimensions": [0.05, 0.1, 0.2, 100],
+        "material": {"color": "orange"},
+        "position": [-2, 0.08, 0.5],
+        "name": "cone",
+        "castShadow": true
+    },
+    {
+        "type": "cylinder",
+        "dimensions": [0.05, 0.1, 0.2, 100],
+        "material": {"color": "orange"},
+        "position": [-3, 0.08, 1],
+        "name": "cone",
+        "castShadow": true
+    },
+    {
+        "type": "cylinder",
+        "dimensions": [0.05, 0.1, 0.2, 100],
+        "material": {"color": "orange"},
+        "position": [2, 0.08, -0.5],
+        "name": "cone",
+        "castShadow": true
+    },
+    {
+        "type": "cylinder",
+        "dimensions": [0.05, 0.1, 0.2, 100],
+        "material": {"color": "orange"},
+        "position": [3, 0.08, -1],
+        "name": "cone",
+        "castShadow": true
+    },
+    {
+        "type": "floor",
+        "dimensions": [0.8, 0.8],
+        "material": {"color": "white"},
+        "name": "floor",
+        "texture": "/js-simulator/textures/white_rect.png",
+        "repeat": [25,25],
+        "offset": [0,0]
+    },
+    { 
+        "type": "fossbot",
+        "position":[0, 0, 0.01],
+        "orientation": [0, 0, 0]
+    }
+
+
+]

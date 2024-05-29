@@ -533,6 +533,11 @@ const TOOLBOX_JSON = {
         },
         {
           kind: 'block',
+          type: 'move_step',
+
+        },
+        {
+          kind: 'block',
           type: 'just_move',
         },
 

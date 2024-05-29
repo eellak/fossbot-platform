@@ -56,6 +56,33 @@ pythonGenerator.forBlock['just_move'] = function (block) {
   return code;
 };
 
+
+// move_step
+Blockly.Blocks['move_step'] = {
+  init: function () {
+    this.appendDummyInput()
+      .appendField(i18n.t('blocklyBlocks.move_step'))
+      .appendField(
+        new Blockly.FieldDropdown([
+          [i18n.t('blocklyBlocks.forward'), "'forward'"],
+          [i18n.t('blocklyBlocks.reverse'), "'reverse'"],
+        ]),
+        'option',
+      );
+    this.setPreviousStatement(true, null);
+    this.setNextStatement(true, null);
+    this.setColour(290);
+    this.setTooltip(i18n.t('blocklyBlocks.move_step_description'));
+    this.setHelpUrl('');
+  },
+};
+
+pythonGenerator.forBlock['move_step'] = function (block) {
+  var input_value = block.getFieldValue('option');
+  var code = `${input_value === "'forward'" ? 'move_forward_distance(-0.315)' : 'move_reverse_distance(0.315)'}\n`;
+  return code;
+};
+
 // STOP
 Blockly.Blocks['stop'] = {
   init: function () {

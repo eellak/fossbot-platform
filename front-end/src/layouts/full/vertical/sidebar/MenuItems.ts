@@ -8,6 +8,7 @@ import {
   IconMoodHappy,
   IconLayoutDashboard,
   IconAlbum,
+  IconHandGrab
 } from '@tabler/icons-react';
 
 interface MenuitemsType {
@@ -53,8 +54,8 @@ const Menuitems: MenuitemsType[] = [
     id: uniqueId(),
     title: 'menu.monacoEditor',
     subtitle: 'menu.pythonBased',
-    chip: 'new',
-    chipColor: 'primary',
+    // chip: 'new',
+    // chipColor: 'primary',
     icon: IconCode,
     href: '/monaco-page',
   },
@@ -68,13 +69,13 @@ const Menuitems: MenuitemsType[] = [
 
   {
     id: uniqueId(),
-    title: 'menu.kindergarten',
-    subtitle: 'menu.simplyBlocks',
-    icon: IconMoodKid,
+    title: 'menu.interactive',
+    subtitle: 'menu.interactiveBased',
+    icon: IconHandGrab,
     chip: 'soon',
     // chipColor: 'primary',
-    href: '/blockly-simply-page',
-    disabled: true,
+    href: '/interactive-page',
+    disabled: false,
   },
 
   {
@@ -85,10 +86,10 @@ const Menuitems: MenuitemsType[] = [
     id: uniqueId(),
     title: 'menu.tutorials',
     icon: IconAlbum,
-    chip: 'soon',
+    chip: 'Soon',
     // chipColor: 'primary',
-    href: '/material-page',
-    disabled: true,
+    href: '/tutorials-page',
+    disabled: false,
   },
   {
     id: uniqueId(),

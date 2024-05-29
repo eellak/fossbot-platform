@@ -174,7 +174,7 @@ function checkCollisions() {
             if (object !== baseObject && object.isMesh && !object.userData.isPlane && object.name !== "route" && !object.userData.isRobotPart) {
                 const objectBox = new THREE.Box3().setFromObject(object);
                 if (baseBox.intersectsBox(objectBox)) {
-                    console.log('Collision detected!');
+                    // console.log('Collision detected!');
                     return true;
                 }
             }

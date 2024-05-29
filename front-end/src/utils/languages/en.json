@@ -46,6 +46,7 @@
   "demos": "Demos",
   "newProject": "New Project",
   "newProjectDescription": "New Project Description",
+  "betaTester": "Beta Tester",
   "errors": {
     "noCommandError": "Please write a command in the Editor!"
   },
@@ -59,7 +60,9 @@
     "blocklyEditor": "Blockly Editor",
     "blocksBased": "Blocks based",
     "kindergarten": "Kindergarten",
+    "interactive": "Interactive Mode",
     "simplyBlocks": "Simply Blocks",
+    "interactiveBased": "Camera based control",
     "educationalMaterial": "Educational Material",
     "elementary": "Elementary",
     "fossbotRepository": "FOSSBot Repository",
@@ -228,7 +231,7 @@
     "rotate90DegreesTooltip": "Rotates fossbot 90 degrees towards the specified direction.",
     "rotate45Degrees": "Rotate 45 degrees",
     "rotate45DegreesTooltip": "Rotates fossbot 45 degrees towards the specified direction.",
-
+    "move_step": "Move step",
     "playSound": "Play sound",
     "playSoundTooltip": "Plays mp3 file specified by input audio_path.",
     "distance": "Obstacle distance",
@@ -256,7 +259,8 @@
     "lightSensor": "Get light sensor",
     "lightSensorTooltip": "Returns the reading of the light sensor.",
     "noiseDetection": "Get noise detection",
-    "noiseDetectionTooltip": "Returns True only if noise is detected."
+    "noiseDetectionTooltip": "Returns True only if noise is detected.",
+    "move_step_description": "Moves the robot for one step."
   },
   "alertMessages": {
     "userDataUpdated": "User data updated successfully!",

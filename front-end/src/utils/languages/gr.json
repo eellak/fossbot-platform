@@ -46,6 +46,7 @@
   "demos": "Demos",
   "newProject": "Νέο πρότζεκτ",
   "newProjectDescription": "Περιγραφή νέου πρότζεκτ",
+  "betaTester": "Beta Tester",
   "errors": {
     "noCommandError": "Παρακαλώ γράψτε μία εντολή στον Editor!"
   },
@@ -59,7 +60,9 @@
     "blocklyEditor": "Blockly Editor",
     "blocksBased": "Βασισμένο σε Blocks",
     "kindergarten": "Νηπιαγωγείο",
+    "interactive": "Διαδραστική Χρήση",
     "simplyBlocks": "Απλά Blocks",
+    "interactiveBased": "Διαδραστική χρήσηε με κάμερα",
     "educationalMaterial": "Εκπαιδευτικό υλικό",
     "elementary": "Δημοτικό",
     "fossbotRepository": "FOSSBot Repository",
@@ -255,7 +258,9 @@
     "lightSensor": "Λάβετε τον αισθητήρα φωτός",
     "lightSensorTooltip": "Επιστρέφει την ανάγνωση του αισθητήρα φωτός.",
     "noiseDetection": "Λήψη ανίχνευσης θορύβου",
-    "noiseDetectionTooltip": "Επιστρέφει True μόνο εάν ανιχνευθεί θόρυβος."
+    "noiseDetectionTooltip": "Επιστρέφει True μόνο εάν ανιχνευθεί θόρυβος.",
+    "move_step": "Κινήσου ένα βήμα",
+    "move_step_description": "Κινεί το ρομπότ για ένα βήμα."
   },
   "alertMessages": {
     "userDataUpdated": "Τα δεδομένα του χρήστη ενημερώθηκαν με επιτυχία!",

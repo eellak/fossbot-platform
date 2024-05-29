@@ -17,7 +17,9 @@ const AccountsSettingsPage = Loadable(lazy(() => import('../views/account-settin
 //const BlocklyPage = Loadable(lazy(() => import('../views/blockly-page/BlocklyPage')));
 //const BlocklyPage =  '../views/blockly-page/BlocklyPage';
 import BlocklyPage from '../views/blockly-page/BlocklyPage';
+import InteractivePage from '../views/interactive-page/InteractivePage';
 import MonacoPage from '../views/monaco-page/MonacoPage';
+import TutorialsPage from '../views/tutorials/TutorialsPage';
 // const MonacoPage = Loadable(lazy(() => import('../views/monaco-page/MonacoPage')));
 const HuaPage = Loadable(lazy(() => import('../views/sub-pages/HuaPage')));
 const Register = Loadable(lazy(() => import('../views/authentication/Register')));
@@ -25,6 +27,7 @@ const Login = Loadable(lazy(() => import('../views/authentication/Login')));
 const Error = Loadable(lazy(() => import('../views/authentication/Error')));
 import AuthProvider from '../authentication/AuthProvider'; // Update with actual path
 import PrivateRoute from './PrivateRoute'; // Update with actual path
+import RoleBasedRoute from './RoleBasedRoute'; // Import the new component
 import AdminPanelPage from 'src/views/admin-panel-page/AdminPanelPage';
 import AdminRoute from './AdminRoute';
 
@@ -36,12 +39,15 @@ const Router = [
   },
   {
     path: '/dashboard',
-    element: <PrivateRoute />,
+    element: (
+      <PrivateRoute>       
+          <FullLayout />       
+      </PrivateRoute>
+    ),
     children: [
       {
         path: '',
-        element: <FullLayout />,
-        children: [{ path: '', exact: true, element: <Dashboard /> }],
+        element: <Dashboard />
       },
     ],
   },
@@ -71,19 +77,78 @@ const Router = [
   {
     path: '/blockly-page',
     title: 'Blockly Editor',
-    element: <FullLayout />,
+    element: (
+      <PrivateRoute>       
+          <FullLayout />       
+      </PrivateRoute>
+    ),
     children: [
       { path: '/blockly-page', exact: true, element: <BlocklyPage /> },
       { path: '/blockly-page/:projectId', exact: true, element: <BlocklyPage /> },
     ],
   },
   {
+    path: '/blockly-tutorial-page',
+    title: 'Blockly Tutorial Editor',
+    element: <FullLayout />,
+    children: [
+      { path: '/blockly-tutorial-page', exact: true, element: <BlocklyPage /> },
+      { path: '/blockly-tutorial-page/', exact: true, element: <BlocklyPage /> },
+    ],
+  },
+  {
     path: '/monaco-page',
     title: 'Monaco Editor',
-    element: <FullLayout />,
+    element: (
+      <PrivateRoute>       
+          <FullLayout />       
+      </PrivateRoute>
+    ),
     children: [
       { path: '/monaco-page/:projectId', exact: true, element: <MonacoPage /> },
       { path: '/monaco-page', exact: true, element: <MonacoPage /> },
+    ],
+  },
+
+  {
+    path: '/interactive-page',
+    element: (
+      <PrivateRoute>
+        <RoleBasedRoute betaTesterOnly={true}>
+          <FullLayout />
+        </RoleBasedRoute>
+      </PrivateRoute>
+    ),
+    children: [
+      {
+        path: '',
+        element: <  InteractivePage />,
+      },
+    ],
+  },
+  {
+    path: '/monaco-tutorial-page',
+    title: 'Monaco Tutorial Editor',
+    element: <FullLayout />,
+    children: [
+      { path: '/monaco-tutorial-page/', exact: true, element: <MonacoPage /> },
+      { path: '/monaco-tutorial-page', exact: true, element: <MonacoPage /> },
+    ],
+  },
+  {
+    path: '/tutorials-page',
+    element: (
+      <PrivateRoute>
+        <RoleBasedRoute  betaTesterOnly={true}>
+          <FullLayout />
+        </RoleBasedRoute>
+      </PrivateRoute>
+    ),
+    children: [
+      {
+        path: '',
+        element: <TutorialsPage />,
+      },
     ],
   },
   {
