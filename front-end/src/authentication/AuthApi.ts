@@ -3,7 +3,7 @@ import { BetaTesterData, LoginData, NewProjectData, PassswordData, RegisterData,
 const backendUrl: string = process.env.REACT_APP_BACKEND_URL;
 
 export async function login(data: LoginData) {
-    const response = await fetch(backendUrl + '/token', {
+    const response = await fetch(`${backendUrl}/token`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -16,7 +16,7 @@ export async function login(data: LoginData) {
 
 
 export async function register(data: RegisterData) {
-    const response = await fetch(backendUrl + '/register', {
+    const response = await fetch(`${backendUrl}/register`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -28,7 +28,7 @@ export async function register(data: RegisterData) {
 }
 
 export async function createProject(data: NewProjectData, token: string) {
-    const response = await fetch(backendUrl + '/projects', {
+    const response = await fetch(`${backendUrl}/projects`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -40,7 +40,7 @@ export async function createProject(data: NewProjectData, token: string) {
 }
 
 export async function getUsers(token: string) {
-    const response = await fetch(backendUrl + '/users', {
+    const response = await fetch(`${backendUrl}/users`, {
         method: 'GET',
         headers: {
             'Content-Type': 'application/json',
@@ -51,7 +51,7 @@ export async function getUsers(token: string) {
 }
 
 export async function getProjects(token: string) {
-    const response = await fetch(backendUrl + '/projects', {
+    const response = await fetch(`${backendUrl}/projects`, {
         method: 'GET',
         headers: {
             'Content-Type': 'application/json',
@@ -96,7 +96,7 @@ export async function updateProjectById(data: NewProjectData, projectId: number,
 }
 
 export async function getUserData(token: string) {
-    const response = await fetch(backendUrl + '/users/me', {
+    const response = await fetch(`${backendUrl}/users/me`, {
         method: 'GET',
         headers: {
             'Content-Type': 'application/json',
@@ -108,7 +108,7 @@ export async function getUserData(token: string) {
 
 
 export async function updateUserData(data: UserData, token: string) {
-    const response = await fetch(backendUrl + '/users/me', {
+    const response = await fetch(`${backendUrl}/users/me`, {
         method: 'PUT',
         headers: {
             'Content-Type': 'application/json',
@@ -120,7 +120,7 @@ export async function updateUserData(data: UserData, token: string) {
 }
 
 export async function updateUserPasswordData(data: PassswordData, token: string) {
-    const response = await fetch(backendUrl + '/users/me/password', {
+    const response = await fetch(`${backendUrl}/users/me/password`, {
         method: 'PUT',
         headers: {
             'Content-Type': 'application/json',
