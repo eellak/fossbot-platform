@@ -19,10 +19,11 @@ import { useTranslation } from 'react-i18next';
 
 interface NewProjectFormProps {
   isDescriptionDisabled: boolean,
-  editorInitialValue: string
+  editorInitialValue: string,
+  code: string,
 }
 
-const NewProjectForm = ({ isDescriptionDisabled, editorInitialValue }: NewProjectFormProps) => {
+const NewProjectForm = ({ isDescriptionDisabled, editorInitialValue, code }: NewProjectFormProps) => {
   const { t } = useTranslation();
 
   const [selectedOption, setSelectedOption] = useState(editorInitialValue);
@@ -52,9 +53,10 @@ const NewProjectForm = ({ isDescriptionDisabled, editorInitialValue }: NewProjec
           name: projectName,
           description: description,
           project_type: selectedOption,
-          code: '',
+          code: code,
         });
 
+        console.log("projectID: ", projectID)
         const monacoPageUrl = `/monaco-page/${projectID}`;
         const blocklyPageUrl = `/blockly-page/${projectID}`;
 
@@ -66,6 +68,7 @@ const NewProjectForm = ({ isDescriptionDisabled, editorInitialValue }: NewProjec
           }
         } else {
           if (location.pathname === `/blockly-page` || location.pathname === blocklyPageUrl) {
+            console.log('save after creation')
             window.location.href = blocklyPageUrl;
           } else {
             navigate(blocklyPageUrl);

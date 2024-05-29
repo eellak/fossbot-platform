@@ -180,12 +180,14 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
     const updateProjectByIdAction = async (projectId: number, data: NewProjectData) => {
         try {
             const response = await updateProjectById(data, projectId, token);
-            const res = await response.json();
 
-            if (response.status === 200) {
-                return;
+
+            if (response.status == 200) {
+                const project: Project = await response.json();
+                return project;
+
             } else {
-                throw new Error(res.message || 'Update project failed');
+                throw new Error('Update project failed');
             }
         } catch (err) {
             console.error(err);

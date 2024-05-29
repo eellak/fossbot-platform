@@ -138,6 +138,7 @@ const MonacoPage: React.FC = () => {
         handleDrawerClose={handleDrawerClose}
         isDescriptionDisabled={true}
         editorInitialValue='python'
+        code={editorValue}
       />
       <Box id="monaco-container" flexGrow={1}>
         <Grid container spacing={3} justifyContent="center" alignItems="center">

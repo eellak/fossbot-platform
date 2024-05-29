@@ -4,6 +4,14 @@ export interface AuthContextType {
     token: string;
     loginAction: (data: LoginData) => Promise<void>;
     registerAction: (data: RegisterData) => Promise<void>;
+
+    createProjectAction: (data: NewProjectData) => Promise<number | undefined>;
+    getProjectsAction: () => Promise<Project[] | undefined>;
+    deleteProjectByIdAction: (projectId: number) => Promise<boolean>;
+    getProjectByIdAction: (projectId: number) => Promise<Project | undefined>;
+    updateProjectByIdAction: (projectId: number, data: NewProjectData) => Promise<Project | undefined>;
+    getUserDataAction: () => Promise<User | undefined>;
+
     logOutAction: () => void;
     getUserDataAction: () => Promise<User | undefined>;
     updateUser: (data: UserData) => Promise<User | undefined>;

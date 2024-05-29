@@ -10,10 +10,11 @@ interface NewProjectDialogProps {
   showDrawer: boolean,
   handleDrawerClose: () => void,
   isDescriptionDisabled: boolean,
-  editorInitialValue: string
+  editorInitialValue: string,
+  code: string
 }
 
-const NewProjectDialog = ({ showDrawer, handleDrawerClose, isDescriptionDisabled, editorInitialValue }: NewProjectDialogProps) => {
+const NewProjectDialog = ({ showDrawer, handleDrawerClose, isDescriptionDisabled, editorInitialValue, code }: NewProjectDialogProps) => {
   const { t } = useTranslation();
 
   return (
@@ -29,7 +30,8 @@ const NewProjectDialog = ({ showDrawer, handleDrawerClose, isDescriptionDisabled
       >
         <NewProjectForm
           isDescriptionDisabled={isDescriptionDisabled}
-          editorInitialValue={editorInitialValue} />
+          editorInitialValue={editorInitialValue}
+          code={code} />
       </Dialog>
     </div>
   );
