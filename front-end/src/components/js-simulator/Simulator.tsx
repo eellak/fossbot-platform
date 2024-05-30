@@ -50,9 +50,7 @@ const WebGLApp = forwardRef(({ appsessionId, onMountChange }: WebGLAppProps, ref
 
     resetScene(currentURL);
 
-    if (currentMountRef) {
-      currentMountRef.appendChild(renderer.domElement);
-    }
+    
 
     const handleResize = () => {
       if (currentMountRef) {
@@ -63,7 +61,12 @@ const WebGLApp = forwardRef(({ appsessionId, onMountChange }: WebGLAppProps, ref
       }
     };
 
-    handleResize();
+    if (currentMountRef) {
+      handleResize();
+      currentMountRef.appendChild(renderer.domElement);
+    }
+
+    
     window.addEventListener('resize', handleResize);
 
     startAnimation();
@@ -78,11 +81,11 @@ const WebGLApp = forwardRef(({ appsessionId, onMountChange }: WebGLAppProps, ref
   }, [currentURL]);
 
   const handleForward = async () => {
-    await moveStep(-0.315);
+    await moveStep(-0.4);
   };
 
   const handleBackward = async () => {
-    await moveStep(0.315);
+    await moveStep(0.4);
   };
 
   const handleRotateLeft = async () => {
@@ -117,7 +120,7 @@ const WebGLApp = forwardRef(({ appsessionId, onMountChange }: WebGLAppProps, ref
   };
 
   const handleCardSelect = (url: string) => {
-    resetScene(url);
+    
     setCurrentURL(url);
     setOpenDialog(false); // Close the dialog after selecting a card
   };
@@ -144,7 +147,7 @@ const WebGLApp = forwardRef(({ appsessionId, onMountChange }: WebGLAppProps, ref
 
 
   return (
-    <Box display="flex" flexDirection="column" alignItems="center" justifyContent="center" height="100%">
+    <Box display="flex" flexDirection="column" alignItems="center" justifyContent="center" height="100%" width="100%">
       <div ref={mountRef} style={{ width: '100%', height: '100%' }} />
       <Box mt={2} width="100%">
         <Grid container spacing={2} justifyContent="center">

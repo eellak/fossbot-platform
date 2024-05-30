@@ -69,6 +69,10 @@
     "externalLinks": "External Links",
     "tutorials": "Tutorials"
   },
+  "interactive" : {
+    "title": "Interactive Mode",
+    "instructions" :"This mode allows you to interact with the robot using hand gestures. The closed fist (✊) gesture acts as the press action ontvirtual buttons."
+  },
   "projects-card": {
     "card-title": "FOSSBot Projects",
     "subtitle": "What kind of project will you create today?",

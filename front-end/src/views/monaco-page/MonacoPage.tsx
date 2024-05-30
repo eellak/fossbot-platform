@@ -16,9 +16,9 @@ import VideoPlayer from 'src/components/videoplayer/VideoPlayer';
 import NewProjectDialog from 'src/components/dashboard/NewProjectDialog';
 
 const textart = ` 
-#___   __   __   __   __   __  ___     __      ___       __       
+# __   __   __   __   __   __  ___     __      ___       __       
 #|__  /  \\ /__\` /__\` |__) /  \\  |     |__) \\ /  |  |__| /  \\ |\\ | 
-#|    \\__/ .__/ .__/ |__) \\__/  |     |   |  |  | \\__/ | \\| 
+#|    \\__/ .__/ .__/ |__) \\__/  |     |     |   |  |  | \\__/ | \\| 
 
 print("hello world")`;
 

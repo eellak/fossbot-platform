@@ -53,7 +53,7 @@ const Header = () => {
         {/* ------------------------------------------- */}
         {/* Search Dropdown */}
         {/* ------------------------------------------- */}
-        <Search />
+        {/* <Search /> */}
         {/* {lgUp ? (
           <>
             <Navigation />
@@ -74,7 +74,7 @@ const Header = () => {
           {/* ------------------------------------------- */}
           {/* Toggle Right Sidebar for mobile */}
           {/* ------------------------------------------- */}
-          {lgDown ? <MobileRightSidebar /> : null}
+          {/* {lgDown ? <MobileRightSidebar /> : null} */}
           <UserMenu />
         </Stack>
       </ToolbarStyled>

@@ -115,7 +115,7 @@ const InteractivePage = () => {
           <Grid item xs={8} lg={8}>
             <Box mb={3}>
               <Typography variant="h1" mt={6} color={'primary'}>
-              👋 Interactive Mode
+              👋 {t('interactive.title')}
               </Typography>
             </Box>
           </Grid>
@@ -158,8 +158,7 @@ const InteractivePage = () => {
                 rgb_set_color={rgb_set_color}
               />
                <Typography variant="h4"  m={1} color={'grey'}>
-            This mode allows you to interact with the robot using hand gestures. 
-            The closed fist (✊) gesture acts as the press action ontvirtual buttons.
+               {t('interactive.instructions')}
               </Typography>
             </Grid>
           </Grid>

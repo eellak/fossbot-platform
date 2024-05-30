@@ -196,10 +196,10 @@ const VideoBox: React.FC<VideoBoxProps> = ({
             try {
               switch (button.name) {
                 case 'up':
-                  await moveStep(-0.315);
+                  await moveStep(-0.4);
                   break;
                 case 'down':
-                  await moveStep(0.315);
+                  await moveStep(0.4);
                   break;
                 case 'left':
                   await rotateStep(Math.PI / 2);

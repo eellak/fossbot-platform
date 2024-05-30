@@ -78,7 +78,7 @@ const setUpPyodide = async () => {
     if (direction === 'backward') {
       dir_value = 1;
     }
-    postMessage(JSON.stringify({ command: 'move', distance: dir_value * 0.315 }));
+    postMessage(JSON.stringify({ command: 'move', distance: dir_value * 0.4 }));
     await waitForAction();
   });
 
