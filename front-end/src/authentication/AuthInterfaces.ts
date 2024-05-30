@@ -5,12 +5,7 @@ export interface AuthContextType {
     loginAction: (data: LoginData) => Promise<void>;
     registerAction: (data: RegisterData) => Promise<void>;
 
-    createProjectAction: (data: NewProjectData) => Promise<number | undefined>;
-    getProjectsAction: () => Promise<Project[] | undefined>;
-    deleteProjectByIdAction: (projectId: number) => Promise<boolean>;
-    getProjectByIdAction: (projectId: number) => Promise<Project | undefined>;
-    updateProjectByIdAction: (projectId: number, data: NewProjectData) => Promise<Project | undefined>;
-    getUserDataAction: () => Promise<User | undefined>;
+
 
     logOutAction: () => void;
     getUserDataAction: () => Promise<User | undefined>;
@@ -22,10 +17,11 @@ export interface AuthContextType {
     updateUserBetaTesterStatus: (userId: number, beta_tester: BetaTesterData) => Promise<boolean>;
 
     createProjectAction: (data: NewProjectData) => Promise<number | undefined>;
+    getProjectsAction: () => Promise<Project[] | undefined>;
     deleteProjectByIdAction: (projectId: number) => Promise<boolean>;
     getProjectByIdAction: (projectId: number) => Promise<Project | undefined>;
-    updateProjectByIdAction: (projectId: number, data: NewProjectData) => Promise<void>;
-    getProjectsAction: () => Promise<Project[] | undefined>;
+    updateProjectByIdAction: (projectId: number, data: NewProjectData) => Promise<Project | undefined>;
+    
 }
 
 // Registration data
