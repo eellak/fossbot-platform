@@ -28,7 +28,7 @@ export async function register(data: RegisterData) {
 }
 
 export async function createProject(data: NewProjectData, token: string) {
-    const response = await fetch(`${backendUrl}/projects`, {
+    const response = await fetch(`${backendUrl}/projects/`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -40,7 +40,7 @@ export async function createProject(data: NewProjectData, token: string) {
 }
 
 export async function getUsers(token: string) {
-    const response = await fetch(`${backendUrl}/users`, {
+    const response = await fetch(`${backendUrl}/users/`, {
         method: 'GET',
         headers: {
             'Content-Type': 'application/json',
@@ -51,7 +51,7 @@ export async function getUsers(token: string) {
 }
 
 export async function getProjects(token: string) {
-    const response = await fetch(`${backendUrl}/projects`, {
+    const response = await fetch(`${backendUrl}/projects/`, {
         method: 'GET',
         headers: {
             'Content-Type': 'application/json',
