@@ -13,7 +13,8 @@ import PageContainer from '../../components/container/PageContainer';
 import BlocklyEditorComponent from '../../components/editors/BlocklyEditor';
 import Spinner from '../spinner/Spinner';
 import VideoPlayer from 'src/components/videoplayer/VideoPlayer';import NewProjectDialog from 'src/components/dashboard/NewProjectDialog';
-
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'; 
+import { faPuzzlePiece } from '@fortawesome/free-solid-svg-icons';
 
 const BlocklyPage = () => {
   const { t } = useTranslation();
@@ -87,6 +88,11 @@ const BlocklyPage = () => {
   useEffect(() => {
     if (location.pathname.endsWith('/blockly-tutorial-page')) {
       setShowVideoPlayer(true);
+      setProjectTitle('Blockly Editor FOSSBot Tutorial');
+      setProjectDescription('This is a tutorial on how to use the Blockly Editor with FOSSBot. \
+                              Also we will learn about the default control Blocks and how to use them.');
+
+
     }
   }, [location.pathname]);
 
@@ -152,13 +158,17 @@ const BlocklyPage = () => {
         <Grid container spacing={3} justifyContent="center" alignItems="center">
           <Grid item xs={8} lg={8}>  {/* This item spans 8 columns on large screens */}
             <Box mb={3}>
-              <Typography variant="h1" mt={6} color={'primary'}>
-                🎮 {projectTitle}{' '}
+              <Typography variant="h1" mt={0} color={'primary'}>
+          
+                <FontAwesomeIcon icon={faPuzzlePiece} size="1x" /> {projectTitle}{' '}
+              </Typography>
+              <Typography  mt={1} ml={0} color={'grey'}>
+                {projectDescription}
               </Typography>
             </Box>
           </Grid>
           <Grid item xs={4} lg={4}>  {/* This item spans 4 columns on large screens */}
-            <Box mt={2} sx={{ display: 'flex', justifyContent: 'flex-end' }}> {/* Aligns content to the left */}
+            <Box mt={0} sx={{ display: 'flex', justifyContent: 'flex-end' }}> {/* Aligns content to the left */}
               <DialogContent className="testdialog">
                 <Stack direction="row" spacing={3} alignItems="center" justifyContent="flex-end"> {/* Aligns buttons to the left */}
                   <Buttons

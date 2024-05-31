@@ -14,6 +14,8 @@ import { useTranslation } from 'react-i18next';
 import SearchBar from 'src/components/monaco-functions/MonacoSearchBar';
 import VideoPlayer from 'src/components/videoplayer/VideoPlayer';
 import NewProjectDialog from 'src/components/dashboard/NewProjectDialog';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'; 
+import {faPython} from '@fortawesome/free-brands-svg-icons';
 
 const textart = ` 
 # __   __   __   __   __   __  ___     __      ___       __       
@@ -79,6 +81,7 @@ const MonacoPage: React.FC = () => {
           if (fetchedProject) {
             setEditorValue(fetchedProject.code);
             setProjectTitle(fetchedProject.name);
+            setProjectDescription(fetchedProject.description);
           }
         } else {
           setEditorValue(textart);
@@ -96,6 +99,9 @@ const MonacoPage: React.FC = () => {
 
   useEffect(() => {
     if (location.pathname.endsWith('/monaco-tutorial-page')) {
+      setProjectTitle('Monaco Editor FOSSBot Tutorial');
+      setProjectDescription('This is a tutorial on how to use the Monaco Editor with FOSSBot, \
+                              using Python. Also we will learn about the default control Python commands and how to use them.');
       setShowVideoPlayer(true);
     }
   }, [location.pathname]);
@@ -144,13 +150,16 @@ const MonacoPage: React.FC = () => {
         <Grid container spacing={3} justifyContent="center" alignItems="center">
           <Grid item xs={8} lg={8}>
             <Box mb={3}>
-              <Typography variant="h1" mt={6} color={'primary'}>
-                🐍 {projectTitle}{' '}
+              <Typography variant="h1" mt={0} color={'primary'}>
+              <FontAwesomeIcon icon={faPython} size="1x" /> {projectTitle}{' '}
+              </Typography>
+              <Typography  mt={1} ml={0} color={'grey'}>
+                {projectDescription}
               </Typography>
             </Box>
           </Grid>
           <Grid item xs={4} lg={4}>
-            <Box mt={2}>
+            <Box mt={0}>
               <DialogContent className="testdialog">
                 <Stack direction="row" spacing={3} alignItems="center" justifyContent="flex-end">
                   <SearchBar />

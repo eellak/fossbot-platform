@@ -9,6 +9,8 @@ import Buttons from 'src/components/editors/RightColButtons';
 import PageContainer from '../../components/container/PageContainer';
 import Spinner from '../spinner/Spinner';
 import VideoBox from 'src/components/handtrack/VideoBox';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'; 
+import { faHand } from '@fortawesome/free-solid-svg-icons';
 
 const InteractivePage = () => {
   const { t } = useTranslation();
@@ -114,8 +116,8 @@ const InteractivePage = () => {
         <Grid container spacing={3} justifyContent="left" alignItems="left">
           <Grid item xs={8} lg={8}>
             <Box mb={3}>
-              <Typography variant="h1" mt={6} color={'primary'}>
-              👋 {t('interactive.title')}
+              <Typography variant="h1" mt={0} color={'primary'}>
+              <FontAwesomeIcon icon={faHand} size="1x" /> {t('interactive.title')}
               </Typography>
             </Box>
           </Grid>

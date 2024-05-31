@@ -48,13 +48,6 @@ const complexCard: cardType[] = [
   },
   {
     avatar: user3,
-    coveravatar: img3,
-    title: 'Tutorial for Kindergarten mode with a simpler blockly environment',
-    category: 'Coding Tutorials',
-    link: '/kindergarten-tutorial-page',
-  },
-  {
-    avatar: user3,
     coveravatar: null,
     title: ' ',
     category: 'Robotics Tutorials',
