@@ -62,8 +62,8 @@ const BlocklyPage = () => {
   const handlePlayClick = () => {
     if (runScriptRef.current) {
       runScriptRef.current();
+      handleShowSuccessAlert(t('alertMessages.codeRunning'))
     }
-    handleShowSuccessAlert(t('alertMessages.codeRunning'))
   };
 
   const setRunScriptFunction = (runScript: () => Promise<void>) => {
