@@ -17,6 +17,7 @@
   "firstname": "Firstname",
   "lastname": "Lastname",
   "emailAddress": "Email Address",
+  "invalidEmail": "Invalid Email Address",
   "changeYourPassword": "Change your password",
   "resetYourPassword": "Reset your password",
   "userProfile": "User Profile",
@@ -267,6 +268,7 @@
     "move_step_description": "Moves the robot for one step."
   },
   "alertMessages": {
+    "userRegisterError": "Error registering user. Please try again.",
     "userDataUpdated": "User data updated successfully!",
     "userDataUpdateError": "Error occured when updating user data!",
     "passwordConfirmationError": "The fields: password and password confirmation must be identical.",
@@ -274,10 +276,14 @@
     "projectsFetchError": "Error fetching projects.",
     "projectDeleted": "Project was just deleted successfully.",
     "projectDeleteError": "Error deleting project. Please try again.",
+    "projectUpdated": "Project was just updated successfully.",
+    "projectUpdatedError": "Project was not updated. Please try again.",
     "usersFetchError": "Error fetching all usersfrom database.",
     "userDeleted": "User was just deleted successfully.",
     "userDeleteError": "Error deleting user. Please try again.",
-    "userRoleInvalid": "You have chosen an invalid user role. Please try again."
+    "userRoleInvalid": "You have chosen an invalid user role. Please try again.",
+    "codeRunning": "Your code just began being executed.",
+    "codeStopped": "Your code just stopped being executed."
   },
   "accountSettings": {
     "blocklyProjects": "Blockly projects",

@@ -12,9 +12,12 @@ import Buttons from 'src/components/editors/RightColButtons';
 import PageContainer from '../../components/container/PageContainer';
 import BlocklyEditorComponent from '../../components/editors/BlocklyEditor';
 import Spinner from '../spinner/Spinner';
-import VideoPlayer from 'src/components/videoplayer/VideoPlayer';import NewProjectDialog from 'src/components/dashboard/NewProjectDialog';
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'; 
+import VideoPlayer from 'src/components/videoplayer/VideoPlayer'; import NewProjectDialog from 'src/components/dashboard/NewProjectDialog';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faPuzzlePiece } from '@fortawesome/free-solid-svg-icons';
+import SuccessAlert from 'src/components/alerts/SuccessAlert';
+import ErrorAlert from 'src/components/alerts/ErrorAlert';
+import { Project } from 'src/authentication/AuthInterfaces';
 
 const BlocklyPage = () => {
   const { t } = useTranslation();
@@ -29,7 +32,7 @@ const BlocklyPage = () => {
   const [projectDescription, setProjectDescription] = useState(t('newProjectDescription'));
   const [loading, setLoading] = useState(true); // Loading state of Blockly project
   const [isSimulatorLoading, setIsSimulatorLoading] = useState(true); // Loading state of Simulator
-  const [showVideoPlayer, setShowVideoPlayer] = useState(false);  
+  const [showVideoPlayer, setShowVideoPlayer] = useState(false);
   const [showDrawer, setShowDrawer] = useState(false);
 
   const runScriptRef = useRef<() => Promise<void>>();
@@ -39,11 +42,28 @@ const BlocklyPage = () => {
   const stopScriptRef = useRef<() => void>(); // Added stop script ref
   const [openDialog, setOpenDialog] = useState(false); // New state for dialog
 
+  // ALERTS HANDLING
+  const [showSuccessAlert, setShowSuccessAlert] = useState(false);
+  const [showErrorAlert, setShowErrorAlert] = useState(false);
+
+  const [showSuccessAlertText, setShowSuccessAlertText] = useState("");
+  const [showErrorAlertText, setShowErrorAlertText] = useState("");
+
+  const handleShowSuccessAlert = (message) => {
+    setShowSuccessAlertText(message);
+    setShowSuccessAlert(true);
+  };
+
+  const handleShowErrorAlert = (message) => {
+    setShowErrorAlertText(message);
+    setShowErrorAlert(true);
+  };
 
   const handlePlayClick = () => {
     if (runScriptRef.current) {
       runScriptRef.current();
     }
+    handleShowSuccessAlert(t('alertMessages.codeRunning'))
   };
 
   const setRunScriptFunction = (runScript: () => Promise<void>) => {
@@ -52,7 +72,6 @@ const BlocklyPage = () => {
 
   const setStopScriptFunction = (stopScript: () => void) => { // Added set stop script function
     stopScriptRef.current = stopScript;
-
   };
 
   useEffect(() => {
@@ -104,12 +123,11 @@ const BlocklyPage = () => {
   };
 
 
-  const handleStopClick = () => { // Added handle stop click
-
+  const handleStopClick = () => {
     if (stopScriptRef.current) {
-
       stopScriptRef.current();
       stopMotion();
+      handleShowErrorAlert(t('alertMessages.codeStopped'))
     }
   };
 
@@ -124,14 +142,21 @@ const BlocklyPage = () => {
       setShowDrawer(true);
     } else {
       try {
-        await auth.updateProjectByIdAction(Number(projectId), {
+        const project: Project = await auth.updateProjectByIdAction(Number(projectId), {
           name: projectTitle,
           description: projectDescription,
           project_type: 'blockly',
           code: editorValue,
         });
+        if (project) {
+          handleShowSuccessAlert(t('alertMessages.projectUpdated'))
+        } else {
+          handleShowErrorAlert(t('alertMessages.projectUpdatedError'))
+        }
+
       } catch (error) {
         console.error('Error updating project:', error);
+        handleShowErrorAlert(t('alertMessages.projectUpdatedError'))
       }
     }
   };
@@ -159,10 +184,10 @@ const BlocklyPage = () => {
           <Grid item xs={8} lg={8}>  {/* This item spans 8 columns on large screens */}
             <Box mb={3}>
               <Typography variant="h1" mt={0} color={'primary'}>
-          
+
                 <FontAwesomeIcon icon={faPuzzlePiece} size="1x" /> {projectTitle}{' '}
               </Typography>
-              <Typography  mt={1} ml={0} color={'grey'}>
+              <Typography mt={1} ml={0} color={'grey'}>
                 {projectDescription}
               </Typography>
             </Box>
@@ -198,27 +223,27 @@ const BlocklyPage = () => {
 
             <Grid item xs={5} lg={5}>
 
-            {showVideoPlayer && (
-                <Box height={'350px'} style={{ 
-                      position: 'relative',
-                      backgroundColor: 'black',
-                      color: 'white',
-                      padding: '2px 20px 5px',
-                      overflow: 'auto',
-                      fontFamily: 'monospace',
-                      lineHeight: '0.2',
-                      marginBottom: '20px'
-                    }}>
+              {showVideoPlayer && (
+                <Box height={'350px'} style={{
+                  position: 'relative',
+                  backgroundColor: 'black',
+                  color: 'white',
+                  padding: '2px 20px 5px',
+                  overflow: 'auto',
+                  fontFamily: 'monospace',
+                  lineHeight: '0.2',
+                  marginBottom: '20px'
+                }}>
                   <VideoPlayer />
-  
+
                 </Box>
-                
-              )              
+
+              )
               }
 
-            <Box height="400px">    
-                <WebGLApp appsessionId={sessionId} 
-                  onMountChange={handleMountChange}/>
+              <Box height="400px">
+                <WebGLApp appsessionId={sessionId}
+                  onMountChange={handleMountChange} />
               </Box>
               <br />
 
@@ -264,13 +289,18 @@ const BlocklyPage = () => {
 
                 /> */}
               </Box>
-
-
             </Grid>
           </Grid>
         )}
       </Box>
-     
+
+      {showSuccessAlert && (
+        <SuccessAlert title={showSuccessAlertText} description={""} />
+      )}
+
+      {showErrorAlert && (
+        <ErrorAlert title={showErrorAlertText} description={""} />
+      )}
     </PageContainer>
   );
 };
