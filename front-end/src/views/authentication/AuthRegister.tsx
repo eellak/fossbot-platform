@@ -8,7 +8,8 @@ import { registerType } from 'src/types/auth/auth';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
-const AuthRegister = ({ title, subtitle, subtext }: registerType) => {
+
+const AuthRegister = ({ title, subtitle, subtext, onShowSuccessAlert, onShowErrorAlert }: registerType) => {
   const { t } = useTranslation();
 
   const [username, setUsername] = useState(null);
@@ -67,6 +68,7 @@ const AuthRegister = ({ title, subtitle, subtext }: registerType) => {
     } catch (error) {
       // Handle errors (e.g., show an error message to the user)
       console.error('Register error:', error);
+      onShowErrorAlert(t('userRegisterError'))
     }
   };
 
