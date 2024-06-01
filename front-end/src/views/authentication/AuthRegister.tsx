@@ -68,7 +68,7 @@ const AuthRegister = ({ title, subtitle, subtext, onShowSuccessAlert, onShowErro
     } catch (error) {
       // Handle errors (e.g., show an error message to the user)
       console.error('Register error:', error);
-      onShowErrorAlert(t('userRegisterError'))
+      onShowErrorAlert(t('alertMessages.userRegisterError'))
     }
   };
 
