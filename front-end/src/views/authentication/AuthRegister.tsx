@@ -16,6 +16,7 @@ const AuthRegister = ({ title, subtitle, subtext }: registerType) => {
   const [firstname, setName] = useState(null);
   const [lasname, setLastname] = useState(null);
   const [email, setEmail] = useState(null);
+  const [emailError, setEmailError] = useState('');
 
   const handleUsernameChange = (event) => {
     setUsername(event.target.value);
@@ -33,17 +34,29 @@ const AuthRegister = ({ title, subtitle, subtext }: registerType) => {
     setLastname(event.target.value);
   };
 
+  const validateEmail = (email) => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (emailRegex.test(email)) {
+      setEmailError('');
+    } else {
+      setEmailError(t('invalidEmail')); // Add an appropriate translation key for 'Invalid email address'
+    }
+  };
+
   const handleEmailChange = (event) => {
     setEmail(event.target.value);
+    validateEmail(event.target.value)
   };
   const auth = useAuth();
   const handleSubmit = async (event) => {
     event.preventDefault();
 
+    if (emailError) {
+      return; // Prevent form submission if there's an email error
+    }
+
     try {
       // Call the Register function
-      // await register(username, password, name, lasname, email);
-      // navigate('/login');
       auth.registerAction({
         username: username,
         password: password,
@@ -51,25 +64,11 @@ const AuthRegister = ({ title, subtitle, subtext }: registerType) => {
         lastname: lasname,
         email: email,
       });
-      return;
     } catch (error) {
       // Handle errors (e.g., show an error message to the user)
       console.error('Register error:', error);
     }
   };
-
-  // const register = async (username, password, name, lasname, email) => {
-  //   const response = await fetch('http://localhost:8000/register', {
-  //     method: 'POST',
-  //     headers: {
-  //       'Content-Type': 'application/json',
-  //     },
-  //     body: JSON.stringify({ 'username': username,'password': password, 'firstname': firstname, 'lastname': lasname, 'email': email }),
-  //   });
-
-  //   const data = await response.json();
-  //   console.log(data);
-  // }
 
   return (
     <>
@@ -122,13 +121,15 @@ const AuthRegister = ({ title, subtitle, subtext }: registerType) => {
           />
 
           <CustomFormLabel htmlFor="email">{t('emailAddress')}</CustomFormLabel>
-          <CustomTextField id="email" variant="outlined" fullWidth onChange={handleEmailChange} />
+          <CustomTextField id="email" variant="outlined" fullWidth onChange={handleEmailChange} error={!!emailError}
+            helperText={emailError} />
           <CustomFormLabel htmlFor="password">{t('password')}</CustomFormLabel>
           <CustomTextField
             id="password"
             variant="outlined"
             fullWidth
             onChange={handlePasswordChange}
+            type="password" 
           />
         </Stack>
         <Button
@@ -146,5 +147,6 @@ const AuthRegister = ({ title, subtitle, subtext }: registerType) => {
     </>
   );
 };
+
 
 export default AuthRegister;
