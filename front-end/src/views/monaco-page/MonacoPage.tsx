@@ -16,6 +16,9 @@ import VideoPlayer from 'src/components/videoplayer/VideoPlayer';
 import NewProjectDialog from 'src/components/dashboard/NewProjectDialog';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'; 
 import {faPython} from '@fortawesome/free-brands-svg-icons';
+import SuccessAlert from 'src/components/alerts/SuccessAlert';
+import ErrorAlert from 'src/components/alerts/ErrorAlert';
+import { Project } from 'src/authentication/AuthInterfaces';
 
 const textart = ` 
 # __   __   __   __   __   __  ___     __      ___       __       
@@ -43,18 +46,35 @@ const MonacoPage: React.FC = () => {
   const navigate = useNavigate();
   const { projectId } = useParams<{ projectId: string }>();  
 
+    // ALERTS HANDLING
+    const [showSuccessAlert, setShowSuccessAlert] = useState(false);
+    const [showErrorAlert, setShowErrorAlert] = useState(false);
+  
+    const [showSuccessAlertText, setShowSuccessAlertText] = useState("");
+    const [showErrorAlertText, setShowErrorAlertText] = useState("");
+  
+    const handleShowSuccessAlert = (message) => {
+      setShowSuccessAlertText(message);
+      setShowSuccessAlert(true);
+    };
+  
+    const handleShowErrorAlert = (message) => {
+      setShowErrorAlertText(message);
+      setShowErrorAlert(true);
+    };
+
   const handlePlayClick = () => {
     if (runScriptRef.current) {
       runScriptRef.current();
+      handleShowSuccessAlert(t('alertMessages.codeRunning'))
     }
   };
 
-  const handleStopClick = () => { // Added handle stop click
-
+  const handleStopClick = () => { 
     if (stopScriptRef.current) {
-
       stopScriptRef.current();
       stopMotion();
+      handleShowErrorAlert(t('alertMessages.codeStopped'))
     }
   };
 
@@ -116,14 +136,21 @@ const MonacoPage: React.FC = () => {
       setShowDrawer(true);
     } else {
       try {
-        await auth.updateProjectByIdAction(Number(projectId), {
+        const project: Project = await auth.updateProjectByIdAction(Number(projectId), {
           name: projectTitle,
           description: projectDescription,
           project_type: 'blockly',
           code: editorValue,
         });
+        if (project) {
+          handleShowSuccessAlert(t('alertMessages.projectUpdated'))
+        } else {
+          handleShowErrorAlert(t('alertMessages.projectUpdatedError'))
+        }
+
       } catch (error) {
         console.error('Error updating project:', error);
+        handleShowErrorAlert(t('alertMessages.projectUpdatedError'))
       }
     }
   };
@@ -244,6 +271,13 @@ const MonacoPage: React.FC = () => {
         )}
       </Box>
 
+      {showSuccessAlert && (
+        <SuccessAlert title={showSuccessAlertText} description={""} />
+      )}
+
+      {showErrorAlert && (
+        <ErrorAlert title={showErrorAlertText} description={""} />
+      )}
     
     </PageContainer>
   );
