@@ -109,6 +109,7 @@ const MonacoPage: React.FC = () => {
           }
         } else {
           setEditorValue(textart);
+          setProjectTitle(t('newProject'));
         }
       } catch (error) {
         console.error('Error fetching project:', error);

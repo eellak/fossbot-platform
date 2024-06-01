@@ -96,6 +96,9 @@ const BlocklyPage = () => {
             }
             setProjectTitle(fetchedProject.name);
           }
+        } else {
+          setEditorValue( '<xml xmlns="https://developers.google.com/blockly/xml"></xml>');
+          setProjectTitle(t('newProject'));
         }
       } catch (error) {
         console.error('Error fetching project:', error);
@@ -106,7 +109,7 @@ const BlocklyPage = () => {
     };
 
     fetchProject();
-  }, [auth, projectId, navigate]); // Add necessary dependencies here
+  }, [auth, projectId, editorValue, projectTitle, navigate]); 
 
   useEffect(() => {
     if (location.pathname.endsWith('/blockly-tutorial-page')) {
