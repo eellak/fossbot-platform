@@ -29,24 +29,43 @@ const NewProjectForm = ({ isDescriptionDisabled, editorInitialValue, code }: New
   const [selectedOption, setSelectedOption] = useState(editorInitialValue);
   const [projectName, setProjectName] = useState('');
   const [description, setDescription] = useState('');
-  const navigate = useNavigate();
+  const [projectNameError, setProjectNameError] = useState(false);
+  const [descriptionError, setDescriptionError] = useState(false);
+  const [editorError, setEditorError] = useState(false);
 
+  const navigate = useNavigate();
   const location = useLocation();
+  const auth = useAuth();
 
   const handleProjectNameChange = (event: any) => {
     setProjectName(event.target.value);
-  };
-  const handleDescriptionChange = (event: any) => {
-    setDescription(event.target.value);
-  };
-  const handleEditorChange = (event: any) => {
-    setSelectedOption(event.target.value);
+    if (event.target.value.trim() !== '') {
+      setProjectNameError(false);
+    }
   };
 
-  const auth = useAuth();
+  const handleDescriptionChange = (event: any) => {
+    setDescription(event.target.value);
+    if (event.target.value.trim() !== '') {
+      setDescriptionError(false);
+    }
+  };
+
+  const handleEditorChange = (event: any) => {
+    setSelectedOption(event.target.value);
+    if (event.target.value.trim() !== '') {
+      setEditorError(false);
+    }
+  };
 
   const handleSubmit = async (event) => {
     event.preventDefault();
+
+    // Check for empty fields and set errors
+    setProjectNameError(projectName.trim() === '');
+    setDescriptionError(description.trim() === '');
+    setEditorError(selectedOption.trim() === '');
+
     try {
       if (projectName !== '' && description !== '' && selectedOption !== '') {
         const projectID = await auth.createProjectAction({
@@ -56,7 +75,6 @@ const NewProjectForm = ({ isDescriptionDisabled, editorInitialValue, code }: New
           code: code,
         });
 
-        console.log("projectID: ", projectID)
         const monacoPageUrl = `/monaco-page/${projectID}`;
         const blocklyPageUrl = `/blockly-page/${projectID}`;
 
@@ -92,7 +110,7 @@ const NewProjectForm = ({ isDescriptionDisabled, editorInitialValue, code }: New
               {/* 2 */}
               <Grid item xs={12} sm={3} display="flex" alignItems="center">
                 <CustomFormLabel sx={{ mt: 0, mb: { xs: '-10px', sm: 0 } }}>
-                  {t('projectName')}
+                  {t('projectName')}*
                 </CustomFormLabel>
               </Grid>
               <Grid item xs={12} sm={9}>
@@ -105,12 +123,13 @@ const NewProjectForm = ({ isDescriptionDisabled, editorInitialValue, code }: New
                   placeholder={t('project-form.giveYourProjectAName')}
                   fullWidth
                   onChange={handleProjectNameChange}
+                  error={projectNameError}
                 />
               </Grid>
               {/* 3 */}
               <Grid item xs={12} sm={3} display="flex" alignItems="center">
                 <CustomFormLabel sx={{ mt: 0, mb: { xs: '-10px', sm: 0 } }}>
-                  {t('description')}
+                  {t('description')}*
                 </CustomFormLabel>
               </Grid>
               <Grid item xs={12} sm={9}>
@@ -122,13 +141,14 @@ const NewProjectForm = ({ isDescriptionDisabled, editorInitialValue, code }: New
                   }
                   placeholder={t('project-form.describeYourProject')}
                   fullWidth
+                  error={descriptionError}
                   onChange={handleDescriptionChange}
                 />
               </Grid>
               {/* 4 */}
               <Grid item xs={12} sm={3} display="flex" alignItems="center">
                 <CustomFormLabel sx={{ mt: 0, mb: { xs: '-10px', sm: 0 } }}>
-                  {t('editor')}
+                  {t('editor')}*
                 </CustomFormLabel>
               </Grid>
               <Grid item xs={12} sm={9}>
@@ -142,6 +162,7 @@ const NewProjectForm = ({ isDescriptionDisabled, editorInitialValue, code }: New
                   value={selectedOption}
                   onChange={handleEditorChange}
                   disabled={isDescriptionDisabled}
+                  error={editorError}
                 >
                   <MenuItem value={'python'}>{t('monaco')}</MenuItem>
                   <MenuItem value={'blockly'}>{t('blockly')}</MenuItem>
