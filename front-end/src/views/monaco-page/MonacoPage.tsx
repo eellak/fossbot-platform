@@ -64,6 +64,10 @@ const MonacoPage: React.FC = () => {
     };
 
   const handlePlayClick = () => {
+    if (editorValue == '') {
+      handleShowErrorAlert(t('alertMessages.emptyCodeMonaco'))
+      return;
+    }
     if (runScriptRef.current) {
       runScriptRef.current();
       handleShowSuccessAlert(t('alertMessages.codeRunning'))

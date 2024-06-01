@@ -23,7 +23,7 @@ const BlocklyPage = () => {
   const { t } = useTranslation();
   const location = useLocation();
   const [editorValue, setEditorValue] = useState(
-    '<xml xmlns="http://www.w3.org/1999/xhtml"></xml>',
+    '<xml xmlns="https://developers.google.com/blockly/xml"></xml>',
   );
   const [editorPythonValue, setEditorPythonValue] = useState('');
   const [sessionId, setSessionId] = useState('');
@@ -60,6 +60,10 @@ const BlocklyPage = () => {
   };
 
   const handlePlayClick = () => {
+    if (editorValue == '<xml xmlns="https://developers.google.com/blockly/xml"></xml>' || editorValue == '') {
+      handleShowErrorAlert(t('alertMessages.emptyCodeBlockly'))
+      return;
+    }
     if (runScriptRef.current) {
       runScriptRef.current();
       handleShowSuccessAlert(t('alertMessages.codeRunning'))

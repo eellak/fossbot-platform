@@ -283,7 +283,9 @@
     "userDeleteError": "Error deleting user. Please try again.",
     "userRoleInvalid": "You have chosen an invalid user role. Please try again.",
     "codeRunning": "Your code just began being executed.",
-    "codeStopped": "Your code just stopped being executed."
+    "codeStopped": "Your code just stopped being executed.",
+    "emptyCodeBlockly": "Your code is empty. Please add some blocks before clicking the play button.",
+    "emptyCodeMonaco": "Your code is empty. Please add at least one command before clicking the play button."
   },
   "accountSettings": {
     "blocklyProjects": "Blockly projects",
