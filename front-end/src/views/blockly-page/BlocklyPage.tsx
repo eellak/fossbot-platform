@@ -99,7 +99,7 @@ const BlocklyPage = () => {
             setProjectTitle(fetchedProject.name);
           }
         } else {
-          setEditorValue( '<xml xmlns="https://developers.google.com/blockly/xml"></xml>');
+          //setEditorValue( '<xml xmlns="https://developers.google.com/blockly/xml"></xml>');
           setProjectTitle(t('newProject'));
         }
       } catch (error) {
@@ -147,7 +147,7 @@ const BlocklyPage = () => {
   };
 
   const handleSaveClick = async () => {
-    if (projectId == '' || projectId == undefined) {
+    if ((projectId == '' || projectId == undefined) && projectDescription == t('newProjectDescription') && projectTitle == t('newProject') ) {
       setShowDrawer(true);
     } else {
       try {
