@@ -27,11 +27,13 @@ const HuaPage = Loadable(lazy(() => import('../views/sub-pages/HuaPage')));
 const Register = Loadable(lazy(() => import('../views/authentication/Register')));
 const Login = Loadable(lazy(() => import('../views/authentication/Login')));
 const Error = Loadable(lazy(() => import('../views/authentication/Error')));
+
 import AuthProvider from '../authentication/AuthProvider'; // Update with actual path
 import PrivateRoute from './PrivateRoute'; // Update with actual path
-import RoleBasedRoute from './RoleBasedRoute'; // Import the new component
 import AdminPanelPage from 'src/views/admin-panel-page/AdminPanelPage';
-import AdminRoute from './AdminRoute';
+
+const RoleBasedRoute = Loadable(lazy(() => import('./RoleBasedRoute')));
+const AdminRoute = Loadable(lazy(() => import('./AdminRoute')));
 
 const Router = [
   {
@@ -42,8 +44,8 @@ const Router = [
   {
     path: '/dashboard',
     element: (
-      <PrivateRoute>       
-          <FullLayout />       
+      <PrivateRoute>
+        <FullLayout />
       </PrivateRoute>
     ),
     children: [
@@ -80,8 +82,8 @@ const Router = [
     path: '/blockly-page',
     title: 'Blockly Editor',
     element: (
-      <PrivateRoute>       
-          <FullLayout />       
+      <PrivateRoute>
+        <FullLayout />
       </PrivateRoute>
     ),
     children: [
@@ -102,8 +104,8 @@ const Router = [
     path: '/monaco-page',
     title: 'Monaco Editor',
     element: (
-      <PrivateRoute>       
-          <FullLayout />       
+      <PrivateRoute>
+        <FullLayout />
       </PrivateRoute>
     ),
     children: [
@@ -116,15 +118,15 @@ const Router = [
     path: '/interactive-page',
     element: (
       <PrivateRoute>
-        {/* <RoleBasedRoute betaTesterOnly={true}> */}
+        <RoleBasedRoute betaTesterOnly={true}>
           <FullLayout />
-        {/* </RoleBasedRoute> */}
+        </RoleBasedRoute>
       </PrivateRoute>
     ),
     children: [
       {
         path: '',
-        element: <  InteractivePage />,
+        element: <InteractivePage />,
       },
     ],
   },
@@ -141,10 +143,9 @@ const Router = [
     path: '/tutorials-page',
     element: (
       <PrivateRoute>
-        <FullLayout />
-        {/* <RoleBasedRoute  betaTesterOnly={true}> */}
-          {/* <FullLayout />
-        </RoleBasedRoute> */}
+        <RoleBasedRoute betaTesterOnly={true}>
+          <FullLayout />
+        </RoleBasedRoute>
       </PrivateRoute>
     ),
     children: [
@@ -162,7 +163,7 @@ const Router = [
   {
     path: '/accountSettings',
     title: 'Account Settings',
-    element: <PrivateRoute />,
+    element: <AdminRoute />,
     children: [
       {
         path: '',
