@@ -141,6 +141,7 @@ const Router = [
     path: '/tutorials-page',
     element: (
       <PrivateRoute>
+        <FullLayout />
         {/* <RoleBasedRoute  betaTesterOnly={true}> */}
           {/* <FullLayout />
         </RoleBasedRoute> */}
