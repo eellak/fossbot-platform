@@ -342,7 +342,6 @@ const MonacoPage: React.FC = () => {
                   padding: '2px 20px 5px',
                   overflow: 'auto',
                   fontFamily: 'monospace',
-                  lineHeight: '0.2',
                   marginTop: '20px'
                 }}
               >

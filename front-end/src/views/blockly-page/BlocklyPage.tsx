@@ -305,7 +305,6 @@ const BlocklyPage = () => {
                   padding: '2px 20px 5px',
                   overflow: 'auto',
                   fontFamily: 'monospace', // setting the font to monospace for a console-like appearance
-                  lineHeight: '0.2', // adjusting line height for closer lines
                 }}
               >
                 <p>{t('blockly-page.fossbot-terminal')} 🐍</p>

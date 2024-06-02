@@ -86,10 +86,10 @@ const PythonExecutor = ({
       } else if (data.command === 'stopMotion') {
         stopMotion();
         worker.postMessage(JSON.stringify({ command: 'stop_motion_done' }));
-      }else if (data.command === 'getlightsensor') {
+      } else if (data.command === 'getlightsensor') {
         const lightsensor = await getLightSensor();
         worker.postMessage(JSON.stringify({ command: 'getlightsensor_done', lightsensor }));
-      }else if (data.command === 'drawLine') {
+      } else if (data.command === 'drawLine') {
         await drawLine(data.status);
         worker.postMessage(JSON.stringify({ command: 'drawLine_done' }));
       }
@@ -150,11 +150,11 @@ const PythonExecutor = ({
     <div>
       {error && (
         <>
-          <p className="errorText">{error}</p>
+          <p className="errorText" style={{ wordWrap: 'break-word' }}>{error}</p>
         </>
       )}
       {results.map((result, index) => (
-        <p key={index}>{result}</p>
+        <p key={index} style={{ wordWrap: 'break-word' }}>{result}</p>
       ))}
     </div>
   );
