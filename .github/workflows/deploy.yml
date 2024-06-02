@@ -20,6 +20,13 @@ jobs:
       - name: SSH and Deploy
         run: |
           ssh  -i ~/.ssh/id_rsa ${{ secrets.SSH_USERNAME }}@${{ secrets.SSH_HOST }} << EOF
+            export SECRET_KEY=${{ secrets.SECRET_KEY }}
+            export ADMIN_USERNAME=${{ secrets.ADMIN_USERNAME }}
+            export ADMIN_PASSWORD=${{ secrets.ADMIN_PASSWORD }}
+            export POSTGRES_USER=${{ secrets.POSTGRES_USER }}
+            export POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+            export POSTGRES_DB=${{ secrets.POSTGRES_DB }}
+            export DATABASE=${{ secrets.DATABASE }}
             cd /home/christoclis/fossbot-platform 
             sudo git pull origin master 
             sudo docker compose -f docker-compose-production.yml down 

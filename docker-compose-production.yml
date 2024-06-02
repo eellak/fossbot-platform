@@ -6,10 +6,10 @@ services:
     container_name: fsbt-back
     build: ./back-end
     environment:
-      - SECRET_KEY=your-secret-key
-      - ADMIN_USERNAME=admin
-      - ADMIN_PASSWORD=admin
-      - DATABASE=postgresql://postgres:postgres@db:5432/postgres
+      - SECRET_KEY=${SECRET_KEY}
+      - ADMIN_USERNAME=${ADMIN_USERNAME}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      - DATABASE=${DATABASE}
     ports:
       - "8000:8000"
     volumes:
@@ -32,9 +32,9 @@ services:
     image: postgres:latest
     container_name: fsbt-db
     environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=postgres
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
     volumes:
       - db-data:/var/lib/postgresql/data
 
