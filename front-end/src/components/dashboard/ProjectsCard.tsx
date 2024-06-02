@@ -102,7 +102,7 @@ const ProjectsCard = () => {
         subtitle={t('projects-card.subtitle')}
         action={
           <Fab color="success" aria-label="add" onClick={() => setShowDrawer(true)}>
-            <FontAwesomeIcon icon={faAdd} />
+            <FontAwesomeIcon icon={faAdd} size="2x" />
           </Fab>
         }
       >

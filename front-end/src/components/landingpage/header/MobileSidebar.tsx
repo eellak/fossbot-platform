@@ -3,9 +3,17 @@ import Logo from 'src/layouts/full/shared/logo/Logo';
 import DemosDD from './DemosDD';
 import AppLinks from 'src/layouts/full/vertical/header/AppLinks';
 import QuickLinks from 'src/layouts/full/vertical/header/QuickLinks';
-import { Button, Box, Collapse, Stack } from '@mui/material';
+import { Button, Box, Collapse, Stack,styled } from '@mui/material';
 import { IconChevronDown } from '@tabler/icons-react';
 import { useTranslation } from 'react-i18next';
+import {
+  IconSchool,
+  IconBrandGithub,
+  IconBrandOpenSource,
+  IconInfoCircle
+
+
+} from '@tabler/icons-react';
 
 const MobileSidebar = () => {
   const { t } = useTranslation();
@@ -13,14 +21,32 @@ const MobileSidebar = () => {
   const [toggle, setToggle] = useState(false);
   const [toggle2, setToggle2] = useState(false);
 
+  const StyledButton = styled(Button)(({ theme }) => ({
+    fontSize: '16px',
+    color: theme.palette.text.secondary,
+  }));
+
   return (
     <>
       <Box px={3}>
         <Logo />
       </Box>
       <Box p={3}>
-        <Stack direction="column" spacing={2}>
-          <Button
+        <Stack direction="column" spacing={2} alignItems="flex-start">
+        <StyledButton color="inherit" variant="text" href="https://github.com/eellak/fossbot">
+        <IconBrandGithub style={{ marginRight: '8px' }} />{t('github')}
+        </StyledButton> 
+        {/* /hua-page */}
+        <StyledButton color="inherit" variant="text" href="https://www.hua.gr/index.php/en/">
+        <IconSchool style={{ marginRight: '8px' }} />  {t('harokopioUniversity')}
+        </StyledButton>
+        <StyledButton color="inherit" variant="text" href="https://gfoss.eu/">
+        <IconBrandOpenSource style={{ marginRight: '8px' }} /> {t('gfoss')}
+        </StyledButton>
+        <StyledButton color="inherit" variant="text" href="/about-page">
+        <IconInfoCircle style={{ marginRight: '8px' }} /> {t('aboutUs')} 
+        </StyledButton>
+          {/* <Button
             color="inherit"
             onClick={() => setToggle(!toggle)}
             endIcon={<IconChevronDown width={20} />}
@@ -29,8 +55,8 @@ const MobileSidebar = () => {
             }}
           >
             {t('demos')}
-          </Button>
-          {toggle && (
+          </Button> */}
+          {/* {toggle && (
             <Collapse in={toggle}>
               <Box m="-21px">
                 <Box ml={1}>
@@ -66,7 +92,7 @@ const MobileSidebar = () => {
             }}
           >
             {t('documentation')}
-          </Button>
+          </Button> 
           <Button
             color="inherit"
             href="https://adminmart.com/support"
@@ -75,8 +101,8 @@ const MobileSidebar = () => {
             }}
           >
             {t('support')}
-          </Button>
-          <Button color="primary" variant="contained" href="#">
+          </Button> */}
+          <Button color="primary" variant="contained" href="/dashboard">
             {t('login')}
           </Button>
         </Stack>

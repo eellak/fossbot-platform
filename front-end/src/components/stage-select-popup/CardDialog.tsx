@@ -22,7 +22,7 @@ const CardDialog: React.FC<CardDialogProps> = ({ open, onClose, onSelect }) => {
             <Card style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
               <CardMedia
                 component="img"
-                height="140"
+                height="140" 
                 image="/js-simulator/stages/white_tiles.png"
                 alt="White tiles"
               />

@@ -1,0 +1,166 @@
+﻿WEBVTT
+
+00:00:00.000 --> 00:00:02.000
+Welcome to the FOSSBot platform!
+
+00:00:02.000 --> 00:00:03.000
+Today
+
+00:00:03.000 --> 00:00:07.000
+We're going to learn how to control our FOSSBot in the simulator.
+
+00:00:07.000 --> 00:00:09.000
+It's going to be fun and easy.
+
+00:00:09.000 --> 00:00:10.000
+So let's get started!
+
+00:00:10.000 --> 00:00:11.000
+First of all
+
+00:00:11.000 --> 00:00:15.000
+Let's talk about some basic commands to make our robot move.
+
+00:00:15.000 --> 00:00:16.000
+Remember
+
+00:00:16.000 --> 00:00:20.000
+You can pause the video anytime and try the commands yourself.
+
+00:00:20.000 --> 00:00:22.000
+To start we have the just move command
+
+00:00:23.000 --> 00:00:26.000
+This command lets our robot move in the direction
+
+00:00:26.000 --> 00:00:27.000
+we tell it to until we stop it
+
+00:00:28.000 --> 00:00:29.000
+We can choose to move it
+
+00:00:29.000 --> 00:00:30.000
+forward or backward
+
+00:00:31.000 --> 00:00:33.000
+Next, we have the move step command
+
+00:00:33.000 --> 00:00:37.000
+This one is cool because it moves our robot one step at a time
+
+00:00:37.000 --> 00:00:40.000
+Just tell it to go forward or backward
+
+00:00:40.000 --> 00:00:42.000
+And it will take a single step in that direction
+
+00:00:43.000 --> 00:00:45.000
+If we want our robot to move a bit more
+
+00:00:45.000 --> 00:00:47.000
+We can use the move forward distance command
+
+00:00:48.000 --> 00:00:52.000
+This makes our robot move forward by a specific distance we choose
+
+00:00:52.000 --> 00:00:54.000
+Just tell it how far to go
+
+00:00:54.000 --> 00:00:58.000
+From moving backward we have the move reverse distance command
+
+00:00:58.000 --> 00:01:00.000
+It works just like the forward command
+
+00:01:01.000 --> 00:01:03.000
+But our robot will go backward instead
+
+00:01:03.000 --> 00:01:04.000
+Just tell it the distance
+
+00:01:05.000 --> 00:01:06.000
+And off it goes
+
+00:01:06.000 --> 00:01:08.000
+To stop our robot we use the stop command
+
+00:01:09.000 --> 00:01:10.000
+Just say stop
+
+00:01:10.000 --> 00:01:12.000
+And the robot will stop moving simple right
+
+00:01:12.000 --> 00:01:13.000
+Now
+
+00:01:13.000 --> 00:01:15.000
+Let's learn how to turn our robot
+
+00:01:15.000 --> 00:01:19.000
+The rotate 90 command will make a robot turn 90°
+
+00:01:19.000 --> 00:01:21.000
+We can make it turn left
+
+00:01:21.000 --> 00:01:22.000
+Left or right
+
+00:01:22.000 --> 00:01:23.000
+If we want a smaller turn
+
+00:01:23.000 --> 00:01:26.000
+We use the rotate 45
+
+00:01:25.000 --> 00:01:26.000
+Five Command
+
+00:01:27.000 --> 00:01:31.000
+This will turn our robot 45° to the left or right
+
+00:01:31.000 --> 00:01:34.000
+For even more control we have the rotate degrees command
+
+00:01:35.000 --> 00:01:38.000
+This lets us choose any angle for our robot to turn
+
+00:01:38.000 --> 00:01:40.000
+Just tell it the number of degrees and
+
+00:01:40.000 --> 00:01:41.000
+And it will turn that much
+
+00:01:41.000 --> 00:01:47.000
+To make tiny adjustments we can use rotate clockwise and rotate counterclockwise commands
+
+00:01:48.000 --> 00:01:50.000
+Each of these will turn our robot just degree
+
+00:01:51.000 --> 00:01:55.000
+Clockwise means to the right and counterclockwise means to the left
+
+00:01:55.000 --> 00:01:58.000
+Lastly we have the just rotate command
+
+00:01:58.000 --> 00:02:03.000
+This one lets our robot keep turning in the direction we choose either left or right
+
+00:02:03.000 --> 00:02:06.000
+And remember when we use the move forward step
+
+00:02:06.000 --> 00:02:07.000
+Move backward step
+
+00:02:07.000 --> 00:02:08.000
+rotate 90, rotate45
+
+00:02:09.000 --> 00:02:14.000
+commands the robot will wait until it's done moving before it does anything else
+
+00:02:14.799 --> 00:02:15.000
+That's it for now
+
+00:02:16.000 --> 00:02:18.000
+Try out these commands and see how your fault moves
+
+00:02:19.000 --> 00:02:20.000
+Have fun exploring and learning

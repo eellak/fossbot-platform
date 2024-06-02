@@ -1,12 +1,12 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Box, Grid, Stack, DialogContent, Typography, Button } from '@mui/material';
+import { Box, Grid, Stack, DialogContent, Typography, Button, TextField } from '@mui/material';
 import Spinner from '../spinner/Spinner';
 import PageContainer from 'src/components/container/PageContainer';
 import MonacoEditorComponent from 'src/components/editors/MonacoEditor';
 import Buttons from 'src/components/editors/RightColButtons';
 import PythonExecutor from 'src/components/editors/PythonExecutor';
 import { useAuth } from 'src/authentication/AuthProvider';
-import { WebGLApp, moveStep, rotateStep, stopMotion,get_distance, rgb_set_color, get_acceleration, get_gyroscope,get_floor_sensor,just_move,just_rotate, get_light_sensor,drawLine } from 'src/components/js-simulator/Simulator';
+import { WebGLApp, moveStep, rotateStep, stopMotion, get_distance, rgb_set_color, get_acceleration, get_gyroscope, get_floor_sensor, just_move, just_rotate, get_light_sensor, drawLine } from 'src/components/js-simulator/Simulator';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useLocation } from 'react-router-dom';
 import { v4 as uuidv4 } from 'uuid';
@@ -14,8 +14,10 @@ import { useTranslation } from 'react-i18next';
 import SearchBar from 'src/components/monaco-functions/MonacoSearchBar';
 import VideoPlayer from 'src/components/videoplayer/VideoPlayer';
 import NewProjectDialog from 'src/components/dashboard/NewProjectDialog';
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'; 
-import {faPython} from '@fortawesome/free-brands-svg-icons';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faPython } from '@fortawesome/free-brands-svg-icons';
+import ReactPlayer from 'react-player';
+
 
 const textart = ` 
 # __   __   __   __   __   __  ___     __      ___       __       
@@ -30,18 +32,19 @@ const MonacoPage: React.FC = () => {
   const [editorValue, setEditorValue] = useState('');
   const [projectTitle, setProjectTitle] = useState(t('newProject'));
   const [projectDescription, setProjectDescription] = useState(t('newProjectDescription'));
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [isEditingDescription, setIsEditingDescription] = useState(false);
   const [sessionId, setSessionId] = useState('');
   const [loading, setLoading] = useState(true);
   const [isSimulatorLoading, setIsSimulatorLoading] = useState(true);
   const [showDrawer, setShowDrawer] = useState(false);
-
-
   const [showVideoPlayer, setShowVideoPlayer] = useState(false);
   const runScriptRef = useRef<() => Promise<void>>();
   const stopScriptRef = useRef<() => void>();
   const auth = useAuth();
   const navigate = useNavigate();
-  const { projectId } = useParams<{ projectId: string }>();  
+  const { projectId } = useParams<{ projectId: string }>();
+  const [isInPIP, setIsInPIP] = useState(false);
 
   const handlePlayClick = () => {
     if (runScriptRef.current) {
@@ -49,10 +52,8 @@ const MonacoPage: React.FC = () => {
     }
   };
 
-  const handleStopClick = () => { // Added handle stop click
-
+  const handleStopClick = () => {
     if (stopScriptRef.current) {
-
       stopScriptRef.current();
       stopMotion();
     }
@@ -64,7 +65,6 @@ const MonacoPage: React.FC = () => {
 
   const setStopScriptFunction = (stopScript: () => void) => {
     stopScriptRef.current = stopScript;
-
   };
 
   useEffect(() => {
@@ -126,6 +126,8 @@ const MonacoPage: React.FC = () => {
         console.error('Error updating project:', error);
       }
     }
+    setIsEditingTitle(false);
+    setIsEditingDescription(false);
   };
 
   const handleMountChange = (isMounted: boolean) => {
@@ -135,6 +137,35 @@ const MonacoPage: React.FC = () => {
 
   const handleDrawerClose = () => {
     setShowDrawer(false);
+  };
+
+  const handleTitleClick = () => {
+    if (projectId != '' && projectId != undefined) {
+      setIsEditingTitle(true);
+    }
+   
+  };
+
+  const handleDescriptionClick = () => {
+    if (projectId != '' && projectId != undefined) {
+     setIsEditingDescription(true);
+    }
+  };
+
+  const handleTitleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setProjectTitle(event.target.value);
+  };
+
+  const handleDescriptionChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setProjectDescription(event.target.value);
+  };
+
+  const hideVideoPlayer = () => {
+    setIsInPIP(true);
+  };
+
+  const unhideVideoPlayer = () => {
+    setIsInPIP(false);
   };
 
   return (
@@ -150,12 +181,33 @@ const MonacoPage: React.FC = () => {
         <Grid container spacing={3} justifyContent="center" alignItems="center">
           <Grid item xs={8} lg={8}>
             <Box mb={3}>
-              <Typography variant="h1" mt={0} color={'primary'}>
-              <FontAwesomeIcon icon={faPython} size="1x" /> {projectTitle}{' '}
-              </Typography>
-              <Typography  mt={1} ml={0} color={'grey'}>
-                {projectDescription}
-              </Typography>
+              {isEditingTitle ? (
+                <TextField
+                  value={projectTitle}
+                  onChange={handleTitleChange}
+                  onBlur={() => setIsEditingTitle(false)}
+                  autoFocus
+                  fullWidth
+                />
+              ) : (
+                <Typography variant="h1" mt={0} color={'primary'} onClick={handleTitleClick}>
+                  <FontAwesomeIcon icon={faPython} size="1x" /> {projectTitle}{' '}
+                </Typography>
+              )}
+              {isEditingDescription ? (
+                <TextField
+                  value={projectDescription}
+                  onChange={handleDescriptionChange}
+                  onBlur={() => setIsEditingDescription(false)}
+                  autoFocus
+                  fullWidth
+                  multiline
+                />
+              ) : (
+                <Typography mt={1} ml={0} color={'grey'} onClick={handleDescriptionClick}>
+                  {projectDescription}
+                </Typography>
+              )}
             </Box>
           </Grid>
           <Grid item xs={4} lg={4}>
@@ -181,31 +233,73 @@ const MonacoPage: React.FC = () => {
               <MonacoEditorComponent code={editorValue} handleGetValue={handleGetValue} />
             </Grid>
             <Grid item xs={5} lg={5}>
-              {showVideoPlayer && (
-                <Box
-                  height={'350px'}
-                  style={{
-                    position: 'relative',
-                    backgroundColor: 'black',
-                    color: 'white',
-                    padding: '2px 20px 5px',
-                    overflow: 'auto',
-                    fontFamily: 'monospace',
-                    lineHeight: '0.2',
-                    marginBottom: '20px'
-                  }}
-                >
+            {showVideoPlayer && (
+              <Box
+                height="350px"
+                
+                style={{
+                  position: 'relative',
+                  backgroundColor: 'black',
+                  color: 'white',
+                  padding: '2px 20px 5px',
+                  overflow: 'auto',
+                  fontFamily: 'monospace',
+                  lineHeight: '0.2',
+                  marginBottom: '20px',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  display: isInPIP ? 'none' : 'flex',
+                  
+                }}
+              >
+                
+                <ReactPlayer url={require('../../assets/videos/tutorial1.mp4')}
+                    controls={true}
+                    pip={true}
+                    width='100%'
+                    height='100%'
+                    config={{
+                      file: {
+                        attributes: {
+                          controlsList: 'nodownload'
+                        },
+                        tracks: [
+                          {
+                            kind: 'subtitles',
+                            src: require('../../assets/videos/eng_tutorial1.vtt'),
+                            srcLang: 'en',
+                            label: 'English',
+                            default: false,
+                          },
+                          {
+                            kind: 'subtitles',
+                            src: require('../../assets/videos/el_tutorial1.vtt'),
+                            srcLang: 'el',
+                            label: 'Greek',
+                            default: true,
+                          },
+                        ]
+                      }
+                    }}
+                    onEnablePIP={hideVideoPlayer}
+                    onDisablePIP={unhideVideoPlayer}
+
+
+                  /> 
+        
+                {/* <div style={{ height: '100%', width: '100%' }}>
                   <VideoPlayer />
-                </Box>
-              )}
-            
+                </div> */}
+              </Box>
+            )}
+
               <Box height="400px">
                 <WebGLApp
                   appsessionId={sessionId}
                   onMountChange={handleMountChange}
                 />
               </Box>
-              
+
               <Box
                 height="350px"
                 style={{
@@ -236,15 +330,12 @@ const MonacoPage: React.FC = () => {
                   stopMotion={stopMotion}
                   getLightSensor={get_light_sensor}
                   drawLine={drawLine}
-
                 />
               </Box>
             </Grid>
           </Grid>
         )}
       </Box>
-
-    
     </PageContainer>
   );
 };

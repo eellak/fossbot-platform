@@ -12,9 +12,11 @@ import Buttons from 'src/components/editors/RightColButtons';
 import PageContainer from '../../components/container/PageContainer';
 import BlocklyEditorComponent from '../../components/editors/BlocklyEditor';
 import Spinner from '../spinner/Spinner';
-import VideoPlayer from 'src/components/videoplayer/VideoPlayer';import NewProjectDialog from 'src/components/dashboard/NewProjectDialog';
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'; 
+import VideoPlayer from 'src/components/videoplayer/VideoPlayer';
+import NewProjectDialog from 'src/components/dashboard/NewProjectDialog';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faPuzzlePiece } from '@fortawesome/free-solid-svg-icons';
+import ReactPlayer from 'react-player';
 
 const BlocklyPage = () => {
   const { t } = useTranslation();
@@ -29,7 +31,7 @@ const BlocklyPage = () => {
   const [projectDescription, setProjectDescription] = useState(t('newProjectDescription'));
   const [loading, setLoading] = useState(true); // Loading state of Blockly project
   const [isSimulatorLoading, setIsSimulatorLoading] = useState(true); // Loading state of Simulator
-  const [showVideoPlayer, setShowVideoPlayer] = useState(false);  
+  const [showVideoPlayer, setShowVideoPlayer] = useState(false);
   const [showDrawer, setShowDrawer] = useState(false);
 
   const runScriptRef = useRef<() => Promise<void>>();
@@ -38,7 +40,7 @@ const BlocklyPage = () => {
   const { projectId } = useParams(); // Get project ID from URL
   const stopScriptRef = useRef<() => void>(); // Added stop script ref
   const [openDialog, setOpenDialog] = useState(false); // New state for dialog
-
+  const [isInPIP, setIsInPIP] = useState(false);
 
   const handlePlayClick = () => {
     if (runScriptRef.current) {
@@ -145,6 +147,14 @@ const BlocklyPage = () => {
     setShowDrawer(false);
   };
 
+  const hideVideoPlayer = () => {
+    setIsInPIP(true);
+  };
+
+  const unhideVideoPlayer = () => {
+    setIsInPIP(false);
+  };
+
   return (
     <PageContainer title={t('blockly-page.title')} description={t('blockly-page.description')}>
       <NewProjectDialog
@@ -159,10 +169,10 @@ const BlocklyPage = () => {
           <Grid item xs={8} lg={8}>  {/* This item spans 8 columns on large screens */}
             <Box mb={3}>
               <Typography variant="h1" mt={0} color={'primary'}>
-          
+
                 <FontAwesomeIcon icon={faPuzzlePiece} size="1x" /> {projectTitle}{' '}
               </Typography>
-              <Typography  mt={1} ml={0} color={'grey'}>
+              <Typography mt={1} ml={0} color={'grey'}>
                 {projectDescription}
               </Typography>
             </Box>
@@ -198,34 +208,65 @@ const BlocklyPage = () => {
 
             <Grid item xs={5} lg={5}>
 
-            {showVideoPlayer && (
-                <Box height={'350px'} style={{ 
-                      position: 'relative',
-                      backgroundColor: 'black',
-                      color: 'white',
-                      padding: '2px 20px 5px',
-                      overflow: 'auto',
-                      fontFamily: 'monospace',
-                      lineHeight: '0.2',
-                      marginBottom: '20px'
-                    }}>
-                  <VideoPlayer />
-  
-                </Box>
-                
-              )              
-              }
+              {showVideoPlayer && (
+                <Box
+                  height="350px"
 
-            <Box height="400px">    
-                <WebGLApp appsessionId={sessionId} 
-                  onMountChange={handleMountChange}/>
+                  style={{
+                    position: 'relative',
+                    backgroundColor: 'black',
+                    color: 'white',
+                    padding: '2px 20px 5px',
+                    overflow: 'auto',
+                    fontFamily: 'monospace',
+                    lineHeight: '0.2',
+                    marginBottom: '20px',
+                    display: isInPIP ? 'none' : 'flex',
+                    justifyContent: 'center',
+                    alignItems: 'center'
+                  }}
+                >
+                  <ReactPlayer url={require('../../assets/videos/tutorial1.mp4')}
+                    controls={true}
+                    pip={true}
+                    width='100%'
+                    height='100%'
+                    config={{
+                      file: {
+                        attributes: {
+                          controlsList: 'nodownload'
+                        },
+                        tracks: [
+                          {
+                            kind: 'subtitles',
+                            src: require('../../assets/videos/eng_tutorial1.vtt'),
+                            srcLang: 'en',
+                            label: 'English',
+                            default: true,
+                          },
+                        ]
+                      }
+                    }}
+                    onEnablePIP={hideVideoPlayer}
+                    onDisablePIP={unhideVideoPlayer}
+
+
+                  />                {/* <div style={{ height: '100%', width: '100%' }}>
+                  <VideoPlayer />
+                </div> */}
+                </Box>
+              )}
+
+              <Box height="400px">
+                <WebGLApp appsessionId={sessionId}
+                  onMountChange={handleMountChange} />
               </Box>
               <br />
 
               {/* Terminal */}
 
               <Box
-                height={'400px'}
+                height={'350px'}
                 style={{
                   backgroundColor: 'black',
                   color: 'white',
@@ -270,7 +311,7 @@ const BlocklyPage = () => {
           </Grid>
         )}
       </Box>
-     
+
     </PageContainer>
   );
 };

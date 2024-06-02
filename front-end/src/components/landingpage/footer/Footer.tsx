@@ -9,7 +9,7 @@ const Footer = () => {
 
   return (
     <Container maxWidth="lg">
-      <Grid container spacing={3} justifyContent="center" mt={4}>
+      <Grid container spacing={3} justifyContent="center" mt={0}>
         <Grid item xs={12} sm={5} lg={4} textAlign="center">
           <img src={logoIcon} alt="icon" width={'50px'} />
           <Typography fontSize="16" color="textSecondary" mt={1} mb={4}>

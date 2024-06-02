@@ -17,9 +17,11 @@ const AccountsSettingsPage = Loadable(lazy(() => import('../views/account-settin
 //const BlocklyPage = Loadable(lazy(() => import('../views/blockly-page/BlocklyPage')));
 //const BlocklyPage =  '../views/blockly-page/BlocklyPage';
 import BlocklyPage from '../views/blockly-page/BlocklyPage';
-import InteractivePage from '../views/interactive-page/InteractivePage';
+const InteractivePage = Loadable(lazy(() => import('../views/interactive-page/InteractivePage')));
 import MonacoPage from '../views/monaco-page/MonacoPage';
 import TutorialsPage from '../views/tutorials/TutorialsPage';
+
+
 // const MonacoPage = Loadable(lazy(() => import('../views/monaco-page/MonacoPage')));
 const HuaPage = Loadable(lazy(() => import('../views/sub-pages/HuaPage')));
 const Register = Loadable(lazy(() => import('../views/authentication/Register')));
@@ -114,9 +116,9 @@ const Router = [
     path: '/interactive-page',
     element: (
       <PrivateRoute>
-        <RoleBasedRoute betaTesterOnly={true}>
+        {/* <RoleBasedRoute betaTesterOnly={true}> */}
           <FullLayout />
-        </RoleBasedRoute>
+        {/* </RoleBasedRoute> */}
       </PrivateRoute>
     ),
     children: [
@@ -139,9 +141,9 @@ const Router = [
     path: '/tutorials-page',
     element: (
       <PrivateRoute>
-        <RoleBasedRoute  betaTesterOnly={true}>
-          <FullLayout />
-        </RoleBasedRoute>
+        {/* <RoleBasedRoute  betaTesterOnly={true}> */}
+          {/* <FullLayout />
+        </RoleBasedRoute> */}
       </PrivateRoute>
     ),
     children: [

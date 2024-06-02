@@ -39,13 +39,13 @@ const complexCard: cardType[] = [
     category: 'Coding Tutorials',
     link: '/monaco-tutorial-page',
   },
-  {
-    avatar: user2,
-    coveravatar: img2,
-    title: 'Tutorial for Blockly Editor with the use of programming blocks',
-    category: 'Coding Tutorials',
-    link: '/blockly-tutorial-page',
-  },
+  // {
+  //   avatar: user2,
+  //   coveravatar: img2,
+  //   title: 'Tutorial for Blockly Editor with the use of programming blocks',
+  //   category: 'Coding Tutorials',
+  //   link: '/blockly-tutorial-page',
+  // },
   {
     avatar: user3,
     coveravatar: null,

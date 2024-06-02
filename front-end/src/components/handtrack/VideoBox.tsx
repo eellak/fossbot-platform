@@ -7,7 +7,7 @@ import arrowDownIcon from '../../assets/icons-svg/arrow-down-1-svgrepo-com.svg';
 import arrowLeftIcon from '../../assets/icons-svg/arrow-left-svgrepo-com.svg';
 import arrowRightIcon from '../../assets/icons-svg/arrow-right-svgrepo-com.svg';
 import lightbulbIcon from '../../assets/icons-svg/light-bulb-svgrepo-com.svg';
-import pencilAltIcon from '../../assets/icons-svg/pencil-svgrepo-com.svg'
+import pencilAltIcon from '../../assets/icons-svg/pencil-svgrepo-com.svg';
 
 library.add(faArrowUp, faArrowDown, faArrowLeft, faArrowRight, faLightbulb, faPencilAlt);
 dom.watch();
@@ -49,6 +49,7 @@ const VideoBox: React.FC<VideoBoxProps> = ({
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  
   const [model, setModel] = useState<any>(null);
   const [cameraAvailable, setCameraAvailable] = useState<boolean>(true);
   const [lightOn, setLightOn] = useState<boolean>(false);
@@ -82,7 +83,7 @@ const VideoBox: React.FC<VideoBoxProps> = ({
             if (isMounted) {
               console.error("Error accessing webcam:", err);
               setCameraAvailable(false);
-              drawCameraNotFound();
+              drawMessage('Camera disconnected');
             }
           });
       }
@@ -131,6 +132,11 @@ const VideoBox: React.FC<VideoBoxProps> = ({
   }, []);
 
   const runDetection = () => {
+    if (!cameraAvailable) {
+      drawMessage('Camera disconnected');
+      return;
+    }
+
     if (model && videoRef.current && canvasRef.current) {
       const context = canvasRef.current.getContext('2d');
       if (context) {
@@ -147,7 +153,12 @@ const VideoBox: React.FC<VideoBoxProps> = ({
             checkButtonPress(predictions);
           }
 
-          requestAnimationFrame(runDetection);
+          // Check if the video is still playing
+          if (videoRef.current?.readyState === 4) {
+            requestAnimationFrame(runDetection);
+          } else {
+            drawMessage('Camera disconnected');
+          }
         });
       }
     }
@@ -210,7 +221,7 @@ const VideoBox: React.FC<VideoBoxProps> = ({
                 case 'light':
                   setLightOn(prev => {
                     const newStatus = !prev;
-                    rgb_set_color(newStatus ? "red" : "off");
+                    rgb_set_color(newStatus ? "white" : "off");
                     return newStatus;
                   });
                   break;
@@ -229,7 +240,7 @@ const VideoBox: React.FC<VideoBoxProps> = ({
                 setSelectedButton(null);
                 cooldownRef.current = false;
                 actionInProgressRef.current = false;
-              }, 2000); // Change to 2 seconds
+              }, 500); // Change to 2 seconds
             }
             return;
           }
@@ -238,7 +249,7 @@ const VideoBox: React.FC<VideoBoxProps> = ({
     }
   };
 
-  const drawCameraNotFound = () => {
+  const drawMessage = (message: string) => {
     if (canvasRef.current) {
       const context = canvasRef.current.getContext('2d');
       if (context) {
@@ -246,13 +257,39 @@ const VideoBox: React.FC<VideoBoxProps> = ({
         context.fillStyle = 'grey';
         context.font = '24px Arial';
         context.textAlign = 'center';
-        context.fillText('Camera not found', canvasRef.current.width / 2, canvasRef.current.height / 2);
+        context.fillText(message, canvasRef.current.width / 2, canvasRef.current.height / 2);
       }
     }
   };
 
+  const resizeCanvas = () => {
+    if (canvasRef.current && videoRef.current) {
+      const videoAspectRatio = videoRef.current.videoWidth / videoRef.current.videoHeight;
+      const containerWidth = canvasRef.current.parentElement?.offsetWidth || 640;
+      const containerHeight = canvasRef.current.parentElement?.offsetHeight || 480;
+      const containerAspectRatio = containerWidth / containerHeight;
+
+      if (containerAspectRatio > videoAspectRatio) {
+        canvasRef.current.style.width = `${containerHeight * videoAspectRatio}px`;
+        canvasRef.current.style.height = `${containerHeight}px`;
+      } else {
+        canvasRef.current.style.width = `${containerWidth}px`;
+        canvasRef.current.style.height = `${containerWidth / videoAspectRatio}px`;
+      }
+    }
+  };
+
+  useEffect(() => {
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+    drawMessage('Loading...');
+    return () => {
+      window.removeEventListener('resize', resizeCanvas);
+    };
+  }, []);
+
   return (
-    <div>
+    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
       <video ref={videoRef} width="640" height="480" autoPlay playsInline muted style={{ display: 'none' }} />
       <canvas ref={canvasRef} width="640" height="480" />
     </div>

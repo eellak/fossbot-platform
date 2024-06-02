@@ -81,6 +81,14 @@ function loadBaseObject(scene) {
 
             
             loadWheels(object);
+            loadTop(object);
+            loadLegoTop(object);
+            loadSpoilers(object);
+            loadHanger(object);
+            loadButton(object);
+            loadUltrasonic(object);
+            loadPncil(object);
+
             baseObject.position.set(robot_position[0], robot_position[1], robot_position[2]);
           
             // scene.add(rayLine);
@@ -88,6 +96,178 @@ function loadBaseObject(scene) {
         });
     });
 }
+
+function loadTop(object) {
+    const mtlLoader = new MTLLoader();
+    mtlLoader.load('/js-simulator/models/top.mtl', (materials) => {
+        materials.preload();
+        const objLoader = new OBJLoader();
+        objLoader.setMaterials(materials);
+        objLoader.load('/js-simulator/models/top.obj', (top) => {
+            top.traverse((child) => {
+                if (child.isMesh) {
+                    child.castShadow = true;
+                    child.receiveShadow = true;
+                    child.userData.isRobotPart = true;  // Custom property to identify robot parts
+                }
+            });
+
+            const topScale = 0.001;
+            top.scale.set(topScale, topScale, topScale);
+            top.position.set(0, 0, 0);
+            top.name = 'top';  // Custom property to identify the top object
+            object.add(top);
+        });
+    });
+
+}
+
+function loadLegoTop(object) {
+    const mtlLoader = new MTLLoader();
+    mtlLoader.load('/js-simulator/models/lego_top.mtl', (materials) => {
+        materials.preload();
+        const objLoader = new OBJLoader();
+        objLoader.setMaterials(materials);
+        objLoader.load('/js-simulator/models/lego_top.obj', (top) => {
+            top.traverse((child) => {
+                if (child.isMesh) {
+                    child.castShadow = true;
+                    child.receiveShadow = true;
+                    child.userData.isRobotPart = true;  // Custom property to identify robot parts
+                }
+            });
+
+            const topScale = 0.001;
+            top.scale.set(topScale, topScale, topScale);
+            top.position.set(0, -0.025, 0);
+            top.name = 'top';  // Custom property to identify the top object
+            object.add(top);
+        });
+    });
+}
+
+function loadSpoilers(object) {
+    const mtlLoader = new MTLLoader();
+    mtlLoader.load('/js-simulator/models/spoilers.mtl', (materials) => {
+        materials.preload();
+        const objLoader = new OBJLoader();
+        objLoader.setMaterials(materials);
+        objLoader.load('/js-simulator/models/spoilers.obj', (top) => {
+            top.traverse((child) => {
+                if (child.isMesh) {
+                    child.castShadow = true;
+                    child.receiveShadow = true;
+                    child.userData.isRobotPart = true;  // Custom property to identify robot parts
+                }
+            });
+
+            const topScale = 0.001;
+            top.scale.set(topScale, topScale, topScale);
+            top.position.set(0, 0, 0);
+            top.name = 'top';  // Custom property to identify the top object
+            object.add(top);
+        });
+    });
+}
+
+function loadHanger(object) {
+    const mtlLoader = new MTLLoader();
+    mtlLoader.load('/js-simulator/models/hanger.mtl', (materials) => {
+        materials.preload();
+        const objLoader = new OBJLoader();
+        objLoader.setMaterials(materials);
+        objLoader.load('/js-simulator/models/hanger.obj', (top) => {
+            top.traverse((child) => {
+                if (child.isMesh) {
+                    child.castShadow = true;
+                    child.receiveShadow = true;
+                    child.userData.isRobotPart = true;  // Custom property to identify robot parts
+                }
+            });
+
+            const topScale = 0.001;
+            top.scale.set(topScale, topScale, topScale);
+            top.position.set(0, 0, 0);
+            top.name = 'top';  // Custom property to identify the top object
+            object.add(top);
+        });
+    });
+}
+
+function loadButton(object) {
+    const mtlLoader = new MTLLoader();
+    mtlLoader.load('/js-simulator/models/power.mtl', (materials) => {
+        materials.preload();
+        const objLoader = new OBJLoader();
+        objLoader.setMaterials(materials);
+        objLoader.load('/js-simulator/models/power.obj', (top) => {
+            top.traverse((child) => {
+                if (child.isMesh) {
+                    child.castShadow = true;
+                    child.receiveShadow = true;
+                    child.userData.isRobotPart = true;  // Custom property to identify robot parts
+                }
+            });
+
+            const topScale = 0.001;
+            top.scale.set(topScale, topScale, topScale);
+            top.position.set(0, 0, 0);
+            top.name = 'top';  // Custom property to identify the top object
+            object.add(top);
+        });
+    });
+}
+
+function loadUltrasonic(object) {
+    const cylinderGeometry = new THREE.CylinderGeometry(0.007, 0.007, 0.005, 32);
+    const greyMaterial = new THREE.MeshPhongMaterial({ color: 0x808080 });
+
+    const cylinder1 = new THREE.Mesh(cylinderGeometry, greyMaterial);
+    const height = 0.06;
+    cylinder1.position.set(-0.013, height, -0.08); // Adjust the position of the first cylinder
+    cylinder1.rotation.set(Math.PI / 2, 0, 0); // Adjust the rotation of the first cylinder
+
+    const cylinder2 = new THREE.Mesh(cylinderGeometry, greyMaterial);
+    cylinder2.position.set(0.013, height, -0.08); // Adjust the position of the second cylinder
+    cylinder2.rotation.set(Math.PI / 2, 0, 0); // Adjust the rotation of the second cylinder
+
+    // Set shadows and custom property for both cylinders
+    [cylinder1, cylinder2].forEach(cylinder => {
+        cylinder.castShadow = true;
+        cylinder.receiveShadow = true;
+        cylinder.userData.isRobotPart = true; // Custom property to identify robot parts
+    });
+
+
+    object.add(cylinder1);
+    object.add(cylinder2);
+}
+
+function loadPncil(object) {
+    const mtlLoader = new MTLLoader();
+    mtlLoader.load('/js-simulator/models/pencil.mtl', (materials) => {
+        materials.preload();
+        const objLoader = new OBJLoader();
+        objLoader.setMaterials(materials);
+        objLoader.load('/js-simulator/models/pencil.obj', (top) => {
+            top.traverse((child) => {
+                if (child.isMesh) {
+                    child.castShadow = true;
+                    child.receiveShadow = true;
+                    child.userData.isRobotPart = true;  // Custom property to identify robot parts
+                }
+            });
+
+            const topScale = 0.001;
+            top.scale.set(topScale, topScale, topScale);
+            top.position.set(0, 0, 0);
+            top.name = 'top';  // Custom property to identify the top object
+            object.add(top);
+        });
+    });
+}
+
+
 
 function loadWheels(object) {
     const wheelMtlLoader = new MTLLoader();

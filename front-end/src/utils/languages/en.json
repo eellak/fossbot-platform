@@ -91,9 +91,20 @@
   "c2a2": {
     "description": "Let's start your journey with us, build your own application using blocks or native Python code."
   },
-  "card-fossbot": {
-    "fossbot": "FOSSBot is an open source and open design DIY robot that has been developed by Greek Free and Open Source Software (GFOSS) and Harokopio University of Athens (HUA) for educational purposes. The robot does not come alone, but comprises multiple software and system solutions that provide a holistic approach for STEM education at all educational levels."
+  "general_landing": {
+    "fossbot": "The FOSSBot is an open source and open design DIY robot that has been developed by Greek Free and Open Source Software (GFOSS) and Harokopio University of Athens (HUA) for educational purposes. The robot does not come alone, but comprises multiple software and system solutions that provide a holistic approach for STEM education at all educational levels.",
+    "platform": "The FOSSBot platform is a web-based platform that provides a set of tools for creating, editing, and running programs for the FOSSBot robot. The platform is designed to be user-friendly and to provide a seamless experience for users of all ages and backgrounds.",
+    "whatis": "What is FOSSBot?",
+    "whatis_platform": "What is FOSSBot Platform?",
+    "github": "The FOSSBot is open source and available on GitHub. You can download the 3D print designs and instructions to create your own FOSSBot. Additionally, you can contribute to the development of the platform by submitting bug reports, feature requests, or code contributions."
+
   },
+  "card-fossbot": {
+    "about_blockly" : "You can create programs for the FOSSBot robot using the Blockly editor. Blockly is a visual programming language that allows users to create programs by dragging and dropping blocks that represent code.",
+    "about_monaco" : "The Monaco editor is a text-based editor that allows users to write programs for the FOSSBot robot using the Python programming language. The editor provides a real coding experience and is ideal for users who are familiar with text-based programming languages.",
+    "about_simulator" : "We have developed a simulator that allows users to test their programs for the FOSSBot robot without needing access to the physical robot. The simulator provides a virtual environment where users can run and debug their programs before deploying them to the robot."
+  },
+
   "title-fossbot": {
     "introduceFossbot": "Introducing FOSSBot"
   },

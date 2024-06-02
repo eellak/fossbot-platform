@@ -38,12 +38,12 @@ const C2a2 = () => {
       >
         <Container maxWidth="lg">
           <Grid container justifyContent="space-between" spacing={3}>
-            <Grid item xs={12} sm={12} lg={5}>
-              <Typography variant="h2" color="background.paper" fontWeight={700} mt={4}>
-                {t('c2a2.description')}
+            <Grid item xs={12} sm={12} lg={8}>
+              <Typography variant="h2" color="background.paper" fontWeight={200} mt={0}>
+                {t('general_landing.fossbot')}
               </Typography>
 
-              <Stack
+              {/* <Stack
                 direction={{ xs: 'column', sm: 'row' }}
                 paddingX={{ xs: 2, sm: 4 }}
                 spacing={3}
@@ -55,21 +55,18 @@ const C2a2 = () => {
                 <StyledButton2 variant="outlined" color="inherit" href="/auth/register">
                   {t('register')}
                 </StyledButton2>
-              </Stack>
+              </Stack> */}
             </Grid>
-            <Grid item xs={12} lg={5}>
+            <Grid item xs={12} lg={4}>
               <Box
                 sx={{
-                  textAlign: {
-                    xs: 'center',
-                    sm: 'center',
-                    md: 'center',
-                    lg: 'right',
-                    xl: 'right',
-                  },
+                  display: 'flex',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  height: '100%',  // Make the Box take full height of the Grid item
                 }}
               >
-                <img src={fossbotImg} alt="img" width="100%" object-fit="cover" max-height="75%" />
+                <img src={fossbotImg} alt="img" style={{ width: '100%', maxHeight: '100%' }} />
               </Box>
             </Grid>
           </Grid>

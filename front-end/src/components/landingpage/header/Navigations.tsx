@@ -134,7 +134,7 @@ const Navigations = () => {
             </Box> */}
       <StyledButton color="inherit" variant="text" href="https://github.com/eellak/fossbot">
       <IconBrandGithub style={{ marginRight: '8px' }} />{t('github')}
-      </StyledButton>
+      </StyledButton> 
       {/* /hua-page */}
       <StyledButton color="inherit" variant="text" href="https://www.hua.gr/index.php/en/">
       <IconSchool style={{ marginRight: '8px' }} />  {t('harokopioUniversity')}
