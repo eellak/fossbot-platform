@@ -235,7 +235,7 @@ async def register_user(register_request: RegisterRequest, db: SessionLocal = De
     db.commit()
     db.refresh(new_user)
 
-    return {"username": new_user.username,"email":new_user.email, "id": new_user.id, "errorMessage": message}
+    return {"username": new_user.username,"email":new_user.email, "id": new_user.id}#, "errorMessage": message}
     
 @app.get("/users/", response_model=List[UserResponse])
 async def read_users(current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):
