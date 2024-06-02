@@ -224,11 +224,11 @@ const BlocklyPage = () => {
         </Grid>
 
 
-        {loading && isSimulatorLoading ? (
+        {loading && isSimulatorLoading ? ( 
           <Spinner />
         ) : (
-          <Grid container spacing={1} paddingTop={"0rem"} paddingBottom={"0rem"}>
-            <Grid item xs={7} lg={7}>
+          <Grid container spacing={1} paddingTop={"0rem"} paddingBottom={"0rem"} height={showVideoPlayer && !isInPIP ? 'calc(150vh - 300px)' : 'calc(100vh - 300px)'}>
+            <Grid item xs={7} lg={7} height={showVideoPlayer && !isInPIP ? 'calc(150vh - 300px)' : 'calc(100vh - 300px)'}>
               {/* column */}
               <BlocklyEditorComponent
                 code={editorValue}
@@ -242,7 +242,7 @@ const BlocklyPage = () => {
 
               {showVideoPlayer && (
                 <Box
-                  height="350px"
+                  height="30vh"
 
                   style={{
                     position: 'relative',
@@ -289,7 +289,7 @@ const BlocklyPage = () => {
                 </Box>
               )}
 
-              <Box height="400px">
+              <Box height="39vh">
                 <WebGLApp appsessionId={sessionId}
                   onMountChange={handleMountChange} />
               </Box>
@@ -298,7 +298,7 @@ const BlocklyPage = () => {
               {/* Terminal */}
 
               <Box
-                height={'350px'}
+                height={'27vh'}
                 style={{
                   backgroundColor: 'black',
                   color: 'white',

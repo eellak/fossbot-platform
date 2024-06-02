@@ -33,7 +33,7 @@ const AboutPlatform = () => {
   const { t } = useTranslation();
 
   return (
-    <Box>
+    <Container>
       <Box
         bgcolor="primary.main"
         sx={{
@@ -63,7 +63,7 @@ const AboutPlatform = () => {
           </Grid>
         </Container>
       </Box>
-    </Box>
+    </Container>
   );
 };
 

@@ -20,6 +20,7 @@ import { IconMenu2 } from '@tabler/icons-react';
 const LpHeader = () => {
   const AppBarStyled = styled(AppBar)(({ theme }) => ({
     justifyContent: 'center',
+
     [theme.breakpoints.up('lg')]: {
       minHeight: '80px',
     },

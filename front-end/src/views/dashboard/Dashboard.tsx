@@ -16,7 +16,7 @@ const Modern = () => {
         {/* <Grid item xs={8} lg={8}>
         <SlideShow />
         </Grid> */}
-          <Grid item xs={12} lg={12}>
+          <Grid item xs={12} lg={12} >
             <ProjectsCard />
           </Grid>
         </Grid>

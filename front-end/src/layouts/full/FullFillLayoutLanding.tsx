@@ -7,36 +7,36 @@ import Sidebar from './vertical/sidebar/Sidebar';
 import Navigation from '../full/horizontal/navbar/Navigation';
 import Header from './vertical/header/Header';
 import HorizontalHeader from './horizontal/header/Header';
-import Footer from 'src/components/landingpage/footer/Footer';
+
 const MainWrapper = styled('div')(() => ({
   display: 'flex',
   minHeight: '100vh',
   width: '100%',
+  paddingLeft: '0px',
+  paddingRight: '0px',
 }));
 
-const PageWrapper = styled('div')(({theme}) => ({
+const PageWrapper = styled('div')(() => ({
   display: 'flex',
   flexGrow: 1,
-  // paddingBottom: '60px',
   flexDirection: 'column',
   zIndex: 1,
-  width: '100%',
-  backgroundColor: 'transparent'
+  backgroundColor: 'transparent',
 }));
 
-const FullLayout: FC = () => {
+const FullFillLayout: FC = () => {
   const customizer = useSelector((state: AppState) => state.customizer);
 
   const theme = useTheme();
 
   return (
     <MainWrapper
-      className={customizer.activeMode === 'dark' ? 'darkbg mainwrapper' : 'lightbg mainwrapper'}
+      className={customizer.activeMode === 'ligh' ? 'darkbg mainwrapper' : 'lightbg mainwrapper'}
     >
       {/* ------------------------------------------- */}
       {/* Sidebar */}
       {/* ------------------------------------------- */}
-      {customizer.isHorizontal ? '' : <Sidebar />}
+      {/* {customizer.isHorizontal ? '' : <Sidebar />} */}
       {/* ------------------------------------------- */}
       {/* Main Wrapper */}
       {/* ------------------------------------------- */}
@@ -47,38 +47,34 @@ const FullLayout: FC = () => {
             [theme.breakpoints.up('lg')]: { ml: `${customizer.MiniSidebarWidth}px` },
           }),
         }}
-        theme={theme}
       >
         {/* ------------------------------------------- */}
         {/* Header */}
         {/* ------------------------------------------- */}
-        {customizer.isHorizontal ? <HorizontalHeader /> : <Header />}
+        {/* {customizer.isHorizontal ? <HorizontalHeader/> : <Header />} */}
         {/* PageContent */}
-        {customizer.isHorizontal ? <Navigation /> : ''}
+        {/* {customizer.isHorizontal ? <Navigation /> : ''} */}
         <Container
           sx={{
             maxWidth:'100%!important'
           }}
+          style={{paddingLeft: '0px', paddingRight: '0px'}}
         >
           {/* ------------------------------------------- */}
           {/* PageContent */}
           {/* ------------------------------------------- */}
-         
-          <Box sx={{ minHeight: 'calc(100vh - 178px)' }}>
+          <Box sx={{ minHeight: 'calc(100vh - 170px)' }}  >
             <Outlet />
           </Box>
           {/* ------------------------------------------- */}
           {/* End Page */}
           {/* ------------------------------------------- */}
-          
         </Container>
-        <Footer />
         {/* <Customizer /> */}
+        
       </PageWrapper>
-      
     </MainWrapper>
-    
   );
 };
 
-export default FullLayout;
+export default FullFillLayout;

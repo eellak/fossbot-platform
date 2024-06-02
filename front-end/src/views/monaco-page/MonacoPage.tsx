@@ -212,7 +212,7 @@ const MonacoPage: React.FC = () => {
         code={editorValue}
       />
       <Box id="monaco-container" flexGrow={1}>
-        <Grid container spacing={3} justifyContent="center" alignItems="center">
+        <Grid container spacing={3} justifyContent="center" alignItems="center" >
           <Grid item xs={8} lg={8}>
             <Box mb={3}>
               {isEditingTitle ? (
@@ -244,7 +244,7 @@ const MonacoPage: React.FC = () => {
               )}
             </Box>
           </Grid>
-          <Grid item xs={4} lg={4}>
+          <Grid item xs={4} lg={4} >
             <Box mt={0}>
               <DialogContent className="testdialog">
                 <Stack direction="row" spacing={3} alignItems="center" justifyContent="flex-end">
@@ -262,14 +262,14 @@ const MonacoPage: React.FC = () => {
         {loading && isSimulatorLoading ? (
           <Spinner />
         ) : (
-          <Grid container spacing={1} paddingTop="0rem" paddingBottom="0rem">
-            <Grid item xs={7} lg={7}>
+          <Grid container spacing={1} paddingTop="0rem" paddingBottom="0rem" height={showVideoPlayer && !isInPIP ? 'calc(150vh - 300px)' : 'calc(100vh - 300px)'} >
+            <Grid item xs={7} lg={7} height={showVideoPlayer && !isInPIP ? 'calc(150vh - 300px)' : 'calc(100vh - 300px)'} >
               <MonacoEditorComponent code={editorValue} handleGetValue={handleGetValue} />
             </Grid>
-            <Grid item xs={5} lg={5}>
+            <Grid item xs={5} lg={5} >
             {showVideoPlayer && (
               <Box
-                height="350px"
+                height="30vh"
                 
                 style={{
                   position: 'relative',
@@ -327,7 +327,7 @@ const MonacoPage: React.FC = () => {
               </Box>
             )}
 
-              <Box height="400px">
+              <Box height="39vh">
                 <WebGLApp
                   appsessionId={sessionId}
                   onMountChange={handleMountChange}
@@ -335,7 +335,7 @@ const MonacoPage: React.FC = () => {
               </Box>
 
               <Box
-                height="350px"
+                height="27vh"
                 style={{
                   backgroundColor: 'black',
                   color: 'white',

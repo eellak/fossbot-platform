@@ -22,7 +22,7 @@ SECRET_KEY = os.getenv('SECRET_KEY', 'your-secret-key')
 ALGORITHM = "HS256"
 
 # Database setup
-DATABASE_URL = "sqlite:///./test.db"
+DATABASE_URL = os.getenv('DATABASE', "sqlite:///./test.db")
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
@@ -90,9 +90,10 @@ class User(Base):
     lastname = Column(String, nullable=False)
     email = Column(String, unique=True, nullable=False)
     hashed_password = Column(String, nullable=False)
-    role = Column(Enum(UserRole), default=UserRole.USER)
-    beta_tester = Column(Boolean, default=False)
+    role = Column(Enum(UserRole), default=UserRole.USER, nullable=False)
+    beta_tester = Column(Boolean, default=False, nullable=False)
     image_url = Column(String)  # Added field for user's profile image URL
+    activated = Column(Boolean, default=False, nullable=False)  # New activated column
 
 class Projects(Base):
     __tablename__ = "projects"
@@ -171,7 +172,8 @@ def create_admin_user():
             lastname= os.getenv('ADMIN_LASTNAME', 'Admin'),
             email=admin_email,
             role=UserRole.ADMIN,
-            beta_tester=False
+            beta_tester=False,
+            activated=True  # Ensure admin is activated
         )
         db.add(new_admin)
         db.commit()

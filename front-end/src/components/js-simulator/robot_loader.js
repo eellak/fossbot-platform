@@ -88,6 +88,7 @@ function loadBaseObject(scene) {
             loadButton(object);
             loadUltrasonic(object);
             loadPncil(object);
+            loadCaster(object);
 
             baseObject.position.set(robot_position[0], robot_position[1], robot_position[2]);
           
@@ -250,6 +251,30 @@ function loadPncil(object) {
         const objLoader = new OBJLoader();
         objLoader.setMaterials(materials);
         objLoader.load('/js-simulator/models/pencil.obj', (top) => {
+            top.traverse((child) => {
+                if (child.isMesh) {
+                    child.castShadow = true;
+                    child.receiveShadow = true;
+                    child.userData.isRobotPart = true;  // Custom property to identify robot parts
+                }
+            });
+
+            const topScale = 0.001;
+            top.scale.set(topScale, topScale, topScale);
+            top.position.set(0, 0, 0);
+            top.name = 'top';  // Custom property to identify the top object
+            object.add(top);
+        });
+    });
+}
+
+function loadCaster(object) {
+    const mtlLoader = new MTLLoader();
+    mtlLoader.load('/js-simulator/models/caster.mtl', (materials) => {
+        materials.preload();
+        const objLoader = new OBJLoader();
+        objLoader.setMaterials(materials);
+        objLoader.load('/js-simulator/models/caster.obj', (top) => {
             top.traverse((child) => {
                 if (child.isMesh) {
                     child.castShadow = true;

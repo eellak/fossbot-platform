@@ -32,7 +32,7 @@ const AboutFossbot = () => {
   const { t } = useTranslation();
 
   return (
-    <Box>
+    <Container>
       <Box
         bgcolor="primary.main"
         sx={{
@@ -88,7 +88,7 @@ const AboutFossbot = () => {
       {/* <Container maxWidth="lg">
         <GuaranteeCard />
       </Container> */}
-    </Box>
+    </Container>
   );
 };
 
