@@ -16,7 +16,7 @@ const Landingpage = () => {
     <PageContainer title={t('landing-title.title')} description={t('landing-title.description')}>
       <LpHeader />
       <Banner />
-      {/* <FossbotCard /> */}
+      {/* <FossbotCard /> */} 
       <AboutFossbot />
       <FossbotCard />
       <AboutPlatform />      
