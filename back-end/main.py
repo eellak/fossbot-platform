@@ -213,7 +213,7 @@ async def update_user_role(user_id: int, user_role_update: UpdateUserRoleRequest
 
     return db_user
 
-@app.post("/register")
+@app.post("/register/")
 async def register_user(register_request: RegisterRequest, db: SessionLocal = Depends(get_db)):
     # Check if the user already exists
     print(register_request)

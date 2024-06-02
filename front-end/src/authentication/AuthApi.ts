@@ -16,7 +16,7 @@ export async function login(data: LoginData) {
 
 
 export async function register(data: RegisterData) {
-    const response = await fetch(`${backendUrl}/register`, {
+    const response = await fetch(`${backendUrl}/register/`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
