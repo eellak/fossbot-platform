@@ -6,6 +6,8 @@ services:
     container_name: fsbt-back
     build: ./back-end
     restart: always
+    env_file:
+      - .env
     environment:
       - SECRET_KEY=${SECRET_KEY}
       - ADMIN_USERNAME=${ADMIN_USERNAME}
@@ -34,10 +36,8 @@ services:
     image: postgres:latest
     container_name: fsbt-db
     restart: always
-    environment:
-      - POSTGRES_USER=${POSTGRES_USER}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - POSTGRES_DB=${POSTGRES_DB}
+    env_file:
+      - .env
     volumes:
       - db-data:/var/lib/postgresql/data
 

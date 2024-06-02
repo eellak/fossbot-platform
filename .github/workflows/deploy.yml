@@ -20,15 +20,19 @@ jobs:
       - name: SSH and Deploy
         run: |
           ssh  -i ~/.ssh/id_rsa ${{ secrets.SSH_USERNAME }}@${{ secrets.SSH_HOST }} << EOF
-            export SECRET_KEY=${{ secrets.SECRET_KEY }}
-            export ADMIN_USERNAME=${{ secrets.ADMIN_USERNAME }}
-            export ADMIN_PASSWORD=${{ secrets.ADMIN_PASSWORD }}
-            export POSTGRES_USER=${{ secrets.POSTGRES_USER }}
-            export POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
-            export POSTGRES_DB=${{ secrets.POSTGRES_DB }}
-            export DATABASE=${{ secrets.DATABASE }}
             cd /home/christoclis/fossbot-platform 
-            sudo git pull origin master 
+            sudo git fetch origin
+            sudo git reset --hard origin/master
+            if [ -f .env ]; then
+              sudo rm .env
+            fi
+            sudo echo "SECRET_KEY=${{ secrets.SECRET_KEY }}" > .env
+            sudo echo "ADMIN_USERNAME=${{ secrets.ADMIN_USERNAME }}" >> .env
+            sudo echo "ADMIN_PASSWORD=${{ secrets.ADMIN_PASSWORD }}" >> .env
+            sudo echo "POSTGRES_USER=${{ secrets.POSTGRES_USER }}" >> .env
+            sudo echo "POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}" >> .env
+            sudo echo "POSTGRES_DB=${{ secrets.POSTGRES_DB }}" >> .env
+            sudo echo "DATABASE=${{ secrets.DATABASE }}" >> .env            
             sudo docker compose -f docker-compose-production.yml down 
             sudo docker compose -f docker-compose-production.yml build --no-cache
             sudo docker compose -f docker-compose-production.yml up -d
