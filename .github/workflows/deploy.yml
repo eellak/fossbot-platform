@@ -23,9 +23,7 @@ jobs:
             cd /home/christoclis/fossbot-platform 
             sudo git fetch origin
             sudo git reset --hard origin/master
-            if [ -f .env ]; then
-              sudo rm .env
-            fi
+            sudo rm -f .env
             echo "SECRET_KEY=${{ secrets.SECRET_KEY }}" | sudo tee -a .env > /dev/null
             echo "ADMIN_USERNAME=${{ secrets.ADMIN_USERNAME }}" | sudo tee -a .env > /dev/null
             echo "ADMIN_PASSWORD=${{ secrets.ADMIN_PASSWORD }}" | sudo tee -a .env > /dev/null
