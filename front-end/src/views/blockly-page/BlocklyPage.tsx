@@ -111,7 +111,7 @@ const BlocklyPage = () => {
     };
 
     fetchProject();
-  }, [auth, projectId, editorValue, projectTitle, navigate]); 
+  }, [auth, projectId, editorValue, projectTitle, navigate]);
 
   useEffect(() => {
     if (location.pathname.endsWith('/blockly-tutorial-page')) {
@@ -147,7 +147,7 @@ const BlocklyPage = () => {
   };
 
   const handleSaveClick = async () => {
-    if ((projectId == '' || projectId == undefined) && projectDescription == t('newProjectDescription') && projectTitle == t('newProject') ) {
+    if ((projectId == '' || projectId == undefined) && projectDescription == t('newProjectDescription') && projectTitle == t('newProject')) {
       setShowDrawer(true);
     } else {
       try {
