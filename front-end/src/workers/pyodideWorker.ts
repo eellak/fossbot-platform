@@ -213,7 +213,7 @@ const runPythonCode = async (data: WorkerResponse) => {
   pyodide = await setUpPyodide();
 
   if (pythonScript) {
-    //postMessage(JSON.stringify({ command: 'clear_results' }));
+    postMessage(JSON.stringify({ command: 'clear_results' }));
 
     
     const functionsToAwait = [
