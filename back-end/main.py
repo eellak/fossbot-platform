@@ -1,132 +1,23 @@
-from fastapi import FastAPI, Depends, HTTPException, status,Form
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from sqlalchemy import create_engine, Column, Integer, String,ForeignKey,DateTime,Enum,Boolean
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker,relationship
+from models.models import UserRole, ProjectsCreate, LoginRequest, RegisterRequest, UpdateUserRequest, UpdateUserPasswordRequest, UserResponse, SessionTokenRequest, UpdateUserRoleRequest, UpdateBetaTesterRequest, EmailVerificationRequest
+from database.database import create_db_tables, User, Projects, Curriculum, Lesson, getSessionLocal
+from utils.utils_jwt import create_access_token, verify_access_token
+from fastapi import FastAPI, Depends, HTTPException, status
+from utils.utils_hash import get_hashed, verify_hashed 
 from fastapi.middleware.cors import CORSMiddleware
-from passlib.context import CryptContext
-from typing import Optional, List
-from enum import Enum as PyEnum
-from pydantic import BaseModel
+from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
+from fastapi import Query
 from fastapi import Body
-import datetime
+from typing import List
 import logging
 import uvicorn
 import os
 
 logger = logging.getLogger("uvicorn")
+SessionLocal = getSessionLocal()
 
-# Constants for JWT
-SECRET_KEY = os.getenv('SECRET_KEY', 'your-secret-key')
-ALGORITHM = "HS256"
-
-# Database setup
-DATABASE_URL = os.getenv('DATABASE', "sqlite:///./test.db")
-engine = create_engine(DATABASE_URL)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-Base = declarative_base()
-
-class LoginRequest(BaseModel):
-    username: str
-    password: str
-
-class RegisterRequest(BaseModel):
-    username: str
-    password: str
-    firstname: str
-    lastname: str
-    email: str
-
-class UpdateUserRequest(BaseModel):
-    firstname: str
-    lastname: str
-    username: str
-    email: str
-
-class UpdateUserPasswordRequest(BaseModel): 
-    password: str
-
-class ProjectsCreate(BaseModel):
-    name: str
-    description: str
-    project_type: str    
-    code: str
-
-class SessionTokenRequest(BaseModel):
-    session_token: str
-
-class UserRole(PyEnum):
-    ADMIN = 'admin'
-    TUTOR = 'tutor'
-    USER = 'user'
-
-class UserResponse(BaseModel):
-    id: int
-    username: str
-    firstname: str
-    lastname: str
-    email: str
-    role: UserRole
-    image_url: Optional[str]
-    beta_tester: bool
-
-    class Config:
-        orm_mode = True
-
-class UpdateUserRoleRequest(BaseModel):
-    role: UserRole
-
-class UpdateBetaTesterRequest(BaseModel):
-    beta_tester: bool
-
-# User model
-class User(Base):
-    __tablename__ = "users"
-    id = Column(Integer, primary_key=True, index=True)
-    username = Column(String, unique=True, index=True, nullable=False)
-    firstname = Column(String, nullable=False)
-    lastname = Column(String, nullable=False)
-    email = Column(String, unique=True, nullable=False)
-    hashed_password = Column(String, nullable=False)
-    role = Column(Enum(UserRole), default=UserRole.USER, nullable=False)
-    beta_tester = Column(Boolean, default=False, nullable=False)
-    image_url = Column(String)  # Added field for user's profile image URL
-    activated = Column(Boolean, default=False, nullable=False)  # New activated column
-
-class Projects(Base):
-    __tablename__ = "projects"
-    id = Column(Integer, primary_key=True, index=True)
-    name =  Column(String, nullable=False)
-    description = Column(String)
-    project_type = Column(String, default="python")
-    date_created = Column(DateTime, default=datetime.datetime.utcnow)
-    code = Column(String)
-    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
-    user = relationship("User")
-    
-class Curriculum(Base):
-    __tablename__ = "curriculums"
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, nullable=False)
-    description = Column(String)
-    image_url = Column(String)
-    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
-    user = relationship("User")
-    lessons = relationship("Lesson", back_populates="curriculum")
-
-class Lesson(Base):
-    __tablename__ = "lessons"
-    id = Column(Integer, primary_key=True, index=True)
-    title = Column(String, nullable=False)
-    description = Column(String)
-    image_url = Column(String)
-    video_url = Column(String)
-    curriculum_id = Column(Integer, ForeignKey('curriculums.id'), nullable=False)
-    curriculum = relationship("Curriculum", back_populates="lessons")
-
-Base.metadata.create_all(bind=engine)
+# Database creation
+create_db_tables()
 
 # FastAPI app
 app = FastAPI()
@@ -145,9 +36,7 @@ app.add_middleware(
 )
 
 # Security
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
-
 
 def get_db():
     db = SessionLocal()
@@ -164,7 +53,7 @@ def create_admin_user():
     admin_email =  os.getenv('ADMIN_EMAIL', 'admin@gmail.com')  
     admin_user = get_user(db, admin_username)
     if not admin_user:
-        hashed_password = get_password_hash(admin_password)
+        hashed_password = get_hashed(admin_password)
         new_admin = User(
             username=admin_username,
             hashed_password=hashed_password,
@@ -188,28 +77,14 @@ def on_startup():
     create_admin_user()
 
 
-def verify_password(plain_password, hashed_password):
-    return pwd_context.verify(plain_password, hashed_password)
-
-def get_password_hash(password):
-    return pwd_context.hash(password)
-
 def get_user(db, username: str):
     return db.query(User).filter(User.username == username).first()
 
 def authenticate_user(db, username: str, password: str):
     user = get_user(db, username)
-    if not user or not verify_password(password, user.hashed_password):
+    if not user or not verify_hashed(password, user.hashed_password):
         return False
     return user
-
-def create_access_token(data: dict):
-    encoded_jwt = jwt.encode(data, SECRET_KEY, algorithm=ALGORITHM)
-    return encoded_jwt
-
-# def verify_access_token(data: str):
-#     decoded_jwt = jwt.decode(data, SECRET_KEY, algorithm=ALGORITHM)
-#     return decoded_jwt
 
 async def get_current_user(token: str = Depends(oauth2_scheme), db: SessionLocal = Depends(get_db)):
     credentials_exception = HTTPException(
@@ -218,7 +93,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: SessionLocal
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = verify_access_token(token) 
         username: str = payload.get("sub")
         if username is None:
             raise credentials_exception
@@ -245,30 +120,6 @@ async def login_for_access_token( login_request: LoginRequest,  db: SessionLocal
     access_token = create_access_token(data={"sub": user.username})
     return {"user":user.username, "access_token": access_token, "token_type": "bearer"}
 
-# @app.post("/token/verify")
-# async def login_for_access_token(session_token_request: SessionTokenRequest):
-    
-#     logger.info(f"Request body: {session_token_request}")
-#     decoded_token = verify_access_token(data=session_token_request.session_token)
-#     print('decoded_token: ')
-#     print(decoded_token)
-    
-#     credentials_exception = HTTPException(
-#         status_code=status.HTTP_401_UNAUTHORIZED,
-#         detail="Could not validate credentials",
-#         headers={"WWW-Authenticate": "Bearer"},
-#     )
-
-#     try:
-#         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-#         username: str = payload.get("sub")
-#         if username is None:
-#             raise credentials_exception
-#     except jwt.PyJWTError:
-#         raise credentials_exception
-    
-
-#     return {"verified_token":}
 
 @app.get("/users/me")
 async def read_users_me(token: str = Depends(oauth2_scheme), db: SessionLocal = Depends(get_db)):
@@ -278,11 +129,11 @@ async def read_users_me(token: str = Depends(oauth2_scheme), db: SessionLocal = 
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = verify_access_token(token) 
         username: str = payload.get("sub")
         if username is None:
             raise credentials_exception
-    except jwt.PyJWTError:
+    except JWTError:
         raise credentials_exception
     user = get_user(db, username=username)
     if user is None:
@@ -321,7 +172,7 @@ async def update_user_password(user_password_update: UpdateUserPasswordRequest, 
 
     # Update the user information if provided
     if user_password_update.password:
-        hashed_password = get_password_hash(user_password_update.password)
+        hashed_password = get_hashed(user_password_update.password)
         db_user.password = hashed_password
 
     # Commit the changes to the database and refresh
@@ -371,7 +222,7 @@ async def register_user(register_request: RegisterRequest, db: SessionLocal = De
         raise HTTPException(status_code=400, detail="Username already registered")
 
     # Create new user instance
-    hashed_password = get_password_hash(register_request.password)
+    hashed_password = get_hashed(register_request.password)
     new_user = User(username=register_request.username,
                     hashed_password=hashed_password,
                     firstname=register_request.firstname,
@@ -383,8 +234,9 @@ async def register_user(register_request: RegisterRequest, db: SessionLocal = De
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
-    return {"username": new_user.username,"email":new_user.email, "id": new_user.id}
 
+    return {"username": new_user.username,"email":new_user.email, "id": new_user.id, "errorMessage": message}
+    
 @app.get("/users/", response_model=List[UserResponse])
 async def read_users(current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):
     if current_user.role != UserRole.ADMIN:

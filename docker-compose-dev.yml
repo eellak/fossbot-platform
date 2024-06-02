@@ -11,6 +11,9 @@ services:
     volumes:
       - ./back-end/test.db:/usr/src/app/back-end/test.db
       - ./back-end/main.py:/usr/src/app/back-end/main.py
+      - ./back-end/utils:/usr/src/app/back-end/utils
+      - ./back-end/database:/usr/src/app/back-end/database
+      - ./back-end/models:/usr/src/app/back-end/models
 
   db:
     image: postgres:latest
