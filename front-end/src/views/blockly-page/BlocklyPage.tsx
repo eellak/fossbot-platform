@@ -99,7 +99,7 @@ const BlocklyPage = () => {
             setProjectTitle(fetchedProject.name);
           }
         } else {
-          setEditorValue( '<xml xmlns="https://developers.google.com/blockly/xml"></xml>');
+          //setEditorValue( '<xml xmlns="https://developers.google.com/blockly/xml"></xml>');
           setProjectTitle(t('newProject'));
         }
       } catch (error) {
@@ -111,7 +111,7 @@ const BlocklyPage = () => {
     };
 
     fetchProject();
-  }, [auth, projectId, editorValue, projectTitle, navigate]); 
+  }, [auth, projectId, editorValue, projectTitle, navigate]);
 
   useEffect(() => {
     if (location.pathname.endsWith('/blockly-tutorial-page')) {
@@ -147,7 +147,7 @@ const BlocklyPage = () => {
   };
 
   const handleSaveClick = async () => {
-    if (projectId == '' || projectId == undefined) {
+    if ((projectId == '' || projectId == undefined) && projectDescription == t('newProjectDescription') && projectTitle == t('newProject')) {
       setShowDrawer(true);
     } else {
       try {
@@ -305,7 +305,6 @@ const BlocklyPage = () => {
                   padding: '2px 20px 5px',
                   overflow: 'auto',
                   fontFamily: 'monospace', // setting the font to monospace for a console-like appearance
-                  lineHeight: '0.2', // adjusting line height for closer lines
                 }}
               >
                 <p>{t('blockly-page.fossbot-terminal')} 🐍</p>

@@ -42,6 +42,14 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
     const navigate = useNavigate();
 
     useEffect(() => {
+        if (token) {
+            localStorage.setItem(localStorageName, token);
+        } else {
+            localStorage.removeItem(localStorageName);
+        }
+    }, [token]);
+
+    useEffect(() => {
         const fetchUserData = async () => {
             try {
                 const response = await getUserData(token);

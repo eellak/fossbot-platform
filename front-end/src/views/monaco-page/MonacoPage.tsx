@@ -49,22 +49,22 @@ const MonacoPage: React.FC = () => {
   const { projectId } = useParams<{ projectId: string }>();
   const [isInPIP, setIsInPIP] = useState(false);
 
-    // ALERTS HANDLING
-    const [showSuccessAlert, setShowSuccessAlert] = useState(false);
-    const [showErrorAlert, setShowErrorAlert] = useState(false);
-  
-    const [showSuccessAlertText, setShowSuccessAlertText] = useState("");
-    const [showErrorAlertText, setShowErrorAlertText] = useState("");
-  
-    const handleShowSuccessAlert = (message) => {
-      setShowSuccessAlertText(message);
-      setShowSuccessAlert(true);
-    };
-  
-    const handleShowErrorAlert = (message) => {
-      setShowErrorAlertText(message);
-      setShowErrorAlert(true);
-    };
+  // ALERTS HANDLING
+  const [showSuccessAlert, setShowSuccessAlert] = useState(false);
+  const [showErrorAlert, setShowErrorAlert] = useState(false);
+
+  const [showSuccessAlertText, setShowSuccessAlertText] = useState("");
+  const [showErrorAlertText, setShowErrorAlertText] = useState("");
+
+  const handleShowSuccessAlert = (message) => {
+    setShowSuccessAlertText(message);
+    setShowSuccessAlert(true);
+  };
+
+  const handleShowErrorAlert = (message) => {
+    setShowErrorAlertText(message);
+    setShowErrorAlert(true);
+  };
 
   const handlePlayClick = () => {
     if (editorValue == '') {
@@ -139,7 +139,7 @@ const MonacoPage: React.FC = () => {
   };
 
   const handleSaveClick = async () => {
-    if (projectId == '' || projectId == undefined) {
+    if ((projectId == '' || projectId == undefined) && (projectDescription == t('newProjectDescription') || projectTitle == t('newProject'))) {
       setShowDrawer(true);
     } else {
       try {
@@ -177,12 +177,12 @@ const MonacoPage: React.FC = () => {
     if (projectId != '' && projectId != undefined) {
       setIsEditingTitle(true);
     }
-   
+
   };
 
   const handleDescriptionClick = () => {
     if (projectId != '' && projectId != undefined) {
-     setIsEditingDescription(true);
+      setIsEditingDescription(true);
     }
   };
 
@@ -319,13 +319,13 @@ const MonacoPage: React.FC = () => {
                     onDisablePIP={unhideVideoPlayer}
 
 
-                  /> 
-        
-                {/* <div style={{ height: '100%', width: '100%' }}>
+                  />
+
+                  {/* <div style={{ height: '100%', width: '100%' }}>
                   <VideoPlayer />
                 </div> */}
-              </Box>
-            )}
+                </Box>
+              )}
 
               <Box height="39vh">
                 <WebGLApp
@@ -342,7 +342,6 @@ const MonacoPage: React.FC = () => {
                   padding: '2px 20px 5px',
                   overflow: 'auto',
                   fontFamily: 'monospace',
-                  lineHeight: '0.2',
                   marginTop: '20px'
                 }}
               >
@@ -378,7 +377,7 @@ const MonacoPage: React.FC = () => {
       {showErrorAlert && (
         <ErrorAlert title={showErrorAlertText} description={""} />
       )}
-    
+
     </PageContainer>
   );
 };
