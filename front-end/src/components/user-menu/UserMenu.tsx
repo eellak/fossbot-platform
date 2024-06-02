@@ -143,7 +143,7 @@ const UserMenu = () => {
                         width: '240px',
                       }}
                     >
-                      {profile.title}
+                      {t(profile.title)}
                     </Typography>
                     <Typography
                       color="textSecondary"
@@ -153,7 +153,7 @@ const UserMenu = () => {
                       }}
                       noWrap
                     >
-                      {profile.subtitle}
+                      {t(profile.subtitle)}
                     </Typography>
                   </Box>
                 </Stack>
@@ -163,10 +163,10 @@ const UserMenu = () => {
         ))}
         {user && user.role === UserRole.ADMIN ? (
           <div>
-            {dropdownData.adminPages.map((profile) => (
-              <Box key={profile.title}>
+            {dropdownData.adminPages.map((admin) => (
+              <Box key={admin.title}>
                 <Box sx={{ py: 2, px: 0 }} className="hover-text-primary">
-                  <Link to={profile.href}>
+                  <Link to={admin.href}>
                     <Stack direction="row" spacing={2}>
                       <Box
                         width="45px"
@@ -177,8 +177,8 @@ const UserMenu = () => {
                         justifyContent="center"
                       >
                         <Avatar
-                          src={profile.icon}
-                          alt={profile.icon}
+                          src={admin.icon}
+                          alt={admin.icon}
                           sx={{
                             width: 24,
                             height: 24,
@@ -197,7 +197,7 @@ const UserMenu = () => {
                             width: '240px',
                           }}
                         >
-                          {profile.title}
+                          {t(admin.title)}
                         </Typography>
                         <Typography
                           color="textSecondary"
@@ -207,7 +207,7 @@ const UserMenu = () => {
                           }}
                           noWrap
                         >
-                          {profile.subtitle}
+                          {t(admin.subtitle)}
                         </Typography>
                       </Box>
                     </Stack>

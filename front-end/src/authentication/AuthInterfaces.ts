@@ -5,8 +5,6 @@ export interface AuthContextType {
     loginAction: (data: LoginData) => Promise<void>;
     registerAction: (data: RegisterData) => Promise<void>;
 
-
-
     logOutAction: () => void;
     getUserDataAction: () => Promise<User | undefined>;
     updateUser: (data: UserData) => Promise<User | undefined>;

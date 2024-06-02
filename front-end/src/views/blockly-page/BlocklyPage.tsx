@@ -17,12 +17,15 @@ import NewProjectDialog from 'src/components/dashboard/NewProjectDialog';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faPuzzlePiece } from '@fortawesome/free-solid-svg-icons';
 import ReactPlayer from 'react-player';
+import SuccessAlert from 'src/components/alerts/SuccessAlert';
+import ErrorAlert from 'src/components/alerts/ErrorAlert';
+import { Project } from 'src/authentication/AuthInterfaces';
 
 const BlocklyPage = () => {
   const { t } = useTranslation();
   const location = useLocation();
   const [editorValue, setEditorValue] = useState(
-    '<xml xmlns="http://www.w3.org/1999/xhtml"></xml>',
+    '<xml xmlns="https://developers.google.com/blockly/xml"></xml>',
   );
   const [editorPythonValue, setEditorPythonValue] = useState('');
   const [sessionId, setSessionId] = useState('');
@@ -41,10 +44,31 @@ const BlocklyPage = () => {
   const stopScriptRef = useRef<() => void>(); // Added stop script ref
   const [openDialog, setOpenDialog] = useState(false); // New state for dialog
   const [isInPIP, setIsInPIP] = useState(false);
+  // ALERTS HANDLING
+  const [showSuccessAlert, setShowSuccessAlert] = useState(false);
+  const [showErrorAlert, setShowErrorAlert] = useState(false);
+
+  const [showSuccessAlertText, setShowSuccessAlertText] = useState("");
+  const [showErrorAlertText, setShowErrorAlertText] = useState("");
+
+  const handleShowSuccessAlert = (message) => {
+    setShowSuccessAlertText(message);
+    setShowSuccessAlert(true);
+  };
+
+  const handleShowErrorAlert = (message) => {
+    setShowErrorAlertText(message);
+    setShowErrorAlert(true);
+  };
 
   const handlePlayClick = () => {
+    if (editorValue == '<xml xmlns="https://developers.google.com/blockly/xml"></xml>' || editorValue == '') {
+      handleShowErrorAlert(t('alertMessages.emptyCodeBlockly'))
+      return;
+    }
     if (runScriptRef.current) {
       runScriptRef.current();
+      handleShowSuccessAlert(t('alertMessages.codeRunning'))
     }
   };
 
@@ -54,7 +78,6 @@ const BlocklyPage = () => {
 
   const setStopScriptFunction = (stopScript: () => void) => { // Added set stop script function
     stopScriptRef.current = stopScript;
-
   };
 
   useEffect(() => {
@@ -75,6 +98,9 @@ const BlocklyPage = () => {
             }
             setProjectTitle(fetchedProject.name);
           }
+        } else {
+          setEditorValue( '<xml xmlns="https://developers.google.com/blockly/xml"></xml>');
+          setProjectTitle(t('newProject'));
         }
       } catch (error) {
         console.error('Error fetching project:', error);
@@ -85,7 +111,7 @@ const BlocklyPage = () => {
     };
 
     fetchProject();
-  }, [auth, projectId, navigate]); // Add necessary dependencies here
+  }, [auth, projectId, editorValue, projectTitle, navigate]); 
 
   useEffect(() => {
     if (location.pathname.endsWith('/blockly-tutorial-page')) {
@@ -106,12 +132,11 @@ const BlocklyPage = () => {
   };
 
 
-  const handleStopClick = () => { // Added handle stop click
-
+  const handleStopClick = () => {
     if (stopScriptRef.current) {
-
       stopScriptRef.current();
       stopMotion();
+      handleShowErrorAlert(t('alertMessages.codeStopped'))
     }
   };
 
@@ -126,14 +151,21 @@ const BlocklyPage = () => {
       setShowDrawer(true);
     } else {
       try {
-        await auth.updateProjectByIdAction(Number(projectId), {
+        const project: Project = await auth.updateProjectByIdAction(Number(projectId), {
           name: projectTitle,
           description: projectDescription,
           project_type: 'blockly',
           code: editorValue,
         });
+        if (project) {
+          handleShowSuccessAlert(t('alertMessages.projectUpdated'))
+        } else {
+          handleShowErrorAlert(t('alertMessages.projectUpdatedError'))
+        }
+
       } catch (error) {
         console.error('Error updating project:', error);
+        handleShowErrorAlert(t('alertMessages.projectUpdatedError'))
       }
     }
   };
@@ -305,13 +337,18 @@ const BlocklyPage = () => {
 
                 /> */}
               </Box>
-
-
             </Grid>
           </Grid>
         )}
       </Box>
 
+      {showSuccessAlert && (
+        <SuccessAlert title={showSuccessAlertText} description={""} />
+      )}
+
+      {showErrorAlert && (
+        <ErrorAlert title={showErrorAlertText} description={""} />
+      )}
     </PageContainer>
   );
 };

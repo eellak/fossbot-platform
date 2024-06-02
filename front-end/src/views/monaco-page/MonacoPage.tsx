@@ -18,6 +18,9 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faPython } from '@fortawesome/free-brands-svg-icons';
 import ReactPlayer from 'react-player';
 
+import SuccessAlert from 'src/components/alerts/SuccessAlert';
+import ErrorAlert from 'src/components/alerts/ErrorAlert';
+import { Project } from 'src/authentication/AuthInterfaces';
 
 const textart = ` 
 # __   __   __   __   __   __  ___     __      ___       __       
@@ -46,9 +49,31 @@ const MonacoPage: React.FC = () => {
   const { projectId } = useParams<{ projectId: string }>();
   const [isInPIP, setIsInPIP] = useState(false);
 
+    // ALERTS HANDLING
+    const [showSuccessAlert, setShowSuccessAlert] = useState(false);
+    const [showErrorAlert, setShowErrorAlert] = useState(false);
+  
+    const [showSuccessAlertText, setShowSuccessAlertText] = useState("");
+    const [showErrorAlertText, setShowErrorAlertText] = useState("");
+  
+    const handleShowSuccessAlert = (message) => {
+      setShowSuccessAlertText(message);
+      setShowSuccessAlert(true);
+    };
+  
+    const handleShowErrorAlert = (message) => {
+      setShowErrorAlertText(message);
+      setShowErrorAlert(true);
+    };
+
   const handlePlayClick = () => {
+    if (editorValue == '') {
+      handleShowErrorAlert(t('alertMessages.emptyCodeMonaco'))
+      return;
+    }
     if (runScriptRef.current) {
       runScriptRef.current();
+      handleShowSuccessAlert(t('alertMessages.codeRunning'))
     }
   };
 
@@ -56,6 +81,7 @@ const MonacoPage: React.FC = () => {
     if (stopScriptRef.current) {
       stopScriptRef.current();
       stopMotion();
+      handleShowErrorAlert(t('alertMessages.codeStopped'))
     }
   };
 
@@ -85,6 +111,7 @@ const MonacoPage: React.FC = () => {
           }
         } else {
           setEditorValue(textart);
+          setProjectTitle(t('newProject'));
         }
       } catch (error) {
         console.error('Error fetching project:', error);
@@ -116,14 +143,21 @@ const MonacoPage: React.FC = () => {
       setShowDrawer(true);
     } else {
       try {
-        await auth.updateProjectByIdAction(Number(projectId), {
+        const project: Project = await auth.updateProjectByIdAction(Number(projectId), {
           name: projectTitle,
           description: projectDescription,
           project_type: 'blockly',
           code: editorValue,
         });
+        if (project) {
+          handleShowSuccessAlert(t('alertMessages.projectUpdated'))
+        } else {
+          handleShowErrorAlert(t('alertMessages.projectUpdatedError'))
+        }
+
       } catch (error) {
         console.error('Error updating project:', error);
+        handleShowErrorAlert(t('alertMessages.projectUpdatedError'))
       }
     }
     setIsEditingTitle(false);
@@ -336,6 +370,15 @@ const MonacoPage: React.FC = () => {
           </Grid>
         )}
       </Box>
+
+      {showSuccessAlert && (
+        <SuccessAlert title={showSuccessAlertText} description={""} />
+      )}
+
+      {showErrorAlert && (
+        <ErrorAlert title={showErrorAlertText} description={""} />
+      )}
+    
     </PageContainer>
   );
 };
