@@ -5,6 +5,7 @@ services:
     image: fsbt-back
     container_name: fsbt-back
     build: ./back-end
+    restart: always
     environment:
       - SECRET_KEY=${SECRET_KEY}
       - ADMIN_USERNAME=${ADMIN_USERNAME}
@@ -18,6 +19,7 @@ services:
   frontend:
     image: fsbt-front
     container_name: fsbt-front
+    restart: always
     build: ./front-end
     ports:
       - "80:80"
@@ -31,6 +33,7 @@ services:
   db:
     image: postgres:latest
     container_name: fsbt-db
+    restart: always
     environment:
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
