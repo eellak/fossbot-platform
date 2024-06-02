@@ -13,7 +13,7 @@ const cardData = [
   {
     image: blockly_image,
     textKey: 'card-fossbot.about_blockly',
-    imageFirst: false,
+    imageFirst: false, 
   },
   {
     image: monaco_image,
@@ -31,16 +31,19 @@ const PatformCard = () => {
   const { t } = useTranslation();
 
   return (
-    <Box py={6}>
+    <Box mb={10}>
       <Container maxWidth="lg">
         {/* <FeaturesTitle /> */}
         <AnimationFadeIn>
           <>
+          {/* <Typography variant="h3" color="primary" fontWeight={200} mt={0}  >
+                    {t('general_landing.overview')}
+          </Typography> */}
             {cardData.map((card, index) => (
-              <Box key={index} mt={6}>
+              <Box key={index} mt={2} mb={2}>
                 <Grid container spacing={3} justifyContent="center" alignItems="center">
                   {card.imageFirst && (
-                    <Grid item xs={12} sm={5} lg={5} display="flex" justifyContent="center">
+                    <Grid item xs={12} sm={12} lg={6} display="flex" justifyContent="center">
                       <CardMedia
                         component="img"
                         sx={{ 
@@ -56,13 +59,13 @@ const PatformCard = () => {
                       />
                     </Grid>
                   )}
-                  <Grid item xs={12} sm={7} lg={7} display="flex" justifyContent="center" alignItems="center">
+                  <Grid item xs={12} sm={12} lg={6} display="flex" justifyContent="left" alignItems="left">
                     <Typography
-                      variant="h5"
-                      fontWeight={400}
-                      mt={3}
+                      variant="h5" 
+                      fontWeight={200}
+                      mt={0}
                       lineHeight={{ lg: '1.5', xl: '1.5' }}
-                      textAlign="center"
+                      textAlign="left"
                       paddingX={1.5}
                       color={"#454545"}
                       sx={{ paddingX: { xs: '0.5', sm: '0.5', md: '0.5' } }}
@@ -71,7 +74,7 @@ const PatformCard = () => {
                     </Typography>
                   </Grid>
                   {!card.imageFirst && (
-                    <Grid item xs={12} sm={5} lg={5} display="flex" justifyContent="center">
+                    <Grid item xs={12} sm={12} lg={6} display="flex" justifyContent="center">
                       <CardMedia
                         component="img"
                         sx={{ 

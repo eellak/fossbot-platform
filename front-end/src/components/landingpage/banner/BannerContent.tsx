@@ -86,9 +86,7 @@ const BannerContent = () => {
             {t('banner-content.tryItNow')}
           </StyledButton>
 
-          {/* <StyledButton variant="outlined" href="/dashboards/modern">
-            Live Preview
-          </StyledButton> */}
+
         </Stack>
       </motion.div>
     </Box>

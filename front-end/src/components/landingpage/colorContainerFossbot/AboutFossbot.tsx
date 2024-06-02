@@ -6,55 +6,37 @@ import { useTranslation } from 'react-i18next';
 import robo_pen from 'src/assets/images/landingpage/background/front_pen.png';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faRobot } from '@fortawesome/free-solid-svg-icons';
-import { faPython } from '@fortawesome/free-brands-svg-icons';
+import { faPython,faRaspberryPi } from '@fortawesome/free-brands-svg-icons';
+import { faPuzzlePiece, faScrewdriver } from '@fortawesome/free-solid-svg-icons';
 
-const StyledButton = styled(Button)(({ theme }) => ({
-  padding: '13px 34px',
-  fontSize: '16px',
-  backgroundColor: theme.palette.background.paper,
-  color: theme.palette.primary.main,
-  fontWeight: 600,
-}));
-
-const StyledButton2 = styled(Button)(({ theme }) => ({
-  padding: '13px 34px',
-  fontSize: '16px',
-  borderColor: theme.palette.background.paper,
-  color: theme.palette.background.paper,
-  fontWeight: 600,
-  '&:hover': {
-    backgroundColor: theme.palette.background.paper,
-    color: theme.palette.primary.main,
-  },
-}));
 
 const AboutFossbot = () => {
-  const { t } = useTranslation();
+  const { t } = useTranslation(); 
 
   return (
-    <Container>
-      <Box
-        bgcolor="primary.main"
-        sx={{
-          pt: '30px',
-          pb: '30px',
-        }}
-      >
-        <Container maxWidth="lg">
+
+    <Box mb={10}>
+    <Container maxWidth="lg">
           <Grid container justifyContent="space-between" spacing={3}>
             <Grid item xs={12} sm={12} lg={7}>
-              <Typography variant="h2" color="background.paper" fontWeight={200} mt={0}  >
+              <Typography variant="h2" color="primary" fontWeight={200} mt={0}  >
                 {t('general_landing.whatis')}
               </Typography>
               </Grid>
               <Grid item xs={12} sm={12} lg={12}>
-              <Typography variant="h3" color="white" fontWeight={200} mt={0}  >
+              <Typography variant="h3" color="#454545" fontWeight={200} mt={0}  >
             {t('general_landing.fossbot')}
           </Typography>
-          <Box display="flex" justifyContent="center" mt={4}>
-          <FontAwesomeIcon icon={faRobot} size="4x" color='white' />
+          <Box display="flex" justifyContent="center" mt={5}>
+          <Stack direction="row" spacing={4}>
+            <FontAwesomeIcon icon={faScrewdriver} size="3x" color='#454545' />
+            <FontAwesomeIcon icon={faRobot} size="3x" color='#454545' />
+            <FontAwesomeIcon icon={faPython} size="3x" color='#454545' />
+            <FontAwesomeIcon icon={faPuzzlePiece} size="3x" color='#454545' />
+            <FontAwesomeIcon icon={faRaspberryPi} size="3x" color='#454545' />
+          </Stack>
               {/* <img src={robo_pen} alt="icon" width={'300px'} /> */}
-            </Box>
+          </Box>
 
               {/* <Stack
                 direction={{ xs: 'column', sm: 'row' }}
@@ -85,10 +67,9 @@ const AboutFossbot = () => {
           </Grid>
         </Container>
       </Box>
-      {/* <Container maxWidth="lg">
-        <GuaranteeCard />
-      </Container> */}
-    </Container>
+
+
+
   );
 };
 

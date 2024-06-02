@@ -21,7 +21,17 @@ jobs:
         run: |
           ssh  -i ~/.ssh/id_rsa ${{ secrets.SSH_USERNAME }}@${{ secrets.SSH_HOST }} << EOF
             cd /home/christoclis/fossbot-platform 
-            sudo git pull origin master 
+            sudo git fetch origin
+            sudo git reset --hard origin/master
+            if [ -f .env ]; then
+              sudo rm .env
+            echo "SECRET_KEY=${{ secrets.SECRET_KEY }}" | sudo tee -a .env > /dev/null
+            echo "ADMIN_USERNAME=${{ secrets.ADMIN_USERNAME }}" | sudo tee -a .env > /dev/null
+            echo "ADMIN_PASSWORD=${{ secrets.ADMIN_PASSWORD }}" | sudo tee -a .env > /dev/null
+            echo "POSTGRES_USER=${{ secrets.POSTGRES_USER }}" | sudo tee -a .env > /dev/null
+            echo "POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}" | sudo tee -a .env > /dev/null
+            echo "POSTGRES_DB=${{ secrets.POSTGRES_DB }}" | sudo tee -a .env > /dev/null
+            echo "DATABASE=postgresql://\${POSTGRES_USER}:\${POSTGRES_PASSWORD}@db:5432/\${POSTGRES_DB}" | sudo tee -a .env > /dev/null
             sudo docker compose -f docker-compose-production.yml down 
             sudo docker compose -f docker-compose-production.yml build --no-cache
             sudo docker compose -f docker-compose-production.yml up -d
