@@ -20,7 +20,7 @@ jobs:
       - name: SSH and Deploy
         run: |
           ssh -i ~/.ssh/id_rsa ${{ secrets.SSH_USERNAME }}@${{ secrets.SSH_HOST }} << 'EOF'
-            cd /home/christoclis/fossbot-platform
+            cd /fossbot-platform
             sudo git fetch origin
             sudo git reset --hard origin/master
             sudo rm -f .env

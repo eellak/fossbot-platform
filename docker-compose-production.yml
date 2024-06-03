@@ -28,8 +28,8 @@ services:
       - "443:443"
     volumes:
       - ./front-end/nginx.conf:/etc/nginx/conf.d/default.conf
-      - /etc/letsencrypt/live/fossbot-platform.duckdns.org/fullchain.pem:/etc/letsencrypt/live/fossbot-platform.duckdns.org/fullchain.pem
-      - /etc/letsencrypt/live/fossbot-platform.duckdns.org/privkey.pem:/etc/letsencrypt/live/fossbot-platform.duckdns.org/privkey.pem
+      - /etc/letsencrypt/live/fossbot.gr/fullchain.pem:/etc/letsencrypt/live/fossbot.gr/fullchain.pem
+      - /etc/letsencrypt/live/fossbot.gr/privkey.pem:/etc/letsencrypt/live/fossbot.gr/privkey.pem
     depends_on:
       - backend
   db:
