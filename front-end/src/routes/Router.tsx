@@ -119,9 +119,9 @@ const Router = [
     path: '/interactive-page',
     element: (
       <PrivateRoute>
-        <RoleBasedRoute betaTesterOnly={true}>
+        {/* <RoleBasedRoute betaTesterOnly={true}> */}
           <FullLayout />
-        </RoleBasedRoute>
+        {/* </RoleBasedRoute> */}
       </PrivateRoute>
     ),
     children: [
@@ -144,9 +144,9 @@ const Router = [
     path: '/tutorials-page',
     element: (
       <PrivateRoute>
-        <RoleBasedRoute betaTesterOnly={true}>
+        {/* <RoleBasedRoute betaTesterOnly={true}> */}
           <FullLayout />
-        </RoleBasedRoute>
+        {/* </RoleBasedRoute> */}
       </PrivateRoute>
     ),
     children: [

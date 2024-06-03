@@ -262,8 +262,8 @@ const MonacoPage: React.FC = () => {
         {loading && isSimulatorLoading ? (
           <Spinner />
         ) : (
-          <Grid container spacing={1} paddingTop="0rem" paddingBottom="0rem" height={showVideoPlayer && !isInPIP ? 'calc(150vh - 300px)' : 'calc(100vh - 300px)'} >
-            <Grid item xs={7} lg={7} height={showVideoPlayer && !isInPIP ? 'calc(150vh - 300px)' : 'calc(100vh - 300px)'} >
+          <Grid container spacing={1} paddingTop="0rem" paddingBottom="0rem" height={showVideoPlayer && !isInPIP ? 'calc(150vh - 300px)' : 'calc(120vh - 300px)'} >
+            <Grid item xs={7} lg={7} height={showVideoPlayer && !isInPIP ? 'calc(150vh - 300px)' : 'calc(120vh - 300px)'} >
               <MonacoEditorComponent code={editorValue} handleGetValue={handleGetValue} />
             </Grid>
             <Grid item xs={5} lg={5} >
@@ -327,7 +327,7 @@ const MonacoPage: React.FC = () => {
                 </Box>
               )}
 
-              <Box height="39vh">
+              <Box height="50vh">
                 <WebGLApp
                   appsessionId={sessionId}
                   onMountChange={handleMountChange}
@@ -335,7 +335,7 @@ const MonacoPage: React.FC = () => {
               </Box>
 
               <Box
-                height="27vh"
+                height="35vh"
                 style={{
                   backgroundColor: 'black',
                   color: 'white',
