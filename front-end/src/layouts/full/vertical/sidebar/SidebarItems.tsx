@@ -13,8 +13,8 @@ import { useAuth } from 'src/authentication/AuthProvider'; // Ensure this import
 import { UserRole } from 'src/authentication/AuthInterfaces';
 
 const betaFeatures = [
-  '/tutorials-page',
-  '/interactive-page',
+  // '/tutorials-page',
+  // '/interactive-page',
 ];
 
 const SidebarItems = () => {
