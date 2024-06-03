@@ -5,8 +5,13 @@ FROM python:3.9
 WORKDIR /usr/src/app/back-end
 
 # Copy the current directory contents into the container at /usr/src/app
+
 COPY main.py .
 COPY requirements.txt .
+COPY database/ ./database/
+COPY models/ ./models/
+COPY utils/ ./utils/
+
 
 # Install any needed packages specified in requirements.txt
 RUN pip install -r requirements.txt
