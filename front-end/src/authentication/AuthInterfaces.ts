@@ -2,7 +2,7 @@
 export interface AuthContextType {
     user: User | null;
     token: string;
-    loginAction: (data: LoginData) => Promise<void>;
+    loginAction: (data: LoginData) => Promise<LoginResponse>;
     registerAction: (data: RegisterData) => Promise<void>;
 
     logOutAction: () => void;
@@ -13,6 +13,7 @@ export interface AuthContextType {
     deleteUserByIdAction: (projectId: number) => Promise<boolean>;
     updateUserRole: (userId: number, data: RoleData) => Promise<User | undefined>;
     updateUserBetaTesterStatus: (userId: number, beta_tester: BetaTesterData) => Promise<boolean>;
+    updateUserActivatedStatus: (userId: number, activated: ActivatedData) => Promise<boolean>;
 
     createProjectAction: (data: NewProjectData) => Promise<number | undefined>;
     getProjectsAction: () => Promise<Project[] | undefined>;
@@ -91,4 +92,13 @@ export interface RoleData {
 
 export interface BetaTesterData {
     beta_tester: boolean;
+}
+
+export interface ActivatedData {
+    activated: boolean;
+}
+
+export interface LoginResponse {
+    success: boolean;
+    detail: string;
 }

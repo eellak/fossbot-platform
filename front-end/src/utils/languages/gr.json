@@ -51,6 +51,7 @@
   "newProject": "Νέο πρότζεκτ",
   "newProjectDescription": "Περιγραφή νέου πρότζεκτ",
   "betaTester": "Beta Tester",
+  "activated": "Ενεργοποιημένος",
   "errors": {
     "noCommandError": "Παρακαλώ γράψτε μία εντολή στον Editor!"
   },

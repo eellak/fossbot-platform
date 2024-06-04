@@ -11,6 +11,7 @@ import {
     PassswordData,
     RoleData,
     BetaTesterData,
+    ActivatedData,
 } from './AuthInterfaces';
 import {
     createProject,
@@ -26,7 +27,8 @@ import {
     getUsers,
     deleteUserById,
     updateUserRoleById,
-    updateUserBetaTesterStatusById
+    updateUserBetaTesterStatusById,
+    updateUserActivatedStatusById
 } from './AuthApi';
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -70,16 +72,19 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
             const response = await login(data);
             const res = await response.json();
 
+            console.log(res)
             if (res.access_token) {
                 setUser(res.user);
                 setToken(res.access_token);
                 localStorage.setItem(localStorageName, res.access_token);
                 navigate('/dashboard');
-                return;
+                return { success: true, detail: '' };
             }
-            throw new Error(res.message);
+            return { success: false, detail: res.detail || 'Login failed' };
         } catch (err) {
             console.error(err);
+            return { success: false, detail: err || 'Login failed' };
+
         }
     };
 
@@ -290,7 +295,23 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
                 await response.json();
                 return true; // Indicating success
             } else {
-                throw new Error(`Failed to delete user. Status: ${response.status}`);
+                throw new Error(`Failed to update user. Status: ${response.status}`);
+            }
+        } catch (err) {
+            console.error(err);
+            return false; // Indicating failure
+        }
+    };
+
+    const updateUserActivatedStatus = async (userId: number, data: ActivatedData) => {
+        try {
+            const response = await updateUserActivatedStatusById(userId, data, token);
+
+            if (response.status == 200) {
+                await response.json();
+                return true; // Indicating success
+            } else {
+                throw new Error(`Failed to update user. Status: ${response.status}`);
             }
         } catch (err) {
             console.error(err);
@@ -317,7 +338,8 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
                 getAllUsers,
                 deleteUserByIdAction,
                 updateUserBetaTesterStatus,
-                updateUserRole
+                updateUserRole,
+                updateUserActivatedStatus
             }}
         >
             {children}

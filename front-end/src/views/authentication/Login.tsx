@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import PageContainer from 'src/components/container/PageContainer';
 import img1 from 'src/assets/images/fossbot/back_top_up.png';
 import img2 from 'src/assets/images/fossbot/gfoss_en.png';
@@ -8,9 +8,19 @@ import AuthLogin from './AuthLogin';
 import { Link } from 'react-router-dom';
 import { Grid, Box, Stack, Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
+import ErrorAlert from 'src/components/alerts/ErrorAlert';
 
 const Login = () => {
   const { t } = useTranslation();
+
+  // ERROR ALERTS HANDLING
+  const [showErrorAlert, setShowErrorAlert] = useState(false);
+  const [showErrorAlertText, setShowErrorAlertText] = useState("");
+
+  const handleShowErrorAlert = (message) => {
+    setShowErrorAlertText(message);
+    setShowErrorAlert(true);
+  };
 
   return (
     <PageContainer title={t('authentication.login.title')} description={t('authentication.login.description')}>
@@ -82,7 +92,7 @@ const Login = () => {
         >
           <Box p={4}>
             <AuthLogin
-              title= {t('authentication.login.welcome')}
+              title={t('authentication.login.welcome')}
               subtext={
                 <Typography variant="subtitle1" color="textSecondary" mb={1}>
                   {t('authentication.login.robotsCodingCreativity')}
@@ -91,7 +101,7 @@ const Login = () => {
               subtitle={
                 <Stack direction="row" spacing={1} mt={3}>
                   <Typography color="textSecondary" variant="h6" fontWeight="500">
-                  {t('authentication.login.newToPlatform')}
+                    {t('authentication.login.newToPlatform')}
                   </Typography>
                   <Typography
                     component={Link}
@@ -102,14 +112,19 @@ const Login = () => {
                       color: 'primary.main',
                     }}
                   >
-                  {t('authentication.login.createAccount')}
+                    {t('authentication.login.createAccount')}
                   </Typography>
                 </Stack>
               }
+              handleShowErrorAlert={handleShowErrorAlert}
             />
           </Box>
         </Grid>
       </Grid>
+
+      {showErrorAlert && (
+        <ErrorAlert title={showErrorAlertText} description={""} />
+      )}
     </PageContainer>
   );
 };
