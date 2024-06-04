@@ -38,7 +38,6 @@ const UsersCard = ({ onShowSuccessAlert, onShowErrorAlert }: UsersCardProps) => 
     const fetchUsers = async () => {
       try {
         const users = await auth.getAllUsers();
-        console.log(users)
         if (users) {
           setUsers(users);
         }
