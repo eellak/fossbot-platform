@@ -72,16 +72,19 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
             const response = await login(data);
             const res = await response.json();
 
+            console.log(res)
             if (res.access_token) {
                 setUser(res.user);
                 setToken(res.access_token);
                 localStorage.setItem(localStorageName, res.access_token);
                 navigate('/dashboard');
-                return;
+                return { success: true, detail: '' };
             }
-            throw new Error(res.message);
+            return { success: false, detail: res.detail || 'Login failed' };
         } catch (err) {
             console.error(err);
+            return { success: false, detail: err || 'Login failed' };
+
         }
     };
 

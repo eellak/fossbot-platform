@@ -19,7 +19,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../authentication/AuthProvider';
 import { useTranslation } from 'react-i18next';
 
-const AuthLogin = ({ title, subtitle, subtext }: loginType) => {
+const AuthLogin = ({ title, subtitle, subtext, handleShowErrorAlert }: loginType) => {
   const { t } = useTranslation();
 
   const [username, setUsername] = useState('');
@@ -41,47 +41,17 @@ const AuthLogin = ({ title, subtitle, subtext }: loginType) => {
     try {
       // Call the login function
       if (username !== '' && password !== '') {
-        auth.loginAction({ username: username, password: password });
-        return;
+       const success = await auth.loginAction({ username: username, password: password });
+       if(!success.success){
+        handleShowErrorAlert(success.detail);
+       }
       }
     } catch (error) {
       // Handle errors (e.g., show an error message to the user)
       console.error('Login error:', error);
+      handleShowErrorAlert(error || 'Login failed.');
     }
   };
-
-  // const handleSubmit = async (event) => {
-  //   event.preventDefault();
-
-  //   try {
-  //     // Call the login function
-  //     await login(username, password);
-  //     navigate('/dashboard');
-  //   } catch (error) {
-  //     // Handle errors (e.g., show an error message to the user)
-  //     console.error('Login error:', error);
-
-  //   }
-  // };
-
-  // // The login function
-  // const login = async (username, password) => {
-  //   const response = await fetch('http://localhost:8000/token', {
-  //     method: 'POST',
-  //     headers: {
-  //       'Content-Type': 'application/json',
-  //     },
-  //     body: JSON.stringify({ 'username': username,'password': password }),
-  //   });
-
-  //   if (!response.ok) {
-
-  //     throw new Error('Login failed');
-  //   }
-  //   console.log("Login successful");
-  //   const data = await response.json();
-  //   localStorage.setItem('token', data.token);
-  // };
 
   return (
     <>
