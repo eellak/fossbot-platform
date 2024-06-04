@@ -221,7 +221,7 @@ const runPythonCode = async (data: WorkerResponse) => {
       'rotate_45', 'rotate_degrees', 'rotate_clockwise', 'rotate_counterclockwise', 
       'get_obstacle_distance', 'rgb_set_color', 'draw', 'just_move', 
       'just_rotate', 'stop', 'get_acceleration', 'get_light_sensor', 
-      'get_gyroscope', 'get_floor_sensor'
+      'get_gyroscope', 'get_floor_sensor', 'move_step'
     ];
 
     const finalScript = addAwaitToFunctions(pythonScript, functionsToAwait);
