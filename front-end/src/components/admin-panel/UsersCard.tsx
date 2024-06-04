@@ -38,6 +38,7 @@ const UsersCard = ({ onShowSuccessAlert, onShowErrorAlert }: UsersCardProps) => 
     const fetchUsers = async () => {
       try {
         const users = await auth.getAllUsers();
+        console.log(users)
         if (users) {
           setUsers(users);
         }
@@ -101,6 +102,19 @@ const UsersCard = ({ onShowSuccessAlert, onShowErrorAlert }: UsersCardProps) => 
     }
   };
 
+  const handleActivatedChange = async (userId, event) => {
+    const isActivated = event.target.checked;
+
+    try {
+      const user = await auth.updateUserActivatedStatus(userId, { activated: isActivated });
+      if (user) {
+        window.location.reload();
+      }
+    } catch (error) {
+      onShowErrorAlert(t('alertMessages.userDataUpdateError'));
+      console.error('Error updating user:', error);
+    }
+  };
 
   return (
     <PageContainer>
@@ -141,6 +155,11 @@ const UsersCard = ({ onShowSuccessAlert, onShowErrorAlert }: UsersCardProps) => 
                 </TableCell>
                 <TableCell align="center">
                   <Typography variant="subtitle2" fontWeight={600}>
+                    {t('activated')}
+                  </Typography>
+                </TableCell>
+                <TableCell align="center">
+                  <Typography variant="subtitle2" fontWeight={600}>
                     {t('edit')}
                   </Typography>
                 </TableCell>
@@ -177,6 +196,12 @@ const UsersCard = ({ onShowSuccessAlert, onShowErrorAlert }: UsersCardProps) => 
                       <Checkbox
                         checked={user.beta_tester}
                         onChange={(event) => handleBetaTesterChange(user.id, event)}
+                      />
+                    </TableCell>
+                    <TableCell align="center">
+                      <Checkbox
+                        checked={user.activated}
+                        onChange={(event) => handleActivatedChange(user.id, event)}
                       />
                     </TableCell>
                     <TableCell align="center">

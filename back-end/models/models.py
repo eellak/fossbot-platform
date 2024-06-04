@@ -45,7 +45,8 @@ class UserResponse(BaseModel):
     role: UserRole
     image_url: Optional[str]
     beta_tester: bool
-
+    activated: bool
+    
     class Config:
         orm_mode = True
 
@@ -58,3 +59,6 @@ class UpdateBetaTesterRequest(BaseModel):
 class EmailVerificationRequest(BaseModel):
     email: str
     username: str
+
+class UpdateActiavtedRequest(BaseModel):
+    activated: bool

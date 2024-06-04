@@ -1,4 +1,4 @@
-from models.models import UserRole, ProjectsCreate, LoginRequest, RegisterRequest, UpdateUserRequest, UpdateUserPasswordRequest, UserResponse, SessionTokenRequest, UpdateUserRoleRequest, UpdateBetaTesterRequest, EmailVerificationRequest
+from models.models import UserRole, ProjectsCreate, LoginRequest, RegisterRequest, UpdateActiavtedRequest, UpdateUserRequest, UpdateUserPasswordRequest, UserResponse, SessionTokenRequest, UpdateUserRoleRequest, UpdateBetaTesterRequest, EmailVerificationRequest
 from database.database import create_db_tables, User, Projects, Curriculum, Lesson, getSessionLocal
 from utils.utils_jwt import create_access_token, verify_access_token
 from fastapi import FastAPI, Depends, HTTPException, status
@@ -197,6 +197,22 @@ async def update_beta_tester_status(user_id: int, beta_tester_update: UpdateBeta
 
     return db_user
 
+@app.put("/users/{user_id}/activated")
+async def update_beta_tester_status(user_id: int, activated_update: UpdateActiavtedRequest, current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Not authorized for this action: UPDATE BETA TESTER STATUS")
+
+    db_user = db.query(User).filter(User.id == user_id).first()
+    if db_user is None:
+        raise HTTPException(status_code=404, detail="User not found in database")
+
+    db_user.activated = activated_update.activated
+
+    db.commit()
+    db.refresh(db_user)
+
+    return db_user
+
 @app.put("/users/{user_id}/role")
 async def update_user_role(user_id: int, user_role_update: UpdateUserRoleRequest, current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):
     if current_user.role != UserRole.ADMIN:
@@ -243,7 +259,6 @@ async def read_users(current_user: User = Depends(get_current_user), db: Session
         raise HTTPException(status_code=403, detail="Not authorized to access this resource: GET USERS")
     
     users = db.query(User).all()
-    print(users)
     return users
 
 @app.delete("/users/{user_id}")

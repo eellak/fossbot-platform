@@ -51,6 +51,7 @@
   "newProject": "New Project",
   "newProjectDescription": "New Project Description",
   "betaTester": "Beta Tester",
+  "activated": "Activated",
   "errors": {
     "noCommandError": "Please write a command in the Editor!"
   },
