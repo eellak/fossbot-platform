@@ -65,7 +65,7 @@ function loadBaseObject(scene) {
             scene.add(object);
             baseObject = object;
             baseObject.velocity = 0;
-
+   
             rgbLED.position.set(0.07, 0.052, -0.08);
             rgbLED.target.position.set(0, 0, 1);
             baseObject.add(rgbLED);
@@ -91,7 +91,7 @@ function loadBaseObject(scene) {
             loadCaster(object);
 
             baseObject.position.set(robot_position[0], robot_position[1], robot_position[2]);
-          
+            // Custom property to identify the base object
             // scene.add(rayLine);
 
         });

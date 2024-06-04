@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { plane, updateTexture,updateColor,updateDimensions } from './floor_loader.js';
 import { loadBaseObject,setPosition } from './robot_loader.js';
-
+import CustomObject from './custom_objects.js';
 import { color } from 'framer-motion';
 
 export let robot_position = [0, 0, 0]; 
@@ -27,9 +27,15 @@ export function loadObjectsFromJSON(url, scene) {
                     base_plane.position.z = obj.position[1];
                     base_plane.position.y = -0.019;
                     scene.add(base_plane);
-                    
+                }else if(obj.type === 'model'){                    
+                    const customObject = new CustomObject(scene, obj.filename,obj.scale,obj.position,obj.orientation,obj.color);
+                    customObject.loadObject();
+                   
+
+                       
                 }else if(obj.type === 'fossbot'){
-                    robot_position = obj.position;               
+                    robot_position = obj.position;    
+                  
                 }else{
                     let geometry;
                     const material = new THREE.MeshStandardMaterial(obj.material);

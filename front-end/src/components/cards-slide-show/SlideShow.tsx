@@ -15,7 +15,7 @@ const posts = [
     link: '#',
   },
   {
-    coverImg: '/js-simulator/stages/stage_colors.png',
+    coverImg: '/js-simulator/stages/stage_tiles.png',
     title: 'Colors on the floor',
     link: '#',    
   },

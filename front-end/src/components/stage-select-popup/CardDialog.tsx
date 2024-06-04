@@ -110,6 +110,52 @@ const CardDialog: React.FC<CardDialogProps> = ({ open, onClose, onSelect }) => {
               </CardActions>
             </Card>
           </Grid>
+          <Grid item xs={12} sm={6} md={3}>
+            <Card style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+              <CardMedia
+                component="img"
+                height="140"
+                image="/js-simulator/stages/stage_eiffel.png"
+                alt="Colors on the floor"
+              />
+              <CardContent>
+                <Typography gutterBottom variant="h5" component="div">
+                  The Eiffel tower
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                An example of using 3D models within the simulator.
+                </Typography>
+              </CardContent>
+              <CardActions style={{ marginTop: 'auto' }}>
+                <Button size="small" color="primary" onClick={() => handleSelect('/js-simulator/stages/stage_eiffel.json')}>
+                  Select
+                </Button>
+              </CardActions>
+            </Card>
+          </Grid>
+          <Grid item xs={12} sm={6} md={3}>
+            <Card style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+              <CardMedia
+                component="img"
+                height="140"
+                image="/js-simulator/stages/stage_animals.png"
+                alt="Colors on the floor"
+              />
+              <CardContent>
+                <Typography gutterBottom variant="h5" component="div">
+                  The farm
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                Let's learn about the animals.
+                </Typography>
+              </CardContent>
+              <CardActions style={{ marginTop: 'auto' }}>
+                <Button size="small" color="primary" onClick={() => handleSelect('/js-simulator/stages/stage_animals.json')}>
+                  Select
+                </Button>
+              </CardActions>
+            </Card>
+          </Grid>
         </Grid>
       </DialogContent>
     </Dialog>

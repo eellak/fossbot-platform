@@ -1,0 +1,63 @@
+[
+    {
+        "type": "model",
+        "filename": "/js-simulator/models/animals/dog.obj",
+        "scale": 0.005,
+        "position": [-1.2, -0.02, 0],
+        "name": "dog",
+        "color": "darkgrey",
+        "orientation": [-1.5708,0,0]
+    },
+    {
+        "type": "model",
+        "filename": "/js-simulator/models/animals/cat.obj",
+        "scale": 0.007,
+        "position": [0, -0.02, -1.2],
+        "name": "cat",
+        "color": "black",
+        "orientation": [-1.5708,0,0]
+    },
+    {
+        "type": "model",
+        "filename": "/js-simulator/models/animals/horse.obj",
+        "scale": 0.03,
+        "position": [1.8 ,-0.02 , 0],
+        "name": "horse",
+        "color": "chocolate",
+        "orientation": [-1.5708,0,0]
+    },
+    {
+        "type": "model",
+        "filename": "/js-simulator/models/animals/pig.obj",
+        "scale": 0.015,
+        "position": [0.8, 0.1, 0.8],
+        "name": "pig",
+        "color": "pink",
+        "orientation": [0,-1.5708,0]
+    },
+    {
+        "type": "model",
+        "filename": "/js-simulator/models/animals/chicken.obj",
+        "scale": 0.004,
+        "position": [-1.2, 0.1, -1.6],
+        "name": "chicken",
+        "color": "LemonChiffon",
+        "orientation": [-1.5708,0,3.14]
+    },
+    {
+        "type": "floor",
+        "dimensions": [0.8, 0.8],
+        "material": {"color": "white"},
+        "name": "floor",
+        "texture": "/js-simulator/textures/white_rect.png",
+        "repeat": [25,25],
+        "offset": [0,0]
+    },
+    { 
+        "type": "fossbot",
+        "position":[0, 0,2],
+        "orientation": [0, 0, 0]
+    }
+
+
+]

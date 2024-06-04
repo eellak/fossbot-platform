@@ -3,7 +3,7 @@
         "type": "cylinder",
         "dimensions": [0.05, 0.1, 0.2, 100],
         "material": {"color": "orange"},
-        "position": [1, 0.08, 0],
+        "position": [-0.4, 0.08, -0.4],
         "name": "cone",
         "castShadow": true
     },
@@ -11,7 +11,7 @@
         "type": "cylinder",
         "dimensions": [0.05, 0.1, 0.2, 100],
         "material": {"color": "orange"},
-        "position": [-1, 0.08, 0],
+        "position": [-0.4, 0.08, -0.8],
         "name": "cone",
         "castShadow": true
     },
@@ -19,7 +19,7 @@
         "type": "cylinder",
         "dimensions": [0.05, 0.1, 0.2, 100],
         "material": {"color": "orange"},
-        "position": [-2, 0.08, 0.5],
+        "position": [-0.4, 0.08, -1.2],
         "name": "cone",
         "castShadow": true
     },
@@ -27,7 +27,7 @@
         "type": "cylinder",
         "dimensions": [0.05, 0.1, 0.2, 100],
         "material": {"color": "orange"},
-        "position": [-3, 0.08, 1],
+        "position": [0, 0.08, -1.2],
         "name": "cone",
         "castShadow": true
     },
@@ -35,7 +35,16 @@
         "type": "cylinder",
         "dimensions": [0.05, 0.1, 0.2, 100],
         "material": {"color": "orange"},
-        "position": [2, 0.08, -0.5],
+        "position": [0.4, 0.08, -1.2],
+        "name": "cone",
+        "castShadow": true
+    },
+
+    {
+        "type": "cylinder",
+        "dimensions": [0.05, 0.1, 0.2, 100],
+        "material": {"color": "orange"},
+        "position": [0.8, 0.08, -1.2],
         "name": "cone",
         "castShadow": true
     },
@@ -43,9 +52,203 @@
         "type": "cylinder",
         "dimensions": [0.05, 0.1, 0.2, 100],
         "material": {"color": "orange"},
-        "position": [3, 0.08, -1],
+        "position": [2, 0.08, -1.2],
         "name": "cone",
         "castShadow": true
+    },
+    {
+        "type": "cylinder",
+        "dimensions": [0.05, 0.1, 0.2, 100],
+        "material": {"color": "orange"},
+        "position": [1.2, 0.08, -1.6],
+        "name": "cone",
+        "castShadow": true
+    },
+    {
+        "type": "cylinder",
+        "dimensions": [0.05, 0.1, 0.2, 100],
+        "material": {"color": "orange"},
+        "position": [2, 0.08, -1.6],
+        "name": "cone",
+        "castShadow": true
+    },
+    {
+        "type": "cylinder",
+        "dimensions": [0.05, 0.1, 0.2, 100],
+        "material": {"color": "orange"},
+        "position": [1.2, 0.08, -2],
+        "name": "cone",
+        "castShadow": true
+    },
+    {
+        "type": "cylinder",
+        "dimensions": [0.05, 0.1, 0.2, 100],
+        "material": {"color": "orange"},
+        "position": [2, 0.08, -2],
+        "name": "cone",
+        "castShadow": true
+    },
+    {
+        "type": "cylinder",
+        "dimensions": [0.05, 0.1, 0.2, 100],
+        "material": {"color": "lightblue"},
+        "position": [1.2, 0.08, -2.4],
+        "name": "cone",
+        "castShadow": true
+    },
+    {
+        "type": "cylinder",
+        "dimensions": [0.05, 0.1, 0.2, 100],
+        "material": {"color": "lightblue"},
+        "position": [2, 0.08, -2.4],
+        "name": "cone",
+        "castShadow": true
+    },
+    {
+        "type": "cylinder",
+        "dimensions": [0.05, 0.1, 0.2, 100],
+        "material": {"color": "orange"},
+        "position": [1.2, 0.08, -1.2],
+        "name": "cone",
+        "castShadow": true
+    },
+    {
+        "type": "cylinder",
+        "dimensions": [0.05, 0.1, 0.2, 100],
+        "material": {"color": "orange"},
+        "position": [2, 0.08, -0.8],
+        "name": "cone",
+        "castShadow": true
+    },
+    {
+        "type": "cylinder",
+        "dimensions": [0.05, 0.1, 0.2, 100],
+        "material": {"color": "orange"},
+        "position": [2, 0.08, -0.4],
+        "name": "cone",
+        "castShadow": true
+    },
+    {
+        "type": "cylinder",
+        "dimensions": [0.05, 0.1, 0.2, 100],
+        "material": {"color": "orange"},
+        "position": [1.6, 0.08, -0.4],
+        "name": "cone",
+        "castShadow": true
+    },
+    {
+        "type": "cylinder",
+        "dimensions": [0.05, 0.1, 0.2, 100],
+        "material": {"color": "orange"},
+        "position": [1.2, 0.08, -0.4],
+        "name": "cone",
+        "castShadow": true
+    },
+    {
+        "type": "cylinder",
+        "dimensions": [0.05, 0.1, 0.2, 100],
+        "material": {"color": "orange"},
+        "position": [0.8, 0.08, -0.4],
+        "name": "cone",
+        "castShadow": true
+    },
+    {
+        "type": "cylinder",
+        "dimensions": [0.05, 0.1, 0.2, 100],
+        "material": {"color": "orange"},
+        "position": [0.4, 0.08, -0.4],
+        "name": "cone",
+        "castShadow": true
+    },
+
+    {
+        "type": "cylinder",
+        "dimensions": [0.05, 0.1, 0.2, 100],
+        "material": {"color": "orange"},
+        "position": [0.4, 0.08, 0],
+        "name": "cone",
+        "castShadow": true
+    },
+    {
+        "type": "cylinder",
+        "dimensions": [0.05, 0.1, 0.2, 100],
+        "material": {"color": "orange"},
+        "position": [-0.4, 0.08, 0],
+        "name": "cone",
+        "castShadow": true
+    },
+    {
+        "type": "cylinder",
+        "dimensions": [0.05, 0.1, 0.2, 100],
+        "material": {"color": "orange"},
+        "position": [-0.4, 0.08, 0.4],
+        "name": "cone",
+        "castShadow": true
+    },
+    {
+        "type": "cylinder",
+        "dimensions": [0.05, 0.1, 0.2, 100],
+        "material": {"color": "orange"},
+        "position": [0.4, 0.08, 0.4],
+        "name": "cone",
+        "castShadow": true
+    },
+    {
+        "type": "cylinder",
+        "dimensions": [0.05, 0.1, 0.2, 100],
+        "material": {"color": "orange"},
+        "position": [-0.4, 0.08, 0.8],
+        "name": "cone",
+        "castShadow": true
+    },
+    {
+        "type": "cylinder",
+        "dimensions": [0.05, 0.1, 0.2, 100],
+        "material": {"color": "orange"},
+        "position": [0.4, 0.08, 0.8],
+        "name": "cone",
+        "castShadow": true
+    },
+    {
+        "type": "cylinder",
+        "dimensions": [0.05, 0.1, 0.2, 100],
+        "material": {"color": "orange"},
+        "position": [-0.4, 0.08, 1.2],
+        "name": "cone",
+        "castShadow": true
+    },
+    {
+        "type": "cylinder",
+        "dimensions": [0.05, 0.1, 0.2, 100],
+        "material": {"color": "orange"},
+        "position": [0.4, 0.08, 1.2],
+        "name": "cone",
+        "castShadow": true
+    },
+    {
+        "type": "cylinder",
+        "dimensions": [0.05, 0.1, 0.2, 100],
+        "material": {"color": "lightgreen"},
+        "position": [-0.4, 0.08, 1.6],
+        "name": "cone",
+        "castShadow": true
+    },
+    {
+        "type": "cylinder",
+        "dimensions": [0.05, 0.1, 0.2, 100],
+        "material": {"color": "lightgreen"},
+        "position": [0.4, 0.08, 1.6],
+        "name": "cone",
+        "castShadow": true
+    },
+    {
+        "type": "model",
+        "filename": "/js-simulator/models/diamond.obj",
+        "scale": 0.005,
+        "position": [1.6, 0.1, -2.66],
+        "name": "diamond",
+        "color": "red",
+        "orientation": [-1.5708,0,0]
     },
     {
         "type": "floor",
@@ -58,7 +261,7 @@
     },
     { 
         "type": "fossbot",
-        "position":[0, 0, 0.01],
+        "position":[0, 0,2],
         "orientation": [0, 0, 0]
     }
 
