@@ -156,6 +156,29 @@ const CardDialog: React.FC<CardDialogProps> = ({ open, onClose, onSelect }) => {
               </CardActions>
             </Card>
           </Grid>
+          <Grid item xs={12} sm={6} md={3}>
+            <Card style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+              <CardMedia
+                component="img"
+                height="140"
+                image="/js-simulator/stages/stage_white_paper.png"
+                alt="Colors on the floor"
+              />
+              <CardContent>
+                <Typography gutterBottom variant="h5" component="div">
+                  White paper
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                A stage with a white floor, perfect for drawing.
+                </Typography>
+              </CardContent>
+              <CardActions style={{ marginTop: 'auto' }}>
+                <Button size="small" color="primary" onClick={() => handleSelect('/js-simulator/stages/stage_white_paper.json')}>
+                  Select
+                </Button>
+              </CardActions>
+            </Card>
+          </Grid>
         </Grid>
       </DialogContent>
     </Dialog>
