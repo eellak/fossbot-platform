@@ -200,15 +200,80 @@ const setUpPyodide = async () => {
 
 const addAwaitToFunctions = (script, functions) => {
   functions.forEach(func => {
-    const regex = new RegExp(`(?<!await\\s)\\b${func}\\b`, 'g');
+    // Regex to match 'def function_name' and store function_name
+    const defRegex = new RegExp(`def\\s+${func}\\b`, 'g');
+    
+    // Replace function calls with 'await function_name', excluding those in 'def function_name'
+    const regex = new RegExp(`(?<!await\\s)(?<!def\\s)\\b${func}\\b`, 'g');
+    
+    // Temporarily replace 'def function_name' with a placeholder
+    script = script.replace(defRegex, `DEF_PLACEHOLDER_${func}`);
+    
+    // Add 'await' to function calls
     script = script.replace(regex, `await ${func}`);
+    
+    // Restore 'def function_name'
+    script = script.replace(new RegExp(`DEF_PLACEHOLDER_${func}`, 'g'), `def ${func}`);
   });
   return script;
 };
 
+const processPythonCode = (code) => {
+  const lines = code.split('\n');
+  const modifiedLines = [];
+  const functionsWithAwait = [];
+  let insideFunction = false;
+  let currentFunction = [];
+  let currentIndentation = '';
+  let indentLevel = 0;
+  let functionName = '';
+
+  for (let line of lines) {
+      const trimmedLine = line.trim();
+
+      if (trimmedLine.startsWith('def ') && !insideFunction) {
+          currentFunction = [line];
+          insideFunction = true;
+          currentIndentation = line.match(/^\s*/)[0];  // Capture leading whitespace
+          indentLevel = currentIndentation.length;
+          functionName = trimmedLine.split(' ')[1].split('(')[0]; // Extract function name
+      } else if (insideFunction) {
+          const currentLineIndentation = line.match(/^\s*/)[0].length;
+          currentFunction.push(line);
+
+          // Check if the current line is less indented than the function definition line
+          if (trimmedLine === '' || currentLineIndentation <= indentLevel && trimmedLine !== '') {
+              insideFunction = false;
+              if (currentFunction.some(l => l.includes('await'))) {
+                  functionsWithAwait.push(functionName);
+                  currentFunction[0] = currentFunction[0].replace('def ', 'async def ');
+              }
+              modifiedLines.push(...currentFunction);
+              currentFunction = [];
+              functionName = '';
+          }
+      } else {
+          modifiedLines.push(line);
+      }
+  }
+
+  // Final check in case the last function contains 'await'
+  if (insideFunction && currentFunction.some(l => l.includes('await'))) {
+      functionsWithAwait.push(functionName);
+      currentFunction[0] = currentFunction[0].replace('def ', 'async def ');
+  }
+
+  modifiedLines.push(...currentFunction);
+
+  return {
+      modifiedCode: modifiedLines.join('\n'),
+      functionNames: functionsWithAwait
+  };
+}
+
 
 const runPythonCode = async (data: WorkerResponse) => {
-  const pythonScript = data.script;
+  let pythonScript = data.script;
 
   pyodide = await setUpPyodide();
 
@@ -224,9 +289,24 @@ const runPythonCode = async (data: WorkerResponse) => {
       'get_gyroscope', 'get_floor_sensor', 'move_step'
     ];
 
-    const finalScript = addAwaitToFunctions(pythonScript, functionsToAwait);
+
+    let changesDetected = true;
+
+    pythonScript = addAwaitToFunctions(pythonScript, functionsToAwait);
+
+    while (changesDetected) {
+      changesDetected = false;
+
+      let result = processPythonCode(pythonScript);
+      pythonScript = addAwaitToFunctions(result.modifiedCode, result.functionNames);
+
+      if (result.functionNames.length > 0) {
+        changesDetected = true;
+      }
+    }
+
     try {
-      await pyodide.runPythonAsync(finalScript);
+      await pyodide.runPythonAsync(pythonScript);
     } catch (e) {
       if (e.constructor.name === 'PythonError') {
         const errorMessage = e.message;
