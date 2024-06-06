@@ -41,16 +41,16 @@ services:
     volumes:
       - db-data:/var/lib/postgresql/data
 
-  matomo:
-    image: matomo:latest
-    container_name: matomo
-    restart: always
-    ports:
-      - "8080:80"
-    env_file:
-      - .env
-    depends_on:
-      - db
+  # matomo:
+  #   image: matomo:latest
+  #   container_name: matomo
+  #   restart: always
+  #   ports:
+  #     - "8080:80"
+  #   env_file:
+  #     - .env
+  #   depends_on:
+  #     - db
 
 volumes:
   db-data:
