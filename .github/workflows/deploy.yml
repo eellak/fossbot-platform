@@ -31,12 +31,12 @@ jobs:
             echo "POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}" | sudo tee -a .env > /dev/null
             echo "POSTGRES_DB=${{ secrets.POSTGRES_DB }}" | sudo tee -a .env > /dev/null
             echo "DATABASE=postgresql://${{secrets.POSTGRES_USER}}:${{secrets.POSTGRES_PASSWORD}}@db:5432/${{secrets.POSTGRES_DB}}" | sudo tee -a .env > /dev/null
-            echo "MATOMO_DATABASE_HOST=${{secrets.MATOMO_DATABASE_HOST}}" | sudo tee -a .env > /dev/null
-            echo "MATOMO_DATABASE_ADAPTER=${{secrets.MATOMO_DATABASE_ADAPTER}}" | sudo tee -a .env > /dev/null
-            echo "MATOMO_DATABASE_TABLES_PREFIX=${{secrets.MATOMO_DATABASE_TABLES_PREFIX}}" | sudo tee -a .env > /dev/null
-            echo "MATOMO_DATABASE_USERNAME=${{secrets.MATOMO_DATABASE_USERNAME}}" | sudo tee -a .env > /dev/null
-            echo "MATOMO_DATABASE_PASSWORD=${{secrets.MATOMO_DATABASE_PASSWORD}}" | sudo tee -a .env > /dev/null
-            echo "MATOMO_DATABASE_DBNAME=${{secrets.MATOMO_DATABASE_DBNAME}}" | sudo tee -a .env > /dev/null                             
+            echo "MATOMO_DATABASE_HOST=db" | sudo tee -a .env > /dev/null
+            echo "MATOMO_DATABASE_ADAPTER=pgsql" | sudo tee -a .env > /dev/null
+            echo "MATOMO_DATABASE_TABLES_PREFIX=matomo_" | sudo tee -a .env > /dev/null
+            echo "MATOMO_DATABASE_USERNAME=${{secrets.POSTGRES_USER}}" | sudo tee -a .env > /dev/null
+            echo "MATOMO_DATABASE_PASSWORD=${{secrets.POSTGRES_PASSWORD}}" | sudo tee -a .env > /dev/null
+            echo "MATOMO_DATABASE_DBNAME=matomo_db" | sudo tee -a .env > /dev/null                             
             sudo docker compose -f docker-compose-production.yml down
             sudo docker compose -f docker-compose-production.yml build --no-cache
             sudo docker compose -f docker-compose-production.yml up -d
