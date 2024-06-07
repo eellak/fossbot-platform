@@ -25,7 +25,7 @@ const MonacoEditorComponent = ({ code, handleGetValue }: MonacoEditorProps) => {
       const currentValue = editorRef.current.getValue();
       handleGetValue(() => currentValue);
     }
-  }, [handleGetValue]); 
+  }, [handleGetValue]);
 
   const [theme, setTheme] = useState(customizer.activeMode === 'dark' ? 'vs-dark' : 'vs');
 
@@ -49,6 +49,8 @@ const MonacoEditorComponent = ({ code, handleGetValue }: MonacoEditorProps) => {
         onMount={handleEditorDidMount}
         onChange={handleEditorChange}
         options={{ automaticLayout: true }}
+        className='monacoEditorComponent'
+        
       />
     </div>
   );
