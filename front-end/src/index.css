@@ -101,4 +101,7 @@ button:focus-visible {
   .blocklyDiv {
     min-height: 62vh;
   }
+  #videocomponent video, #videocomponent canvas{
+    width: 100%;
+  }
 }
