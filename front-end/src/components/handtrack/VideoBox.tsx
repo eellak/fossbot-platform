@@ -289,7 +289,7 @@ const VideoBox: React.FC<VideoBoxProps> = ({
   }, []);
 
   return (
-    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+    <div id="videocomponent" style={{ position: 'relative', width: '100%', height: '100%' }}>
       <video ref={videoRef} width="640" height="480" autoPlay playsInline muted style={{ display: 'none' }} />
       <canvas ref={canvasRef} width="640" height="480" />
     </div>
