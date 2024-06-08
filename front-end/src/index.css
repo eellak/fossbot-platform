@@ -95,4 +95,10 @@ button:focus-visible {
   .monacoEditorComponent {
     min-height: 50vh;
   }
+  .blocklyResponsive {
+    flex-wrap: nowrap !important;
+  }
+  .blocklyDiv {
+    min-height: 62vh;
+  }
 }
