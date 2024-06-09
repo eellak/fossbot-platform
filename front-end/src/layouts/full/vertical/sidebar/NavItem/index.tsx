@@ -82,9 +82,9 @@ const NavItem = ({ item, level, pathDirect, hideMenu, onClick }: ItemType) => {
     target?: any;
     to?: any;
   } = {
-    component: item?.external ? 'a' : NavLink,
+    component: item?.external ? 'a' : 'a',
     to: item?.href,
-    href: item?.external ? item?.href : '',
+    href: item?.external ? item?.href : item?.href,
     target: item?.external ? '_blank' : '',
   };
 
