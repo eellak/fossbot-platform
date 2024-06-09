@@ -7,10 +7,12 @@ import Router from './routes/Router';
 import { AppState } from './store/Store';
 import { CssBaseline, ThemeProvider } from '@mui/material';
 import AuthProvider from './authentication/AuthProvider';
+import { useEffect } from 'react';
 function App() {
   const routing = useRoutes(Router);
   const theme = ThemeSettings();
   const customizer = useSelector((state: AppState) => state.customizer);
+
   return (
     <AuthProvider>
     <ThemeProvider theme={theme}>
