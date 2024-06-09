@@ -7,7 +7,21 @@ import { useTranslation } from 'react-i18next';
 import PythonExecutor from 'src/components/editors/PythonExecutor';
 import PythonTerminal from 'src/components/editors/PythonTerminal';
 // import WebGLApp from 'src/components/websimulator/Simulator';
-import { WebGLApp, moveStep, rotateStep, stopMotion, get_distance, rgb_set_color, get_acceleration, get_gyroscope, get_floor_sensor, just_move, just_rotate, get_light_sensor, drawLine } from 'src/components/js-simulator/Simulator';
+import {
+  WebGLApp,
+  moveStep,
+  rotateStep,
+  stopMotion,
+  get_distance,
+  rgb_set_color,
+  get_acceleration,
+  get_gyroscope,
+  get_floor_sensor,
+  just_move,
+  just_rotate,
+  get_light_sensor,
+  drawLine,
+} from 'src/components/js-simulator/Simulator';
 import Buttons from 'src/components/editors/RightColButtons';
 import PageContainer from '../../components/container/PageContainer';
 import BlocklyEditorComponent from '../../components/editors/BlocklyEditor';
@@ -20,6 +34,7 @@ import ReactPlayer from 'react-player';
 import SuccessAlert from 'src/components/alerts/SuccessAlert';
 import ErrorAlert from 'src/components/alerts/ErrorAlert';
 import { Project } from 'src/authentication/AuthInterfaces';
+import { useMediaQuery } from '@mui/material';
 
 const BlocklyPage = () => {
   const { t } = useTranslation();
@@ -48,8 +63,8 @@ const BlocklyPage = () => {
   const [showSuccessAlert, setShowSuccessAlert] = useState(false);
   const [showErrorAlert, setShowErrorAlert] = useState(false);
 
-  const [showSuccessAlertText, setShowSuccessAlertText] = useState("");
-  const [showErrorAlertText, setShowErrorAlertText] = useState("");
+  const [showSuccessAlertText, setShowSuccessAlertText] = useState('');
+  const [showErrorAlertText, setShowErrorAlertText] = useState('');
 
   const handleShowSuccessAlert = (message) => {
     setShowSuccessAlertText(message);
@@ -62,13 +77,16 @@ const BlocklyPage = () => {
   };
 
   const handlePlayClick = () => {
-    if (editorValue == '<xml xmlns="https://developers.google.com/blockly/xml"></xml>' || editorValue == '') {
-      handleShowErrorAlert(t('alertMessages.emptyCodeBlockly'))
+    if (
+      editorValue == '<xml xmlns="https://developers.google.com/blockly/xml"></xml>' ||
+      editorValue == ''
+    ) {
+      handleShowErrorAlert(t('alertMessages.emptyCodeBlockly'));
       return;
     }
     if (runScriptRef.current) {
       runScriptRef.current();
-      handleShowSuccessAlert(t('alertMessages.codeRunning'))
+      handleShowSuccessAlert(t('alertMessages.codeRunning'));
     }
   };
 
@@ -76,7 +94,8 @@ const BlocklyPage = () => {
     runScriptRef.current = runScript;
   };
 
-  const setStopScriptFunction = (stopScript: () => void) => { // Added set stop script function
+  const setStopScriptFunction = (stopScript: () => void) => {
+    // Added set stop script function
     stopScriptRef.current = stopScript;
   };
 
@@ -117,10 +136,10 @@ const BlocklyPage = () => {
     if (location.pathname.endsWith('/blockly-tutorial-page')) {
       setShowVideoPlayer(true);
       setProjectTitle('Blockly Editor FOSSBot Tutorial');
-      setProjectDescription('This is a tutorial on how to use the Blockly Editor with FOSSBot. \
-                              Also we will learn about the default control Blocks and how to use them.');
-
-
+      setProjectDescription(
+        'This is a tutorial on how to use the Blockly Editor with FOSSBot. \
+                              Also we will learn about the default control Blocks and how to use them.',
+      );
     }
   }, [location.pathname]);
 
@@ -131,12 +150,11 @@ const BlocklyPage = () => {
     setEditorValue(value);
   };
 
-
   const handleStopClick = () => {
     if (stopScriptRef.current) {
       stopScriptRef.current();
       stopMotion();
-      handleShowErrorAlert(t('alertMessages.codeStopped'))
+      handleShowErrorAlert(t('alertMessages.codeStopped'));
     }
   };
 
@@ -147,7 +165,11 @@ const BlocklyPage = () => {
   };
 
   const handleSaveClick = async () => {
-    if ((projectId == '' || projectId == undefined) && projectDescription == t('newProjectDescription') && projectTitle == t('newProject')) {
+    if (
+      (projectId == '' || projectId == undefined) &&
+      projectDescription == t('newProjectDescription') &&
+      projectTitle == t('newProject')
+    ) {
       setShowDrawer(true);
     } else {
       try {
@@ -158,14 +180,13 @@ const BlocklyPage = () => {
           code: editorValue,
         });
         if (project) {
-          handleShowSuccessAlert(t('alertMessages.projectUpdated'))
+          handleShowSuccessAlert(t('alertMessages.projectUpdated'));
         } else {
-          handleShowErrorAlert(t('alertMessages.projectUpdatedError'))
+          handleShowErrorAlert(t('alertMessages.projectUpdatedError'));
         }
-
       } catch (error) {
         console.error('Error updating project:', error);
-        handleShowErrorAlert(t('alertMessages.projectUpdatedError'))
+        handleShowErrorAlert(t('alertMessages.projectUpdatedError'));
       }
     }
   };
@@ -187,21 +208,30 @@ const BlocklyPage = () => {
     setIsInPIP(false);
   };
 
+  const isResponsive = useMediaQuery('(max-width:1024px)');
+
   return (
     <PageContainer title={t('blockly-page.title')} description={t('blockly-page.description')}>
       <NewProjectDialog
         showDrawer={showDrawer}
         handleDrawerClose={handleDrawerClose}
         isDescriptionDisabled={true}
-        editorInitialValue='blockly'
+        editorInitialValue="blockly"
         code={editorValue}
       />
       <Box flexGrow={1}>
-        <Grid container spacing={3} justifyContent="center" alignItems="center">
-          <Grid item xs={8} lg={8}>  {/* This item spans 8 columns on large screens */}
+        <Grid
+          direction={isResponsive ? 'column' : 'row'}
+          container
+          spacing={3}
+          justifyContent="center"
+          alignItems="center"
+        >
+          <Grid item xs={8} lg={8}>
+            {' '}
+            {/* This item spans 8 columns on large screens */}
             <Box mb={3}>
               <Typography variant="h1" mt={0} color={'primary'}>
-
                 <FontAwesomeIcon icon={faPuzzlePiece} size="1x" /> {projectTitle}{' '}
               </Typography>
               <Typography mt={1} ml={0} color={'grey'}>
@@ -209,26 +239,45 @@ const BlocklyPage = () => {
               </Typography>
             </Box>
           </Grid>
-          <Grid item xs={4} lg={4}>  {/* This item spans 4 columns on large screens */}
-            <Box mt={0} sx={{ display: 'flex', justifyContent: 'flex-end' }}> {/* Aligns content to the left */}
+          <Grid item xs={4} lg={4}>
+            {' '}
+            {/* This item spans 4 columns on large screens */}
+            <Box mt={0} sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+              {' '}
+              {/* Aligns content to the left */}
               <DialogContent className="testdialog">
-                <Stack direction="row" spacing={3} alignItems="center" justifyContent="flex-end"> {/* Aligns buttons to the left */}
+                <Stack direction="row" spacing={3} alignItems="center" justifyContent="flex-end">
+                  {' '}
+                  {/* Aligns buttons to the left */}
                   <Buttons
                     handlePlayClick={handlePlayClick}
                     handleSaveClick={handleSaveClick}
-                    handleStopClick={handleStopClick} />
+                    handleStopClick={handleStopClick}
+                  />
                 </Stack>
               </DialogContent>
             </Box>
           </Grid>
         </Grid>
 
-
-        {loading && isSimulatorLoading ? ( 
+        {loading && isSimulatorLoading ? (
           <Spinner />
         ) : (
-          <Grid container spacing={1} paddingTop={"0rem"} paddingBottom={"0rem"} height={showVideoPlayer && !isInPIP ? 'calc(150vh - 300px)' : 'calc(120vh - 300px)'}>
-            <Grid item xs={7} lg={7} height={showVideoPlayer && !isInPIP ? 'calc(150vh - 300px)' : 'calc(120vh - 300px)'}>
+          <Grid
+            container
+            spacing={1}
+            paddingTop={'0rem'}
+            paddingBottom={'0rem'}
+            height={showVideoPlayer && !isInPIP ? 'calc(150vh - 300px)' : 'calc(120vh - 300px)'}
+            direction={isResponsive ? 'column' : 'row'}
+            className="blocklyResponsive"
+          >
+            <Grid
+              item
+              xs={7}
+              lg={7}
+              height={showVideoPlayer && !isInPIP ? 'calc(150vh - 300px)' : 'calc(120vh - 300px)'}
+            >
               {/* column */}
               <BlocklyEditorComponent
                 code={editorValue}
@@ -239,11 +288,9 @@ const BlocklyPage = () => {
             </Grid>
 
             <Grid item xs={5} lg={5}>
-
               {showVideoPlayer && (
                 <Box
                   height="30vh"
-
                   style={{
                     position: 'relative',
                     backgroundColor: 'black',
@@ -255,18 +302,19 @@ const BlocklyPage = () => {
                     marginBottom: '20px',
                     display: isInPIP ? 'none' : 'flex',
                     justifyContent: 'center',
-                    alignItems: 'center'
+                    alignItems: 'center',
                   }}
                 >
-                  <ReactPlayer url={require('../../assets/videos/tutorial1.mp4')}
+                  <ReactPlayer
+                    url={require('../../assets/videos/tutorial1.mp4')}
                     controls={true}
                     pip={true}
-                    width='100%'
-                    height='100%'
+                    width="100%"
+                    height="100%"
                     config={{
                       file: {
                         attributes: {
-                          controlsList: 'nodownload'
+                          controlsList: 'nodownload',
                         },
                         tracks: [
                           {
@@ -276,22 +324,20 @@ const BlocklyPage = () => {
                             label: 'English',
                             default: true,
                           },
-                        ]
-                      }
+                        ],
+                      },
                     }}
                     onEnablePIP={hideVideoPlayer}
                     onDisablePIP={unhideVideoPlayer}
-
-
-                  />                {/* <div style={{ height: '100%', width: '100%' }}>
+                  />{' '}
+                  {/* <div style={{ height: '100%', width: '100%' }}>
                   <VideoPlayer />
                 </div> */}
                 </Box>
               )}
 
               <Box height="50vh">
-                <WebGLApp appsessionId={sessionId}
-                  onMountChange={handleMountChange} />
+                <WebGLApp appsessionId={sessionId} onMountChange={handleMountChange} />
               </Box>
               <br />
 
@@ -325,7 +371,6 @@ const BlocklyPage = () => {
                   stopMotion={stopMotion}
                   getLightSensor={get_light_sensor}
                   drawLine={drawLine}
-
                 />
 
                 {/*                 
@@ -341,13 +386,9 @@ const BlocklyPage = () => {
         )}
       </Box>
 
-      {showSuccessAlert && (
-        <SuccessAlert title={showSuccessAlertText} description={""} />
-      )}
+      {showSuccessAlert && <SuccessAlert title={showSuccessAlertText} description={''} />}
 
-      {showErrorAlert && (
-        <ErrorAlert title={showErrorAlertText} description={""} />
-      )}
+      {showErrorAlert && <ErrorAlert title={showErrorAlertText} description={''} />}
     </PageContainer>
   );
 };

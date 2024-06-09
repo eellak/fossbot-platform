@@ -79,14 +79,29 @@ button:focus-visible {
   font-weight: bold;
 }
 
-#simulatorIframe{
+#simulatorIframe {
   min-height: 370px;
 }
 
-.darkbg{
+.darkbg {
   background-color: #2a3447;
 }
 
-.lightbg{
+.lightbg {
   background: #fff;
+}
+
+@media screen and (max-width: 1024px) {
+  .monacoEditorComponent {
+    min-height: 50vh;
+  }
+  .blocklyResponsive {
+    flex-wrap: nowrap !important;
+  }
+  .blocklyDiv {
+    min-height: 62vh;
+  }
+  #videocomponent video, #videocomponent canvas{
+    width: 100%;
+  }
 }

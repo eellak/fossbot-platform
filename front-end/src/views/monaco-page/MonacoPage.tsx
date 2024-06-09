@@ -1,12 +1,35 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Box, Grid, Stack, DialogContent, Typography, Button, TextField } from '@mui/material';
+import {
+  Box,
+  Grid,
+  Stack,
+  DialogContent,
+  Typography,
+  Button,
+  TextField,
+  useMediaQuery,
+} from '@mui/material';
 import Spinner from '../spinner/Spinner';
 import PageContainer from 'src/components/container/PageContainer';
 import MonacoEditorComponent from 'src/components/editors/MonacoEditor';
 import Buttons from 'src/components/editors/RightColButtons';
 import PythonExecutor from 'src/components/editors/PythonExecutor';
 import { useAuth } from 'src/authentication/AuthProvider';
-import { WebGLApp, moveStep, rotateStep, stopMotion, get_distance, rgb_set_color, get_acceleration, get_gyroscope, get_floor_sensor, just_move, just_rotate, get_light_sensor, drawLine } from 'src/components/js-simulator/Simulator';
+import {
+  WebGLApp,
+  moveStep,
+  rotateStep,
+  stopMotion,
+  get_distance,
+  rgb_set_color,
+  get_acceleration,
+  get_gyroscope,
+  get_floor_sensor,
+  just_move,
+  just_rotate,
+  get_light_sensor,
+  drawLine,
+} from 'src/components/js-simulator/Simulator';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useLocation } from 'react-router-dom';
 import { v4 as uuidv4 } from 'uuid';
@@ -49,12 +72,14 @@ const MonacoPage: React.FC = () => {
   const { projectId } = useParams<{ projectId: string }>();
   const [isInPIP, setIsInPIP] = useState(false);
 
+  const isColumn = useMediaQuery('(max-width:1024px)');
+
   // ALERTS HANDLING
   const [showSuccessAlert, setShowSuccessAlert] = useState(false);
   const [showErrorAlert, setShowErrorAlert] = useState(false);
 
-  const [showSuccessAlertText, setShowSuccessAlertText] = useState("");
-  const [showErrorAlertText, setShowErrorAlertText] = useState("");
+  const [showSuccessAlertText, setShowSuccessAlertText] = useState('');
+  const [showErrorAlertText, setShowErrorAlertText] = useState('');
 
   const handleShowSuccessAlert = (message) => {
     setShowSuccessAlertText(message);
@@ -68,12 +93,12 @@ const MonacoPage: React.FC = () => {
 
   const handlePlayClick = () => {
     if (editorValue == '') {
-      handleShowErrorAlert(t('alertMessages.emptyCodeMonaco'))
+      handleShowErrorAlert(t('alertMessages.emptyCodeMonaco'));
       return;
     }
     if (runScriptRef.current) {
       runScriptRef.current();
-      handleShowSuccessAlert(t('alertMessages.codeRunning'))
+      handleShowSuccessAlert(t('alertMessages.codeRunning'));
     }
   };
 
@@ -81,7 +106,7 @@ const MonacoPage: React.FC = () => {
     if (stopScriptRef.current) {
       stopScriptRef.current();
       stopMotion();
-      handleShowErrorAlert(t('alertMessages.codeStopped'))
+      handleShowErrorAlert(t('alertMessages.codeStopped'));
     }
   };
 
@@ -127,8 +152,10 @@ const MonacoPage: React.FC = () => {
   useEffect(() => {
     if (location.pathname.endsWith('/monaco-tutorial-page')) {
       setProjectTitle('Monaco Editor FOSSBot Tutorial');
-      setProjectDescription('This is a tutorial on how to use the Monaco Editor with FOSSBot, \
-                              using Python. Also we will learn about the default control Python commands and how to use them.');
+      setProjectDescription(
+        'This is a tutorial on how to use the Monaco Editor with FOSSBot, \
+                              using Python. Also we will learn about the default control Python commands and how to use them.',
+      );
       setShowVideoPlayer(true);
     }
   }, [location.pathname]);
@@ -139,7 +166,10 @@ const MonacoPage: React.FC = () => {
   };
 
   const handleSaveClick = async () => {
-    if ((projectId == '' || projectId == undefined) && (projectDescription == t('newProjectDescription') || projectTitle == t('newProject'))) {
+    if (
+      (projectId == '' || projectId == undefined) &&
+      (projectDescription == t('newProjectDescription') || projectTitle == t('newProject'))
+    ) {
       setShowDrawer(true);
     } else {
       try {
@@ -150,14 +180,13 @@ const MonacoPage: React.FC = () => {
           code: editorValue,
         });
         if (project) {
-          handleShowSuccessAlert(t('alertMessages.projectUpdated'))
+          handleShowSuccessAlert(t('alertMessages.projectUpdated'));
         } else {
-          handleShowErrorAlert(t('alertMessages.projectUpdatedError'))
+          handleShowErrorAlert(t('alertMessages.projectUpdatedError'));
         }
-
       } catch (error) {
         console.error('Error updating project:', error);
-        handleShowErrorAlert(t('alertMessages.projectUpdatedError'))
+        handleShowErrorAlert(t('alertMessages.projectUpdatedError'));
       }
     }
     setIsEditingTitle(false);
@@ -177,7 +206,6 @@ const MonacoPage: React.FC = () => {
     if (projectId != '' && projectId != undefined) {
       setIsEditingTitle(true);
     }
-
   };
 
   const handleDescriptionClick = () => {
@@ -208,11 +236,17 @@ const MonacoPage: React.FC = () => {
         showDrawer={showDrawer}
         handleDrawerClose={handleDrawerClose}
         isDescriptionDisabled={true}
-        editorInitialValue='python'
+        editorInitialValue="python"
         code={editorValue}
       />
       <Box id="monaco-container" flexGrow={1}>
-        <Grid container spacing={3} justifyContent="center" alignItems="center" >
+        <Grid
+          direction={isColumn ? 'column' : 'row'}
+          container
+          spacing={3}
+          justifyContent="center"
+          alignItems="center"
+        >
           <Grid item xs={8} lg={8}>
             <Box mb={3}>
               {isEditingTitle ? (
@@ -244,7 +278,7 @@ const MonacoPage: React.FC = () => {
               )}
             </Box>
           </Grid>
-          <Grid item xs={4} lg={4} >
+          <Grid item xs={4} lg={4}>
             <Box mt={0}>
               <DialogContent className="testdialog">
                 <Stack direction="row" spacing={3} alignItems="center" justifyContent="flex-end">
@@ -262,40 +296,56 @@ const MonacoPage: React.FC = () => {
         {loading && isSimulatorLoading ? (
           <Spinner />
         ) : (
-          <Grid container spacing={1} paddingTop="0rem" paddingBottom="0rem" height={showVideoPlayer && !isInPIP ? 'calc(150vh - 300px)' : 'calc(120vh - 300px)'} >
-            <Grid item xs={7} lg={7} height={showVideoPlayer && !isInPIP ? 'calc(150vh - 300px)' : 'calc(120vh - 300px)'} >
+          <Grid
+            container
+            spacing={1}
+            paddingTop="0rem"
+            paddingBottom="0rem"
+            height={
+              isColumn
+                ? 'auto'
+                : showVideoPlayer && !isInPIP
+                ? 'calc(150vh - 300px)'
+                : 'calc(120vh - 300px)'
+            }
+            direction={isColumn ? 'column' : 'row'}
+          >
+            <Grid
+              item
+              xs={7}
+              lg={7}
+              height={showVideoPlayer && !isInPIP ? 'calc(150vh - 300px)' : 'calc(120vh - 300px)'}
+            >
               <MonacoEditorComponent code={editorValue} handleGetValue={handleGetValue} />
             </Grid>
-            <Grid item xs={5} lg={5} >
-            {showVideoPlayer && (
-              <Box
-                height="30vh"
-                
-                style={{
-                  position: 'relative',
-                  backgroundColor: 'black',
-                  color: 'white',
-                  padding: '2px 20px 5px',
-                  overflow: 'auto',
-                  fontFamily: 'monospace',
-                  lineHeight: '0.2',
-                  marginBottom: '20px',
-                  justifyContent: 'center',
-                  alignItems: 'center',
-                  display: isInPIP ? 'none' : 'flex',
-                  
-                }}
-              >
-                
-                <ReactPlayer url={require('../../assets/videos/tutorial1.mp4')}
+            <Grid item xs={5} lg={5}>
+              {showVideoPlayer && (
+                <Box
+                  height="30vh"
+                  style={{
+                    position: 'relative',
+                    backgroundColor: 'black',
+                    color: 'white',
+                    padding: '2px 20px 5px',
+                    overflow: 'auto',
+                    fontFamily: 'monospace',
+                    lineHeight: '0.2',
+                    marginBottom: '20px',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    display: isInPIP ? 'none' : 'flex',
+                  }}
+                >
+                  <ReactPlayer
+                    url={require('../../assets/videos/tutorial1.mp4')}
                     controls={true}
                     pip={true}
-                    width='100%'
-                    height='100%'
+                    width="100%"
+                    height="100%"
                     config={{
                       file: {
                         attributes: {
-                          controlsList: 'nodownload'
+                          controlsList: 'nodownload',
                         },
                         tracks: [
                           {
@@ -312,13 +362,11 @@ const MonacoPage: React.FC = () => {
                             label: 'Greek',
                             default: true,
                           },
-                        ]
-                      }
+                        ],
+                      },
                     }}
                     onEnablePIP={hideVideoPlayer}
                     onDisablePIP={unhideVideoPlayer}
-
-
                   />
 
                   {/* <div style={{ height: '100%', width: '100%' }}>
@@ -328,10 +376,7 @@ const MonacoPage: React.FC = () => {
               )}
 
               <Box height="50vh">
-                <WebGLApp
-                  appsessionId={sessionId}
-                  onMountChange={handleMountChange}
-                />
+                <WebGLApp appsessionId={sessionId} onMountChange={handleMountChange} />
               </Box>
 
               <Box
@@ -342,7 +387,7 @@ const MonacoPage: React.FC = () => {
                   padding: '2px 20px 5px',
                   overflow: 'auto',
                   fontFamily: 'monospace',
-                  marginTop: '20px'
+                  marginTop: '20px',
                 }}
               >
                 <p>{t('monaco-page.fossbot-terminal')} 🐍</p>
@@ -370,14 +415,9 @@ const MonacoPage: React.FC = () => {
         )}
       </Box>
 
-      {showSuccessAlert && (
-        <SuccessAlert title={showSuccessAlertText} description={""} />
-      )}
+      {showSuccessAlert && <SuccessAlert title={showSuccessAlertText} description={''} />}
 
-      {showErrorAlert && (
-        <ErrorAlert title={showErrorAlertText} description={""} />
-      )}
-
+      {showErrorAlert && <ErrorAlert title={showErrorAlertText} description={''} />}
     </PageContainer>
   );
 };

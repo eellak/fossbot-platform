@@ -3,11 +3,19 @@ import { Box, Grid, Typography } from '@mui/material';
 import { v4 as uuidv4 } from 'uuid';
 import { useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { WebGLApp, moveStep, rotateStep, stopMotion, drawLine, rgb_set_color } from 'src/components/js-simulator/Simulator';
+import {
+  WebGLApp,
+  moveStep,
+  rotateStep,
+  stopMotion,
+  drawLine,
+  rgb_set_color,
+} from 'src/components/js-simulator/Simulator';
 import PageContainer from '../../components/container/PageContainer';
 import VideoBox from 'src/components/handtrack/VideoBox';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faHand } from '@fortawesome/free-solid-svg-icons';
+import { useMediaQuery } from '@mui/material';
 
 const InteractivePage = () => {
   const { t } = useTranslation();
@@ -18,6 +26,8 @@ const InteractivePage = () => {
   const [isSimulatorLoading, setIsSimulatorLoading] = useState(true);
   const [videoBoxKey, setVideoBoxKey] = useState(uuidv4());
   const location = useLocation();
+
+  const isResponsive = useMediaQuery('(max-width:1024px)');
 
   useEffect(() => {
     const newSessionId = uuidv4();
@@ -35,25 +45,31 @@ const InteractivePage = () => {
   }, [location]);
 
   return (
-    <PageContainer title={t('interactive-page.title')} description={t('interactive-page.description')}>
-      <Box flexGrow={1} >
+    <PageContainer
+      title={t('interactive-page.title')}
+      description={t('interactive-page.description')}
+    >
+      <Box flexGrow={1}>
         <Box mb={3}>
           <Typography variant="h1" mt={0} color={'primary'}>
             <FontAwesomeIcon icon={faHand} size="1x" /> {t('interactive.title')}
           </Typography>
         </Box>
-        <Grid container spacing={1} paddingTop={"0rem"} paddingBottom={"0rem"} >
-          <Grid item xs={7} lg={7}>
-            <Box height="70vh" >
-
-              <WebGLApp appsessionId={sessionId}
-                onMountChange={handleMountChange}
-              />
+        <Grid
+          direction={isResponsive ? 'column' : 'row'}
+          container
+          spacing={1}
+          paddingTop={'0rem'}
+          paddingBottom={'0rem'}
+        >
+          <Grid width={"100%"} item xs={7} lg={7}>
+            <Box height="70vh">
+              <WebGLApp appsessionId={sessionId} onMountChange={handleMountChange} />
             </Box>
           </Grid>
 
           <Grid item xs={5} lg={5}>
-            <Box >
+            <Box>
               <VideoBox
                 key={videoBoxKey}
                 moveStep={moveStep}
