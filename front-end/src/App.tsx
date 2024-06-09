@@ -7,6 +7,7 @@ import Router from './routes/Router';
 import { AppState } from './store/Store';
 import { CssBaseline, ThemeProvider } from '@mui/material';
 import AuthProvider from './authentication/AuthProvider';
+import MatomoTracker from './components/matomo-tracker/MatomoTracker';
 function App() {
   const routing = useRoutes(Router);
   const theme = ThemeSettings();
@@ -16,6 +17,7 @@ function App() {
     <ThemeProvider theme={theme}>
       <RTL direction={customizer.activeDir}>
         <CssBaseline />
+        <MatomoTracker /> 
         <ScrollToTop>{routing}</ScrollToTop>
       </RTL>
     </ThemeProvider>
