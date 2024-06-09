@@ -37,6 +37,7 @@ jobs:
             echo "MATOMO_DATABASE_DBNAME=${{secrets.MATOMO_DATABASE_DBNAME}}" | sudo tee -a .env > /dev/null                             
             echo "MATOMO_TRUSTED_HOSTS=${{secrets.MATOMO_TRUSTED_HOSTS}}" | sudo tee -a .env > /dev/null                             
             echo "MATOMO_ASSUME_SECURE_PROTOCOL=1" | sudo tee -a .env > /dev/null                             
+            echo "MATOMO_PROXY_URI_HEADER=1" | sudo tee -a .env > /dev/null                          
             echo "MYSQL_ROOT_PASSWORD=${{secrets.MYSQL_ROOT_PASSWORD}}" | sudo tee -a .env > /dev/null                             
             echo "MYSQL_DATABASE=${{secrets.MATOMO_DATABASE_DBNAME}}" | sudo tee -a .env > /dev/null                             
             echo "MYSQL_USER=${{secrets.MATOMO_DATABASE_USERNAME}}" | sudo tee -a .env > /dev/null                             
