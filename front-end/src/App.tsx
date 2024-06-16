@@ -23,7 +23,7 @@ function App() {
     return (
       <>
         <div className="devices-page">
-          <PageContainer title={'test'} description={'test'}>
+          <PageContainer title={'Change Device'} description={'You should change device'}>
             <DevicesPage />
             <Footer />
           </PageContainer>
