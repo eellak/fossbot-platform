@@ -107,7 +107,8 @@
   },
   "device_page": {
     "errorMessage": "This platform is available only on Tablet and Desktop",
-    "suggestion":"Please connect from these devices to have 100% user experience"
+    "suggestion": "Please connect from these devices to have 100% user experience",
+    "title": "Please change device"
   },
   "card-fossbot": {
     "about_blockly": "You can create programs for the FOSSBot robot using the Blockly editor. Blockly is a visual programming language that allows users to create programs by dragging and dropping blocks that represent code.",
