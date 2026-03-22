@@ -1,4 +1,23 @@
-from models.models import UserRole, ProjectsCreate, LoginRequest, RegisterRequest, UpdateActiavtedRequest, UpdateUserRequest, UpdateUserPasswordRequest, UserResponse, SessionTokenRequest, UpdateUserRoleRequest, UpdateBetaTesterRequest, EmailVerificationRequest
+from models.models import (
+    UserRole,
+    ProjectsCreate,
+    LoginRequest,
+    RegisterRequest,
+    UpdateActiavtedRequest,
+    UpdateUserRequest,
+    UpdateUserPasswordRequest,
+    UserResponse,
+    SessionTokenRequest,
+    UpdateUserRoleRequest,
+    UpdateBetaTesterRequest,
+    EmailVerificationRequest,
+    CurriculumCreate,
+    CurriculumUpdate,
+    CurriculumResponse,
+    LessonCreate,
+    LessonUpdate,
+    LessonResponse,
+)
 from database.database import create_db_tables, User, Projects, Curriculum, Lesson, getSessionLocal
 from utils.utils_jwt import create_access_token, verify_access_token
 from fastapi import FastAPI, Depends, HTTPException, status
@@ -106,19 +125,24 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: SessionLocal
 
 
 @app.post("/token")
-async def login_for_access_token( login_request: LoginRequest,  db: SessionLocal = Depends(get_db)):
-    
+async def login_for_access_token(login_request: LoginRequest, db: SessionLocal = Depends(get_db)):
     logger.info(f"Request body: {login_request}")
     user = authenticate_user(db, login_request.username, login_request.password)
-    
+
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    if not user.activated:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User is not activated",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     access_token = create_access_token(data={"sub": user.username})
-    return {"user":user.username, "access_token": access_token, "token_type": "bearer"}
+    return {"user": user.username, "access_token": access_token, "token_type": "bearer"}
 
 
 @app.get("/users/me")
@@ -165,21 +189,19 @@ async def update_user_info(user_update: UpdateUserRequest, current_user: User = 
 
 @app.put("/users/me/password")
 async def update_user_password(user_password_update: UpdateUserPasswordRequest, current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):
-    # Fetch the current user from the database
     db_user = db.query(User).filter(User.id == current_user.id).first()
     if db_user is None:
         raise HTTPException(status_code=404, detail="User not found in database")
 
-    # Update the user information if provided
-    if user_password_update.password:
-        hashed_password = get_hashed(user_password_update.password)
-        db_user.password = hashed_password
+    if not verify_hashed(user_password_update.current_password, db_user.hashed_password):
+        raise HTTPException(status_code=400, detail="Incorrect current password")
 
-    # Commit the changes to the database and refresh
+    db_user.hashed_password = get_hashed(user_password_update.new_password)
+
     db.commit()
     db.refresh(db_user)
 
-    return db_user
+    return {"detail": "Password updated"}
 
 @app.put("/users/{user_id}/beta_tester")
 async def update_beta_tester_status(user_id: int, beta_tester_update: UpdateBetaTesterRequest, current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):
@@ -198,9 +220,9 @@ async def update_beta_tester_status(user_id: int, beta_tester_update: UpdateBeta
     return db_user
 
 @app.put("/users/{user_id}/activated")
-async def update_beta_tester_status(user_id: int, activated_update: UpdateActiavtedRequest, current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):
+async def update_activated_status(user_id: int, activated_update: UpdateActiavtedRequest, current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):
     if current_user.role != UserRole.ADMIN:
-        raise HTTPException(status_code=403, detail="Not authorized for this action: UPDATE BETA TESTER STATUS")
+        raise HTTPException(status_code=403, detail="Not authorized for this action: UPDATE ACTIVATED STATUS")
 
     db_user = db.query(User).filter(User.id == user_id).first()
     if db_user is None:
@@ -251,7 +273,20 @@ async def register_user(register_request: RegisterRequest, db: SessionLocal = De
     db.commit()
     db.refresh(new_user)
 
-    return {"username": new_user.username,"email":new_user.email, "id": new_user.id}#, "errorMessage": message}
+    return {"username": new_user.username, "email": new_user.email, "id": new_user.id}
+
+
+@app.post("/users/verify-email")
+async def verify_email(verify_request: EmailVerificationRequest, db: SessionLocal = Depends(get_db)):
+    db_user = get_user(db, verify_request.username)
+    if db_user is None or db_user.email != verify_request.email:
+        raise HTTPException(status_code=404, detail="User not found or email mismatch")
+    if db_user.activated:
+        return {"detail": "User already activated"}
+    db_user.activated = True
+    db.commit()
+    db.refresh(db_user)
+    return {"detail": "User activated"}
     
 @app.get("/users/", response_model=List[UserResponse])
 async def read_users(current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):
@@ -315,6 +350,123 @@ async def update_project(project_id: int, project_update: ProjectsCreate, curren
     db.commit()
     db.refresh(db_project)
     return db_project
+
+
+@app.get("/curriculums", response_model=List[CurriculumResponse])
+async def list_curriculums(current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):
+    curriculums = db.query(Curriculum).filter(Curriculum.user_id == current_user.id).all()
+    return curriculums
+
+
+@app.post("/curriculums", response_model=CurriculumResponse)
+async def create_curriculum(curriculum: CurriculumCreate, current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):
+    db_curriculum = Curriculum(
+        name=curriculum.name,
+        description=curriculum.description,
+        image_url=curriculum.image_url,
+        user_id=current_user.id,
+    )
+    db.add(db_curriculum)
+    db.commit()
+    db.refresh(db_curriculum)
+    return db_curriculum
+
+
+def _get_owned_curriculum(db: SessionLocal, curriculum_id: int, user_id: int) -> Curriculum:
+    curriculum = db.query(Curriculum).filter(Curriculum.id == curriculum_id, Curriculum.user_id == user_id).first()
+    if curriculum is None:
+        raise HTTPException(status_code=404, detail="Curriculum not found")
+    return curriculum
+
+
+@app.put("/curriculums/{curriculum_id}", response_model=CurriculumResponse)
+async def update_curriculum(curriculum_id: int, curriculum_update: CurriculumUpdate, current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):
+    db_curriculum = _get_owned_curriculum(db, curriculum_id, current_user.id)
+
+    if curriculum_update.name is not None:
+        db_curriculum.name = curriculum_update.name
+    if curriculum_update.description is not None:
+        db_curriculum.description = curriculum_update.description
+    if curriculum_update.image_url is not None:
+        db_curriculum.image_url = curriculum_update.image_url
+
+    db.commit()
+    db.refresh(db_curriculum)
+    return db_curriculum
+
+
+@app.delete("/curriculums/{curriculum_id}")
+async def delete_curriculum(curriculum_id: int, current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):
+    db_curriculum = _get_owned_curriculum(db, curriculum_id, current_user.id)
+    db.delete(db_curriculum)
+    db.commit()
+    return {"detail": "Curriculum deleted"}
+
+
+def _get_owned_lesson(db: SessionLocal, curriculum_id: int, lesson_id: int, user_id: int) -> Lesson:
+    lesson = (
+        db.query(Lesson)
+        .join(Curriculum, Lesson.curriculum_id == Curriculum.id)
+        .filter(Lesson.id == lesson_id, Curriculum.id == curriculum_id, Curriculum.user_id == user_id)
+        .first()
+    )
+    if lesson is None:
+        raise HTTPException(status_code=404, detail="Lesson not found")
+    return lesson
+
+
+@app.get("/curriculums/{curriculum_id}/lessons", response_model=List[LessonResponse])
+async def list_lessons(curriculum_id: int, current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):
+    _get_owned_curriculum(db, curriculum_id, current_user.id)
+    lessons = (
+        db.query(Lesson)
+        .join(Curriculum, Lesson.curriculum_id == Curriculum.id)
+        .filter(Curriculum.id == curriculum_id, Curriculum.user_id == current_user.id)
+        .all()
+    )
+    return lessons
+
+
+@app.post("/curriculums/{curriculum_id}/lessons", response_model=LessonResponse)
+async def create_lesson(curriculum_id: int, lesson: LessonCreate, current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):
+    _get_owned_curriculum(db, curriculum_id, current_user.id)
+    db_lesson = Lesson(
+        title=lesson.title,
+        description=lesson.description,
+        image_url=lesson.image_url,
+        video_url=lesson.video_url,
+        curriculum_id=curriculum_id,
+    )
+    db.add(db_lesson)
+    db.commit()
+    db.refresh(db_lesson)
+    return db_lesson
+
+
+@app.put("/curriculums/{curriculum_id}/lessons/{lesson_id}", response_model=LessonResponse)
+async def update_lesson(curriculum_id: int, lesson_id: int, lesson_update: LessonUpdate, current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):
+    db_lesson = _get_owned_lesson(db, curriculum_id, lesson_id, current_user.id)
+
+    if lesson_update.title is not None:
+        db_lesson.title = lesson_update.title
+    if lesson_update.description is not None:
+        db_lesson.description = lesson_update.description
+    if lesson_update.image_url is not None:
+        db_lesson.image_url = lesson_update.image_url
+    if lesson_update.video_url is not None:
+        db_lesson.video_url = lesson_update.video_url
+
+    db.commit()
+    db.refresh(db_lesson)
+    return db_lesson
+
+
+@app.delete("/curriculums/{curriculum_id}/lessons/{lesson_id}")
+async def delete_lesson(curriculum_id: int, lesson_id: int, current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):
+    db_lesson = _get_owned_lesson(db, curriculum_id, lesson_id, current_user.id)
+    db.delete(db_lesson)
+    db.commit()
+    return {"detail": "Lesson deleted"}
 
 
 # Run the application

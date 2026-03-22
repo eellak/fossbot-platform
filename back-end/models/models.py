@@ -1,6 +1,6 @@
 from enum import Enum as PyEnum
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 
 class UserRole(PyEnum):
     ADMIN = 'admin'
@@ -24,8 +24,9 @@ class UpdateUserRequest(BaseModel):
     username: str
     email: str
 
-class UpdateUserPasswordRequest(BaseModel): 
-    password: str
+class UpdateUserPasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
 
 class ProjectsCreate(BaseModel):
     name: str
@@ -62,3 +63,52 @@ class EmailVerificationRequest(BaseModel):
 
 class UpdateActiavtedRequest(BaseModel):
     activated: bool
+
+
+class CurriculumBase(BaseModel):
+    name: str
+    description: Optional[str] = None
+    image_url: Optional[str] = None
+
+
+class CurriculumCreate(CurriculumBase):
+    pass
+
+
+class CurriculumUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    image_url: Optional[str] = None
+
+
+class LessonBase(BaseModel):
+    title: str
+    description: Optional[str] = None
+    image_url: Optional[str] = None
+    video_url: Optional[str] = None
+
+
+class LessonCreate(LessonBase):
+    pass
+
+
+class LessonUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    image_url: Optional[str] = None
+    video_url: Optional[str] = None
+
+
+class LessonResponse(LessonBase):
+    id: int
+
+    class Config:
+        orm_mode = True
+
+
+class CurriculumResponse(CurriculumBase):
+    id: int
+    lessons: List[LessonResponse] = []
+
+    class Config:
+        orm_mode = True
