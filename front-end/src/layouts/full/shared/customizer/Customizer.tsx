@@ -44,24 +44,24 @@ interface colors {
   bgColor: string;
   disp?: string;
 }
+const StyledBox = styled(Box)<BoxProps>(({ theme }) => ({
+  boxShadow: theme.shadows[8],
+  padding: '20px',
+  cursor: 'pointer',
+  justifyContent: 'center',
+  display: 'flex',
+  transition: '0.1s ease-in',
+  border: '1px solid rgba(145, 158, 171, 0.12)',
+  '&:hover': {
+    transform: 'scale(1.05)',
+  },
+}));
+
 const Customizer: FC = () => {
   const [showDrawer, setShowDrawer] = useState(false);
   const customizer = useSelector((state: AppState) => state.customizer);
 
   const dispatch = useDispatch();
-
-  const StyledBox = styled(Box)<BoxProps>(({ theme }) => ({
-    boxShadow: theme.shadows[8],
-    padding: '20px',
-    cursor: 'pointer',
-    justifyContent: 'center',
-    display: 'flex',
-    transition: '0.1s ease-in',
-    border: '1px solid rgba(145, 158, 171, 0.12)',
-    '&:hover': {
-      transform: 'scale(1.05)',
-    },
-  }));
 
   const thColors: colors[] = [
     {

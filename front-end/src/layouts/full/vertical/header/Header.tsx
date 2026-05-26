@@ -1,3 +1,4 @@
+import React, { useMemo } from 'react';
 import { IconButton, Box, AppBar, useMediaQuery, Toolbar, styled, Stack } from '@mui/material';
 
 import { useSelector, useDispatch } from 'src/store/Store';
@@ -22,19 +23,25 @@ const Header = () => {
   const customizer = useSelector((state: AppState) => state.customizer);
   const dispatch = useDispatch();
 
-  const AppBarStyled = styled(AppBar)(({ theme }) => ({
-    boxShadow: 'none',
-    background: theme.palette.background.paper,
-    justifyContent: 'center',
-    backdropFilter: 'blur(4px)',
-    [theme.breakpoints.up('lg')]: {
-      minHeight: customizer.TopbarHeight,
-    },
-  }));
-  const ToolbarStyled = styled(Toolbar)(({ theme }) => ({
-    width: '100%',
-    color: theme.palette.text.secondary,
-  }));
+  const AppBarStyled = useMemo(
+    () => styled(AppBar)(({ theme }) => ({
+      boxShadow: 'none',
+      background: theme.palette.background.paper,
+      justifyContent: 'center',
+      backdropFilter: 'blur(4px)',
+      [theme.breakpoints.up('lg')]: {
+        minHeight: customizer.TopbarHeight,
+      },
+    })),
+    [customizer.TopbarHeight]
+  );
+  const ToolbarStyled = useMemo(
+    () => styled(Toolbar)(({ theme }) => ({
+      width: '100%',
+      color: theme.palette.text.secondary,
+    })),
+    []
+  );
 
   return (
     <AppBarStyled position="sticky" color="default">

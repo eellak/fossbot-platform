@@ -1,5 +1,5 @@
  
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   AppBar,
   styled,
@@ -18,21 +18,27 @@ import MobileSidebar from './MobileSidebar';
 import { IconMenu2 } from '@tabler/icons-react';
 
 const LpHeader = () => {
-  const AppBarStyled = styled(AppBar)(({ theme }) => ({
-    justifyContent: 'center',
+  const AppBarStyled = useMemo(
+    () => styled(AppBar)(({ theme }) => ({
+      justifyContent: 'center',
 
-    [theme.breakpoints.up('lg')]: {
-      minHeight: '80px',
-    },
-    backgroundColor: theme.palette.background.default,
-  }));
+      [theme.breakpoints.up('lg')]: {
+        minHeight: '80px',
+      },
+      backgroundColor: theme.palette.background.default,
+    })),
+    []
+  );
 
-  const ToolbarStyled = styled(Toolbar)(({ theme }) => ({
-    width: '100%',
-    paddingLeft: '0 !important',
-    paddingRight: '0 !important',
-    color: theme.palette.text.secondary,
-  }));
+  const ToolbarStyled = useMemo(
+    () => styled(Toolbar)(({ theme }) => ({
+      width: '100%',
+      paddingLeft: '0 !important',
+      paddingRight: '0 !important',
+      color: theme.palette.text.secondary,
+    })),
+    []
+  );
 
   //   sidebar
   const lgUp = useMediaQuery((theme: Theme) => theme.breakpoints.up('lg'));

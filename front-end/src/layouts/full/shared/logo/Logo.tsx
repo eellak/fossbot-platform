@@ -1,4 +1,4 @@
-import { FC } from 'react';
+import { FC, useMemo } from 'react';
 import { useSelector } from 'src/store/Store';
 import { Link } from 'react-router-dom';
 import { ReactComponent as LogoDark } from 'src/assets/images/logos/dark-logo.svg';
@@ -13,12 +13,15 @@ const Logo: FC = () => {
   const { t } = useTranslation();
 
   const customizer = useSelector((state: AppState) => state.customizer);
-  const LinkStyled = styled(Link)(() => ({
-    height: customizer.TopbarHeight,
-    width: customizer.isCollapse ? '40px' : '180px',
-    overflow: 'hidden',
-    display: 'block',
-  }));
+  const LinkStyled = useMemo(
+    () => styled(Link)(() => ({
+      height: customizer.TopbarHeight,
+      width: customizer.isCollapse ? '40px' : '180px',
+      overflow: 'hidden',
+      display: 'block',
+    })),
+    [customizer.TopbarHeight, customizer.isCollapse]
+  );
 
   if (customizer.activeDir === 'ltr') {
     return (

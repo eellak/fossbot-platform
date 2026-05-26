@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import NavItem from '../NavItem';
 
 import { useState } from 'react';
@@ -69,27 +69,30 @@ const NavCollapse = ({
     });
   }, [pathname, menu.children]);
 
-  const ListItemStyled = styled(ListItemButton)(() => ({
-    marginBottom: '2px',
-    padding: '8px 10px',
-    paddingLeft: hideMenu ? '10px' : level > 2 ? `${level * 15}px` : '10px',
-    backgroundColor: open && level < 2 ? theme.palette.primary.main : '',
-    whiteSpace: 'nowrap',
-    '&:hover': {
-      backgroundColor:
-        pathname.includes(menu.href) || open
+  const ListItemStyled = useMemo(
+    () => styled(ListItemButton)(() => ({
+      marginBottom: '2px',
+      padding: '8px 10px',
+      paddingLeft: hideMenu ? '10px' : level > 2 ? `${level * 15}px` : '10px',
+      backgroundColor: open && level < 2 ? theme.palette.primary.main : '',
+      whiteSpace: 'nowrap',
+      '&:hover': {
+        backgroundColor:
+          pathname.includes(menu.href) || open
+            ? theme.palette.primary.main
+            : theme.palette.primary.light,
+        color: pathname.includes(menu.href) || open ? 'white' : theme.palette.primary.main,
+      },
+      color:
+        open && level < 2
+          ? 'white'
+          : `inherit` && level > 1 && open
           ? theme.palette.primary.main
-          : theme.palette.primary.light,
-      color: pathname.includes(menu.href) || open ? 'white' : theme.palette.primary.main,
-    },
-    color:
-      open && level < 2
-        ? 'white'
-        : `inherit` && level > 1 && open
-        ? theme.palette.primary.main
-        : theme.palette.text.secondary,
-    borderRadius: `${customizer.borderRadius}px`,
-  }));
+          : theme.palette.text.secondary,
+      borderRadius: `${customizer.borderRadius}px`,
+    })),
+    [hideMenu, level, open, theme, pathname, menu.href, customizer.borderRadius]
+  );
 
   // If Menu has Children
   const submenus = menu.children?.map((item: any) => {

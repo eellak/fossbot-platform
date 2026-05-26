@@ -1,4 +1,4 @@
-import * as React from 'react';
+import React, { useMemo } from 'react';
 import Notifications from 'src/layouts/full/vertical/header/Notification';
 import Cart from 'src/layouts/full/vertical/header/Cart';
 import UserMenu from 'src/components/user-menu/UserMenu';
@@ -29,16 +29,22 @@ const Header = () => {
   const customizer = useSelector((state: AppState) => state.customizer);
   const dispatch = useDispatch();
 
-  const AppBarStyled = styled(AppBar)(({ theme }) => ({
-    background: theme.palette.background.paper,
-    justifyContent: 'center',
-    backdropFilter: 'blur(4px)',
+  const AppBarStyled = useMemo(
+    () => styled(AppBar)(({ theme }) => ({
+      background: theme.palette.background.paper,
+      justifyContent: 'center',
+      backdropFilter: 'blur(4px)',
 
-    [theme.breakpoints.up('lg')]: {
-      minHeight: customizer.TopbarHeight,
-    },
-  }));
-  const ToolbarStyled = styled(Toolbar)(() => ({ margin: '0 auto', width: '100%' }));
+      [theme.breakpoints.up('lg')]: {
+        minHeight: customizer.TopbarHeight,
+      },
+    })),
+    [customizer.TopbarHeight]
+  );
+  const ToolbarStyled = useMemo(
+    () => styled(Toolbar)(() => ({ margin: '0 auto', width: '100%' })),
+    []
+  );
 
   return (
     <AppBarStyled position="sticky" color="default" elevation={8}>
