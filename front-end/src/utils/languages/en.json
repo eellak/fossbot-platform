@@ -233,7 +233,8 @@
     "title": "Admin Panel",
     "description": "This is the admin panel page",
     "usageDescription": "You can delete users or edit their role",
-    "noUsersFound": "No users found"
+    "noUsersFound": "No users found",
+    "provider": "Provider"
   },
   "blocklyBlocks": {
     "forward": "forward",

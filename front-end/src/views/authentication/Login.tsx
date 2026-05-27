@@ -6,7 +6,7 @@ import Logo from 'src/layouts/full/shared/logo/Logo';
 import AuthLogin from './AuthLogin';
 
 import { Link } from 'react-router-dom';
-import { Grid, Box, Stack, Typography } from '@mui/material';
+import { Grid, Box, Typography, Stack } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import ErrorAlert from 'src/components/alerts/ErrorAlert';
 
@@ -15,7 +15,7 @@ const Login = () => {
 
   // ERROR ALERTS HANDLING
   const [showErrorAlert, setShowErrorAlert] = useState(false);
-  const [showErrorAlertText, setShowErrorAlertText] = useState("");
+  const [showErrorAlertText, setShowErrorAlertText] = useState('');
 
   const handleShowErrorAlert = (message) => {
     setShowErrorAlertText(message);
@@ -122,9 +122,7 @@ const Login = () => {
         </Grid>
       </Grid>
 
-      {showErrorAlert && (
-        <ErrorAlert title={showErrorAlertText} description={""} />
-      )}
+      {showErrorAlert && <ErrorAlert title={showErrorAlertText} description={''} />}
     </PageContainer>
   );
 };

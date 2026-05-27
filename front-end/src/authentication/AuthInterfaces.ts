@@ -3,7 +3,8 @@ export interface AuthContextType {
     user: User | null;
     token: string;
     loginAction: (data: LoginData) => Promise<LoginResponse>;
-    registerAction: (data: RegisterData) => Promise<void>;
+    loginWithFirebaseAction: (provider: FirebaseProviderName) => Promise<LoginResponse>;
+    registerAction: (data: RegisterData) => Promise<LoginResponse>;
 
     logOutAction: () => void;
     getUserDataAction: () => Promise<User | undefined>;
@@ -20,8 +21,10 @@ export interface AuthContextType {
     deleteProjectByIdAction: (projectId: number) => Promise<boolean>;
     getProjectByIdAction: (projectId: number) => Promise<Project | undefined>;
     updateProjectByIdAction: (projectId: number, data: NewProjectData) => Promise<Project | undefined>;
-    
+
 }
+
+export type FirebaseProviderName = 'google' | 'github';
 
 // Registration data
 export interface RegisterData {
@@ -57,6 +60,14 @@ export interface LoginData {
     password: string;
 }
 
+export interface FirebaseTokenData {
+    id_token: string;
+    display_name?: string;
+    email?: string;
+    photo_url?: string;
+}
+
+
 export interface User {
     id: number;
     username: string;
@@ -67,6 +78,8 @@ export interface User {
     image_url?: string;
     hashed_password?: string;
     beta_tester: boolean;
+    firebase_uid?: string;
+    provider: string;
 }
 
 export interface UserData {

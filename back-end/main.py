@@ -1,17 +1,21 @@
-from models.models import UserRole, ProjectsCreate, LoginRequest, RegisterRequest, UpdateActiavtedRequest, UpdateUserRequest, UpdateUserPasswordRequest, UserResponse, SessionTokenRequest, UpdateUserRoleRequest, UpdateBetaTesterRequest, EmailVerificationRequest
-from database.database import create_db_tables, User, Projects, Curriculum, Lesson, getSessionLocal
+from models.models import UserRole, ProjectsCreate, LoginRequest, RegisterRequest, UpdateActiavtedRequest, UpdateUserRequest, UpdateUserPasswordRequest, UserResponse, SessionTokenRequest, FirebaseTokenRequest, UpdateUserRoleRequest, UpdateBetaTesterRequest, EmailVerificationRequest
+from database.database import create_db_tables, migrate_schema, User, Projects, Curriculum, Lesson, getSessionLocal
 from utils.utils_jwt import create_access_token, verify_access_token
 from fastapi import FastAPI, Depends, HTTPException, status
 from utils.utils_hash import get_hashed, verify_hashed 
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
-from fastapi import Query
-from fastapi import Body
+from fastapi import Query, Body
+from sqlalchemy.exc import IntegrityError
 from typing import List
+import json
+import re
 import logging
 import uvicorn
 import os
+import firebase_admin
+from firebase_admin import auth as firebase_auth, credentials
 
 logger = logging.getLogger("uvicorn")
 SessionLocal = getSessionLocal()
@@ -37,6 +41,17 @@ app.add_middleware(
 
 # Security
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+
+
+def initialize_firebase():
+    if firebase_admin._apps:
+        return
+
+    service_account_json = os.getenv('FIREBASE_SERVICE_ACCOUNT_JSON')
+    if service_account_json:
+        firebase_admin.initialize_app(credentials.Certificate(json.loads(service_account_json)))
+    else:
+        firebase_admin.initialize_app()
 
 def get_db():
     db = SessionLocal()
@@ -74,16 +89,116 @@ def create_admin_user():
 
 @app.on_event("startup")
 def on_startup():
+    migrate_schema()
     create_admin_user()
 
 
 def get_user(db, username: str):
     return db.query(User).filter(User.username == username).first()
 
+def provider_allows_local_login(provider: str) -> bool:
+    providers = {p.strip().lower() for p in (provider or '').split(',')}
+    return 'local' in providers
+
+
 def authenticate_user(db, username: str, password: str):
     user = get_user(db, username)
-    if not user or not verify_hashed(password, user.hashed_password):
+    if not user:
         return False
+    if not provider_allows_local_login(user.provider):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Please sign in with your social login provider.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    if not verify_hashed(password, user.hashed_password):
+        return False
+    return user
+
+
+def build_firebase_username(db, display_name: str, email: str, firebase_uid: str, current_user=None):
+    base_username = re.sub(r'[^a-zA-Z0-9_-]+', '-', display_name.strip().lower()).strip('-')
+    if not base_username or base_username == 'user':
+        base_username = re.sub(r'[^a-zA-Z0-9_-]+', '-', email.split('@')[0].lower()).strip('-')
+    if not base_username or base_username == 'user':
+        base_username = f"firebase-{firebase_uid[:8]}"
+
+    username = base_username
+    existing_user = get_user(db, username)
+    if existing_user and (not current_user or existing_user.id != current_user.id):
+        username = f"{base_username}-{firebase_uid[:8]}"
+
+    return username
+
+
+FIREBASE_PROVIDER_MAP = {
+    'google.com': 'google',
+    'github.com': 'github',
+    'password': 'local',
+}
+
+def extract_firebase_provider(decoded_token: dict) -> str:
+    """Extract the normalized provider name from a Firebase ID token's claims."""
+    raw = (decoded_token.get('firebase') or {}).get('sign_in_provider', '')
+    return FIREBASE_PROVIDER_MAP.get(raw, raw)
+
+
+def merge_providers(existing: str, new_provider: str) -> str:
+    """Merge a new provider into an existing comma-separated provider string."""
+    if not existing or existing == 'local':
+        return new_provider
+    providers = set(p.strip() for p in existing.split(','))
+    providers.add(new_provider)
+    return ','.join(sorted(providers))
+
+
+def get_or_create_firebase_user(db, decoded_token, firebase_request: FirebaseTokenRequest):
+    email = firebase_request.email or decoded_token.get('email')
+    firebase_uid = decoded_token.get('uid')
+    provider = extract_firebase_provider(decoded_token)
+
+    if not email:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Firebase account has no email")
+
+    display_name = firebase_request.display_name or decoded_token.get('name') or email.split('@')[0]
+    photo_url = firebase_request.photo_url or decoded_token.get('picture')
+    name_parts = display_name.split(' ', 1)
+    firstname = name_parts[0] or 'Firebase'
+    lastname = name_parts[1] if len(name_parts) > 1 else ''
+
+    user = db.query(User).filter(User.email == email).first()
+    if user:
+        if firebase_uid and user.firebase_uid == firebase_uid:
+            user.username = build_firebase_username(db, display_name, email, firebase_uid, user)
+            user.firstname = firstname
+            user.lastname = lastname
+            if photo_url:
+                user.image_url = photo_url
+            user.provider = merge_providers(user.provider or 'local', provider)
+            db.commit()
+            db.refresh(user)
+            return user
+
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="An account with this email already exists.")
+
+    username = build_firebase_username(db, display_name, email, firebase_uid)
+
+    user = User(
+        username=username,
+        hashed_password=get_hashed(os.urandom(32).hex()),
+        firstname=firstname,
+        lastname=lastname,
+        email=email,
+        role=UserRole.USER,
+        beta_tester=False,
+        activated=True,
+        image_url=photo_url,
+        firebase_uid=firebase_uid,
+        provider=provider,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
     return user
 
 async def get_current_user(token: str = Depends(oauth2_scheme), db: SessionLocal = Depends(get_db)):
@@ -119,6 +234,24 @@ async def login_for_access_token( login_request: LoginRequest,  db: SessionLocal
         )
     access_token = create_access_token(data={"sub": user.username})
     return {"user":user.username, "access_token": access_token, "token_type": "bearer"}
+
+
+@app.post("/firebase-token")
+async def login_with_firebase_token(firebase_request: FirebaseTokenRequest, db: SessionLocal = Depends(get_db)):
+    try:
+        initialize_firebase()
+        decoded_token = firebase_auth.verify_id_token(firebase_request.id_token)
+    except Exception as error:
+        logger.exception("Firebase token verification failed")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid Firebase token",
+            headers={"WWW-Authenticate": "Bearer"},
+        ) from error
+
+    user = get_or_create_firebase_user(db, decoded_token, firebase_request)
+    access_token = create_access_token(data={"sub": user.username})
+    return {"user": user.username, "access_token": access_token, "token_type": "bearer"}
 
 
 @app.get("/users/me")
@@ -237,19 +370,30 @@ async def register_user(register_request: RegisterRequest, db: SessionLocal = De
     if db_user:
         raise HTTPException(status_code=400, detail="Username already registered")
 
+    email = register_request.email.strip().lower()
+    email_user = db.query(User).filter(User.email == email).first()
+    if email_user:
+        raise HTTPException(status_code=400, detail="An account with this email already exists.")
+
     # Create new user instance
     hashed_password = get_hashed(register_request.password)
     new_user = User(username=register_request.username,
                     hashed_password=hashed_password,
                     firstname=register_request.firstname,
                     lastname=register_request.lastname,
-                    email=register_request.email
+                    email=email
                     )
 
     # Add new user to the database
-    db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
+    try:
+        db.add(new_user)
+        db.commit()
+        db.refresh(new_user)
+    except IntegrityError as error:
+        db.rollback()
+        if 'users_email_key' in str(error.orig):
+            raise HTTPException(status_code=400, detail="An account with this email already exists.") from error
+        raise
 
     return {"username": new_user.username,"email":new_user.email, "id": new_user.id}#, "errorMessage": message}
     
@@ -261,14 +405,69 @@ async def read_users(current_user: User = Depends(get_current_user), db: Session
     users = db.query(User).all()
     return users
 
+def delete_firebase_user(firebase_uid: str):
+    """Delete a Firebase Auth user by UID.
+
+    Falls back to log-and-continue if Firebase Admin SDK is unavailable
+    or the user doesn't exist in Firebase (already deleted or never had
+    a Firebase auth account).
+    """
+    try:
+        initialize_firebase()
+        firebase_auth.delete_user(firebase_uid)
+        logger.info(f"Deleted Firebase Auth user {firebase_uid}")
+        return True
+    except firebase_auth.UserNotFoundError:
+        logger.info(f"Firebase user {firebase_uid} already deleted or never existed")
+        return False
+    except Exception as error:
+        logger.warning(f"Could not delete Firebase user {firebase_uid}: {error}")
+        return False
+
+
 @app.delete("/users/{user_id}")
-async def delete_user(user_id: int, current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):
+async def delete_user(
+    user_id: int,
+    current_user: User = Depends(get_current_user),
+    db: SessionLocal = Depends(get_db),
+):
+    """Delete a local DB user and its linked Firebase Auth account (admin only).
+
+    --- User-identity deletion policy ---
+    Source of truth model:
+      - Firebase Auth: identity / social-login provider only.
+      - Local DB: app-user store (roles, beta-tester status, activation, projects).
+
+    Local DB user deletion:
+      - Removes the local user and their projects.
+      - Also deletes the linked Firebase Auth account if a `firebase_uid`
+        is stored (populated on first Firebase social login).
+      - If `firebase_uid` is missing (user registered via email/password only),
+        local-only deletion proceeds without error.
+
+    Firebase Auth deletion (admin console):
+      - If a Firebase Auth user is deleted from the Firebase Console outside
+        this endpoint, the local DB user becomes orphaned. The next sign-in
+        attempt via that social provider will fail at Firebase.
+      - To prevent orphaned accounts, always delete local DB users through
+        this endpoint rather than the Firebase Console.
+
+    Error handling:
+      - Firebase deletion is best-effort: if the Firebase Admin SDK is not
+        configured or the Firebase user no longer exists, the local deletion
+        still proceeds. The error is logged but not raised.
+    """
     if current_user.role != UserRole.ADMIN:
         raise HTTPException(status_code=403, detail="Not authorized for this action: DELETE USER")
     
     db_user = db.query(User).filter(User.id == user_id).first()
     if db_user is None:
         raise HTTPException(status_code=404, detail="User not found in database")
+
+    # Always delete the linked Firebase Auth account when we know the UID.
+    # This prevents orphaned Firebase accounts and keeps both stores in sync.
+    if db_user.firebase_uid:
+        delete_firebase_user(db_user.firebase_uid)
 
     db.delete(db_user)
     db.commit()

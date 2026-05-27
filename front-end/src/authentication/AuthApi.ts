@@ -1,9 +1,21 @@
-import { ActivatedData, BetaTesterData, LoginData, NewProjectData, PassswordData, RegisterData, RoleData, User, UserData } from './AuthInterfaces';
+import { ActivatedData, BetaTesterData, FirebaseTokenData, LoginData, NewProjectData, PassswordData, RegisterData, RoleData, User, UserData } from './AuthInterfaces';
 
 const backendUrl: string = process.env.REACT_APP_BACKEND_URL;
 
 export async function login(data: LoginData) {
     const response = await fetch(`${backendUrl}/token`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data),
+    });
+
+    return response;
+}
+
+export async function loginWithFirebaseToken(data: FirebaseTokenData) {
+    const response = await fetch(`${backendUrl}/firebase-token`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',

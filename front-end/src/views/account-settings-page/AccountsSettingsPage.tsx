@@ -60,7 +60,18 @@ const AccountsSettingsPage = () => {
 
 
     useEffect(() => {
+        if (auth.user) {
+            setUser(auth.user);
+            setIsLoading(false);
+        }
+    }, [auth.user]);
+
+    useEffect(() => {
         const fetchUserData = async () => {
+            if (!auth.token) {
+                return;
+            }
+
             try {
                 const userData = await auth.getUserDataAction();
                 setUser(userData);
@@ -75,7 +86,7 @@ const AccountsSettingsPage = () => {
         };
 
         fetchUserData();
-    }, []);
+    }, [auth.token]);
 
     const handleFormSubmitResult = (result) => {
         if (result) {

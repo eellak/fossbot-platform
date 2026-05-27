@@ -5,6 +5,8 @@ import PageContainer from 'src/components/container/PageContainer';
 import MenuItem from '@mui/material/MenuItem';
 import { useState, useEffect } from 'react';
 import {
+  Box,
+  Stack,
   Typography,
   Table,
   TableBody,
@@ -15,12 +17,15 @@ import {
   Select,
   Checkbox,
 } from '@mui/material';
+import { useTheme } from '@mui/material/styles';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faTrash } from '@fortawesome/free-solid-svg-icons';
 import { IconUserFilled } from '@tabler/icons-react';
 import { useAuth } from 'src/authentication/AuthProvider';
 import { useTranslation } from 'react-i18next';
 import { UserRole } from 'src/authentication/AuthInterfaces';
+import googleIcon from 'src/assets/images/svgs/google-icon.svg';
+import githubIcon from 'src/assets/images/svgs/github-icon.svg';
 
 interface UsersCardProps {
   onShowSuccessAlert: (message: string) => void;
@@ -29,6 +34,7 @@ interface UsersCardProps {
 
 const UsersCard = ({ onShowSuccessAlert, onShowErrorAlert }: UsersCardProps) => {
   const { t } = useTranslation();
+  const theme = useTheme();
 
   const auth = useAuth();
 
@@ -115,6 +121,64 @@ const UsersCard = ({ onShowSuccessAlert, onShowErrorAlert }: UsersCardProps) => 
     }
   };
 
+  const PROVIDER_LABELS: Record<string, string> = {
+    google: 'Google',
+    'google.com': 'Google',
+    github: 'GitHub',
+    'github.com': 'GitHub',
+    password: 'Email/Password',
+    local: 'Local',
+  };
+
+  const PROVIDER_ICONS: Record<string, string> = {
+    google: googleIcon,
+    'google.com': googleIcon,
+    github: githubIcon,
+    'github.com': githubIcon,
+  };
+
+  const renderProvider = (provider: string) => {
+    const providers = (provider || 'local')
+      .split(',')
+      .map((p) => p.trim().toLowerCase())
+      .filter(Boolean);
+
+    return (
+      <Stack direction="row" spacing={0.75} alignItems="center" justifyContent="center" flexWrap="wrap">
+        {providers.map((providerId) => {
+          const label = PROVIDER_LABELS[providerId] || providerId;
+          const icon = PROVIDER_ICONS[providerId];
+
+          if (icon) {
+            return (
+              <Box
+                key={providerId}
+                component="img"
+                src={icon}
+                alt={label}
+                title={label}
+                sx={{
+                  width: 18,
+                  height: 18,
+                  display: 'block',
+                  ...(providerId.startsWith('github') && theme.palette.mode === 'dark'
+                    ? { filter: 'brightness(0) invert(1)' }
+                    : {}),
+                }}
+              />
+            );
+          }
+
+          return (
+            <Typography key={providerId} variant="body2">
+              {label}
+            </Typography>
+          );
+        })}
+      </Stack>
+    );
+  };
+
   return (
     <PageContainer>
       <DashboardCard>
@@ -149,6 +213,11 @@ const UsersCard = ({ onShowSuccessAlert, onShowErrorAlert }: UsersCardProps) => 
                 </TableCell>
                 <TableCell align="center">
                   <Typography variant="subtitle2" fontWeight={600}>
+                    {t('admin-panel.provider')}
+                  </Typography>
+                </TableCell>
+                <TableCell align="center">
+                  <Typography variant="subtitle2" fontWeight={600}>
                     {t('betaTester')}
                   </Typography>
                 </TableCell>
@@ -172,13 +241,14 @@ const UsersCard = ({ onShowSuccessAlert, onShowErrorAlert }: UsersCardProps) => 
             <TableBody>
               {users.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6}>
+                  <TableCell colSpan={9}>
                     <Typography>{t('admin-panel.noUsersFound')} </Typography>
                   </TableCell>
                 </TableRow>
               ) : (
-                users.map((user) => (
-                  <TableRow key={user.id}>
+                users.map((user) => {
+                  return (
+                    <TableRow key={user.id}>
                     <TableCell align="center">
                       {user.username}
                     </TableCell>
@@ -190,6 +260,9 @@ const UsersCard = ({ onShowSuccessAlert, onShowErrorAlert }: UsersCardProps) => 
                     </TableCell>
                     <TableCell align="center">
                       <Typography>{user.email}</Typography>
+                    </TableCell>
+                    <TableCell align="center">
+                      {renderProvider(user.provider)}
                     </TableCell>
                     <TableCell align="center">
                       <Checkbox
@@ -225,7 +298,8 @@ const UsersCard = ({ onShowSuccessAlert, onShowErrorAlert }: UsersCardProps) => 
                       </Fab>
                     </TableCell>
                   </TableRow>
-                ))
+                  );
+                })
               )}
             </TableBody>
           </Table>

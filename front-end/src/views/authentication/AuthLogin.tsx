@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import CustomCheckbox from '../../components/forms/theme-elements/CustomCheckbox';
 import CustomTextField from '../../components/forms/theme-elements/CustomTextField';
 import CustomFormLabel from '../../components/forms/theme-elements/CustomFormLabel';
@@ -10,44 +10,72 @@ import {
   FormControlLabel,
   Button,
   Stack,
-  Divider,
 } from '@mui/material';
+import { useTheme } from '@mui/material/styles';
 import { Link } from 'react-router-dom';
-import { useState } from 'react';
 import { loginType } from 'src/types/auth/auth';
-import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../authentication/AuthProvider';
-import { useTranslation } from 'react-i18next';
+import googleIcon from 'src/assets/images/svgs/google-icon.svg';
+import githubIcon from 'src/assets/images/svgs/github-icon.svg';
 
 const AuthLogin = ({ title, subtitle, subtext, handleShowErrorAlert }: loginType) => {
-  const { t } = useTranslation();
+  const theme = useTheme();
 
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const navigate = useNavigate();
-
-  const handleUsernameChange = (event) => {
-    setUsername(event.target.value);
-  };
-
-  const handlePasswordChange = (event) => {
-    setPassword(event.target.value);
-  };
+  const [loginBannerError, setLoginBannerError] = useState('');
 
   const auth = useAuth();
+
+  const renderSocialIcon = (provider: 'google' | 'github') => (
+    <Box
+      component="img"
+      src={provider === 'google' ? googleIcon : githubIcon}
+      alt=""
+      aria-hidden="true"
+      sx={{
+        width: 18,
+        height: 18,
+        display: 'block',
+        ...(provider === 'github' && theme.palette.mode === 'dark'
+          ? { filter: 'brightness(0) invert(1)' }
+          : {}),
+      }}
+    />
+  );
+
+  const accountExistsMessage = 'An account with this email already exists.';
+  const socialLoginMessage = 'Please sign in with your social login provider.';
+
+  const handleFirebaseLogin = async (provider) => {
+    setLoginBannerError('');
+    const success = await auth.loginWithFirebaseAction(provider);
+    if (!success.success) {
+      if (success.detail === accountExistsMessage) {
+        setLoginBannerError(success.detail);
+      } else {
+        handleShowErrorAlert(success.detail);
+      }
+    }
+  };
+
   const handleSubmit = async (event) => {
     event.preventDefault();
 
+    setLoginBannerError('');
+
     try {
-      // Call the login function
       if (username !== '' && password !== '') {
-       const success = await auth.loginAction({ username: username, password: password });
-       if(!success.success){
-        handleShowErrorAlert(success.detail);
-       }
+        const success = await auth.loginAction({ username: username, password: password });
+        if (!success.success) {
+          if (success.detail === socialLoginMessage) {
+            setLoginBannerError(success.detail);
+          } else {
+            handleShowErrorAlert(success.detail);
+          }
+        }
       }
     } catch (error) {
-      // Handle errors (e.g., show an error message to the user)
       console.error('Login error:', error);
       handleShowErrorAlert(error || 'Login failed.');
     }
@@ -63,77 +91,167 @@ const AuthLogin = ({ title, subtitle, subtext, handleShowErrorAlert }: loginType
 
       {subtext}
 
-      {/* <AuthSocialButtons title="Sign in with" /> */}
-      <Box mt={3}>
-        <Divider>
-          <Typography
-            component="span"
-            color="textSecondary"
-            variant="h6"
-            fontWeight="400"
-            position="relative"
-            px={2}
-          >
-            {t('signInWith')}
-          </Typography>
-        </Divider>
-      </Box>
+      {loginBannerError && (
+        <Box
+          sx={{
+            mt: 3,
+            p: 1.5,
+            borderRadius: 1,
+            backgroundColor: '#fdecea',
+            color: '#b42318',
+            fontWeight: 600,
+          }}
+        >
+          {loginBannerError}
+        </Box>
+      )}
 
-      <Stack>
-        <Box>
-          <CustomFormLabel htmlFor="username">{t('username')}</CustomFormLabel>
-          <CustomTextField
-            id="username"
-            variant="outlined"
-            fullWidth
-            value={username}
-            onChange={handleUsernameChange}
-          />
-        </Box>
-        <Box>
-          <CustomFormLabel htmlFor="password">{t('password')}</CustomFormLabel>
-          <CustomTextField
-            id="password"
-            type="password"
-            variant="outlined"
-            fullWidth
-            value={password}
-            onChange={handlePasswordChange}
-          />
-        </Box>
-        <Stack justifyContent="space-between" direction="row" alignItems="center" my={2}>
-          <FormGroup>
-            <FormControlLabel
-              control={<CustomCheckbox defaultChecked />}
-              label= {t('authentication.authLogin.rememberDevice')}
-            />
-          </FormGroup>
-          <Typography
-            component={Link}
-            to="/auth/forgot-password"
-            fontWeight="500"
-            sx={{
-              textDecoration: 'none',
-              color: 'primary.main',
-            }}
-          >
-            {t('authentication.authLogin.forgotPassword')}
-          </Typography>
-        </Stack>
-      </Stack>
-      <Box>
+      <Stack spacing={2} sx={{ mt: loginBannerError ? 2 : 3 }}>
         <Button
-          color="primary"
-          variant="contained"
+          color="inherit"
+          variant="outlined"
           size="large"
           fullWidth
-          onClick={handleSubmit}
-          type="submit"
+          onClick={() => handleFirebaseLogin('google')}
+          startIcon={renderSocialIcon('google')}
+          sx={{
+            justifyContent: 'center',
+            borderColor: '#2f3748',
+            color: '#2f3748',
+            textTransform: 'none',
+            boxShadow: 'none',
+            '&:hover': {
+              borderColor: '#2f3748',
+              backgroundColor: 'rgba(47, 55, 72, 0.03)',
+              boxShadow: 'none',
+            },
+          }}
         >
-          {t('signIn')}
+          Continue with Google
         </Button>
+        <Button
+          color="inherit"
+          variant="outlined"
+          size="large"
+          fullWidth
+          onClick={() => handleFirebaseLogin('github')}
+          startIcon={renderSocialIcon('github')}
+          sx={{
+            justifyContent: 'center',
+            borderColor: '#2f3748',
+            color: '#2f3748',
+            textTransform: 'none',
+            boxShadow: 'none',
+            '&:hover': {
+              borderColor: '#2f3748',
+              backgroundColor: 'rgba(47, 55, 72, 0.03)',
+              boxShadow: 'none',
+            },
+          }}
+        >
+          Continue with GitHub
+        </Button>
+      </Stack>
+
+      <Typography
+        variant="body1"
+        sx={{
+          mt: 2.25,
+          mb: 1.5,
+          color: '#65708c',
+          fontWeight: 500,
+        }}
+      >
+        or use username
+      </Typography>
+
+      <Box component="form" onSubmit={handleSubmit}>
+        <Stack>
+          <Box>
+            <CustomFormLabel htmlFor="username">Username</CustomFormLabel>
+            <CustomTextField
+              id="username"
+              type="text"
+              variant="outlined"
+              fullWidth
+              value={username}
+              onChange={(event) => setUsername(event.target.value)}
+              autoComplete="username"
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  backgroundColor: '#fff',
+                },
+              }}
+            />
+          </Box>
+
+          <Box>
+            <CustomFormLabel htmlFor="password">Password</CustomFormLabel>
+            <CustomTextField
+              id="password"
+              type="password"
+              variant="outlined"
+              fullWidth
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              autoComplete="current-password"
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  backgroundColor: '#fff',
+                },
+              }}
+            />
+          </Box>
+
+          <Stack justifyContent="space-between" direction="row" alignItems="center" my={2}>
+            <FormGroup>
+              <FormControlLabel
+                control={<CustomCheckbox defaultChecked />}
+                label={
+                  <Typography sx={{ color: '#2f3748' }}>
+                    Remember this device
+                  </Typography>
+                }
+              />
+            </FormGroup>
+            <Typography
+              component={Link}
+              to="/auth/forgot-password"
+              fontWeight="500"
+              sx={{
+                textDecoration: 'none',
+                color: '#6f84ff',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              Forgot password?
+            </Typography>
+          </Stack>
+
+          <Button
+            color="primary"
+            variant="contained"
+            size="large"
+            fullWidth
+            onClick={handleSubmit}
+            type="submit"
+            sx={{
+              backgroundColor: '#6f84ff',
+              textTransform: 'none',
+              boxShadow: 'none',
+              '&:hover': {
+                backgroundColor: '#5f76f7',
+                boxShadow: 'none',
+              },
+            }}
+          >
+            Sign in
+          </Button>
+        </Stack>
       </Box>
+
       {subtitle}
+
     </>
   );
 };

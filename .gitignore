@@ -9,7 +9,11 @@ data/
 /back-end/.env
 /back-end/jwtgenerator.py
 **/*-env/
+**/.env
 **/alembic.ini
 **/alembic/
 **/old*
 **/versions/*.py
+**/node_modules/
+
+*adminsdk*.json

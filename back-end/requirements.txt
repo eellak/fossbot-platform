@@ -9,3 +9,4 @@ python-multipart==0.0.6
 pydantic==2.5.3
 PyJWT==2.8.0
 psycopg2==2.9.9
+firebase-admin==6.5.0

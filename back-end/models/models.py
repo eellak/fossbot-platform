@@ -36,6 +36,12 @@ class ProjectsCreate(BaseModel):
 class SessionTokenRequest(BaseModel):
     session_token: str
 
+class FirebaseTokenRequest(BaseModel):
+    id_token: str
+    display_name: Optional[str] = None
+    email: Optional[str] = None
+    photo_url: Optional[str] = None
+
 class UserResponse(BaseModel):
     id: int
     username: str
@@ -46,6 +52,8 @@ class UserResponse(BaseModel):
     image_url: Optional[str]
     beta_tester: bool
     activated: bool
+    firebase_uid: Optional[str]
+    provider: str
     
     class Config:
         orm_mode = True

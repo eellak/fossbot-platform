@@ -1,358 +1,452 @@
 import React, { useContext, createContext, useEffect, useState, ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-    LoginData,
-    RegisterData,
-    NewProjectData,
-    AuthContextType,
-    Project,
-    UserData,
-    User,
-    PassswordData,
-    RoleData,
-    BetaTesterData,
-    ActivatedData,
+  LoginData,
+  RegisterData,
+  NewProjectData,
+  AuthContextType,
+  Project,
+  UserData,
+  User,
+  PassswordData,
+  RoleData,
+  BetaTesterData,
+  ActivatedData,
+  FirebaseProviderName,
+  LoginResponse,
 } from './AuthInterfaces';
 import {
-    createProject,
-    deleteProjectById,
-    getProjectById,
-    getProjects,
-    login,
-    register,
-    updateProjectById,
-    getUserData,
-    updateUserData,
-    updateUserPasswordData,
-    getUsers,
-    deleteUserById,
-    updateUserRoleById,
-    updateUserBetaTesterStatusById,
-    updateUserActivatedStatusById
+  createProject,
+  deleteProjectById,
+  getProjectById,
+  getProjects,
+  login,
+  loginWithFirebaseToken,
+  register,
+  updateProjectById,
+  getUserData,
+  updateUserData,
+  updateUserPasswordData,
+  getUsers,
+  deleteUserById,
+  updateUserRoleById,
+  updateUserBetaTesterStatusById,
+  updateUserActivatedStatusById
 } from './AuthApi';
+import { signInWithFirebaseProvider, signOutFromFirebase, subscribeToFirebaseAuthState } from './firebase';
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+const firebaseUserToUser = (firebaseUser): User => {
+  const email = firebaseUser.email || '';
+  const displayName = firebaseUser.displayName || email.split('@')[0] || 'Firebase user';
+  const [firstname = displayName, ...lastnameParts] = displayName.split(' ');
+
+  return {
+    id: 0,
+    username: email || firebaseUser.uid,
+    firstname,
+    lastname: lastnameParts.join(' '),
+    email,
+    role: 'user',
+    image_url: firebaseUser.photoURL || undefined,
+    beta_tester: false,
+    provider: 'local',
+  };
+};
+
 interface AuthProviderProps {
-    children: ReactNode;
+  children: ReactNode;
 }
 
 const AuthProvider = ({ children }: AuthProviderProps) => {
-    const localStorageName = 'fossbot-platform';
-    const [user, setUser] = useState<User | null>(null);
-    const [token, setToken] = useState<string>(localStorage.getItem(localStorageName) || '');
-    const navigate = useNavigate();
+  const localStorageName = 'fossbot-platform';
+  const [user, setUser] = useState<User | null>(null);
+  const [token, setToken] = useState<string>(localStorage.getItem(localStorageName) || '');
+  const navigate = useNavigate();
 
-    useEffect(() => {
-        if (token) {
-            localStorage.setItem(localStorageName, token);
-        } else {
-            localStorage.removeItem(localStorageName);
-        }
-    }, [token]);
+  useEffect(() => {
+    if (token) {
+      localStorage.setItem(localStorageName, token);
+    } else {
+      localStorage.removeItem(localStorageName);
+    }
+  }, [token]);
 
-    useEffect(() => {
-        const fetchUserData = async () => {
-            try {
-                const response = await getUserData(token);
-                const userData: User = await response.json(); // Extract the user data from the response
-                setUser(userData); // Set the user data in the state
-            } catch (error) {
-                console.error('Error fetching user data:', error);
-            }
-        };
+  const exchangeFirebaseToken = async (idToken: string, firebaseUser) => {
+    const response = await loginWithFirebaseToken({
+      id_token: idToken,
+      display_name: firebaseUser.displayName || undefined,
+      email: firebaseUser.email || undefined,
+      photo_url: firebaseUser.photoURL || undefined,
+    });
+    const res = await response.json();
 
-        if (token) {
-            fetchUserData();
-        }
-    }, [token]);
+    if (!res.access_token) {
+      throw new Error(res.detail || 'Firebase login failed');
+    }
 
-    const loginAction = async (data: LoginData) => {
-        try {
-            const response = await login(data);
-            const res = await response.json();
+    setToken(res.access_token);
+    localStorage.setItem(localStorageName, res.access_token);
+    return res.access_token;
+  };
 
-            console.log(res)
-            if (res.access_token) {
-                setUser(res.user);
-                setToken(res.access_token);
-                localStorage.setItem(localStorageName, res.access_token);
-                navigate('/dashboard');
-                return { success: true, detail: '' };
-            }
-            return { success: false, detail: res.detail || 'Login failed' };
-        } catch (err) {
-            console.error(err);
-            return { success: false, detail: err || 'Login failed' };
+  useEffect(() => {
+    const unsubscribe = subscribeToFirebaseAuthState(async (firebaseUser) => {
+      if (!firebaseUser) {
+        return;
+      }
 
-        }
+      try {
+        const idToken = await firebaseUser.getIdToken();
+        await exchangeFirebaseToken(idToken, firebaseUser);
+        setUser(firebaseUserToUser(firebaseUser));
+      } catch (err) {
+        console.error(err);
+        signOutFromFirebase().catch(console.error);
+      }
+    });
+
+    return unsubscribe;
+  }, []);
+
+  useEffect(() => {
+    const fetchUserData = async () => {
+      try {
+        const response = await getUserData(token);
+        const userData: User = await response.json(); // Extract the user data from the response
+        setUser(userData); // Set the user data in the state
+      } catch (error) {
+        console.error('Error fetching user data:', error);
+      }
     };
 
-    const logOutAction = () => {
-        setUser(null);
-        setToken('');
-        localStorage.removeItem(localStorageName);
-        navigate('/');
-    };
+    if (token) {
+      fetchUserData();
+    }
+  }, [token]);
 
-    const registerAction = async (data: RegisterData) => {
-        try {
-            const response = await register(data);
-            const res = await response.json();
+  const loginAction = async (data: LoginData) => {
+    try {
+      const response = await login(data);
+      const res = await response.json();
 
-            if (response.status === 200) {
-                navigate('/auth/login');
-            } else {
-                throw new Error(res.message || 'Registration failed');
-            }
-        } catch (err) {
-            console.error(err);
-        }
-    };
+      console.log(res)
+      if (res.access_token) {
+        setUser(res.user);
+        setToken(res.access_token);
+        localStorage.setItem(localStorageName, res.access_token);
+        navigate('/dashboard');
+        return { success: true, detail: '' };
+      }
+      return { success: false, detail: res.detail || 'Login failed' };
+    } catch (err) {
+      console.error(err);
+      return { success: false, detail: err || 'Login failed' };
 
-    const getAllUsers = async (): Promise<User[] | undefined> => {
-        try {
-            const response = await getUsers(token);
+    }
+  };
 
-            if (response.status == 200) {
-                const users: User[] = await response.json();
+  const loginWithFirebaseAction = async (provider: FirebaseProviderName) => {
+    try {
+      const credential = await signInWithFirebaseProvider(provider);
+      const idToken = await credential.user.getIdToken();
 
-                return users;
-            } else {
-                throw new Error('Failed to fetch users');
-            }
-        } catch (err) {
-            console.error(err);
-            return undefined; // Return undefined in case of an error
-        }
-    };
+      await exchangeFirebaseToken(idToken, credential.user);
+      setUser(firebaseUserToUser(credential.user));
+      navigate('/dashboard');
 
-    const createProjectAction = async (data: NewProjectData): Promise<number | undefined> => {
-        try {
-            const response = await createProject(data, token);
-            const res = await response.json();
+      return { success: true, detail: '' };
+    } catch (err: any) {
+      console.error(err);
 
-            if (response.status === 200 && res.id) {
-                return res.id;
-            } else {
-                throw new Error(res.message || 'New project failed');
-            }
-        } catch (err) {
-            console.error(err);
-        }
-    };
+      if (err?.code === 'auth/account-exists-with-different-credential') {
+        return { success: false, detail: 'An account with this email already exists.' };
+      }
 
-    const getProjectsAction = async (): Promise<Project[] | undefined> => {
-        try {
-            const response = await getProjects(token);
-
-            if (response.status === 200) {
-                const projects: Project[] = await response.json();
-                return projects;
-            } else {
-                throw new Error('Failed to fetch projects');
-            }
-        } catch (err) {
-            console.error(err);
-            return undefined;
-        }
-    };
-
-    const deleteProjectByIdAction = async (projectId: number) => {
-        try {
-            const response = await deleteProjectById(projectId, token);
-
-            if (response.status === 200) {
-                await response.json();
-                return true;
-            } else {
-                throw new Error(`Failed to delete project. Status: ${response.status}`);
-            }
-        } catch (err) {
-            console.error(err);
-            return false;
-        }
-    };
-
-    const getProjectByIdAction = async (projectId: number): Promise<Project | undefined> => {
-        try {
-            const response = await getProjectById(projectId, token);
-
-            if (response.status === 200) {
-                const project: Project = await response.json();
-                return project;
-            } else {
-                throw new Error('Failed to fetch project');
-            }
-        } catch (err) {
-            console.error(err);
-            return undefined;
-        }
-    };
-
-    const updateProjectByIdAction = async (projectId: number, data: NewProjectData) => {
-        try {
-            const response = await updateProjectById(data, projectId, token);
+      signOutFromFirebase().catch(console.error);
+      return { success: false, detail: err instanceof Error ? err.message : 'Firebase login failed' };
+    }
+  };
 
 
-            if (response.status == 200) {
-                const project: Project = await response.json();
-                return project;
+  const logOutAction = () => {
+    signOutFromFirebase().catch(console.error);
+    setUser(null);
+    setToken('');
+    localStorage.removeItem(localStorageName);
+    navigate('/');
+  };
 
-            } else {
-                throw new Error('Update project failed');
-            }
-        } catch (err) {
-            console.error(err);
-        }
-    };
+  const registerAction = async (data: RegisterData): Promise<LoginResponse> => {
+    try {
+      const response = await register(data);
+      const res = await response.json();
 
-    const getUserDataAction = async () => {
-        try {
-            const response = await getUserData(token);
-            const userData = await response.json();
+      if (response.status === 200) {
+        navigate('/auth/login');
+        return { success: true, detail: '' };
+      }
 
-            if (response.status === 200) {
-                return userData;
-            } else {
-                throw new Error('Failed to fetch user data');
-            }
-        } catch (error) {
-            console.error('Error fetching user data:', error);
-            throw error;
-        }
-    };
+      return { success: false, detail: res.detail || 'Registration failed' };
+    } catch (err) {
+      console.error(err);
+      return { success: false, detail: err instanceof Error ? err.message : 'Registration failed' };
+    }
+  };
 
-    const updateUser = async (data: UserData): Promise<User | undefined> => {
-        try {
-            const response = await updateUserData(data, token);
+  const getAllUsers = async (): Promise<User[] | undefined> => {
+    try {
+      const response = await getUsers(token);
 
-            if (response.status === 200) {
-                const user: User = await response.json();
-                return user;
-            } else {
-                throw new Error('User data update failed');
-            }
-        } catch (error) {
-            console.error(error);
-            return undefined;
-        }
-    };
+      if (response.status == 200) {
+        const users: User[] = await response.json();
 
-    const updateUserRole = async (userId: number, data: RoleData): Promise<User | undefined> => {
-        try {
-            const response = await updateUserRoleById(userId, data, token);
+        return users;
+      } else {
+        throw new Error('Failed to fetch users');
+      }
+    } catch (err) {
+      console.error(err);
+      return undefined; // Return undefined in case of an error
+    }
+  };
 
-            if (response.status == 200) {
-                const user: User = await response.json();
-                return user;
-            } else {
-                throw new Error('User role data update failed');
-            }
-        } catch (error) {
-            console.error(error);
-            return undefined;
-        }
-    };
+  const createProjectAction = async (data: NewProjectData): Promise<number | undefined> => {
+    try {
+      const response = await createProject(data, token);
+      const res = await response.json();
 
-    const updateUserPassword = async (data: PassswordData): Promise<User | undefined> => {
-        try {
-            const response = await updateUserPasswordData(data, token);
+      if (response.status === 200 && res.id) {
+        return res.id;
+      } else {
+        throw new Error(res.message || 'New project failed');
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
-            if (response.status === 200) {
-                const user: User = await response.json();
-                return user;
-            } else {
-                throw new Error('User password data update failed');
-            }
-        } catch (error) {
-            console.error(error);
-            return undefined;
-        }
-    };
+  const getProjectsAction = async (): Promise<Project[] | undefined> => {
+    try {
+      const response = await getProjects(token);
 
-    const deleteUserByIdAction = async (projectId: number) => {
-        try {
-            const response = await deleteUserById(projectId, token);
+      if (response.status === 200) {
+        const projects: Project[] = await response.json();
+        return projects;
+      } else {
+        throw new Error('Failed to fetch projects');
+      }
+    } catch (err) {
+      console.error(err);
+      return undefined;
+    }
+  };
 
-            if (response.status == 200) {
-                await response.json();
-                return true; // Indicating success
-            } else {
-                throw new Error(`Failed to delete user. Status: ${response.status}`);
-            }
-        } catch (err) {
-            console.error(err);
-            return false; // Indicating failure
-        }
-    };
+  const deleteProjectByIdAction = async (projectId: number) => {
+    try {
+      const response = await deleteProjectById(projectId, token);
 
-    const updateUserBetaTesterStatus = async (userId: number, data: BetaTesterData) => {
-        try {
-            const response = await updateUserBetaTesterStatusById(userId, data, token);
+      if (response.status === 200) {
+        await response.json();
+        return true;
+      } else {
+        throw new Error(`Failed to delete project. Status: ${response.status}`);
+      }
+    } catch (err) {
+      console.error(err);
+      return false;
+    }
+  };
 
-            if (response.status == 200) {
-                await response.json();
-                return true; // Indicating success
-            } else {
-                throw new Error(`Failed to update user. Status: ${response.status}`);
-            }
-        } catch (err) {
-            console.error(err);
-            return false; // Indicating failure
-        }
-    };
+  const getProjectByIdAction = async (projectId: number): Promise<Project | undefined> => {
+    try {
+      const response = await getProjectById(projectId, token);
 
-    const updateUserActivatedStatus = async (userId: number, data: ActivatedData) => {
-        try {
-            const response = await updateUserActivatedStatusById(userId, data, token);
+      if (response.status === 200) {
+        const project: Project = await response.json();
+        return project;
+      } else {
+        throw new Error('Failed to fetch project');
+      }
+    } catch (err) {
+      console.error(err);
+      return undefined;
+    }
+  };
 
-            if (response.status == 200) {
-                await response.json();
-                return true; // Indicating success
-            } else {
-                throw new Error(`Failed to update user. Status: ${response.status}`);
-            }
-        } catch (err) {
-            console.error(err);
-            return false; // Indicating failure
-        }
-    };
+  const updateProjectByIdAction = async (projectId: number, data: NewProjectData) => {
+    try {
+      const response = await updateProjectById(data, projectId, token);
 
-    return (
-        <AuthContext.Provider
-            value={{
-                token,
-                user,
-                loginAction,
-                registerAction,
-                createProjectAction,
-                getProjectsAction,
-                deleteProjectByIdAction,
-                getProjectByIdAction,
-                updateProjectByIdAction,
-                logOutAction,
-                getUserDataAction,
-                updateUser,
-                updateUserPassword,
-                getAllUsers,
-                deleteUserByIdAction,
-                updateUserBetaTesterStatus,
-                updateUserRole,
-                updateUserActivatedStatus
-            }}
-        >
-            {children}
-        </AuthContext.Provider>
-    );
+
+      if (response.status == 200) {
+        const project: Project = await response.json();
+        return project;
+
+      } else {
+        throw new Error('Update project failed');
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const getUserDataAction = async () => {
+    try {
+      const response = await getUserData(token);
+      const userData = await response.json();
+
+      if (response.status === 200) {
+        setUser(userData);
+        return userData;
+      } else {
+        throw new Error('Failed to fetch user data');
+      }
+    } catch (error) {
+      console.error('Error fetching user data:', error);
+      throw error;
+    }
+  };
+
+  const updateUser = async (data: UserData): Promise<User | undefined> => {
+    try {
+      const response = await updateUserData(data, token);
+
+      if (response.status === 200) {
+        const user: User = await response.json();
+        setUser(user);
+        return user;
+      } else {
+        throw new Error('User data update failed');
+      }
+    } catch (error) {
+      console.error(error);
+      return undefined;
+    }
+  };
+
+  const updateUserRole = async (userId: number, data: RoleData): Promise<User | undefined> => {
+    try {
+      const response = await updateUserRoleById(userId, data, token);
+
+      if (response.status == 200) {
+        const user: User = await response.json();
+        return user;
+      } else {
+        throw new Error('User role data update failed');
+      }
+    } catch (error) {
+      console.error(error);
+      return undefined;
+    }
+  };
+
+  const updateUserPassword = async (data: PassswordData): Promise<User | undefined> => {
+    try {
+      const response = await updateUserPasswordData(data, token);
+
+      if (response.status === 200) {
+        const user: User = await response.json();
+        return user;
+      } else {
+        throw new Error('User password data update failed');
+      }
+    } catch (error) {
+      console.error(error);
+      return undefined;
+    }
+  };
+
+  const deleteUserByIdAction = async (projectId: number) => {
+    try {
+      const response = await deleteUserById(projectId, token);
+
+      if (response.status == 200) {
+        await response.json();
+        return true; // Indicating success
+      } else {
+        throw new Error(`Failed to delete user. Status: ${response.status}`);
+      }
+    } catch (err) {
+      console.error(err);
+      return false; // Indicating failure
+    }
+  };
+
+  const updateUserBetaTesterStatus = async (userId: number, data: BetaTesterData) => {
+    try {
+      const response = await updateUserBetaTesterStatusById(userId, data, token);
+
+      if (response.status == 200) {
+        await response.json();
+        return true; // Indicating success
+      } else {
+        throw new Error(`Failed to update user. Status: ${response.status}`);
+      }
+    } catch (err) {
+      console.error(err);
+      return false; // Indicating failure
+    }
+  };
+
+  const updateUserActivatedStatus = async (userId: number, data: ActivatedData) => {
+    try {
+      const response = await updateUserActivatedStatusById(userId, data, token);
+
+      if (response.status == 200) {
+        await response.json();
+        return true; // Indicating success
+      } else {
+        throw new Error(`Failed to update user. Status: ${response.status}`);
+      }
+    } catch (err) {
+      console.error(err);
+      return false; // Indicating failure
+    }
+  };
+
+  const contextValue = useMemo(
+    () => ({
+      token,
+      user,
+      loginAction,
+      loginWithFirebaseAction,
+      registerAction,
+      createProjectAction,
+      getProjectsAction,
+      deleteProjectByIdAction,
+      getProjectByIdAction,
+      updateProjectByIdAction,
+      logOutAction,
+      getUserDataAction,
+      updateUser,
+      updateUserPassword,
+      getAllUsers,
+      deleteUserByIdAction,
+      updateUserBetaTesterStatus,
+      updateUserRole,
+      updateUserActivatedStatus,
+    }),
+    [token, user, loginAction, loginWithFirebaseAction, registerAction, createProjectAction, getProjectsAction,
+      deleteProjectByIdAction, getProjectByIdAction, updateProjectByIdAction, logOutAction,
+      getUserDataAction, updateUser, updateUserPassword, getAllUsers, deleteUserByIdAction,
+      updateUserBetaTesterStatus, updateUserRole, updateUserActivatedStatus]
+  );
+
+  return (
+    <AuthContext.Provider value={contextValue}>
+      {children}
+    </AuthContext.Provider>
+  );
 };
 
 export default AuthProvider;
 
 export const useAuth = () => {
-    const context = useContext(AuthContext);
-    if (context === undefined) {
-        throw new Error('useAuth must be used within an AuthProvider');
-    }
-    return context;
+  const context = useContext(AuthContext);
+  if (context === undefined) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
 };
