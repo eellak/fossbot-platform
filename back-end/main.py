@@ -1,21 +1,44 @@
-from models.models import UserRole, ProjectsCreate, LoginRequest, RegisterRequest, UpdateActiavtedRequest, UpdateUserRequest, UpdateUserPasswordRequest, UserResponse, SessionTokenRequest, FirebaseTokenRequest, UpdateUserRoleRequest, UpdateBetaTesterRequest, EmailVerificationRequest
-from database.database import create_db_tables, migrate_schema, User, Projects, Curriculum, Lesson, getSessionLocal
-from utils.utils_jwt import create_access_token, verify_access_token
-from fastapi import FastAPI, Depends, HTTPException, status
-from utils.utils_hash import get_hashed, verify_hashed 
+import json
+import logging
+import os
+import re
+from typing import List
+
+import firebase_admin
+import uvicorn
+from database.database import (
+    Curriculum,
+    Lesson,
+    Projects,
+    User,
+    create_db_tables,
+    getSessionLocal,
+    migrate_schema,
+)
+from fastapi import Body, Depends, FastAPI, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer
+from firebase_admin import auth as firebase_auth
+from firebase_admin import credentials
 from jose import JWTError, jwt
-from fastapi import Query, Body
+from models.models import (
+    EmailVerificationRequest,
+    FirebaseTokenRequest,
+    LoginRequest,
+    ProjectsCreate,
+    RegisterRequest,
+    SessionTokenRequest,
+    UpdateActiavtedRequest,
+    UpdateBetaTesterRequest,
+    UpdateUserPasswordRequest,
+    UpdateUserRequest,
+    UpdateUserRoleRequest,
+    UserResponse,
+    UserRole,
+)
 from sqlalchemy.exc import IntegrityError
-from typing import List
-import json
-import re
-import logging
-import uvicorn
-import os
-import firebase_admin
-from firebase_admin import auth as firebase_auth, credentials
+from utils.utils_hash import get_hashed, verify_hashed
+from utils.utils_jwt import create_access_token, verify_access_token
 
 logger = logging.getLogger("uvicorn")
 SessionLocal = getSessionLocal()
@@ -47,11 +70,17 @@ def initialize_firebase():
     if firebase_admin._apps:
         return
 
+    service_account_path = os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
+    if service_account_path:
+        firebase_admin.initialize_app(credentials.Certificate(service_account_path))
+        return
+
     service_account_json = os.getenv('FIREBASE_SERVICE_ACCOUNT_JSON')
     if service_account_json:
         firebase_admin.initialize_app(credentials.Certificate(json.loads(service_account_json)))
-    else:
-        firebase_admin.initialize_app()
+        return
+
+    firebase_admin.initialize_app()
 
 def get_db():
     db = SessionLocal()

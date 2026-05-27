@@ -16,4 +16,5 @@ data/
 **/versions/*.py
 **/node_modules/
 
+/secrets/
 *adminsdk*.json
