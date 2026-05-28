@@ -34,6 +34,10 @@ def migrate_schema():
             with engine.connect() as conn:
                 conn.execute(text("ALTER TABLE users ADD COLUMN provider VARCHAR NOT NULL DEFAULT 'local'"))
                 conn.commit()
+        if 'access_revoked' not in cols:
+            with engine.connect() as conn:
+                conn.execute(text("ALTER TABLE users ADD COLUMN access_revoked BOOLEAN NOT NULL DEFAULT false"))
+                conn.commit()
 
 def create_db_tables():
     Base.metadata.create_all(bind=engine)
@@ -53,6 +57,7 @@ class User(Base):
     activated = Column(Boolean, default=False, nullable=False)  # New activated column
     firebase_uid = Column(String, nullable=True)  # Firebase Auth UID for social-login users
     provider = Column(String, nullable=False, default='local')  # Auth provider(s): 'local', 'google', 'github', or comma-separated
+    access_revoked = Column(Boolean, default=False, nullable=False)  # Blocks user login/access without deleting account
 
 class Projects(Base):
     __tablename__ = "projects"

@@ -16,6 +16,7 @@ import {
   TableContainer,
   Select,
   Checkbox,
+  Button,
 } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
@@ -121,6 +122,18 @@ const UsersCard = ({ onShowSuccessAlert, onShowErrorAlert }: UsersCardProps) => 
     }
   };
 
+  const handleAccessRevokedChange = async (userId, accessRevoked) => {
+    try {
+      const user = await auth.updateUserAccessRevokedStatus(userId, { access_revoked: accessRevoked });
+      if (user) {
+        window.location.reload();
+      }
+    } catch (error) {
+      onShowErrorAlert(t('alertMessages.userDataUpdateError'));
+      console.error('Error updating user:', error);
+    }
+  };
+
   const PROVIDER_LABELS: Record<string, string> = {
     google: 'Google',
     'google.com': 'Google',
@@ -137,11 +150,18 @@ const UsersCard = ({ onShowSuccessAlert, onShowErrorAlert }: UsersCardProps) => 
     'github.com': githubIcon,
   };
 
+  const parseProviders = (provider: string) => (provider || 'local')
+    .split(',')
+    .map((p) => p.trim().toLowerCase())
+    .filter(Boolean);
+
+  const isLocalAccount = (user) => {
+    const providers = parseProviders(user.provider);
+    return !user.firebase_uid && providers.every((providerId) => ['local', 'password'].includes(providerId));
+  };
+
   const renderProvider = (provider: string) => {
-    const providers = (provider || 'local')
-      .split(',')
-      .map((p) => p.trim().toLowerCase())
-      .filter(Boolean);
+    const providers = parseProviders(provider);
 
     return (
       <Stack direction="row" spacing={0.75} alignItems="center" justifyContent="center" flexWrap="wrap">
@@ -228,6 +248,11 @@ const UsersCard = ({ onShowSuccessAlert, onShowErrorAlert }: UsersCardProps) => 
                 </TableCell>
                 <TableCell align="center">
                   <Typography variant="subtitle2" fontWeight={600}>
+                    {t('admin-panel.access')}
+                  </Typography>
+                </TableCell>
+                <TableCell align="center">
+                  <Typography variant="subtitle2" fontWeight={600}>
                     {t('edit')}
                   </Typography>
                 </TableCell>
@@ -241,7 +266,7 @@ const UsersCard = ({ onShowSuccessAlert, onShowErrorAlert }: UsersCardProps) => 
             <TableBody>
               {users.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={9}>
+                  <TableCell colSpan={10}>
                     <Typography>{t('admin-panel.noUsersFound')} </Typography>
                   </TableCell>
                 </TableRow>
@@ -277,6 +302,19 @@ const UsersCard = ({ onShowSuccessAlert, onShowErrorAlert }: UsersCardProps) => 
                       />
                     </TableCell>
                     <TableCell align="center">
+                      {user.role !== UserRole.ADMIN && (
+                        <Button
+                          variant="outlined"
+                          color={user.access_revoked ? 'success' : 'error'}
+                          size="small"
+                          onClick={() => handleAccessRevokedChange(user.id, !user.access_revoked)}
+                          sx={{ textTransform: 'none', whiteSpace: 'nowrap' }}
+                        >
+                          {user.access_revoked ? t('admin-panel.restoreAccess') : t('admin-panel.revokeAccess')}
+                        </Button>
+                      )}
+                    </TableCell>
+                    <TableCell align="center">
                       <Select
                         fullWidth
                         value={user.role}
@@ -288,14 +326,16 @@ const UsersCard = ({ onShowSuccessAlert, onShowErrorAlert }: UsersCardProps) => 
                       </Select>
                     </TableCell>
                     <TableCell align="center">
-                      <Fab
-                        color="error"
-                        size="small"
-                        aria-label="trash"
-                        onClick={() => handleDeleteUser(user.id)}
-                      >
-                        <FontAwesomeIcon icon={faTrash} />
-                      </Fab>
+                      {isLocalAccount(user) && (
+                        <Fab
+                          color="error"
+                          size="small"
+                          aria-label="trash"
+                          onClick={() => handleDeleteUser(user.id)}
+                        >
+                          <FontAwesomeIcon icon={faTrash} />
+                        </Fab>
+                      )}
                     </TableCell>
                   </TableRow>
                   );

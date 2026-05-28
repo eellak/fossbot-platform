@@ -15,6 +15,7 @@ export interface AuthContextType {
     updateUserRole: (userId: number, data: RoleData) => Promise<User | undefined>;
     updateUserBetaTesterStatus: (userId: number, beta_tester: BetaTesterData) => Promise<boolean>;
     updateUserActivatedStatus: (userId: number, activated: ActivatedData) => Promise<boolean>;
+    updateUserAccessRevokedStatus: (userId: number, access_revoked: AccessRevokedData) => Promise<boolean>;
 
     createProjectAction: (data: NewProjectData) => Promise<number | undefined>;
     getProjectsAction: () => Promise<Project[] | undefined>;
@@ -78,8 +79,10 @@ export interface User {
     image_url?: string;
     hashed_password?: string;
     beta_tester: boolean;
+    activated?: boolean;
     firebase_uid?: string;
     provider: string;
+    access_revoked: boolean;
 }
 
 export interface UserData {
@@ -109,6 +112,10 @@ export interface BetaTesterData {
 
 export interface ActivatedData {
     activated: boolean;
+}
+
+export interface AccessRevokedData {
+    access_revoked: boolean;
 }
 
 export interface LoginResponse {

@@ -48,9 +48,11 @@ const AuthLogin = ({ title, subtitle, subtext, handleShowErrorAlert }: loginType
 
   const accountExistsMessage = 'An account with this email already exists.';
   const socialLoginMessage = 'Please sign in with your social login provider.';
+  const revokedAccessMessage = 'Your access to the platform has been revoked.';
   const shouldShowLoginBanner = (message: string) => [
     accountExistsMessage,
     socialLoginMessage,
+    revokedAccessMessage,
   ].includes(message);
 
   const handleFirebaseLogin = async (provider) => {

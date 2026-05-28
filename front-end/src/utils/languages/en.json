@@ -234,7 +234,10 @@
     "description": "This is the admin panel page",
     "usageDescription": "You can delete users or edit their role",
     "noUsersFound": "No users found",
-    "provider": "Provider"
+    "provider": "Provider",
+    "access": "Access",
+    "revokeAccess": "Revoke access",
+    "restoreAccess": "Restore access"
   },
   "blocklyBlocks": {
     "forward": "forward",

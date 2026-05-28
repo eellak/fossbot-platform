@@ -27,6 +27,7 @@ from models.models import (
     ProjectsCreate,
     RegisterRequest,
     SessionTokenRequest,
+    UpdateAccessRevokedRequest,
     UpdateActiavtedRequest,
     UpdateBetaTesterRequest,
     UpdateUserPasswordRequest,
@@ -65,6 +66,7 @@ app.add_middleware(
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 
+REVOKED_ACCESS_MESSAGE = "Your access to the platform has been revoked."
 FIREBASE_CERTS_URL = 'https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com'
 _firebase_certs_cache = {'certs': {}, 'expires_at': 0}
 
@@ -162,6 +164,12 @@ def authenticate_user(db, username: str, password: str):
     user = get_user(db, username)
     if not user:
         return False
+    if user.access_revoked:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=REVOKED_ACCESS_MESSAGE,
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     if not provider_allows_local_login(user.provider):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -227,6 +235,9 @@ def get_or_create_firebase_user(db, decoded_token, firebase_request: FirebaseTok
 
     user = db.query(User).filter(User.email == email).first()
     if user:
+        if user.access_revoked:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=REVOKED_ACCESS_MESSAGE)
+
         if firebase_uid and user.firebase_uid == firebase_uid and provider_matches(user.provider, provider):
             user.username = build_firebase_username(db, display_name, email, firebase_uid, user)
             user.firstname = firstname
@@ -275,6 +286,8 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: SessionLocal
     user = get_user(db, username=username)
     if user is None:
         raise credentials_exception
+    if user.access_revoked:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=REVOKED_ACCESS_MESSAGE)
     return user
 
 
@@ -334,6 +347,8 @@ async def read_users_me(token: str = Depends(oauth2_scheme), db: SessionLocal = 
     user = get_user(db, username=username)
     if user is None:
         raise credentials_exception
+    if user.access_revoked:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=REVOKED_ACCESS_MESSAGE)
     return user
 
 @app.put("/users/me")
@@ -419,6 +434,28 @@ async def update_user_role(user_id: int, user_role_update: UpdateUserRoleRequest
         raise HTTPException(status_code=404, detail="User not found in database")
 
     db_user.role = user_role_update.role
+    if db_user.role == UserRole.ADMIN:
+        db_user.access_revoked = False
+
+    db.commit()
+    db.refresh(db_user)
+
+    return db_user
+
+@app.put("/users/{user_id}/access_revoked")
+async def update_access_revoked_status(user_id: int, access_revoked_update: UpdateAccessRevokedRequest, current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Not authorized for this action: UPDATE ACCESS REVOKED STATUS")
+
+    db_user = db.query(User).filter(User.id == user_id).first()
+    if db_user is None:
+        raise HTTPException(status_code=404, detail="User not found in database")
+
+    if db_user.role == UserRole.ADMIN and access_revoked_update.access_revoked:
+        raise HTTPException(status_code=400, detail="Admins cannot have access revoked")
+
+    db_user.access_revoked = access_revoked_update.access_revoked
+
     db.commit()
     db.refresh(db_user)
 

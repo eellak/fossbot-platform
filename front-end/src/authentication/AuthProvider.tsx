@@ -12,6 +12,7 @@ import {
   RoleData,
   BetaTesterData,
   ActivatedData,
+  AccessRevokedData,
   FirebaseProviderName,
   LoginResponse,
 } from './AuthInterfaces';
@@ -31,11 +32,13 @@ import {
   deleteUserById,
   updateUserRoleById,
   updateUserBetaTesterStatusById,
-  updateUserActivatedStatusById
+  updateUserActivatedStatusById,
+  updateUserAccessRevokedStatusById
 } from './AuthApi';
 import { signInWithFirebaseProvider, signOutFromFirebase, subscribeToFirebaseAuthState } from './firebase';
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+const revokedAccessMessage = 'Your access to the platform has been revoked.';
 
 const firebaseUserToUser = (firebaseUser): User => {
   const email = firebaseUser.email || '';
@@ -51,7 +54,9 @@ const firebaseUserToUser = (firebaseUser): User => {
     role: 'user',
     image_url: firebaseUser.photoURL || undefined,
     beta_tester: false,
+    activated: true,
     provider: 'local',
+    access_revoked: false,
   };
 };
 
@@ -115,6 +120,16 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
       try {
         const response = await getUserData(token);
         const userData = await response.json(); // Extract the user data from the response
+
+        if (!response.ok) {
+          if (userData.detail === revokedAccessMessage) {
+            setUser(null);
+            setToken('');
+            localStorage.removeItem(localStorageName);
+            signOutFromFirebase().catch(console.error);
+          }
+          throw new Error(userData.detail || 'Failed to fetch user data');
+        }
 
         setUser(userData); // Set the user data in the state
       } catch (error) {
@@ -412,6 +427,22 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
     }
   };
 
+  const updateUserAccessRevokedStatus = async (userId: number, data: AccessRevokedData) => {
+    try {
+      const response = await updateUserAccessRevokedStatusById(userId, data, token);
+
+      if (response.status == 200) {
+        await response.json();
+        return true; // Indicating success
+      } else {
+        throw new Error(`Failed to update user. Status: ${response.status}`);
+      }
+    } catch (err) {
+      console.error(err);
+      return false; // Indicating failure
+    }
+  };
+
   const contextValue = useMemo(
     () => ({
       token,
@@ -433,11 +464,12 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
       updateUserBetaTesterStatus,
       updateUserRole,
       updateUserActivatedStatus,
+      updateUserAccessRevokedStatus,
     }),
     [token, user, loginAction, loginWithFirebaseAction, registerAction, createProjectAction, getProjectsAction,
       deleteProjectByIdAction, getProjectByIdAction, updateProjectByIdAction, logOutAction,
       getUserDataAction, updateUser, updateUserPassword, getAllUsers, deleteUserByIdAction,
-      updateUserBetaTesterStatus, updateUserRole, updateUserActivatedStatus]
+      updateUserBetaTesterStatus, updateUserRole, updateUserActivatedStatus, updateUserAccessRevokedStatus]
   );
 
   return (

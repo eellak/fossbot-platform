@@ -54,6 +54,7 @@ class UserResponse(BaseModel):
     activated: bool
     firebase_uid: Optional[str]
     provider: str
+    access_revoked: bool
     
     class Config:
         orm_mode = True
@@ -63,6 +64,9 @@ class UpdateUserRoleRequest(BaseModel):
 
 class UpdateBetaTesterRequest(BaseModel):
     beta_tester: bool
+
+class UpdateAccessRevokedRequest(BaseModel):
+    access_revoked: bool
 
 class EmailVerificationRequest(BaseModel):
     email: str

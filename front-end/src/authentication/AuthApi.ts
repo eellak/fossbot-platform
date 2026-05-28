@@ -1,4 +1,4 @@
-import { ActivatedData, BetaTesterData, FirebaseTokenData, LoginData, NewProjectData, PassswordData, RegisterData, RoleData, User, UserData } from './AuthInterfaces';
+import { AccessRevokedData, ActivatedData, BetaTesterData, FirebaseTokenData, LoginData, NewProjectData, PassswordData, RegisterData, RoleData, User, UserData } from './AuthInterfaces';
 
 const backendUrl: string = process.env.REACT_APP_BACKEND_URL;
 
@@ -180,6 +180,18 @@ export async function updateUserBetaTesterStatusById(userId: number, data: BetaT
 
 export async function updateUserActivatedStatusById(userId: number, data: ActivatedData, token: string) {
     const response = await fetch(`${backendUrl}/users/${userId}/activated`, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(data),
+    });
+    return response;
+}
+
+export async function updateUserAccessRevokedStatusById(userId: number, data: AccessRevokedData, token: string) {
+    const response = await fetch(`${backendUrl}/users/${userId}/access_revoked`, {
         method: 'PUT',
         headers: {
             'Content-Type': 'application/json',
