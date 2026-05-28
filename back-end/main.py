@@ -219,10 +219,38 @@ def provider_matches(existing: str, provider: str) -> bool:
     return provider.lower() in providers or (provider == 'local' and 'password' in providers)
 
 
+def provider_is_local_only(provider: str) -> bool:
+    """Return whether the provider value represents a local/password-only account."""
+    providers = provider_list(provider or 'local') or {'local'}
+    return providers.issubset({'local', 'password'})
+
+
+def can_link_local_to_firebase_provider(user: User, provider: str, email_verified: bool) -> bool:
+    """Allow trusted social providers to claim an existing local account by email."""
+    return (
+        email_verified
+        and provider in {'google', 'github'}
+        and not user.firebase_uid
+        and provider_is_local_only(user.provider)
+    )
+
+
+def link_local_user_to_firebase_provider(db, user: User, firebase_uid: str, provider: str, photo_url):
+    user.firebase_uid = firebase_uid
+    user.provider = provider
+    user.hashed_password = get_hashed(os.urandom(32).hex())
+    if photo_url:
+        user.image_url = photo_url
+    db.commit()
+    db.refresh(user)
+    return user
+
+
 def get_or_create_firebase_user(db, decoded_token, firebase_request: FirebaseTokenRequest):
     email = (decoded_token.get('email') or '').strip().lower()
     firebase_uid = decoded_token.get('uid')
     provider = extract_firebase_provider(decoded_token)
+    email_verified = decoded_token.get('email_verified') is True
 
     if not email:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Firebase account has no email")
@@ -247,6 +275,9 @@ def get_or_create_firebase_user(db, decoded_token, firebase_request: FirebaseTok
             db.commit()
             db.refresh(user)
             return user
+
+        if firebase_uid and can_link_local_to_firebase_provider(user, provider, email_verified):
+            return link_local_user_to_firebase_provider(db, user, firebase_uid, provider, photo_url)
 
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="An account with this email already exists.")
 
@@ -505,12 +536,7 @@ async def read_users(current_user: User = Depends(get_current_user), db: Session
     return users
 
 def is_local_user(db_user: User) -> bool:
-    providers = {
-        provider.strip().lower()
-        for provider in (db_user.provider or 'local').split(',')
-        if provider.strip()
-    } or {'local'}
-    return not db_user.firebase_uid and providers.issubset({'local', 'password'})
+    return not db_user.firebase_uid and provider_is_local_only(db_user.provider)
 
 
 @app.delete("/users/{user_id}")
