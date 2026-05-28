@@ -1,17 +1,26 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import PageContainer from 'src/components/container/PageContainer';
 import img1 from 'src/assets/images/fossbot/back_top_up.png';
 import img2 from 'src/assets/images/fossbot/gfoss_en.png';
 import Logo from 'src/layouts/full/shared/logo/Logo';
 import AuthLogin from './AuthLogin';
 
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Grid, Box, Typography, Stack } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import ErrorAlert from 'src/components/alerts/ErrorAlert';
+import { useAuth } from 'src/authentication/AuthProvider';
 
 const Login = () => {
   const { t } = useTranslation();
+  const auth = useAuth();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (auth.token) {
+      navigate('/dashboard', { replace: true });
+    }
+  }, [auth.token, navigate]);
 
   // ERROR ALERTS HANDLING
   const [showErrorAlert, setShowErrorAlert] = useState(false);

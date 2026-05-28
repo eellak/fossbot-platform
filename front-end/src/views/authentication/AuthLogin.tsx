@@ -13,6 +13,7 @@ import {
 } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 import { Link } from 'react-router-dom';
+import { IconMail } from '@tabler/icons-react';
 import { loginType } from 'src/types/auth/auth';
 import { useAuth } from '../../authentication/AuthProvider';
 import googleIcon from 'src/assets/images/svgs/google-icon.svg';
@@ -23,6 +24,7 @@ const AuthLogin = ({ title, subtitle, subtext, handleShowErrorAlert }: loginType
 
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [showUsernameLogin, setShowUsernameLogin] = useState(false);
   const [loginBannerError, setLoginBannerError] = useState('');
 
   const auth = useAuth();
@@ -46,12 +48,16 @@ const AuthLogin = ({ title, subtitle, subtext, handleShowErrorAlert }: loginType
 
   const accountExistsMessage = 'An account with this email already exists.';
   const socialLoginMessage = 'Please sign in with your social login provider.';
+  const shouldShowLoginBanner = (message: string) => [
+    accountExistsMessage,
+    socialLoginMessage,
+  ].includes(message);
 
   const handleFirebaseLogin = async (provider) => {
     setLoginBannerError('');
     const success = await auth.loginWithFirebaseAction(provider);
     if (!success.success) {
-      if (success.detail === accountExistsMessage) {
+      if (shouldShowLoginBanner(success.detail)) {
         setLoginBannerError(success.detail);
       } else {
         handleShowErrorAlert(success.detail);
@@ -68,7 +74,7 @@ const AuthLogin = ({ title, subtitle, subtext, handleShowErrorAlert }: loginType
       if (username !== '' && password !== '') {
         const success = await auth.loginAction({ username: username, password: password });
         if (!success.success) {
-          if (success.detail === socialLoginMessage) {
+          if (shouldShowLoginBanner(success.detail)) {
             setLoginBannerError(success.detail);
           } else {
             handleShowErrorAlert(success.detail);
@@ -151,104 +157,118 @@ const AuthLogin = ({ title, subtitle, subtext, handleShowErrorAlert }: loginType
         >
           Continue with GitHub
         </Button>
-      </Stack>
-
-      <Typography
-        variant="body1"
-        sx={{
-          mt: 2.25,
-          mb: 1.5,
-          color: '#65708c',
-          fontWeight: 500,
-        }}
-      >
-        or use username
-      </Typography>
-
-      <Box component="form" onSubmit={handleSubmit}>
-        <Stack>
-          <Box>
-            <CustomFormLabel htmlFor="username">Username</CustomFormLabel>
-            <CustomTextField
-              id="username"
-              type="text"
-              variant="outlined"
-              fullWidth
-              value={username}
-              onChange={(event) => setUsername(event.target.value)}
-              autoComplete="username"
-              sx={{
-                '& .MuiOutlinedInput-root': {
-                  backgroundColor: '#fff',
-                },
-              }}
-            />
-          </Box>
-
-          <Box>
-            <CustomFormLabel htmlFor="password">Password</CustomFormLabel>
-            <CustomTextField
-              id="password"
-              type="password"
-              variant="outlined"
-              fullWidth
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              autoComplete="current-password"
-              sx={{
-                '& .MuiOutlinedInput-root': {
-                  backgroundColor: '#fff',
-                },
-              }}
-            />
-          </Box>
-
-          <Stack justifyContent="space-between" direction="row" alignItems="center" my={2}>
-            <FormGroup>
-              <FormControlLabel
-                control={<CustomCheckbox defaultChecked />}
-                label={
-                  <Typography sx={{ color: '#2f3748' }}>
-                    Remember this device
-                  </Typography>
-                }
-              />
-            </FormGroup>
-            <Typography
-              component={Link}
-              to="/auth/forgot-password"
-              fontWeight="500"
-              sx={{
-                textDecoration: 'none',
-                color: '#6f84ff',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              Forgot password?
-            </Typography>
-          </Stack>
-
+        {!showUsernameLogin && (
           <Button
-            color="primary"
-            variant="contained"
+            color="inherit"
+            variant="outlined"
             size="large"
             fullWidth
-            onClick={handleSubmit}
-            type="submit"
+            onClick={() => setShowUsernameLogin(true)}
+            startIcon={<IconMail size={18} stroke={1.8} />}
             sx={{
-              backgroundColor: '#6f84ff',
+              justifyContent: 'center',
+              borderColor: '#2f3748',
+              color: '#2f3748',
               textTransform: 'none',
               boxShadow: 'none',
               '&:hover': {
-                backgroundColor: '#5f76f7',
+                borderColor: '#2f3748',
+                backgroundColor: 'rgba(47, 55, 72, 0.03)',
                 boxShadow: 'none',
               },
             }}
           >
-            Sign in
+            Continue with username
           </Button>
-        </Stack>
-      </Box>
+        )}
+      </Stack>
+
+      {showUsernameLogin && (
+        <Box component="form" onSubmit={handleSubmit} sx={{ mt: 3 }}>
+          <Stack>
+            <Box>
+              <CustomFormLabel htmlFor="username">Username</CustomFormLabel>
+              <CustomTextField
+                id="username"
+                type="text"
+                variant="outlined"
+                fullWidth
+                value={username}
+                onChange={(event) => setUsername(event.target.value)}
+                autoComplete="username"
+                sx={{
+                  '& .MuiOutlinedInput-root': {
+                    backgroundColor: '#fff',
+                  },
+                }}
+              />
+            </Box>
+
+            <Box>
+              <CustomFormLabel htmlFor="password">Password</CustomFormLabel>
+              <CustomTextField
+                id="password"
+                type="password"
+                variant="outlined"
+                fullWidth
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                autoComplete="current-password"
+                sx={{
+                  '& .MuiOutlinedInput-root': {
+                    backgroundColor: '#fff',
+                  },
+                }}
+              />
+            </Box>
+
+            <Stack justifyContent="space-between" direction="row" alignItems="center" my={2}>
+              <FormGroup>
+                <FormControlLabel
+                  control={<CustomCheckbox defaultChecked />}
+                  label={
+                    <Typography sx={{ color: '#2f3748' }}>
+                      Remember this device
+                    </Typography>
+                  }
+                />
+              </FormGroup>
+              <Typography
+                component={Link}
+                to="/auth/forgot-password"
+                fontWeight="500"
+                sx={{
+                  textDecoration: 'none',
+                  color: '#6f84ff',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                Forgot password?
+              </Typography>
+            </Stack>
+
+            <Button
+              color="primary"
+              variant="contained"
+              size="large"
+              fullWidth
+              onClick={handleSubmit}
+              type="submit"
+              sx={{
+                backgroundColor: '#6f84ff',
+                textTransform: 'none',
+                boxShadow: 'none',
+                '&:hover': {
+                  backgroundColor: '#5f76f7',
+                  boxShadow: 'none',
+                },
+              }}
+            >
+              Sign in
+            </Button>
+          </Stack>
+        </Box>
+      )}
 
       {subtitle}
 

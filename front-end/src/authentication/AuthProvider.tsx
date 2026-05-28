@@ -114,7 +114,8 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
     const fetchUserData = async () => {
       try {
         const response = await getUserData(token);
-        const userData: User = await response.json(); // Extract the user data from the response
+        const userData = await response.json(); // Extract the user data from the response
+
         setUser(userData); // Set the user data in the state
       } catch (error) {
         console.error('Error fetching user data:', error);
@@ -149,6 +150,11 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
 
   const loginWithFirebaseAction = async (provider: FirebaseProviderName) => {
     try {
+      if (token) {
+        navigate('/dashboard', { replace: true });
+        return { success: true, detail: '' };
+      }
+
       const credential = await signInWithFirebaseProvider(provider);
       const idToken = await credential.user.getIdToken();
 
