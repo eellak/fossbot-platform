@@ -1,3 +1,6 @@
+# Please create .env in front-end/ and back-end/ with the necessary environment 
+# variables before running this docker-compose file.
+
 services:
   frontend:
     build:
@@ -44,7 +47,7 @@ services:
     env_file:
       - .env
     volumes:
-      - db-data-local:/var/lib/postgresql
+      - db-data-local:/var/lib/postgresql/data
 
 volumes:
   db-data-local:
