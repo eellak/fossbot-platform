@@ -2,9 +2,10 @@ import json
 import logging
 import os
 import re
+import time
+import urllib.request
 from typing import List
 
-import firebase_admin
 import uvicorn
 from database.database import (
     Curriculum,
@@ -18,8 +19,6 @@ from database.database import (
 from fastapi import Body, Depends, FastAPI, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer
-from firebase_admin import auth as firebase_auth
-from firebase_admin import credentials
 from jose import JWTError, jwt
 from models.models import (
     EmailVerificationRequest,
@@ -66,21 +65,50 @@ app.add_middleware(
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 
-def initialize_firebase():
-    if firebase_admin._apps:
-        return
+FIREBASE_CERTS_URL = 'https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com'
+_firebase_certs_cache = {'certs': {}, 'expires_at': 0}
 
-    service_account_path = os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
-    if service_account_path:
-        firebase_admin.initialize_app(credentials.Certificate(service_account_path))
-        return
 
-    service_account_json = os.getenv('FIREBASE_SERVICE_ACCOUNT_JSON')
-    if service_account_json:
-        firebase_admin.initialize_app(credentials.Certificate(json.loads(service_account_json)))
-        return
+def get_firebase_project_id():
+    project_id = os.getenv('FIREBASE_PROJECT_ID')
+    if not project_id:
+        raise RuntimeError('FIREBASE_PROJECT_ID is required for Firebase token verification')
+    return project_id
 
-    firebase_admin.initialize_app()
+
+def get_firebase_public_certs():
+    now = time.time()
+    if _firebase_certs_cache['certs'] and _firebase_certs_cache['expires_at'] > now:
+        return _firebase_certs_cache['certs']
+
+    with urllib.request.urlopen(FIREBASE_CERTS_URL, timeout=5) as response:
+        certs = json.loads(response.read().decode('utf-8'))
+        cache_control = response.headers.get('Cache-Control', '')
+
+    max_age_match = re.search(r'max-age=(\d+)', cache_control)
+    max_age = int(max_age_match.group(1)) if max_age_match else 3600
+    _firebase_certs_cache['certs'] = certs
+    _firebase_certs_cache['expires_at'] = now + max_age
+    return certs
+
+
+def verify_firebase_id_token(id_token: str):
+    project_id = get_firebase_project_id()
+    headers = jwt.get_unverified_header(id_token)
+    key_id = headers.get('kid')
+    cert = get_firebase_public_certs().get(key_id)
+    if not cert:
+        raise JWTError('Firebase token has an unknown key ID')
+
+    decoded_token = jwt.decode(
+        id_token,
+        cert,
+        algorithms=['RS256'],
+        audience=project_id,
+        issuer=f'https://securetoken.google.com/{project_id}',
+    )
+    decoded_token['uid'] = decoded_token.get('uid') or decoded_token.get('user_id') or decoded_token.get('sub')
+    return decoded_token
 
 def get_db():
     db = SessionLocal()
@@ -172,17 +200,19 @@ def extract_firebase_provider(decoded_token: dict) -> str:
     return FIREBASE_PROVIDER_MAP.get(raw, raw)
 
 
-def merge_providers(existing: str, new_provider: str) -> str:
-    """Merge a new provider into an existing comma-separated provider string."""
-    if not existing or existing == 'local':
-        return new_provider
-    providers = set(p.strip() for p in existing.split(','))
-    providers.add(new_provider)
-    return ','.join(sorted(providers))
+def provider_list(provider: str) -> set[str]:
+    """Return normalized providers from a comma-separated provider string."""
+    return {p.strip().lower() for p in (provider or '').split(',') if p.strip()}
+
+
+def provider_matches(existing: str, provider: str) -> bool:
+    """Check whether an account already belongs to the given provider."""
+    providers = provider_list(existing)
+    return provider.lower() in providers or (provider == 'local' and 'password' in providers)
 
 
 def get_or_create_firebase_user(db, decoded_token, firebase_request: FirebaseTokenRequest):
-    email = firebase_request.email or decoded_token.get('email')
+    email = (decoded_token.get('email') or '').strip().lower()
     firebase_uid = decoded_token.get('uid')
     provider = extract_firebase_provider(decoded_token)
 
@@ -197,13 +227,12 @@ def get_or_create_firebase_user(db, decoded_token, firebase_request: FirebaseTok
 
     user = db.query(User).filter(User.email == email).first()
     if user:
-        if firebase_uid and user.firebase_uid == firebase_uid:
+        if firebase_uid and user.firebase_uid == firebase_uid and provider_matches(user.provider, provider):
             user.username = build_firebase_username(db, display_name, email, firebase_uid, user)
             user.firstname = firstname
             user.lastname = lastname
             if photo_url:
                 user.image_url = photo_url
-            user.provider = merge_providers(user.provider or 'local', provider)
             db.commit()
             db.refresh(user)
             return user
@@ -268,8 +297,13 @@ async def login_for_access_token( login_request: LoginRequest,  db: SessionLocal
 @app.post("/firebase-token")
 async def login_with_firebase_token(firebase_request: FirebaseTokenRequest, db: SessionLocal = Depends(get_db)):
     try:
-        initialize_firebase()
-        decoded_token = firebase_auth.verify_id_token(firebase_request.id_token)
+        decoded_token = verify_firebase_id_token(firebase_request.id_token)
+    except RuntimeError as error:
+        logger.error(f"Firebase auth is not configured: {error}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Firebase auth is not configured",
+        ) from error
     except Exception as error:
         logger.exception("Firebase token verification failed")
         raise HTTPException(
@@ -385,7 +419,6 @@ async def update_user_role(user_id: int, user_role_update: UpdateUserRoleRequest
         raise HTTPException(status_code=404, detail="User not found in database")
 
     db_user.role = user_role_update.role
-
     db.commit()
     db.refresh(db_user)
 
@@ -434,24 +467,13 @@ async def read_users(current_user: User = Depends(get_current_user), db: Session
     users = db.query(User).all()
     return users
 
-def delete_firebase_user(firebase_uid: str):
-    """Delete a Firebase Auth user by UID.
-
-    Falls back to log-and-continue if Firebase Admin SDK is unavailable
-    or the user doesn't exist in Firebase (already deleted or never had
-    a Firebase auth account).
-    """
-    try:
-        initialize_firebase()
-        firebase_auth.delete_user(firebase_uid)
-        logger.info(f"Deleted Firebase Auth user {firebase_uid}")
-        return True
-    except firebase_auth.UserNotFoundError:
-        logger.info(f"Firebase user {firebase_uid} already deleted or never existed")
-        return False
-    except Exception as error:
-        logger.warning(f"Could not delete Firebase user {firebase_uid}: {error}")
-        return False
+def is_local_user(db_user: User) -> bool:
+    providers = {
+        provider.strip().lower()
+        for provider in (db_user.provider or 'local').split(',')
+        if provider.strip()
+    } or {'local'}
+    return not db_user.firebase_uid and providers.issubset({'local', 'password'})
 
 
 @app.delete("/users/{user_id}")
@@ -460,31 +482,11 @@ async def delete_user(
     current_user: User = Depends(get_current_user),
     db: SessionLocal = Depends(get_db),
 ):
-    """Delete a local DB user and its linked Firebase Auth account (admin only).
+    """Delete a local-only DB user (admin only).
 
-    --- User-identity deletion policy ---
-    Source of truth model:
-      - Firebase Auth: identity / social-login provider only.
-      - Local DB: app-user store (roles, beta-tester status, activation, projects).
-
-    Local DB user deletion:
-      - Removes the local user and their projects.
-      - Also deletes the linked Firebase Auth account if a `firebase_uid`
-        is stored (populated on first Firebase social login).
-      - If `firebase_uid` is missing (user registered via email/password only),
-        local-only deletion proceeds without error.
-
-    Firebase Auth deletion (admin console):
-      - If a Firebase Auth user is deleted from the Firebase Console outside
-        this endpoint, the local DB user becomes orphaned. The next sign-in
-        attempt via that social provider will fail at Firebase.
-      - To prevent orphaned accounts, always delete local DB users through
-        this endpoint rather than the Firebase Console.
-
-    Error handling:
-      - Firebase deletion is best-effort: if the Firebase Admin SDK is not
-        configured or the Firebase user no longer exists, the local deletion
-        still proceeds. The error is logged but not raised.
+    Firebase Auth users are not deleted by the backend. Social-login users
+    must be managed in Firebase and are rejected here to avoid orphaning the
+    external identity.
     """
     if current_user.role != UserRole.ADMIN:
         raise HTTPException(status_code=403, detail="Not authorized for this action: DELETE USER")
@@ -493,10 +495,11 @@ async def delete_user(
     if db_user is None:
         raise HTTPException(status_code=404, detail="User not found in database")
 
-    # Always delete the linked Firebase Auth account when we know the UID.
-    # This prevents orphaned Firebase accounts and keeps both stores in sync.
-    if db_user.firebase_uid:
-        delete_firebase_user(db_user.firebase_uid)
+    if not is_local_user(db_user):
+        raise HTTPException(
+            status_code=400,
+            detail="Only local accounts can be deleted from the admin panel.",
+        )
 
     db.delete(db_user)
     db.commit()
