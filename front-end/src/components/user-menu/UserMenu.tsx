@@ -39,7 +39,7 @@ const UserMenu = () => {
 
   useEffect(() => {
     const fetchUserData = async () => {
-      if (!auth.token) {
+      if (auth.authStatus !== 'authenticated' || !auth.token) {
         return;
       }
 
@@ -52,7 +52,7 @@ const UserMenu = () => {
     };
 
     fetchUserData();
-  }, [auth.token]);
+  }, [auth.authStatus, auth.token]);
 
   return (
     <Box>

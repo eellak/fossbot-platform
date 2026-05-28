@@ -1,22 +1,23 @@
 import React from 'react';
 import { Navigate, Outlet } from 'react-router-dom';
 import { useAuth } from '../authentication/AuthProvider';
-import { User } from 'src/authentication/AuthInterfaces';
-
 const AdminRoute = () => {
   const auth = useAuth();
   const token = auth.token;
-  const user: User = auth.user;
+  const user = auth.user;
 
-  if (!token) {
+  if (auth.authStatus === 'loading') {
+    return null;
+  }
+
+  if (!token || auth.authStatus !== 'authenticated') {
     return <Navigate to="/auth/login" />;
   }
 
-  if (user != null) {
-    console.log(user)
-    if (user.role != "admin")
-      return <Navigate to="/dashboard" />;
+  if (!user || user.role != "admin") {
+    return <Navigate to="/dashboard" />;
   }
+
   return <Outlet />;
 };
 

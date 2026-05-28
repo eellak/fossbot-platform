@@ -219,6 +219,22 @@ def provider_matches(existing: str, provider: str) -> bool:
     return provider.lower() in providers or (provider == 'local' and 'password' in providers)
 
 
+def merge_provider(existing: str, provider: str) -> str:
+    """Add a provider to the user's provider list without dropping existing providers."""
+    providers = provider_list(existing)
+    providers.add(provider.lower())
+    return ','.join(sorted(providers))
+
+
+def merge_firebase_provider(existing: str, provider: str) -> str:
+    """Add a Firebase provider and remove local/password once the account is Firebase-linked."""
+    providers = provider_list(existing)
+    providers.discard('local')
+    providers.discard('password')
+    providers.add(provider.lower())
+    return ','.join(sorted(providers))
+
+
 def provider_is_local_only(provider: str) -> bool:
     """Return whether the provider value represents a local/password-only account."""
     providers = provider_list(provider or 'local') or {'local'}
@@ -237,8 +253,21 @@ def can_link_local_to_firebase_provider(user: User, provider: str, email_verifie
 
 def link_local_user_to_firebase_provider(db, user: User, firebase_uid: str, provider: str, photo_url):
     user.firebase_uid = firebase_uid
-    user.provider = provider
+    user.provider = merge_firebase_provider(user.provider, provider)
     user.hashed_password = get_hashed(os.urandom(32).hex())
+    if photo_url:
+        user.image_url = photo_url
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+def update_firebase_user_metadata(db, user: User, display_name: str, email: str, firebase_uid: str, provider: str, photo_url):
+    user.username = build_firebase_username(db, display_name, email, firebase_uid, user)
+    name_parts = display_name.split(' ', 1)
+    user.firstname = name_parts[0] or user.firstname or 'Firebase'
+    user.lastname = name_parts[1] if len(name_parts) > 1 else user.lastname or ''
+    user.provider = merge_firebase_provider(user.provider, provider)
     if photo_url:
         user.image_url = photo_url
     db.commit()
@@ -261,22 +290,30 @@ def get_or_create_firebase_user(db, decoded_token, firebase_request: FirebaseTok
     firstname = name_parts[0] or 'Firebase'
     lastname = name_parts[1] if len(name_parts) > 1 else ''
 
+    if not firebase_uid:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Firebase account has no UID")
+
+    user = db.query(User).filter(User.firebase_uid == firebase_uid).first()
+    if user:
+        if user.access_revoked:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=REVOKED_ACCESS_MESSAGE)
+        return update_firebase_user_metadata(db, user, display_name, email, firebase_uid, provider, photo_url)
+
     user = db.query(User).filter(User.email == email).first()
     if user:
         if user.access_revoked:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=REVOKED_ACCESS_MESSAGE)
 
-        if firebase_uid and user.firebase_uid == firebase_uid and provider_matches(user.provider, provider):
-            user.username = build_firebase_username(db, display_name, email, firebase_uid, user)
-            user.firstname = firstname
-            user.lastname = lastname
-            if photo_url:
-                user.image_url = photo_url
-            db.commit()
-            db.refresh(user)
-            return user
+        if user.firebase_uid == firebase_uid:
+            return update_firebase_user_metadata(db, user, display_name, email, firebase_uid, provider, photo_url)
 
-        if firebase_uid and can_link_local_to_firebase_provider(user, provider, email_verified):
+        if user.firebase_uid and user.firebase_uid != firebase_uid:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="This email already belongs to another Firebase account. Sign in with the existing provider and link this provider first.",
+            )
+
+        if can_link_local_to_firebase_provider(user, provider, email_verified):
             return link_local_user_to_firebase_provider(db, user, firebase_uid, provider, photo_url)
 
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="An account with this email already exists.")

@@ -1,7 +1,11 @@
 // Define the shape of your context data
+export type AuthStatus = 'loading' | 'authenticated' | 'unauthenticated';
+
 export interface AuthContextType {
     user: User | null;
     token: string;
+    authStatus: AuthStatus;
+    isAuthenticated: boolean;
     loginAction: (data: LoginData) => Promise<LoginResponse>;
     loginWithFirebaseAction: (provider: FirebaseProviderName) => Promise<LoginResponse>;
     registerAction: (data: RegisterData) => Promise<LoginResponse>;

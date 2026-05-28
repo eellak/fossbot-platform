@@ -17,10 +17,10 @@ const Login = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (auth.token) {
+    if (auth.authStatus === 'authenticated') {
       navigate('/dashboard', { replace: true });
     }
-  }, [auth.token, navigate]);
+  }, [auth.authStatus, navigate]);
 
   // ERROR ALERTS HANDLING
   const [showErrorAlert, setShowErrorAlert] = useState(false);

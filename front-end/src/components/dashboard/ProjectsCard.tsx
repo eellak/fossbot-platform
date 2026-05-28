@@ -45,6 +45,10 @@ const ProjectsCard = () => {
   const [projects, setProjects] = useState([]);
 
   useEffect(() => {
+    if (auth.authStatus !== 'authenticated' || !auth.token) {
+      return;
+    }
+
     const fetchProjects = async () => {
       try {
         const fetchedProjects = await auth.getProjectsAction();
@@ -60,7 +64,7 @@ const ProjectsCard = () => {
     };
 
     fetchProjects();
-  }, []);
+  }, [auth.authStatus, auth.token]);
 
   const handleDeleteProject = async (projectId) => {
     try {
