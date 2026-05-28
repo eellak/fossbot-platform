@@ -16,7 +16,7 @@ services:
       - ./back-end/models:/usr/src/app/back-end/models
 
   db:
-    image: postgres:latest
+    image: postgres:16.3
     container_name: fsbt-db
     env_file:
       - .env
