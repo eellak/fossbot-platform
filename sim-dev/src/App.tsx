@@ -2,7 +2,7 @@ import React, { useRef, useEffect, useState } from 'react'
 import { scene, camera, renderer } from '@simulator/scene.js'
 import { ambientLight, directionalLight } from '@simulator/environment_lights.js'
 import { loadBaseObject } from '@simulator/robot_loader.js'
-import { startAnimation, stopAnimation, rgb_set_color, drawLine, moveStep, rotateStep, stopMotion } from '@simulator/animate.js'
+import { startAnimation, stopAnimation, rgb_set_color, drawLine, moveStep, rotateStep, stopMotion, changeCamera } from '@simulator/animate.js'
 import { loadObjectsFromJSON } from '@simulator/stage_loader.js'
 import { traceLine } from '@simulator/sensors.js'
 import { keys } from '@simulator/utils.js'
@@ -109,6 +109,7 @@ export default function App() {
   const [currentStage, setCurrentStage] = useState(STAGES[0].url)
   const [fps, setFps] = useState(0)
   const [wasdEnabled, setWasdEnabled] = useState(false)
+  const [followCam, setFollowCam] = useState(false)
   const [robotPos, setRobotPos] = useState({ x: 0, y: 0, z: 0 })
   const fpsState = useRef({ frames: 0, lastTime: performance.now() })
   const posTimer = useRef(0)
@@ -236,6 +237,18 @@ export default function App() {
           title={wasdEnabled ? 'Disable WASD / arrow key movement' : 'Enable WASD / arrow key movement'}
         >
           WASD / ↑↓←→
+        </Toggle>
+
+        <Divider />
+
+        {/* Scene / camera controls */}
+        <Btn onClick={() => resetScene(currentStage)} title="Reload current stage">↺ reset</Btn>
+        <Toggle
+          active={followCam}
+          onClick={() => { changeCamera(); setFollowCam(v => !v) }}
+          title={followCam ? 'Switch to orbit camera' : 'Switch to follow camera'}
+        >
+          {followCam ? '🎥 follow' : '🎥 orbit'}
         </Toggle>
 
         {/* FPS — pushed right */}
