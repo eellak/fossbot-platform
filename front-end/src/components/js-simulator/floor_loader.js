@@ -52,10 +52,16 @@ function updateTexture(texturePath, color, repeat = { x: 25, y: 25 }, offset = {
 }
 
 
+function updateColor(color) {
+  planeMaterial.map = null;
+  planeMaterial.color.set(color);
+  planeMaterial.needsUpdate = true;
+}
+
 function updateDimensions(dimensions) {
   plane.scale.set(dimensions[0], dimensions[1]);
 }
 
 
-export { plane, updateTexture, updateDimensions };
+export { plane, updateTexture, updateColor, updateDimensions };
 
