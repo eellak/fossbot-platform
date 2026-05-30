@@ -2,9 +2,10 @@ import React, { useRef, useEffect, useState } from 'react'
 import { scene, camera, renderer } from '@simulator/scene.js'
 import { ambientLight, directionalLight } from '@simulator/environment_lights.js'
 import { loadBaseObject } from '@simulator/robot_loader.js'
-import { startAnimation, stopAnimation, rgb_set_color, drawLine } from '@simulator/animate.js'
+import { startAnimation, stopAnimation, rgb_set_color, drawLine, moveStep, rotateStep, stopMotion } from '@simulator/animate.js'
 import { loadObjectsFromJSON } from '@simulator/stage_loader.js'
 import { traceLine } from '@simulator/sensors.js'
+import { keys } from '@simulator/utils.js'
 
 const STAGES = [
   { label: 'White Rectangle', url: '/js-simulator/stages/stage_white_rect.json' },
@@ -32,11 +33,100 @@ function resetScene(url: string) {
   loadBaseObject(scene)
 }
 
+// WASD + arrow key → keys object wiring (global, set up once)
+const KEY_MAP: Record<string, keyof typeof keys> = {
+  ArrowUp: 'ArrowUp',   w: 'ArrowUp',   W: 'ArrowUp',
+  ArrowDown: 'ArrowDown', s: 'ArrowDown', S: 'ArrowDown',
+  ArrowLeft: 'ArrowLeft', a: 'ArrowLeft', A: 'ArrowLeft',
+  ArrowRight: 'ArrowRight', d: 'ArrowRight', D: 'ArrowRight',
+}
+
+// Preset distances / angles (mirroring Simulator.tsx conventions)
+const STEP_DIST   = 0.4          // one step
+const PRESET_DIST = STEP_DIST * 10  // ×10 preset
+const DEG_90      = Math.PI / 2
+
+function Divider() {
+  return <span style={{ width: 1, height: 18, background: '#333', flexShrink: 0 }} />
+}
+
+function Toggle({ onClick, title, active, children }: {
+  onClick: () => void
+  title?: string
+  active: boolean
+  children: React.ReactNode
+}) {
+  return (
+    <button
+      onClick={onClick}
+      title={title}
+      style={{
+        background: active ? '#1a3a1a' : '#2a2a2a',
+        color: active ? '#6f6' : '#555',
+        border: `1px solid ${active ? '#363' : '#444'}`,
+        borderRadius: 4,
+        padding: '3px 10px',
+        fontFamily: 'monospace',
+        fontSize: 12,
+        cursor: 'pointer',
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {children}
+    </button>
+  )
+}
+
+function Btn({ onClick, title, accent, children }: {
+  onClick: () => void
+  title?: string
+  accent?: boolean
+  children: React.ReactNode
+}) {
+  return (
+    <button
+      onClick={onClick}
+      title={title}
+      style={{
+        background: accent ? '#3a1a1a' : '#2a2a2a',
+        color: accent ? '#f88' : '#ccc',
+        border: `1px solid ${accent ? '#633' : '#444'}`,
+        borderRadius: 4,
+        padding: '3px 10px',
+        fontFamily: 'monospace',
+        fontSize: 12,
+        cursor: 'pointer',
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {children}
+    </button>
+  )
+}
+
 export default function App() {
   const mountRef = useRef<HTMLDivElement>(null)
   const [currentStage, setCurrentStage] = useState(STAGES[0].url)
   const [fps, setFps] = useState(0)
+  const [wasdEnabled, setWasdEnabled] = useState(false)
   const fpsState = useRef({ frames: 0, lastTime: performance.now() })
+
+  // Wire WASD + arrow keys only when toggle is on
+  useEffect(() => {
+    if (!wasdEnabled) {
+      Object.keys(keys).forEach(k => (keys[k as keyof typeof keys] = false))
+      return
+    }
+    const down = (e: KeyboardEvent) => { if (KEY_MAP[e.key]) { keys[KEY_MAP[e.key]] = true; e.preventDefault() } }
+    const up   = (e: KeyboardEvent) => { if (KEY_MAP[e.key]) { keys[KEY_MAP[e.key]] = false } }
+    window.addEventListener('keydown', down)
+    window.addEventListener('keyup',   up)
+    return () => {
+      window.removeEventListener('keydown', down)
+      window.removeEventListener('keyup',   up)
+      Object.keys(keys).forEach(k => (keys[k as keyof typeof keys] = false))
+    }
+  }, [wasdEnabled])
 
   useEffect(() => {
     const mount = mountRef.current
@@ -87,13 +177,19 @@ export default function App() {
         borderBottom: '1px solid #333',
         display: 'flex',
         alignItems: 'center',
-        gap: '12px',
+        gap: '8px',
         flexShrink: 0,
+        flexWrap: 'wrap',
       }}>
-        <span style={{ color: '#888', fontFamily: 'monospace', fontSize: 13, fontWeight: 'bold', letterSpacing: 1 }}>
+        {/* Brand */}
+        <span style={{ color: '#555', fontFamily: 'monospace', fontSize: 13, fontWeight: 'bold', letterSpacing: 1, marginRight: 4 }}>
           sim-dev
         </span>
 
+        <Divider />
+
+        {/* Stage picker */}
+        <span style={{ color: '#666', fontFamily: 'monospace', fontSize: 12 }}>stage</span>
         <select
           value={currentStage}
           onChange={e => setCurrentStage(e.target.value)}
@@ -113,6 +209,29 @@ export default function App() {
           ))}
         </select>
 
+        <Divider />
+
+        {/* Preset moves */}
+        <span style={{ color: '#666', fontFamily: 'monospace', fontSize: 12 }}>movement</span>
+        <Btn onClick={() => moveStep(-PRESET_DIST)} title="Forward ×10">⬆ ×10</Btn>
+        <Btn onClick={() => moveStep( PRESET_DIST)} title="Backward ×10">⬇ ×10</Btn>
+        <Btn onClick={() => rotateStep( DEG_90)}    title="Rotate left 90°">↺ 90°</Btn>
+        <Btn onClick={() => rotateStep(-DEG_90)}    title="Rotate right 90°">↻ 90°</Btn>
+        <Btn onClick={() => stopMotion()} title="Stop" accent>■ stop</Btn>
+
+        <Divider />
+
+        {/* WASD toggle */}
+        <span style={{ color: '#666', fontFamily: 'monospace', fontSize: 12 }}>keyboard</span>
+        <Toggle
+          active={wasdEnabled}
+          onClick={() => setWasdEnabled(v => !v)}
+          title={wasdEnabled ? 'Disable WASD / arrow key movement' : 'Enable WASD / arrow key movement'}
+        >
+          WASD / ↑↓←→
+        </Toggle>
+
+        {/* FPS — pushed right */}
         <div style={{ marginLeft: 'auto', fontFamily: 'monospace', fontSize: 13, color: fpsColor }}>
           {fps} fps
         </div>
