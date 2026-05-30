@@ -109,7 +109,9 @@ export default function App() {
   const [currentStage, setCurrentStage] = useState(STAGES[0].url)
   const [fps, setFps] = useState(0)
   const [wasdEnabled, setWasdEnabled] = useState(false)
+  const [robotPos, setRobotPos] = useState({ x: 0, y: 0, z: 0 })
   const fpsState = useRef({ frames: 0, lastTime: performance.now() })
+  const posTimer = useRef(0)
 
   // Wire WASD + arrow keys only when toggle is on
   useEffect(() => {
@@ -154,6 +156,11 @@ export default function App() {
         setFps(Math.round((fpsState.current.frames * 1000) / delta))
         fpsState.current.frames = 0
         fpsState.current.lastTime = now
+      }
+      if (now - posTimer.current >= 100) {
+        const robot = scene.getObjectByName('robot_body')
+        if (robot) setRobotPos({ x: robot.position.x, y: robot.position.y, z: robot.position.z })
+        posTimer.current = now
       }
       rafId = requestAnimationFrame(countFps)
     }
@@ -237,7 +244,21 @@ export default function App() {
         </div>
       </div>
 
-      <div ref={mountRef} style={{ flex: 1 }} />
+      <div style={{ flex: 1, position: 'relative' }}>
+        <div ref={mountRef} style={{ width: '100%', height: '100%' }} />
+
+        {/* Robot position overlay — bottom-left */}
+        <div style={{
+          position: 'absolute', bottom: 10, left: 10,
+          background: 'rgba(0,0,0,0.55)', borderRadius: 4,
+          padding: '4px 8px', pointerEvents: 'none',
+          fontFamily: 'monospace', fontSize: 11, lineHeight: 1.7, color: '#888',
+        }}>
+          <div><span style={{ color: '#555' }}>x</span> {robotPos.x.toFixed(3)}</div>
+          <div><span style={{ color: '#555' }}>y</span> {robotPos.y.toFixed(3)}</div>
+          <div><span style={{ color: '#555' }}>z</span> {robotPos.z.toFixed(3)}</div>
+        </div>
+      </div>
     </div>
   )
 }
