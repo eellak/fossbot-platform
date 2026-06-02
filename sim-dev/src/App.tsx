@@ -18,12 +18,6 @@ import { createDebugger } from './physics/debug'
 import type { DebuggerHandle } from './physics/debug'
 import { PhysicsPanel } from './physics/PhysicsPanel'
 import type { PhysicsOptions } from './physics/PhysicsPanel'
-import { Btn, Toggle, Divider } from './ui'
-import { BenchResults } from './bench/BenchResults'
-import { SweepResultsView } from './bench/SweepResults'
-import { createBenchRunner, sleep, waitForRobot } from './bench/runner'
-import type { StageResult, SweepResults } from './bench/types'
-import { fpsColor } from './bench/stats'
 
 const STAGES = [
   { label: 'White Rectangle', url: '/js-simulator/stages/stage_white_rect.json' },
