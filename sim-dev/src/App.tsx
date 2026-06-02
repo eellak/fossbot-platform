@@ -308,14 +308,14 @@ export default function App() {
 
         {/* Robot position overlay — bottom-left */}
         <div style={{
-          position: 'absolute', bottom: 10, left: 10,
+          position: 'absolute', top: 10, left: 10,
           background: 'rgba(0,0,0,0.55)', borderRadius: 4,
           padding: '4px 8px', pointerEvents: 'none',
           fontFamily: 'monospace', fontSize: 11, lineHeight: 1.7, color: '#888',
         }}>
-          <div><span style={{ color: '#555' }}>x</span> {robotPos.x.toFixed(3)}</div>
-          <div><span style={{ color: '#555' }}>y</span> {robotPos.y.toFixed(3)}</div>
-          <div><span style={{ color: '#555' }}>z</span> {robotPos.z.toFixed(3)}</div>
+          <div><span style={{ color: '#ff0000' }}>x</span> {robotPos.x.toFixed(3)}</div>
+          <div><span style={{ color: '#00ff00' }}>y</span> {robotPos.y.toFixed(3)}</div>
+          <div><span style={{ color: '#0000ff' }}>z</span> {robotPos.z.toFixed(3)}</div>
         </div>
       </div>
     </div>
