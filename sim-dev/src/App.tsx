@@ -113,8 +113,12 @@ export default function App() {
   const [followCam, setFollowCam] = useState(false)
   const [robotPos, setRobotPos] = useState({ x: 0, y: 0, z: 0 })
   const [objCount, setObjCount] = useState(0)
+  const [frameMs, setFrameMs] = useState(0)
+  const [memMb, setMemMb] = useState<number | null>(null)
+  const snapLog = useRef<{ ts: number; fps: number; frameMs: number; memMb: number | null }[]>([])
   const fpsState = useRef({ frames: 0, lastTime: performance.now() })
   const posTimer = useRef(0)
+  const lastFrameTime = useRef(performance.now())
 
   // Wire WASD + arrow keys only when toggle is on
   useEffect(() => {
@@ -152,11 +156,17 @@ export default function App() {
 
     let rafId: number
     const countFps = () => {
-      fpsState.current.frames++
       const now = performance.now()
+      const dt = now - lastFrameTime.current
+      lastFrameTime.current = now
+      setFrameMs(dt)
+
+      fpsState.current.frames++
       const delta = now - fpsState.current.lastTime
       if (delta >= 500) {
         setFps(Math.round((fpsState.current.frames * 1000) / delta))
+        const mem = (performance as any).memory
+        setMemMb(mem ? Math.round(mem.usedJSHeapSize / 1024 / 1024) : null)
         fpsState.current.frames = 0
         fpsState.current.lastTime = now
       }
@@ -262,9 +272,33 @@ export default function App() {
           {followCam ? '🎥 follow' : '🎥 orbit'}
         </Toggle>
 
-        {/* FPS — pushed right */}
-        <div style={{ marginLeft: 'auto', fontFamily: 'monospace', fontSize: 13, color: fpsColor }}>
-          {fps} fps
+        <Divider />
+
+        {/* Record snapshot */}
+        <Btn
+          onClick={() => {
+            const snap = { ts: Date.now(), fps, frameMs: Math.round(frameMs * 100) / 100, memMb }
+            snapLog.current.push(snap)
+            console.log(`[sim-dev snapshot #${snapLog.current.length}]`, snap)
+          }}
+          title="Record a perf snapshot to the console"
+        >
+          ⏺ snap
+        </Btn>
+
+        {/* Perf metrics — pushed right */}
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 10, alignItems: 'center' }}>
+          {memMb !== null && (
+            <span style={{ fontFamily: 'monospace', fontSize: 11, color: '#666' }}>
+              {memMb} MB
+            </span>
+          )}
+          <span style={{ fontFamily: 'monospace', fontSize: 11, color: '#666' }}>
+            {frameMs.toFixed(1)} ms
+          </span>
+          <span style={{ fontFamily: 'monospace', fontSize: 13, color: fpsColor }}>
+            {fps} fps
+          </span>
         </div>
       </div>
 
