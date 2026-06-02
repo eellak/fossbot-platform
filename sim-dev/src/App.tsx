@@ -114,8 +114,6 @@ export default function App() {
   const [robotPos, setRobotPos] = useState({ x: 0, y: 0, z: 0 })
   const [objCount, setObjCount] = useState(0)
   const [frameMs, setFrameMs] = useState(0)
-  const [memMb, setMemMb] = useState<number | null>(null)
-  const snapLog = useRef<{ ts: number; fps: number; frameMs: number; memMb: number | null }[]>([])
   const fpsState = useRef({ frames: 0, lastTime: performance.now() })
   const posTimer = useRef(0)
   const lastFrameTime = useRef(performance.now())
@@ -165,8 +163,6 @@ export default function App() {
       const delta = now - fpsState.current.lastTime
       if (delta >= 500) {
         setFps(Math.round((fpsState.current.frames * 1000) / delta))
-        const mem = (performance as any).memory
-        setMemMb(mem ? Math.round(mem.usedJSHeapSize / 1024 / 1024) : null)
         fpsState.current.frames = 0
         fpsState.current.lastTime = now
       }
@@ -272,27 +268,11 @@ export default function App() {
           {followCam ? '🎥 follow' : '🎥 orbit'}
         </Toggle>
 
-        <Divider />
-
-        {/* Record snapshot */}
-        <Btn
-          onClick={() => {
-            const snap = { ts: Date.now(), fps, frameMs: Math.round(frameMs * 100) / 100, memMb }
-            snapLog.current.push(snap)
-            console.log(`[sim-dev snapshot #${snapLog.current.length}]`, snap)
-          }}
-          title="Record a perf snapshot to the console"
-        >
-          ⏺ snap
-        </Btn>
-
         {/* Perf metrics — pushed right */}
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 10, alignItems: 'center' }}>
-          {memMb !== null && (
-            <span style={{ fontFamily: 'monospace', fontSize: 11, color: '#666' }}>
-              {memMb} MB
-            </span>
-          )}
+          <span style={{ fontFamily: 'monospace', fontSize: 11, color: '#666' }}>
+            {objCount} obj
+          </span>
           <span style={{ fontFamily: 'monospace', fontSize: 11, color: '#666' }}>
             {frameMs.toFixed(1)} ms
           </span>
@@ -304,23 +284,6 @@ export default function App() {
 
       <div style={{ flex: 1, position: 'relative' }}>
         <div ref={mountRef} style={{ width: '100%', height: '100%' }} />
-
-        {/* Object count overlay — top-right */}
-        {(() => {
-          const warn = objCount > 50
-          const caution = objCount > 30
-          const color = warn ? '#f66' : caution ? '#fa0' : '#6a6'
-          return (
-            <div style={{
-              position: 'absolute', top: 10, right: 10,
-              background: 'rgba(0,0,0,0.55)', borderRadius: 4,
-              padding: '4px 8px', pointerEvents: 'none',
-              fontFamily: 'monospace', fontSize: 11, color,
-            }}>
-              {objCount} obj{warn ? ' ⚠ >50' : ''}
-            </div>
-          )
-        })()}
 
         {/* Robot position overlay — bottom-left */}
         <div style={{
