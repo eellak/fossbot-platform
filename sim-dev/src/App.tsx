@@ -114,6 +114,8 @@ export default function App() {
   const [robotPos, setRobotPos] = useState({ x: 0, y: 0, z: 0 })
   const [objCount, setObjCount] = useState(0)
   const [frameMs, setFrameMs] = useState(0)
+  const [showMetrics, setShowMetrics] = useState(false)
+  const showMetricsRef = useRef(false)
   const fpsState = useRef({ frames: 0, lastTime: performance.now() })
   const posTimer = useRef(0)
   const lastFrameTime = useRef(performance.now())
@@ -157,12 +159,17 @@ export default function App() {
       const now = performance.now()
       const dt = now - lastFrameTime.current
       lastFrameTime.current = now
-      setFrameMs(dt)
 
       fpsState.current.frames++
       const delta = now - fpsState.current.lastTime
-      if (delta >= 500) {
-        setFps(Math.round((fpsState.current.frames * 1000) / delta))
+      if (showMetricsRef.current) {
+        setFrameMs(dt)
+        if (delta >= 500) {
+          setFps(Math.round((fpsState.current.frames * 1000) / delta))
+          fpsState.current.frames = 0
+          fpsState.current.lastTime = now
+        }
+      } else if (delta >= 500) {
         fpsState.current.frames = 0
         fpsState.current.lastTime = now
       }
@@ -273,12 +280,26 @@ export default function App() {
           <span style={{ fontFamily: 'monospace', fontSize: 11, color: '#666' }}>
             {objCount} obj
           </span>
-          <span style={{ fontFamily: 'monospace', fontSize: 11, color: '#666' }}>
-            {frameMs.toFixed(1)} ms
-          </span>
-          <span style={{ fontFamily: 'monospace', fontSize: 13, color: fpsColor }}>
-            {fps} fps
-          </span>
+          {showMetrics && <>
+            <span style={{ fontFamily: 'monospace', fontSize: 11, color: '#666' }}>
+              {frameMs.toFixed(1)} ms
+            </span>
+            <span style={{ fontFamily: 'monospace', fontSize: 13, color: fpsColor }}>
+              {fps} fps
+            </span>
+          </>}
+          <Toggle
+            active={showMetrics}
+            onClick={() => {
+              const next = !showMetrics
+              showMetricsRef.current = next
+              setShowMetrics(next)
+              if (!next) { setFps(0); setFrameMs(0) }
+            }}
+            title={showMetrics ? 'Hide FPS / frame time' : 'Show FPS / frame time'}
+          >
+            perf
+          </Toggle>
         </div>
       </div>
 
