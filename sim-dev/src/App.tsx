@@ -14,8 +14,16 @@ import { createRobotBody } from './physics/robotBody'
 import { runPresetMoveWithTimeout, stopBody } from './physics/control'
 import { startPhysicsLoop } from './physics/loop'
 import type { PhysicsLoopHandle } from './physics/loop'
-import { createDebugger, isDebugEnabled } from './physics/debug'
+import { createDebugger } from './physics/debug'
 import type { DebuggerHandle } from './physics/debug'
+import { PhysicsPanel } from './physics/PhysicsPanel'
+import type { PhysicsOptions } from './physics/PhysicsPanel'
+import { Btn, Toggle, Divider } from './ui'
+import { BenchResults } from './bench/BenchResults'
+import { SweepResultsView } from './bench/SweepResults'
+import { createBenchRunner, sleep, waitForRobot } from './bench/runner'
+import type { StageResult, SweepResults } from './bench/types'
+import { fpsColor } from './bench/stats'
 
 const STAGES = [
   { label: 'White Rectangle', url: '/js-simulator/stages/stage_white_rect.json' },
@@ -429,6 +437,13 @@ export default function App() {
   const [showMetrics, setShowMetrics] = useState(false)
   const [physicsOn, setPhysicsOn] = useState(false)
   const [physicsReady, setPhysicsReady] = useState(false)
+  const [physicsPanel, setPhysicsPanel] = useState(false)
+  const [physicsOptions, setPhysicsOptions] = useState<PhysicsOptions>({
+    collisionEnabled: true,
+    debugWireframes: false,
+    lockRollPitch: true,
+    gravityEnabled: true,
+  })
   const [benchRunning, setBenchRunning] = useState(false)
   const [benchStage, setBenchStage] = useState('')
   const [benchResults, setBenchResults] = useState<StageResult[] | null>(null)
@@ -448,6 +463,8 @@ export default function App() {
   const physicsHandleRef = useRef<PhysicsLoopHandle | null>(null)
   const robotBodyRef = useRef<CANNON.Body | null>(null)
   const physicsDebuggerRef = useRef<DebuggerHandle | null>(null)
+  const physicsOptionsRef = useRef(physicsOptions)
+  useEffect(() => { physicsOptionsRef.current = physicsOptions }, [physicsOptions])
 
   useEffect(() => {
     if (!wasdEnabled) {
@@ -585,14 +602,23 @@ export default function App() {
       // Cut over: stop animate.js's loop, build world, start physics loop.
       stopAnimation()
       resetWorld()
-      const summary = mirrorStageToWorld(scene)
-      console.log('[physics] mirrored stage →', summary)
+      const opts = physicsOptionsRef.current
+      if (opts.collisionEnabled) {
+        const summary = mirrorStageToWorld(scene)
+        console.log('[physics] mirrored stage →', summary)
+      }
 
       const base = scene.getObjectByName('robot_body')
       if (!base) { console.warn('[physics] no robot_body in scene'); return }
       robotBodyRef.current = createRobotBody(base)
 
-      if (isDebugEnabled()) {
+      // Apply options that are set before the body was created.
+      const { lockRollPitch, gravityEnabled, debugWireframes } = physicsOptionsRef.current
+      const av = lockRollPitch ? 0 : 1
+      robotBodyRef.current.angularFactor.set(av, 1, av)
+      getWorld().gravity.set(0, gravityEnabled ? -9.82 : 0, 0)
+
+      if (debugWireframes) {
         physicsDebuggerRef.current = createDebugger(scene, getWorld())
       }
 
@@ -633,7 +659,18 @@ export default function App() {
     }
 
     return () => { cancelled = true }
-  }, [physicsOn, currentStage])
+  }, [physicsOn, currentStage, physicsOptions.collisionEnabled, physicsOptions.debugWireframes])
+
+  // Live option toggles — no physics restart needed.
+  useEffect(() => {
+    if (!robotBodyRef.current) return
+    const v = physicsOptions.lockRollPitch ? 0 : 1
+    robotBodyRef.current.angularFactor.set(v, 1, v)
+  }, [physicsOptions.lockRollPitch])
+
+  useEffect(() => {
+    getWorld().gravity.set(0, physicsOptions.gravityEnabled ? -9.82 : 0, 0)
+  }, [physicsOptions.gravityEnabled])
 
   // ── Preset move router — physics-mode-aware ─────────────────────────────
   // Preset buttons and the benchmark MOVE_ACTIONS go through this so physics
@@ -888,14 +925,17 @@ export default function App() {
 
         <Divider />
 
-        {/* Physics toggle */}
-        <Toggle
-          active={physicsOn}
-          onClick={() => !benchRunning && setPhysicsOn(v => !v)}
-          title={physicsOn ? 'Disable Cannon-es physics (return to kinematic)' : 'Enable Cannon-es physics prototype'}
-        >
-          ⚛ physics{physicsOn && !physicsReady ? '…' : ''}
-        </Toggle>
+        {/* Physics toggle + options panel */}
+        <PhysicsPanel
+          physicsOn={physicsOn}
+          physicsReady={physicsReady}
+          benchRunning={benchRunning}
+          panelOpen={physicsPanel}
+          options={physicsOptions}
+          onTogglePhysics={() => setPhysicsOn(v => !v)}
+          onTogglePanel={() => setPhysicsPanel(v => !v)}
+          onChangeOption={(key, value) => setPhysicsOptions(prev => ({ ...prev, [key]: value }))}
+        />
 
         <Divider />
 
