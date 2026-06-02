@@ -7,6 +7,20 @@ import { startAnimation, stopAnimation, rgb_set_color, drawLine, moveStep, rotat
 import { loadObjectsFromJSON } from '@simulator/stage_loader.js'
 import { traceLine } from '@simulator/sensors.js'
 import { keys } from '@simulator/utils.js'
+import { getWorld, resetWorld } from './physics/world'
+import { mirrorStageToWorld } from './physics/buildFromScene'
+import { createRobotBody } from './physics/robotBody'
+import { runPresetMoveWithTimeout, stopBody } from './physics/control'
+import { startPhysicsLoop } from './physics/loop'
+import type { PhysicsLoopHandle } from './physics/loop'
+import { createDebugger, isDebugEnabled } from './physics/debug'
+import type { DebuggerHandle } from './physics/debug'
+import { Btn, Toggle, Divider } from './ui'
+import { BenchResults } from './bench/BenchResults'
+import { SweepResultsView } from './bench/SweepResults'
+import { createBenchRunner, sleep, waitForRobot } from './bench/runner'
+import type { StageResult, SweepResults } from './bench/types'
+import { fpsColor } from './bench/stats'
 
 const STAGES = [
   { label: 'White Rectangle', url: '/js-simulator/stages/stage_white_rect.json' },
@@ -34,7 +48,6 @@ function resetScene(url: string) {
   loadBaseObject(scene)
 }
 
-// WASD + arrow key → keys object wiring (global, set up once)
 const KEY_MAP: Record<string, keyof typeof keys> = {
   ArrowUp: 'ArrowUp', w: 'ArrowUp', W: 'ArrowUp',
   ArrowDown: 'ArrowDown', s: 'ArrowDown', S: 'ArrowDown',
@@ -45,223 +58,6 @@ const KEY_MAP: Record<string, keyof typeof keys> = {
 const STEP_DIST = 0.4
 const PRESET_DIST = STEP_DIST * 10
 const DEG_90 = Math.PI / 2
-
-// ─── Benchmark types ────────────────────────────────────────────────────────
-
-interface StatSummary { avg: number; min: number; max: number }
-interface CamResult {
-  idle: { fps: StatSummary; ms: StatSummary }
-  moving: { fps: StatSummary; ms: StatSummary }
-}
-interface StageResult {
-  stage: string
-  loadMs: number
-  loaded: boolean
-  orbit: CamResult
-  follow: CamResult
-  top: CamResult
-}
-
-function sampleStats(frameMsSamples: number[]): { fps: StatSummary; ms: StatSummary } {
-  if (!frameMsSamples.length) {
-    const zero = { avg: 0, min: 0, max: 0 }
-    return { fps: zero, ms: zero }
-  }
-  const n = frameMsSamples.length
-  const sum = frameMsSamples.reduce((a, b) => a + b, 0)
-  const avg = sum / n
-  const minMs = Math.min(...frameMsSamples)
-  const maxMs = Math.max(...frameMsSamples)
-  return {
-    fps: {
-      avg: Math.round(1000 / avg),
-      min: Math.round(1000 / maxMs),  // worst fps ← highest frameMs
-      max: Math.round(1000 / minMs),  // best fps  ← lowest  frameMs
-    },
-    ms: {
-      avg: parseFloat(avg.toFixed(1)),
-      min: parseFloat(minMs.toFixed(1)),
-      max: parseFloat(maxMs.toFixed(1)),
-    },
-  }
-}
-
-function sleep(ms: number) {
-  return new Promise<void>(resolve => setTimeout(resolve, ms))
-}
-
-function waitForRobot(timeoutMs = 12000): Promise<boolean> {
-  return new Promise(resolve => {
-    const start = performance.now()
-    const tick = () => {
-      if (scene.getObjectByName('robot_body')) { resolve(true); return }
-      if (performance.now() - start > timeoutMs) { resolve(false); return }
-      setTimeout(tick, 100)
-    }
-    tick()
-  })
-}
-
-// ─── UI helpers ─────────────────────────────────────────────────────────────
-
-function Divider() {
-  return <span style={{ width: 1, height: 18, background: '#333', flexShrink: 0 }} />
-}
-
-function Toggle({ onClick, title, active, children }: {
-  onClick: () => void; title?: string; active: boolean; children: React.ReactNode
-}) {
-  return (
-    <button onClick={onClick} title={title} style={{
-      background: active ? '#1a3a1a' : '#2a2a2a',
-      color: active ? '#6f6' : '#555',
-      border: `1px solid ${active ? '#363' : '#444'}`,
-      borderRadius: 4, padding: '3px 10px',
-      fontFamily: 'monospace', fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap',
-    }}>
-      {children}
-    </button>
-  )
-}
-
-function Btn({ onClick, title, accent, disabled, children }: {
-  onClick: () => void; title?: string; accent?: boolean; disabled?: boolean; children: React.ReactNode
-}) {
-  return (
-    <button onClick={onClick} title={title} disabled={disabled} style={{
-      background: accent ? '#3a1a1a' : '#2a2a2a',
-      color: disabled ? '#444' : accent ? '#f88' : '#ccc',
-      border: `1px solid ${accent ? '#633' : disabled ? '#333' : '#444'}`,
-      borderRadius: 4, padding: '3px 10px',
-      fontFamily: 'monospace', fontSize: 12,
-      cursor: disabled ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap',
-    }}>
-      {children}
-    </button>
-  )
-}
-
-// ─── Results overlay ─────────────────────────────────────────────────────────
-
-function avg(arr: number[]) { return arr.reduce((a, b) => a + b, 0) / arr.length }
-
-function avgCamResult(results: StageResult[], key: 'orbit' | 'follow' | 'top'): CamResult {
-  const avgStat = (fn: (r: StageResult) => number) => parseFloat(avg(results.map(fn)).toFixed(1))
-  const avgFps = (fn: (r: StageResult) => number) => Math.round(avg(results.map(fn)))
-  return {
-    idle: {
-      fps: { avg: avgFps(r => r[key].idle.fps.avg), min: avgFps(r => r[key].idle.fps.min), max: avgFps(r => r[key].idle.fps.max) },
-      ms: { avg: avgStat(r => r[key].idle.ms.avg), min: avgStat(r => r[key].idle.ms.min), max: avgStat(r => r[key].idle.ms.max) },
-    },
-    moving: {
-      fps: { avg: avgFps(r => r[key].moving.fps.avg), min: avgFps(r => r[key].moving.fps.min), max: avgFps(r => r[key].moving.fps.max) },
-      ms: { avg: avgStat(r => r[key].moving.ms.avg), min: avgStat(r => r[key].moving.ms.min), max: avgStat(r => r[key].moving.ms.max) },
-    },
-  }
-}
-
-function averageResults(results: StageResult[]): StageResult {
-  return {
-    stage: 'Average',
-    loadMs: Math.round(avg(results.map(r => r.loadMs))),
-    loaded: true,
-    orbit: avgCamResult(results, 'orbit'),
-    follow: avgCamResult(results, 'follow'),
-    top: avgCamResult(results, 'top'),
-  }
-}
-
-const CAM_KEYS = ['orbit', 'follow', 'top'] as const
-
-function fpsColor(fps: number) { return fps < 30 ? '#f66' : fps < 55 ? '#fa0' : '#6f6' }
-
-function BenchResults({ results, onClose }: { results: StageResult[]; onClose: () => void }) {
-  const averaged = averageResults(results)
-  const allRows = [...results, averaged]
-
-  const camCell = (c: CamResult) => {
-    return <>
-      <td style={{ padding: '4px 10px', textAlign: 'right', color: fpsColor(c.idle.fps.avg) }}>{c.idle.fps.avg}</td>
-      <td style={{ padding: '4px 10px', textAlign: 'right', color: fpsColor(c.idle.fps.min) }}>{c.idle.fps.min}</td>
-      <td style={{ padding: '4px 10px', textAlign: 'right', color: '#777' }}>{c.idle.ms.avg}</td>
-      <td style={{ padding: '4px 10px', textAlign: 'right', color: fpsColor(c.moving.fps.avg) }}>{c.moving.fps.avg}</td>
-      <td style={{ padding: '4px 10px', textAlign: 'right', color: fpsColor(c.moving.fps.min) }}>{c.moving.fps.min}</td>
-      <td style={{ padding: '4px 10px', textAlign: 'right', color: '#777' }}>{c.moving.ms.avg}</td>
-    </>
-  }
-
-  const toMd = () => {
-    const h1 = '| Stage | Load ms | Orbit idle fps avg/min | Orbit idle ms | Orbit move fps avg/min | Orbit move ms | Follow idle fps avg/min | Follow idle ms | Follow move fps avg/min | Follow move ms | Top idle fps avg/min | Top idle ms | Top move fps avg/min | Top move ms |'
-    const sep = allRows[0] ? '|' + Array(15).fill('---|').join('') : ''
-    const rows = allRows.map(r =>
-      `| ${r.stage} | ${r.loaded ? r.loadMs : r.loadMs + ' ⚠'} ` +
-      CAM_KEYS.map(k =>
-        `| ${r[k].idle.fps.avg}/${r[k].idle.fps.min} | ${r[k].idle.ms.avg} ` +
-        `| ${r[k].moving.fps.avg}/${r[k].moving.fps.min} | ${r[k].moving.ms.avg} `
-      ).join('') + '|'
-    )
-    return [h1, sep, ...rows].join('\n')
-  }
-
-  const thG = (label: string) => (
-    <th colSpan={6} style={{ padding: '4px 10px', textAlign: 'center', color: '#888', borderBottom: '1px solid #333', borderLeft: '1px solid #333' }}>
-      {label}
-    </th>
-  )
-  const thS = (label: string) => (
-    <th style={{ padding: '3px 10px', textAlign: 'right', color: '#555', borderBottom: '1px solid #222' }}>{label}</th>
-  )
-
-  return (
-    <div style={{
-      position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.75)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10,
-    }}>
-      <div style={{
-        background: '#1a1a1a', border: '1px solid #444', borderRadius: 6,
-        padding: '20px 24px', maxWidth: '95vw', maxHeight: '90vh', overflowX: 'auto', overflowY: 'auto',
-        fontFamily: 'monospace', fontSize: 12, color: '#ccc',
-      }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-          <span style={{ color: '#aaa', fontSize: 13, fontWeight: 'bold' }}>Benchmark Results</span>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <Btn onClick={() => navigator.clipboard.writeText(toMd())} title="Copy as Markdown table">📋 copy md</Btn>
-            <Btn onClick={() => { console.log('Benchmark JSON:', JSON.stringify(results, null, 2)) }} title="Log full JSON to console">🖥 console</Btn>
-            <Btn onClick={onClose} accent title="Close">✕ close</Btn>
-          </div>
-        </div>
-
-        <table style={{ borderCollapse: 'collapse', whiteSpace: 'nowrap' }}>
-          <thead>
-            <tr>
-              <th rowSpan={2} style={{ padding: '4px 12px 4px 0', textAlign: 'left', color: '#666', borderBottom: '1px solid #222' }}>Stage</th>
-              <th rowSpan={2} style={{ padding: '4px 10px', textAlign: 'right', color: '#666', borderBottom: '1px solid #222' }}>Load ms</th>
-              {thG('orbit')} {thG('follow')} {thG('top')}
-            </tr>
-            <tr>
-              {CAM_KEYS.map(k => <React.Fragment key={k}>
-                {thS('idle avg')} {thS('idle min')} {thS('idle ms')}
-                {thS('move avg')} {thS('move min')} {thS('move ms')}
-              </React.Fragment>)}
-            </tr>
-          </thead>
-          <tbody>
-            {allRows.map(r => {
-              const isAvg = r.stage === 'Average'
-              return (
-                <tr key={r.stage} style={isAvg ? { borderTop: '1px solid #555', background: '#222' } : { borderBottom: '1px solid #1e1e1e' }}>
-                  <td style={{ padding: '4px 12px 4px 0', color: isAvg ? '#fff' : '#ddd', fontWeight: isAvg ? 'bold' : 'normal' }}>{r.stage}</td>
-                  <td style={{ padding: '4px 10px', textAlign: 'right', color: r.loaded ? '#666' : '#f66' }}>{r.loadMs}{!r.loaded && ' ⚠'}</td>
-                  {CAM_KEYS.map(k => <React.Fragment key={k}>{camCell(r[k])}</React.Fragment>)}
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  )
-}
 
 // ─── Main app ────────────────────────────────────────────────────────────────
 
@@ -276,7 +72,7 @@ export default function App() {
   const [frameMs, setFrameMs] = useState(0)
   const [showMetrics, setShowMetrics] = useState(false)
   const [benchRunning, setBenchRunning] = useState(false)
-  const [benchStage, setBenchStage] = useState('')       // label while running
+  const [benchStage, setBenchStage] = useState('')
   const [benchResults, setBenchResults] = useState<StageResult[] | null>(null)
 
   const showMetricsRef = useRef(false)
@@ -286,11 +82,12 @@ export default function App() {
   const fpsState = useRef({ frames: 0, lastTime: performance.now() })
   const posTimer = useRef(0)
   const lastFrameTime = useRef(performance.now())
-  // Benchmark sample collection — written by RAF, read by runBenchmark
   const benchSamples = useRef<number[]>([])
   const benchCollecting = useRef(false)
+  const physicsHandleRef = useRef<PhysicsLoopHandle | null>(null)
+  const robotBodyRef = useRef<CANNON.Body | null>(null)
+  const physicsDebuggerRef = useRef<DebuggerHandle | null>(null)
 
-  // Wire WASD + arrow keys only when toggle is on
   useEffect(() => {
     if (!wasdEnabled) {
       Object.keys(keys).forEach(k => (keys[k as keyof typeof keys] = false))
@@ -322,9 +119,8 @@ export default function App() {
     handleResize()
     mount.appendChild(renderer.domElement)
     window.addEventListener('resize', handleResize)
-    startAnimation()
+    if (!physicsOnRef.current) startAnimation()
 
-    // Capture initial orbit camera position after the first rendered frame
     const captureId = requestAnimationFrame(() => {
       initialOrbitPos.current.copy(camera.position)
       initialOrbitFov.current = camera.fov
@@ -343,7 +139,7 @@ export default function App() {
         if (camModeRef.current === 'top') {
           const pc = c as THREE.PerspectiveCamera
           pc.fov = TOP_FOV
-          pc.updateProjectionMatrix()          // must sync before computing h
+          pc.updateProjectionMatrix()
           const vFov = (TOP_FOV * Math.PI) / 180
           const h = (5 / Math.tan(vFov / 2)) * Math.max(1, 1 / pc.aspect) * 1.08
           pc.position.set(0, h, 0.001)
@@ -359,10 +155,8 @@ export default function App() {
       const dt = now - lastFrameTime.current
       lastFrameTime.current = now
 
-      // Benchmark sample collection (always runs, no React setState)
       if (benchCollecting.current) benchSamples.current.push(dt)
 
-      // Perf metrics (gated — expensive React re-renders)
       fpsState.current.frames++
       const delta = now - fpsState.current.lastTime
       if (showMetricsRef.current) {
@@ -377,7 +171,6 @@ export default function App() {
         fpsState.current.lastTime = now
       }
 
-      // Position + object count (10 fps)
       if (now - posTimer.current >= 100) {
         const robot = scene.getObjectByName('robot_body')
         if (robot) setRobotPos({ x: robot.position.x, y: robot.position.y, z: robot.position.z })
@@ -400,98 +193,115 @@ export default function App() {
       mount.removeChild(renderer.domElement)
       window.removeEventListener('resize', handleResize)
       stopAnimation()
+      physicsHandleRef.current?.stop()
+      physicsHandleRef.current = null
       cancelAnimationFrame(rafId)
       cancelAnimationFrame(captureId)
-        ; (renderer as any).render = origRender   // restore original render
+        ; (renderer as any).render = origRender
     }
   }, [currentStage])
 
-  // ── Benchmark runner ────────────────────────────────────────────────────
+  // ── Physics mode lifecycle ───────────────────────────────────────────────
 
-  const collectFor = async (ms: number) => {
-    benchSamples.current = []
-    benchCollecting.current = true
-    await sleep(ms)
-    benchCollecting.current = false
-    return [...benchSamples.current]
-  }
+  useEffect(() => {
+    physicsOnRef.current = physicsOn
+    let cancelled = false
 
-  const MOVE_ACTIONS = [
-    () => moveStep(-STEP_DIST * 5),
-    () => moveStep(-STEP_DIST * 10),
-    () => moveStep(STEP_DIST * 5),
-    () => moveStep(STEP_DIST * 10),
-    () => rotateStep(DEG_90),
-    () => rotateStep(-DEG_90),
-    () => rotateStep(Math.PI / 4),
-    () => rotateStep(-Math.PI / 4),
-  ]
+    async function enablePhysics() {
+      const robotLoaded = await waitForRobot(8000)
+      if (cancelled) return
+      if (!robotLoaded) { console.warn('[physics] robot failed to load'); return }
+      await sleep(500)
+      if (cancelled) return
 
-  const runCamPhase = async (): Promise<CamResult> => {
-    const idleSamples = await collectFor(1500)
-    benchSamples.current = []
-    benchCollecting.current = true
-    const numMoves = 20 + Math.floor(Math.random() * 8)
-    for (let i = 0; i < numMoves; i++) {
-      MOVE_ACTIONS[Math.floor(Math.random() * MOVE_ACTIONS.length)]()
-      await sleep(300 + Math.random() * 200)
-    }
-    benchCollecting.current = false
-    const moveSamples = [...benchSamples.current]
-    stopMotion()
-    return { idle: sampleStats(idleSamples), moving: sampleStats(moveSamples) }
-  }
+      stopAnimation()
+      resetWorld()
+      const summary = mirrorStageToWorld(scene)
+      console.log('[physics] mirrored stage →', summary)
 
-  const runBenchmark = async () => {
-    setBenchRunning(true)
-    setBenchResults(null)
-    const results: StageResult[] = []
+      const base = scene.getObjectByName('robot_body')
+      if (!base) { console.warn('[physics] no robot_body in scene'); return }
+      robotBodyRef.current = createRobotBody(base)
 
-    for (const stage of STAGES) {
-      // Load stage
-      const loadStart = performance.now()
-      resetScene(stage.url)
-      const loaded = await waitForRobot()
-      const loadMs = Math.round(performance.now() - loadStart)
-      await sleep(600)
-
-      // Ensure we start in orbit (animate.js default after reset)
-      if (camModeRef.current !== 'orbit') {
-        if (camModeRef.current === 'follow') changeCamera()
-        else camera.up.set(0, 1, 0)
-        camModeRef.current = 'orbit'
-        setCamMode('orbit')
+      if (isDebugEnabled()) {
+        physicsDebuggerRef.current = createDebugger(scene, getWorld())
       }
 
-      // ── Orbit ──
-      setBenchStage(`${stage.label} · orbit`)
-      const orbitResult = await runCamPhase()
-
-      // ── Follow ──
-      changeCamera(); camModeRef.current = 'follow'; setCamMode('follow')
-      await sleep(400)
-      setBenchStage(`${stage.label} · follow`)
-      const followResult = await runCamPhase()
-      changeCamera(); camModeRef.current = 'orbit'; setCamMode('orbit')
-
-      // ── Top ──
-      camModeRef.current = 'top'; setCamMode('top')
-      await sleep(400)
-      setBenchStage(`${stage.label} · top`)
-      const topResult = await runCamPhase()
-      camera.up.set(0, 1, 0); camModeRef.current = 'orbit'; setCamMode('orbit')
-
-      results.push({ stage: stage.label, loadMs, loaded, orbit: orbitResult, follow: followResult, top: topResult })
+      physicsHandleRef.current = startPhysicsLoop({
+        scene, camera, renderer,
+        getBaseObject: () => scene.getObjectByName('robot_body') ?? null,
+        getRobotBody: () => robotBodyRef.current,
+        getKeys: () => ({
+          ArrowUp: !!keys.ArrowUp, ArrowDown: !!keys.ArrowDown,
+          ArrowLeft: !!keys.ArrowLeft, ArrowRight: !!keys.ArrowRight,
+        }),
+        getCamMode: () => camModeRef.current,
+        orbitControls: controls as any,
+        onFrame: (dtMs) => {
+          if (benchCollecting.current) benchSamples.current.push(dtMs)
+        },
+        onPostRender: () => { physicsDebuggerRef.current?.update() },
+      })
+      setPhysicsReady(true)
     }
 
-    stopMotion()
-    setBenchRunning(false)
-    setBenchStage('')
-    setBenchResults(results)
+    function disablePhysics() {
+      physicsHandleRef.current?.stop()
+      physicsHandleRef.current = null
+      physicsDebuggerRef.current = null
+      robotBodyRef.current = null
+      resetWorld()
+      setPhysicsReady(false)
+      if (!cancelled && scene.getObjectByName('robot_body')) startAnimation()
+    }
 
-    // Restore first stage
-    resetScene(STAGES[0].url)
-    setCurrentStage(STAGES[0].url)
+    if (physicsOn) {
+      enablePhysics()
+    } else {
+      disablePhysics()
+    }
+
+    return () => { cancelled = true }
+  }, [physicsOn, currentStage])
+
+  // ── Preset move router — physics-mode-aware ─────────────────────────────
+
+  const presetForward = (signedDist: number): Promise<void> => {
+    if (physicsOnRef.current) {
+      const body = robotBodyRef.current
+      if (!body) return Promise.resolve()
+      return runPresetMoveWithTimeout(body, 'forward', signedDist)
+    }
+    return moveStep(signedDist)
+  }
+
+  const presetRotate = (signedAngle: number): Promise<void> => {
+    if (physicsOnRef.current) {
+      const body = robotBodyRef.current
+      if (!body) return Promise.resolve()
+      return runPresetMoveWithTimeout(body, 'rotate', signedAngle)
+    }
+    return rotateStep(signedAngle)
+  }
+
+  const presetStop = () => {
+    if (physicsOnRef.current) {
+      const body = robotBodyRef.current
+      if (body) stopBody(body)
+    } else {
+      stopMotion()
+    }
+  }
+
+  // ── Camera helpers ──────────────────────────────────────────────────────
+
+  const restoreOrbitCamera = () => {
+    camera.position.copy(initialOrbitPos.current)
+    camera.up.set(0, 1, 0)
+    camera.fov = initialOrbitFov.current
+    camera.updateProjectionMatrix()
+    camModeRef.current = 'orbit'
+    setCamMode('orbit')
   }
 
   // ── Camera cycling: orbit → follow → top → orbit ────────────────────────
@@ -499,14 +309,13 @@ export default function App() {
   const cycleCamera = () => {
     if (benchRunning) return
     if (camMode === 'orbit') {
-      changeCamera()                    // orbit → follow
+      changeCamera()
       camModeRef.current = 'follow'
       setCamMode('follow')
     } else if (camMode === 'follow') {
-      changeCamera()                    // follow → orbit (stops follow logic)
+      changeCamera()
       camModeRef.current = 'top'
       setCamMode('top')
-      // render intercept will pin camera on the very next frame
     } else {
       // Restore orbit: put camera back to initial position, reset fov to orbit
       // value (10) and sync the projection matrix so OrbitControls takes over cleanly
@@ -518,6 +327,30 @@ export default function App() {
       setCamMode('orbit')
     }
   }
+
+  // ── Benchmark ───────────────────────────────────────────────────────────
+  // Runner is recreated each render but all deps are refs or stable — no side effects.
+
+  const { runBenchmark, runSweep } = createBenchRunner({
+    stages: STAGES,
+    physicsOnRef,
+    camModeRef,
+    benchSamples,
+    benchCollecting,
+    setPhysicsOn,
+    setCamMode,
+    setBenchRunning,
+    setBenchStage,
+    setBenchResults,
+    setSweepResults,
+    setCurrentStage,
+    resetScene,
+    changeCamera,
+    restoreOrbitCamera,
+    presetForward,
+    presetRotate,
+    presetStop,
+  })
 
   // ── Render ──────────────────────────────────────────────────────────────
 
