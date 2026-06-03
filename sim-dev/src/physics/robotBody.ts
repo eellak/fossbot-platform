@@ -57,6 +57,15 @@ export function createRobotBody(baseObject: THREE.Object3D): CANNON.Body {
   // compound body + wheel colliders.)
   body.angularFactor.set(0, 1, 0)
 
+  // Lock vertical (Y) translation so the robot cannot "climb" obstacles.
+  // Cannon-es Trimesh contact normals on curved surfaces (e.g. cones) are
+  // unreliable and can point upward, giving the robot a lift impulse instead
+  // of a lateral push-back. Freezing Y prevents any such impulse from
+  // launching it over an obstacle. If you ever need ramps or real gravity
+  // interaction (e.g. edge-falling via physics rather than raycasting),
+  // remove this lock and handle climbing prevention at the stage-design level.
+  body.linearFactor.set(1, 0, 1)
+
   world.addBody(body)
   return body
 }
