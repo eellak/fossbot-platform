@@ -1,8 +1,8 @@
 import * as THREE from 'three'
-import * as CANNON from 'cannon-es'
+import RAPIER from '@dimforge/rapier3d-compat'
 import { getWorld } from './world'
 
-// A single Box body approximated from the robot's world AABB.
+// A single cuboid body approximated from the robot's world AABB.
 // Throwaway: no compound wheel shapes, no realistic wheel friction.
 // Robot starts airborne by ~1 cm so the first step settles it onto the floor.
 
@@ -14,7 +14,7 @@ const _tmpBox = new THREE.Box3()
 const _tmpSize = new THREE.Vector3()
 const _tmpCenter = new THREE.Vector3()
 
-export function createRobotBody(baseObject: THREE.Object3D): CANNON.Body {
+export function createRobotBody(baseObject: THREE.Object3D): RAPIER.RigidBody {
   const world = getWorld()
 
   _tmpBox.setFromObject(baseObject)
@@ -26,65 +26,45 @@ export function createRobotBody(baseObject: THREE.Object3D): CANNON.Body {
   const halfY = Math.max(_tmpSize.y / 2, 0.05)
   const halfZ = Math.max(_tmpSize.z / 2, 0.05)
 
-  const body = new CANNON.Body({
-    mass: ROBOT_MASS_KG,
-    linearDamping: LINEAR_DAMPING,
-    angularDamping: ANGULAR_DAMPING,
-    allowSleep: false,
-  })
-  body.addShape(new CANNON.Box(new CANNON.Vec3(halfX, halfY, halfZ)))
-
-  body.position.set(_tmpCenter.x, _tmpCenter.y, _tmpCenter.z)
-  // Store the offset from baseObject.position → bbox center so we can map back
-  // when syncing the mesh. (Mesh origin is often below the bbox center.)
+  // Offset from baseObject.position → bbox center for mesh sync.
   const meshPos = baseObject.position
-  const offset = new CANNON.Vec3(
-    _tmpCenter.x - meshPos.x,
-    _tmpCenter.y - meshPos.y,
-    _tmpCenter.z - meshPos.z,
-  )
-  ;(body as any).userData = { meshOffset: offset }
+  const meshOffset = {
+    x: _tmpCenter.x - meshPos.x,
+    y: _tmpCenter.y - meshPos.y,
+    z: _tmpCenter.z - meshPos.z,
+  }
 
-  body.quaternion.set(
-    baseObject.quaternion.x,
-    baseObject.quaternion.y,
-    baseObject.quaternion.z,
-    baseObject.quaternion.w,
-  )
+  const q = baseObject.quaternion
+  const bodyDesc = RAPIER.RigidBodyDesc.dynamic()
+    .setTranslation(_tmpCenter.x, _tmpCenter.y, _tmpCenter.z)
+    .setRotation({ x: q.x, y: q.y, z: q.z, w: q.w })
+    .setLinearDamping(LINEAR_DAMPING)
+    .setAngularDamping(ANGULAR_DAMPING)
 
-  // Lock pitch/roll so the prototype robot doesn't tumble end-over-end on
-  // trimesh stages. Yaw stays free. (Feature 1.1 proper will revisit with a
-  // compound body + wheel colliders.)
-  body.angularFactor.set(0, 1, 0)
+  const body = world.createRigidBody(bodyDesc)
 
-  // Lock vertical (Y) translation so the robot cannot "climb" obstacles.
-  // Cannon-es Trimesh contact normals on curved surfaces (e.g. cones) are
-  // unreliable and can point upward, giving the robot a lift impulse instead
-  // of a lateral push-back. Freezing Y prevents any such impulse from
-  // launching it over an obstacle. If you ever need ramps or real gravity
-  // interaction (e.g. edge-falling via physics rather than raycasting),
-  // remove this lock and handle climbing prevention at the stage-design level.
-  body.linearFactor.set(1, 0, 1)
+  // Lock pitch/roll so the robot doesn't tumble. Yaw stays free.
+  body.setEnabledRotations(false, true, false, true)
+  // Lock vertical (Y) translation — trimesh contact normals on curved surfaces
+  // can point upward and launch the robot over obstacles. Freeze Y to prevent
+  // any such lift impulse. Remove if ramps / real gravity interaction needed.
+  body.setEnabledTranslations(true, false, true, true)
 
-  world.addBody(body)
+  world.createCollider(RAPIER.ColliderDesc.cuboid(halfX, halfY, halfZ), body)
+
+  ;(body as any).userData = { meshOffset }
+
   return body
 }
 
-export function syncMeshFromBody(baseObject: THREE.Object3D, body: CANNON.Body) {
-  const offset = (body as any).userData?.meshOffset as CANNON.Vec3 | undefined
+export function syncMeshFromBody(baseObject: THREE.Object3D, body: RAPIER.RigidBody): void {
+  const offset = (body as any).userData?.meshOffset as { x: number; y: number; z: number } | undefined
+  const pos = body.translation()
   if (offset) {
-    baseObject.position.set(
-      body.position.x - offset.x,
-      body.position.y - offset.y,
-      body.position.z - offset.z,
-    )
+    baseObject.position.set(pos.x - offset.x, pos.y - offset.y, pos.z - offset.z)
   } else {
-    baseObject.position.set(body.position.x, body.position.y, body.position.z)
+    baseObject.position.set(pos.x, pos.y, pos.z)
   }
-  baseObject.quaternion.set(
-    body.quaternion.x,
-    body.quaternion.y,
-    body.quaternion.z,
-    body.quaternion.w,
-  )
+  const rot = body.rotation()
+  baseObject.quaternion.set(rot.x, rot.y, rot.z, rot.w)
 }

@@ -1,8 +1,8 @@
 import * as THREE from 'three'
-import * as CANNON from 'cannon-es'
+import RAPIER from '@dimforge/rapier3d-compat'
 import { getWorld } from './world'
 
-// Mirror stage meshes into static Cannon bodies.
+// Mirror stage meshes into static Rapier colliders.
 //
 // Dispatch: mesh name first, then geometry. Floor planes, boxes, cylinders, and
 // cones get primitive shapes; unknown OBJ-loaded meshes get Trimesh as a fallback.
@@ -27,70 +27,80 @@ function isRobotSubtree(obj: THREE.Object3D): boolean {
   return false
 }
 
-function addGroundPlane(mesh: THREE.Mesh, world: CANNON.World): CANNON.Body {
-  // Stage "floor" plane — PlaneGeometry rotated x=π/2 so it lies flat.
-  // For simplicity use an infinite Cannon.Plane at the mesh's world Y.
-  mesh.getWorldPosition(_tmpPos)
-  const body = new CANNON.Body({ mass: 0, type: CANNON.Body.STATIC })
-  body.addShape(new CANNON.Plane())
-  // Cannon Plane's normal is +Z. Rotate so normal points +Y.
-  body.quaternion.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), -Math.PI / 2)
-  body.position.set(_tmpPos.x, _tmpPos.y, _tmpPos.z)
-  world.addBody(body)
+function makeFixed(world: RAPIER.World, desc: RAPIER.ColliderDesc, pos: THREE.Vector3, q: THREE.Quaternion): RAPIER.RigidBody {
+  const body = world.createRigidBody(
+    RAPIER.RigidBodyDesc.fixed()
+      .setTranslation(pos.x, pos.y, pos.z)
+      .setRotation({ x: q.x, y: q.y, z: q.z, w: q.w }),
+  )
+  world.createCollider(desc, body)
   return body
 }
 
-function addBox(mesh: THREE.Mesh, geom: THREE.BoxGeometry, world: CANNON.World): CANNON.Body {
+function addGroundPlane(mesh: THREE.Mesh, world: RAPIER.World): RAPIER.RigidBody {
+  // Stage "floor" — use a thin cuboid so collision normals are well-behaved.
+  mesh.getWorldPosition(_tmpPos)
+  mesh.updateWorldMatrix(true, false)
+  mesh.matrixWorld.decompose(_tmpPos, _tmpQ, _tmpS)
+
+  const geom = mesh.geometry as THREE.PlaneGeometry
+  const { width = 1, height = 1 } = geom.parameters ?? {}
+  const halfX = (width * Math.abs(_tmpS.x)) / 2
+  const halfZ = (height * Math.abs(_tmpS.y)) / 2   // PlaneGeometry height maps to Z after x-rotation
+
+  // PlaneGeometry is rotated x=π/2 to lie flat. After decompose, _tmpPos is
+  // correct world position. We want a horizontal slab, so reset to identity yaw.
+  const flatQ = new THREE.Quaternion()
+  return makeFixed(world, RAPIER.ColliderDesc.cuboid(halfX, 0.005, halfZ), _tmpPos, flatQ)
+}
+
+function addBox(mesh: THREE.Mesh, geom: THREE.BoxGeometry, world: RAPIER.World): RAPIER.RigidBody {
   const { width = 1, height = 1, depth = 1 } = geom.parameters
   mesh.updateWorldMatrix(true, false)
   mesh.matrixWorld.decompose(_tmpPos, _tmpQ, _tmpS)
-  const halfExtents = new CANNON.Vec3(
+  const desc = RAPIER.ColliderDesc.cuboid(
     (width * Math.abs(_tmpS.x)) / 2,
     (height * Math.abs(_tmpS.y)) / 2,
     (depth * Math.abs(_tmpS.z)) / 2,
   )
-  const body = new CANNON.Body({ mass: 0, type: CANNON.Body.STATIC })
-  body.addShape(new CANNON.Box(halfExtents))
-  body.position.set(_tmpPos.x, _tmpPos.y, _tmpPos.z)
-  body.quaternion.set(_tmpQ.x, _tmpQ.y, _tmpQ.z, _tmpQ.w)
-  world.addBody(body)
-  return body
+  return makeFixed(world, desc, _tmpPos, _tmpQ)
 }
 
-function addCylinder(mesh: THREE.Mesh, geom: THREE.CylinderGeometry, world: CANNON.World): CANNON.Body {
-  const { radiusTop = 0.5, radiusBottom = 0.5, height = 1, radialSegments = 16 } = geom.parameters
+function addCylinder(mesh: THREE.Mesh, geom: THREE.CylinderGeometry, world: RAPIER.World): RAPIER.RigidBody {
+  const { radiusTop = 0.5, radiusBottom = 0.5, height = 1 } = geom.parameters
   mesh.updateWorldMatrix(true, false)
   mesh.matrixWorld.decompose(_tmpPos, _tmpQ, _tmpS)
   const sy = Math.abs(_tmpS.y) || 1
   const sxz = Math.max(Math.abs(_tmpS.x), Math.abs(_tmpS.z)) || 1
-  const body = new CANNON.Body({ mass: 0, type: CANNON.Body.STATIC })
-  // Cannon cylinder axis is +Y by default, matching THREE.CylinderGeometry.
-  body.addShape(new CANNON.Cylinder(radiusTop * sxz, radiusBottom * sxz, height * sy, radialSegments))
-  body.position.set(_tmpPos.x, _tmpPos.y, _tmpPos.z)
-  body.quaternion.set(_tmpQ.x, _tmpQ.y, _tmpQ.z, _tmpQ.w)
-  world.addBody(body)
-  return body
+  const r = Math.max(radiusTop, radiusBottom) * sxz
+  // Rapier cylinder: axis Y, halfHeight, radius.
+  const desc = RAPIER.ColliderDesc.cylinder((height * sy) / 2, r)
+  return makeFixed(world, desc, _tmpPos, _tmpQ)
 }
 
-function addTrimesh(mesh: THREE.Mesh, world: CANNON.World): CANNON.Body | null {
+function addCone(mesh: THREE.Mesh, geom: THREE.ConeGeometry, world: RAPIER.World): RAPIER.RigidBody {
+  const { radius = 0.5, height = 1 } = geom.parameters
+  mesh.updateWorldMatrix(true, false)
+  mesh.matrixWorld.decompose(_tmpPos, _tmpQ, _tmpS)
+  const sy = Math.abs(_tmpS.y) || 1
+  const sxz = Math.max(Math.abs(_tmpS.x), Math.abs(_tmpS.z)) || 1
+  // Rapier cone: axis Y, halfHeight, radius.
+  const desc = RAPIER.ColliderDesc.cone((height * sy) / 2, radius * sxz)
+  return makeFixed(world, desc, _tmpPos, _tmpQ)
+}
+
+function addTrimesh(mesh: THREE.Mesh, world: RAPIER.World): RAPIER.RigidBody | null {
   const geom = mesh.geometry as THREE.BufferGeometry
   const posAttr = geom.getAttribute('position') as THREE.BufferAttribute | undefined
   if (!posAttr) return null
-  const vertices = new Float32Array(posAttr.array.length)
-  vertices.set(posAttr.array as ArrayLike<number>)
-  let indices: number[]
-  if (geom.index) {
-    indices = Array.from(geom.index.array as ArrayLike<number>)
-  } else {
-    indices = new Array(posAttr.count)
-    for (let i = 0; i < posAttr.count; i++) indices[i] = i
-  }
+
+  // Bake world-space scale into the vertex positions before passing to Rapier.
   mesh.updateWorldMatrix(true, false)
   mesh.matrixWorld.decompose(_tmpPos, _tmpQ, _tmpS)
-  // Bake scale into the vertices BEFORE passing to Trimesh.
-  // CANNON.Trimesh copies the array in its constructor, so any mutation
-  // after construction is silently ignored. Baking first ensures the shape
-  // is the correct size in world space.
+
+  const raw = posAttr.array as ArrayLike<number>
+  const vertices = new Float32Array(raw.length)
+  vertices.set(raw)
   if (_tmpS.x !== 1 || _tmpS.y !== 1 || _tmpS.z !== 1) {
     for (let i = 0; i < vertices.length; i += 3) {
       vertices[i] *= _tmpS.x
@@ -98,78 +108,39 @@ function addTrimesh(mesh: THREE.Mesh, world: CANNON.World): CANNON.Body | null {
       vertices[i + 2] *= _tmpS.z
     }
   }
-  const shape = new CANNON.Trimesh(vertices as unknown as number[], indices)
-  const body = new CANNON.Body({ mass: 0, type: CANNON.Body.STATIC })
-  body.addShape(shape)
-  body.position.set(_tmpPos.x, _tmpPos.y, _tmpPos.z)
-  body.quaternion.set(_tmpQ.x, _tmpQ.y, _tmpQ.z, _tmpQ.w)
-  world.addBody(body)
-  return body
+
+  let indices: Uint32Array
+  if (geom.index) {
+    indices = new Uint32Array(geom.index.array as ArrayLike<number>)
+  } else {
+    indices = new Uint32Array(posAttr.count)
+    for (let i = 0; i < posAttr.count; i++) indices[i] = i
+  }
+
+  const desc = RAPIER.ColliderDesc.trimesh(vertices, indices)
+  return makeFixed(world, desc, _tmpPos, _tmpQ)
 }
 
-function addBoundingBoxFallback(obj: THREE.Object3D, world: CANNON.World): CANNON.Body | null {
+function addBoundingBoxFallback(obj: THREE.Object3D, world: RAPIER.World): RAPIER.RigidBody | null {
   _tmpBox.setFromObject(obj)
   if (_tmpBox.isEmpty()) return null
   _tmpBox.getSize(_tmpSize)
   _tmpBox.getCenter(_tmpCenter)
   if (_tmpSize.x <= 0 || _tmpSize.y <= 0 || _tmpSize.z <= 0) return null
-  const body = new CANNON.Body({ mass: 0, type: CANNON.Body.STATIC })
-  body.addShape(new CANNON.Box(new CANNON.Vec3(_tmpSize.x / 2, _tmpSize.y / 2, _tmpSize.z / 2)))
-  body.position.set(_tmpCenter.x, _tmpCenter.y, _tmpCenter.z)
-  world.addBody(body)
-  return body
+  const desc = RAPIER.ColliderDesc.cuboid(_tmpSize.x / 2, _tmpSize.y / 2, _tmpSize.z / 2)
+  return makeFixed(world, desc, _tmpCenter, new THREE.Quaternion())
 }
 
-function buildForMesh(mesh: THREE.Mesh, world: CANNON.World): CANNON.Body | null {
+function buildForMesh(mesh: THREE.Mesh, world: RAPIER.World): RAPIER.RigidBody | null {
   const geom = mesh.geometry
 
-  // Floor plane (shared by every stage) — dispatch by userData first.
-  if (mesh.userData?.isPlane) {
+  if (mesh.userData?.isPlane || geom instanceof THREE.PlaneGeometry) {
     return addGroundPlane(mesh, world)
-  }
-
-  // Base plane from stage_loader type 'base' — axis-aligned rotated PlaneGeometry.
-  // Treat as a thin box for collision so the robot can stand on it without
-  // punching through Cannon.Plane's infinite extent.
-  if (geom instanceof THREE.PlaneGeometry) {
-    const { width = 1, height = 1 } = geom.parameters
-    mesh.updateWorldMatrix(true, false)
-    mesh.matrixWorld.decompose(_tmpPos, _tmpQ, _tmpS)
-    const halfExtents = new CANNON.Vec3(
-      (width * Math.abs(_tmpS.x)) / 2,
-      0.005,
-      (height * Math.abs(_tmpS.y)) / 2,
-    )
-    const body = new CANNON.Body({ mass: 0, type: CANNON.Body.STATIC })
-    body.addShape(new CANNON.Box(halfExtents))
-    body.position.set(_tmpPos.x, _tmpPos.y, _tmpPos.z)
-    // Stage planes are rotated x=π/2 — undo so the thin axis is Y.
-    body.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), 0)
-    world.addBody(body)
-    return body
   }
 
   if (geom instanceof THREE.BoxGeometry) return addBox(mesh, geom, world)
   if (geom instanceof THREE.CylinderGeometry) return addCylinder(mesh, geom, world)
-
-  // ConeGeometry → approximate as a Cylinder with radiusTop = 0.
-  // Cannon-es has no native cone primitive. Using Trimesh for a cone produces
-  // unreliable contact normals on the sloped faces — the robot slides *up* the
-  // cone instead of being deflected sideways. A zero-top-radius Cylinder gives
-  // cannon-es clean contacts and a well-behaved side surface.
-  if (geom instanceof THREE.ConeGeometry) {
-    const { radius = 0.5, height = 1, radialSegments = 16 } = geom.parameters
-    mesh.updateWorldMatrix(true, false)
-    mesh.matrixWorld.decompose(_tmpPos, _tmpQ, _tmpS)
-    const sy = Math.abs(_tmpS.y) || 1
-    const sxz = Math.max(Math.abs(_tmpS.x), Math.abs(_tmpS.z)) || 1
-    const body = new CANNON.Body({ mass: 0, type: CANNON.Body.STATIC })
-    body.addShape(new CANNON.Cylinder(0, radius * sxz, height * sy, radialSegments))
-    body.position.set(_tmpPos.x, _tmpPos.y, _tmpPos.z)
-    body.quaternion.set(_tmpQ.x, _tmpQ.y, _tmpQ.z, _tmpQ.w)
-    world.addBody(body)
-    return body
-  }
+  if (geom instanceof THREE.ConeGeometry) return addCone(mesh, geom, world)
 
   // Unknown geometry → trimesh (used for OBJ-imported props).
   return addTrimesh(mesh, world)
@@ -193,12 +164,12 @@ export function mirrorStageToWorld(scene: THREE.Scene): MirrorSummary {
 
     const body = buildForMesh(mesh, world)
     if (body) {
-      ;(mesh.userData as any).cannonBody = body
+      ;(mesh.userData as any).rapierBody = body
       bodyCount++
     } else {
       const fallback = addBoundingBoxFallback(mesh, world)
       if (fallback) {
-        ;(mesh.userData as any).cannonBody = fallback
+        ;(mesh.userData as any).rapierBody = fallback
         bodyCount++
       } else {
         skipped++
