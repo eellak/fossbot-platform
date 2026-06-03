@@ -243,7 +243,7 @@
     },
     {
         "type": "model",
-        "filename": "/js-simulator/models/eiffel.obj",
+        "filename": "/js-simulator/models/static/eiffel.obj",
         "scale": 0.03,
         "position": [1.6, -0.02, -3.6],
         "name": "eiffel",

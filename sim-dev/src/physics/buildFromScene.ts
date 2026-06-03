@@ -4,9 +4,9 @@ import { getWorld } from './world'
 
 // Mirror stage meshes into static Cannon bodies.
 //
-// Dispatch: mesh name first, then geometry. Floor planes, boxes, and cylinders
-// get primitive shapes; unknown OBJ-loaded meshes get Trimesh as a fallback.
-// Robot meshes (anything under baseObject, or with userData.isRobotPart) are
+// Dispatch: mesh name first, then geometry. Floor planes, boxes, cylinders, and
+// cones get primitive shapes; unknown OBJ-loaded meshes get Trimesh as a fallback.
+// Robot meshes (anything under robot_body, or with userData.isRobotPart) are
 // skipped — the robot body is built separately in robotBody.ts.
 
 const _tmpBox = new THREE.Box3()
@@ -87,18 +87,18 @@ function addTrimesh(mesh: THREE.Mesh, world: CANNON.World): CANNON.Body | null {
   }
   mesh.updateWorldMatrix(true, false)
   mesh.matrixWorld.decompose(_tmpPos, _tmpQ, _tmpS)
-  const shape = new CANNON.Trimesh(vertices as unknown as number[], indices)
-  // Bake scale into the shape by multiplying vertices in place.
+  // Bake scale into the vertices BEFORE passing to Trimesh.
+  // CANNON.Trimesh copies the array in its constructor, so any mutation
+  // after construction is silently ignored. Baking first ensures the shape
+  // is the correct size in world space.
   if (_tmpS.x !== 1 || _tmpS.y !== 1 || _tmpS.z !== 1) {
     for (let i = 0; i < vertices.length; i += 3) {
       vertices[i] *= _tmpS.x
       vertices[i + 1] *= _tmpS.y
       vertices[i + 2] *= _tmpS.z
     }
-    shape.updateTree()
-    shape.updateAABB()
-    shape.updateBoundingSphereRadius()
   }
+  const shape = new CANNON.Trimesh(vertices as unknown as number[], indices)
   const body = new CANNON.Body({ mass: 0, type: CANNON.Body.STATIC })
   body.addShape(shape)
   body.position.set(_tmpPos.x, _tmpPos.y, _tmpPos.z)
@@ -152,7 +152,26 @@ function buildForMesh(mesh: THREE.Mesh, world: CANNON.World): CANNON.Body | null
   if (geom instanceof THREE.BoxGeometry) return addBox(mesh, geom, world)
   if (geom instanceof THREE.CylinderGeometry) return addCylinder(mesh, geom, world)
 
-  // Unknown geometry → trimesh (used for OBJ-imported props: cones, maze, etc.)
+  // ConeGeometry → approximate as a Cylinder with radiusTop = 0.
+  // Cannon-es has no native cone primitive. Using Trimesh for a cone produces
+  // unreliable contact normals on the sloped faces — the robot slides *up* the
+  // cone instead of being deflected sideways. A zero-top-radius Cylinder gives
+  // cannon-es clean contacts and a well-behaved side surface.
+  if (geom instanceof THREE.ConeGeometry) {
+    const { radius = 0.5, height = 1, radialSegments = 16 } = geom.parameters
+    mesh.updateWorldMatrix(true, false)
+    mesh.matrixWorld.decompose(_tmpPos, _tmpQ, _tmpS)
+    const sy = Math.abs(_tmpS.y) || 1
+    const sxz = Math.max(Math.abs(_tmpS.x), Math.abs(_tmpS.z)) || 1
+    const body = new CANNON.Body({ mass: 0, type: CANNON.Body.STATIC })
+    body.addShape(new CANNON.Cylinder(0, radius * sxz, height * sy, radialSegments))
+    body.position.set(_tmpPos.x, _tmpPos.y, _tmpPos.z)
+    body.quaternion.set(_tmpQ.x, _tmpQ.y, _tmpQ.z, _tmpQ.w)
+    world.addBody(body)
+    return body
+  }
+
+  // Unknown geometry → trimesh (used for OBJ-imported props).
   return addTrimesh(mesh, world)
 }
 
@@ -170,8 +189,6 @@ export function mirrorStageToWorld(scene: THREE.Scene): MirrorSummary {
     if (!(obj as THREE.Mesh).isMesh) return
     const mesh = obj as THREE.Mesh
     if (isRobotSubtree(mesh)) return
-    // Skip the traceLine (it's a Line, not a Mesh — already filtered by isMesh).
-    // Skip lights' helpers / targets (no geometry).
     if (!mesh.geometry) return
 
     const body = buildForMesh(mesh, world)

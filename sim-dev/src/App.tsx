@@ -429,7 +429,7 @@ export default function App() {
   const [objCount, setObjCount] = useState(0)
   const [frameMs, setFrameMs] = useState(0)
   const [showMetrics, setShowMetrics] = useState(false)
-  const [physicsOn, setPhysicsOn] = useState(false)
+  const [physicsOn, setPhysicsOn] = useState(true)
   const [physicsReady, setPhysicsReady] = useState(false)
   const [physicsPanel, setPhysicsPanel] = useState(false)
   const [physicsOptions, setPhysicsOptions] = useState<PhysicsOptions>({
@@ -475,6 +475,17 @@ export default function App() {
       Object.keys(keys).forEach(k => (keys[k as keyof typeof keys] = false))
     }
   }, [wasdEnabled])
+
+  // ── Q key → cycle camera ────────────────────────────────────────────────
+  // Bound globally (not gated on wasdEnabled) so it works in both keyboard
+  // modes. cycleCamera() is already a no-op when benchRunning.
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'q' || e.key === 'Q') cycleCamera()
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [camMode, benchRunning])
 
   useEffect(() => {
     const mount = mountRef.current

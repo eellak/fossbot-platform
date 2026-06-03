@@ -1,7 +1,7 @@
 [
     {
         "type": "model",
-        "filename": "/js-simulator/models/animals/dog.obj",
+        "filename": "/js-simulator/models/dynamic/animals/dog.obj",
         "scale": 0.005,
         "position": [-1.2, -0.02, 0],
         "name": "dog",
@@ -10,7 +10,7 @@
     },
     {
         "type": "model",
-        "filename": "/js-simulator/models/animals/cat.obj",
+        "filename": "/js-simulator/models/dynamic/animals/cat.obj",
         "scale": 0.007,
         "position": [0, -0.02, -1.2],
         "name": "cat",
@@ -19,7 +19,7 @@
     },
     {
         "type": "model",
-        "filename": "/js-simulator/models/animals/horse.obj",
+        "filename": "/js-simulator/models/dynamic/animals/horse.obj",
         "scale": 0.03,
         "position": [1.8 ,-0.02 , 0],
         "name": "horse",
@@ -28,7 +28,7 @@
     },
     {
         "type": "model",
-        "filename": "/js-simulator/models/animals/pig.obj",
+        "filename": "/js-simulator/models/dynamic/animals/pig.obj",
         "scale": 0.015,
         "position": [0.8, 0.1, 0.8],
         "name": "pig",
@@ -37,7 +37,7 @@
     },
     {
         "type": "model",
-        "filename": "/js-simulator/models/animals/chicken.obj",
+        "filename": "/js-simulator/models/dynamic/animals/chicken.obj",
         "scale": 0.004,
         "position": [-1.2, 0.1, -1.6],
         "name": "chicken",
