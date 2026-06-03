@@ -52,7 +52,7 @@ export function createRobotBody(baseObject: THREE.Object3D): RAPIER.RigidBody {
 
   world.createCollider(RAPIER.ColliderDesc.cuboid(halfX, halfY, halfZ), body)
 
-  ;(body as any).userData = { meshOffset }
+    ; (body as any).userData = { meshOffset }
 
   return body
 }

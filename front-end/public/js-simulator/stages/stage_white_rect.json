@@ -548,7 +548,8 @@
       1.6
     ],
     "name": "cone",
-    "castShadow": true
+    "castShadow": true,
+    "mass": 0.2
   },
   {
     "type": "cylinder",
@@ -567,7 +568,8 @@
       1.6
     ],
     "name": "cone",
-    "castShadow": true
+    "castShadow": true,
+    "mass": 0.2
   },
   {
     "type": "model",

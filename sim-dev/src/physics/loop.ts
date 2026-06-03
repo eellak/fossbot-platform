@@ -57,6 +57,7 @@ export function startPhysicsLoop(cfg: PhysicsLoopConfig): PhysicsLoopHandle {
     // 3. Sync mesh from body
     const base = cfg.getBaseObject()
     if (body && base) syncMeshFromBody(base, body)
+    syncDynamicStageObjects(cfg.scene)
 
     // 4. Camera update (mirrors the relevant bits of animate.js's loop).
     const mode = cfg.getCamMode()
@@ -88,6 +89,35 @@ export function startPhysicsLoop(cfg: PhysicsLoopConfig): PhysicsLoopHandle {
   }
 }
 
+function syncDynamicStageObjects(scene: THREE.Scene): void {
+  scene.traverse((obj) => {
+    const body = (obj.userData as any)?.rapierBody as RAPIER.RigidBody | undefined
+    const isSyncRoot = (obj.userData as any)?.rapierSyncRoot === true
+    if (!body || !isSyncRoot || !body.isDynamic()) return
+
+    const pos = body.translation()
+    const rot = body.rotation()
+    _tmpWorldPos.set(pos.x, pos.y, pos.z)
+    _tmpWorldQuat.set(rot.x, rot.y, rot.z, rot.w)
+
+    if (obj.parent) {
+      obj.parent.updateWorldMatrix(true, false)
+      obj.parent.worldToLocal(_tmpWorldPos)
+      obj.parent.getWorldQuaternion(_tmpParentQuat).invert()
+      _tmpLocalQuat.copy(_tmpParentQuat).multiply(_tmpWorldQuat)
+      obj.quaternion.copy(_tmpLocalQuat)
+    } else {
+      obj.quaternion.copy(_tmpWorldQuat)
+    }
+
+    obj.position.copy(_tmpWorldPos)
+  })
+}
+
 // Mirrors the offset in @simulator/animate.js:updateObjectPosition.
 const _followOffset = new THREE.Vector3(0, 0.8, 0.9)
 const _tmpVec3 = new THREE.Vector3()
+const _tmpWorldPos = new THREE.Vector3()
+const _tmpWorldQuat = new THREE.Quaternion()
+const _tmpParentQuat = new THREE.Quaternion()
+const _tmpLocalQuat = new THREE.Quaternion()
