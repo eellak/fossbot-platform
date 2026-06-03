@@ -6,6 +6,32 @@ import { color } from 'framer-motion';
 
 export let robot_position = [0, 0, 0]; 
 
+function parsePhysicsConfig(obj) {
+    const massValue = Number(obj?.mass);
+    const hasMass = Number.isFinite(massValue);
+    const hasImmovable = obj?.immovable === true;
+
+    if (!hasMass && !hasImmovable) return null;
+
+    const cfg = {
+        immovable: hasImmovable,
+    };
+
+    if (hasMass) {
+        cfg.mass = Math.max(0, massValue);
+        if (cfg.mass === 0) cfg.immovable = true;
+    }
+
+    return cfg;
+}
+
+function applyPhysicsConfig(target, obj) {
+    const physics = parsePhysicsConfig(obj);
+    if (!physics) return;
+    target.userData = target.userData || {};
+    target.userData.physics = physics;
+}
+
 export function loadObjectsFromJSON(url, scene) {
     const loader = new THREE.FileLoader();    
     loader.load(
@@ -28,7 +54,19 @@ export function loadObjectsFromJSON(url, scene) {
                     base_plane.position.y = -0.019;
                     scene.add(base_plane);
                 }else if(obj.type === 'model'){                    
-                    const customObject = new CustomObject(scene, obj.filename,obj.scale,obj.position,obj.orientation,obj.color);
+                    const customObject = new CustomObject(
+                        scene,
+                        obj.filename,
+                        obj.scale,
+                        obj.position,
+                        obj.orientation,
+                        obj.color,
+                        {
+                            name: obj.name,
+                            castShadow: obj.castShadow,
+                            physics: parsePhysicsConfig(obj),
+                        },
+                    );
                     customObject.loadObject();
                    
 
@@ -55,6 +93,7 @@ export function loadObjectsFromJSON(url, scene) {
                     mesh.position.set(...obj.position);
                     mesh.name = obj.name;
                     mesh.castShadow = obj.castShadow || false;
+                    applyPhysicsConfig(mesh, obj);
                     scene.add(mesh);
                 }
             });
