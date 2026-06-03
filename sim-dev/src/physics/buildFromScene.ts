@@ -2,6 +2,9 @@ import * as THREE from 'three'
 import RAPIER from '@dimforge/rapier3d-compat'
 import { getWorld } from './world'
 
+const WALL_HALF_H = 0.25   // 0.5 m tall — enough to block the robot
+const WALL_HALF_T = 0.025  // 0.05 m thick — thin, invisible
+
 // Mirror stage meshes into static Rapier colliders.
 //
 // Dispatch: mesh name first, then geometry. Floor planes, boxes, cylinders, and
@@ -146,6 +149,39 @@ function buildForMesh(mesh: THREE.Mesh, world: RAPIER.World): RAPIER.RigidBody |
   return addTrimesh(mesh, world)
 }
 
+// Place 4 invisible static wall colliders around the stage AABB perimeter.
+// N/S walls span the full X width (+ corner overlap); E/W walls span the Z depth.
+function addArenaBounds(world: RAPIER.World, bounds: THREE.Box3): void {
+  const { min, max } = bounds
+  const midX = (min.x + max.x) / 2
+  const midZ = (min.z + max.z) / 2
+  const halfX = (max.x - min.x) / 2
+  const halfZ = (max.z - min.z) / 2
+  const wallY = min.y + WALL_HALF_H   // wall bottom sits on the floor
+
+  // North (+Z) and South (-Z): span full X, include corner overlap via WALL_HALF_T.
+  for (const sign of [1, -1] as const) {
+    const body = world.createRigidBody(
+      RAPIER.RigidBodyDesc.fixed().setTranslation(midX, wallY, midZ + sign * (halfZ + WALL_HALF_T))
+    )
+    world.createCollider(
+      RAPIER.ColliderDesc.cuboid(halfX + WALL_HALF_T, WALL_HALF_H, WALL_HALF_T),
+      body,
+    )
+  }
+
+  // East (+X) and West (-X): span Z only (corners already covered above).
+  for (const sign of [1, -1] as const) {
+    const body = world.createRigidBody(
+      RAPIER.RigidBodyDesc.fixed().setTranslation(midX + sign * (halfX + WALL_HALF_T), wallY, midZ)
+    )
+    world.createCollider(
+      RAPIER.ColliderDesc.cuboid(WALL_HALF_T, WALL_HALF_H, halfZ),
+      body,
+    )
+  }
+}
+
 export interface MirrorSummary {
   bodies: number
   skipped: number
@@ -155,6 +191,8 @@ export function mirrorStageToWorld(scene: THREE.Scene): MirrorSummary {
   const world = getWorld()
   let bodyCount = 0
   let skipped = 0
+  const stageBounds = new THREE.Box3()
+  const _meshBounds = new THREE.Box3()
 
   scene.traverse((obj) => {
     if (!(obj as THREE.Mesh).isMesh) return
@@ -173,9 +211,20 @@ export function mirrorStageToWorld(scene: THREE.Scene): MirrorSummary {
         bodyCount++
       } else {
         skipped++
+        return
       }
     }
+
+    // Accumulate stage bounds from every mesh that got a physics body.
+    _meshBounds.setFromObject(mesh)
+    if (!_meshBounds.isEmpty()) stageBounds.union(_meshBounds)
   })
+
+  // Second pass: place invisible arena walls around the full stage footprint.
+  if (!stageBounds.isEmpty()) {
+    addArenaBounds(world, stageBounds)
+    bodyCount += 4
+  }
 
   return { bodies: bodyCount, skipped }
 }
