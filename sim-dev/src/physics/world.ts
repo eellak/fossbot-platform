@@ -1,32 +1,36 @@
-import * as CANNON from 'cannon-es'
+import RAPIER from '@dimforge/rapier3d-compat'
 
-// Singleton Cannon world for the sim-dev physics prototype.
+// Singleton Rapier world for the sim-dev physics prototype.
 // Throwaway — when the real integration lands, this goes away.
+//
+// initPhysics() must be awaited before any other call. It handles WASM boot
+// (idempotent) and creates a fresh world.
 
-let world: CANNON.World | null = null
+let _initialized = false
+let _world: RAPIER.World | null = null
 
-const FIXED_STEP = 1 / 60
-const MAX_DT = 1 / 30   // clamp hitches so the solver doesn't explode
-const MAX_SUB_STEPS = 3
-
-export function getWorld(): CANNON.World {
-  if (!world) {
-    world = new CANNON.World({ gravity: new CANNON.Vec3(0, -9.82, 0) })
-    world.broadphase = new CANNON.SAPBroadphase(world)
-    world.allowSleep = true
+export async function initPhysics(): Promise<void> {
+  if (!_initialized) {
+    await RAPIER.init()
+    _initialized = true
   }
-  return world
+  _world = new RAPIER.World({ x: 0, y: -9.82, z: 0 })
 }
 
-// Remove all bodies + contact equations so a fresh stage can be mirrored in.
-export function resetWorld() {
-  const w = getWorld()
-  // Copy because w.bodies gets mutated during removal.
-  const bodies = [...w.bodies]
-  for (const b of bodies) w.removeBody(b)
+export function getWorld(): RAPIER.World {
+  if (!_world) throw new Error('[physics] not initialized — call initPhysics() first')
+  return _world
 }
 
-export function stepWorld(dtSeconds: number) {
-  const dt = Math.min(Math.max(dtSeconds, 0), MAX_DT)
-  getWorld().step(FIXED_STEP, dt, MAX_SUB_STEPS)
+// Recreate a clean world, preserving current gravity.
+export function resetWorld(): void {
+  if (!_initialized) return
+  const g = _world ? _world.gravity : { x: 0, y: -9.82, z: 0 }
+  _world = new RAPIER.World({ x: g.x, y: g.y, z: g.z })
+}
+
+export function stepWorld(dtSeconds: number): void {
+  if (!_world) return
+  _world.timestep = Math.min(Math.max(dtSeconds, 0), 1 / 30)
+  _world.step()
 }

@@ -1,6 +1,7 @@
-import * as CANNON from 'cannon-es'
+import * as THREE from 'three'
+import RAPIER from '@dimforge/rapier3d-compat'
 
-// Input → Cannon body mapping for the throwaway prototype. Not a PID, not a
+// Input → Rapier body mapping for the throwaway prototype. Not a PID, not a
 // realistic motor model — just enough to make WASD drive the robot and the
 // preset buttons (forward/rotate) complete in a plausible time.
 
@@ -20,29 +21,32 @@ type KeyState = {
 // Robot's local "forward" is -Z in the Three.js hierarchy (matches
 // @simulator/animate.js:move which uses getWorldDirection and multiplies by a
 // NEGATIVE maxSpeed for "forward"). We replicate that convention here.
-const _localForward = new CANNON.Vec3(0, 0, -1)
-const _worldForward = new CANNON.Vec3()
+const _localForward = new THREE.Vector3(0, 0, -1)
+const _worldForward = new THREE.Vector3()
+const _q = new THREE.Quaternion()
 
-export function applyInput(body: CANNON.Body, keys: KeyState) {
-  // Rotate local forward into world space via body.quaternion.
-  body.quaternion.vmult(_localForward, _worldForward)
+export function applyInput(body: RAPIER.RigidBody, keys: KeyState): void {
+  const rot = body.rotation()
+  _q.set(rot.x, rot.y, rot.z, rot.w)
+  _worldForward.copy(_localForward).applyQuaternion(_q)
 
   let linear = 0
   if (keys.ArrowUp) linear += 1
   if (keys.ArrowDown) linear -= 1
 
+  const curVel = body.linvel()
   if (linear !== 0) {
-    body.velocity.x = _worldForward.x * LIN_SPEED * linear
-    body.velocity.z = _worldForward.z * LIN_SPEED * linear
-    // y-velocity left untouched → gravity / contacts own it
-  } else {
-    // Not zeroing — let damping + contacts bring it to rest naturally.
+    body.setLinvel(
+      { x: _worldForward.x * LIN_SPEED * linear, y: curVel.y, z: _worldForward.z * LIN_SPEED * linear },
+      true,
+    )
   }
+  // Not zeroing velocity when no key — let damping + contacts bring it to rest.
 
   let ang = 0
   if (keys.ArrowLeft) ang += 1
   if (keys.ArrowRight) ang -= 1
-  body.angularVelocity.y = ang * ANG_SPEED
+  body.setAngvel({ x: 0, y: ang * ANG_SPEED, z: 0 }, true)
 }
 
 // Promise-based preset move: drive the body along forward (or rotate) until
@@ -53,7 +57,7 @@ export function applyInput(body: CANNON.Body, keys: KeyState) {
 // `signedAngle` is radians; positive = left (CCW about Y).
 
 export function runPresetMove(
-  body: CANNON.Body,
+  body: RAPIER.RigidBody,
   kind: 'forward' | 'rotate',
   signed: number,
 ): Promise<void> {
@@ -61,24 +65,30 @@ export function runPresetMove(
     if (signed === 0) { resolve(); return }
 
     if (kind === 'forward') {
-      const startX = body.position.x
-      const startZ = body.position.z
+      const start = body.translation()
+      const startX = start.x
+      const startZ = start.z
       const target = Math.abs(signed)
       const sign = Math.sign(signed)
       const tick = () => {
-        const dx = body.position.x - startX
-        const dz = body.position.z - startZ
-        const traveled = Math.sqrt(dx * dx + dz * dz)
-        if (traveled >= target) {
-          body.velocity.x = 0
-          body.velocity.z = 0
+        const pos = body.translation()
+        const dx = pos.x - startX
+        const dz = pos.z - startZ
+        if (Math.sqrt(dx * dx + dz * dz) >= target) {
+          const v = body.linvel()
+          body.setLinvel({ x: 0, y: v.y, z: 0 }, true)
           resolve()
           return
         }
-        body.quaternion.vmult(_localForward, _worldForward)
+        const rot = body.rotation()
+        _q.set(rot.x, rot.y, rot.z, rot.w)
+        _worldForward.copy(_localForward).applyQuaternion(_q)
+        const v = body.linvel()
         // animate.js's convention: forward = negative magnitude.
-        body.velocity.x = _worldForward.x * LIN_SPEED * -sign
-        body.velocity.z = _worldForward.z * LIN_SPEED * -sign
+        body.setLinvel(
+          { x: _worldForward.x * LIN_SPEED * -sign, y: v.y, z: _worldForward.z * LIN_SPEED * -sign },
+          true,
+        )
         requestAnimationFrame(tick)
       }
       requestAnimationFrame(tick)
@@ -86,20 +96,18 @@ export function runPresetMove(
     }
 
     // rotate
-    const startYaw = yawOf(body.quaternion)
+    const startYaw = yawOf(body.rotation())
     const targetDelta = signed
     const sign = Math.sign(targetDelta)
     const tick = () => {
-      const yawNow = yawOf(body.quaternion)
-      const delta = normalizeAngle(yawNow - startYaw)
-      // progress toward target in the commanded direction
+      const delta = normalizeAngle(yawOf(body.rotation()) - startYaw)
       const progressed = sign > 0 ? delta : -delta
       if (progressed >= Math.abs(targetDelta) - 0.01) {
-        body.angularVelocity.y = 0
+        body.setAngvel({ x: 0, y: 0, z: 0 }, true)
         resolve()
         return
       }
-      body.angularVelocity.y = ANG_SPEED * sign
+      body.setAngvel({ x: 0, y: ANG_SPEED * sign, z: 0 }, true)
       requestAnimationFrame(tick)
     }
     requestAnimationFrame(tick)
@@ -109,7 +117,7 @@ export function runPresetMove(
 // Timeout-guarded wrapper for benchmark robustness — if a preset move gets
 // wedged against a wall, don't hang forever.
 export function runPresetMoveWithTimeout(
-  body: CANNON.Body,
+  body: RAPIER.RigidBody,
   kind: 'forward' | 'rotate',
   signed: number,
   timeoutMs = 4000,
@@ -117,16 +125,15 @@ export function runPresetMoveWithTimeout(
   return Promise.race<void>([
     runPresetMove(body, kind, signed),
     new Promise<void>((resolve) => setTimeout(() => {
-      body.velocity.x = 0
-      body.velocity.z = 0
-      body.angularVelocity.y = 0
+      const v = body.linvel()
+      body.setLinvel({ x: 0, y: v.y, z: 0 }, true)
+      body.setAngvel({ x: 0, y: 0, z: 0 }, true)
       resolve()
     }, timeoutMs)),
   ])
 }
 
-function yawOf(q: CANNON.Quaternion): number {
-  // Extract yaw (rotation about Y) from a quaternion.
+function yawOf(q: { x: number; y: number; z: number; w: number }): number {
   const siny_cosp = 2 * (q.w * q.y + q.x * q.z)
   const cosy_cosp = 1 - 2 * (q.y * q.y + q.x * q.x)
   return Math.atan2(siny_cosp, cosy_cosp)
@@ -138,8 +145,8 @@ function normalizeAngle(a: number): number {
   return a
 }
 
-export function stopBody(body: CANNON.Body) {
-  body.velocity.x = 0
-  body.velocity.z = 0
-  body.angularVelocity.y = 0
+export function stopBody(body: RAPIER.RigidBody): void {
+  const v = body.linvel()
+  body.setLinvel({ x: 0, y: v.y, z: 0 }, true)
+  body.setAngvel({ x: 0, y: 0, z: 0 }, true)
 }

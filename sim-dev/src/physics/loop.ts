@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import * as CANNON from 'cannon-es'
+import type RAPIER from '@dimforge/rapier3d-compat'
 import { stepWorld } from './world'
 import { applyInput } from './control'
 import { syncMeshFromBody } from './robotBody'
@@ -15,7 +15,7 @@ export interface PhysicsLoopConfig {
   camera: THREE.PerspectiveCamera
   renderer: THREE.WebGLRenderer
   getBaseObject: () => THREE.Object3D | null
-  getRobotBody: () => CANNON.Body | null
+  getRobotBody: () => RAPIER.RigidBody | null
   getKeys: () => {
     ArrowUp: boolean; ArrowDown: boolean; ArrowLeft: boolean; ArrowRight: boolean
   }
@@ -23,7 +23,7 @@ export interface PhysicsLoopConfig {
   // Called each frame with measured dt (ms). Used by sim-dev's perf HUD and
   // benchmark sampler — same contract as the existing sim-dev RAF hook.
   onFrame?: (dtMs: number) => void
-  // Called each frame AFTER render. Used for cannon-es-debugger overlay.
+  // Called each frame AFTER render. Used for the debug wireframe overlay.
   onPostRender?: () => void
   // OrbitControls instance from @simulator/animate.js (exported as `controls`).
   // We call update() on it when in orbit mode.

@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useState } from 'react'
 import * as THREE from 'three'
-import type * as CANNON from 'cannon-es'
+import type RAPIER from '@dimforge/rapier3d-compat'
 import { scene, camera, renderer } from '@simulator/scene.js'
 import { ambientLight, directionalLight } from '@simulator/environment_lights.js'
 import { loadBaseObject } from '@simulator/robot_loader.js'
@@ -8,7 +8,7 @@ import { startAnimation, stopAnimation, rgb_set_color, drawLine, moveStep, rotat
 import { loadObjectsFromJSON } from '@simulator/stage_loader.js'
 import { traceLine } from '@simulator/sensors.js'
 import { keys } from '@simulator/utils.js'
-import { getWorld, resetWorld } from './physics/world'
+import { initPhysics, getWorld, resetWorld } from './physics/world'
 import { mirrorStageToWorld } from './physics/buildFromScene'
 import { createRobotBody } from './physics/robotBody'
 import { runPresetMoveWithTimeout, stopBody } from './physics/control'
@@ -455,7 +455,7 @@ export default function App() {
   const benchCollecting = useRef(false)
   // Physics refs — the loop handle, active robot body, and optional wireframe debugger
   const physicsHandleRef = useRef<PhysicsLoopHandle | null>(null)
-  const robotBodyRef = useRef<CANNON.Body | null>(null)
+  const robotBodyRef = useRef<RAPIER.RigidBody | null>(null)
   const physicsDebuggerRef = useRef<DebuggerHandle | null>(null)
   const physicsOptionsRef = useRef(physicsOptions)
   useEffect(() => { physicsOptionsRef.current = physicsOptions }, [physicsOptions])
@@ -606,7 +606,7 @@ export default function App() {
 
       // Cut over: stop animate.js's loop, build world, start physics loop.
       stopAnimation()
-      resetWorld()
+      await initPhysics()
       const opts = physicsOptionsRef.current
       if (opts.collisionEnabled) {
         const summary = mirrorStageToWorld(scene)
@@ -619,9 +619,8 @@ export default function App() {
 
       // Apply options that are set before the body was created.
       const { lockRollPitch, gravityEnabled, debugWireframes } = physicsOptionsRef.current
-      const av = lockRollPitch ? 0 : 1
-      robotBodyRef.current.angularFactor.set(av, 1, av)
-      getWorld().gravity.set(0, gravityEnabled ? -9.82 : 0, 0)
+      robotBodyRef.current.setEnabledRotations(!lockRollPitch, true, !lockRollPitch, true)
+      getWorld().gravity.y = gravityEnabled ? -9.82 : 0
 
       if (debugWireframes) {
         physicsDebuggerRef.current = createDebugger(scene, getWorld())
@@ -669,12 +668,12 @@ export default function App() {
   // Live option toggles — no physics restart needed.
   useEffect(() => {
     if (!robotBodyRef.current) return
-    const v = physicsOptions.lockRollPitch ? 0 : 1
-    robotBodyRef.current.angularFactor.set(v, 1, v)
+    const lock = physicsOptions.lockRollPitch
+    robotBodyRef.current.setEnabledRotations(!lock, true, !lock, true)
   }, [physicsOptions.lockRollPitch])
 
   useEffect(() => {
-    getWorld().gravity.set(0, physicsOptions.gravityEnabled ? -9.82 : 0, 0)
+    try { getWorld().gravity.y = physicsOptions.gravityEnabled ? -9.82 : 0 } catch { /* physics not yet init */ }
   }, [physicsOptions.gravityEnabled])
 
   // ── Preset move router — physics-mode-aware ─────────────────────────────
