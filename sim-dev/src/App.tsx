@@ -563,9 +563,9 @@ export default function App() {
         const count = scene.children.filter(c =>
           !(c instanceof THREE.Light) &&
           !(c as any).userData?.isPlane &&
+          !(c as any).userData?.isPhysicsDebug &&
           c.name !== 'robot_body' &&
-          c.name !== 'traceLine' &&
-          c.name !== ''
+          c.name !== 'traceLine'
         ).length
         setObjCount(count)
         posTimer.current = now
@@ -621,6 +621,9 @@ export default function App() {
       const { lockRollPitch, gravityEnabled, debugWireframes } = physicsOptionsRef.current
       robotBodyRef.current.setEnabledRotations(!lockRollPitch, true, !lockRollPitch, true)
       getWorld().gravity.y = gravityEnabled ? -9.82 : 0
+      // Y is locked by default in createRobotBody to prevent lift from contact normals.
+      // Unlock it when gravity is off so the toggle has a visible effect.
+      if (!gravityEnabled) robotBodyRef.current.setEnabledTranslations(true, true, true, true)
 
       if (debugWireframes) {
         physicsDebuggerRef.current = createDebugger(scene, getWorld())
@@ -648,6 +651,7 @@ export default function App() {
     function disablePhysics() {
       physicsHandleRef.current?.stop()
       physicsHandleRef.current = null
+      physicsDebuggerRef.current?.dispose()
       physicsDebuggerRef.current = null
       robotBodyRef.current = null
       resetWorld()
@@ -662,7 +666,13 @@ export default function App() {
       disablePhysics()
     }
 
-    return () => { cancelled = true }
+    return () => {
+      cancelled = true
+      physicsHandleRef.current?.stop()
+      physicsHandleRef.current = null
+      physicsDebuggerRef.current?.dispose()
+      physicsDebuggerRef.current = null
+    }
   }, [physicsOn, currentStage, physicsOptions.collisionEnabled, physicsOptions.debugWireframes])
 
   // Live option toggles — no physics restart needed.
@@ -673,7 +683,14 @@ export default function App() {
   }, [physicsOptions.lockRollPitch])
 
   useEffect(() => {
-    try { getWorld().gravity.y = physicsOptions.gravityEnabled ? -9.82 : 0 } catch { /* physics not yet init */ }
+    try {
+      getWorld().gravity.y = physicsOptions.gravityEnabled ? -9.82 : 0
+      // Only unlock Y when gravity is disabled — never re-lock it from the toggle.
+      // Y re-locks automatically on the next physics restart via createRobotBody.
+      if (!physicsOptions.gravityEnabled) {
+        robotBodyRef.current?.setEnabledTranslations(true, true, true, true)
+      }
+    } catch { /* physics not yet init */ }
   }, [physicsOptions.gravityEnabled])
 
   // ── Preset move router — physics-mode-aware ─────────────────────────────
