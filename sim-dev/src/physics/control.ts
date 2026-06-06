@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import RAPIER from '@dimforge/rapier3d-compat'
+import { getWorld } from './world'
 
 // Input → Rapier body mapping for the throwaway prototype. Not a PID, not a
 // realistic motor model — just enough to make WASD drive the robot and the
@@ -13,6 +14,8 @@ const ANG_SPEED = Math.PI    // rad/s about world Y when ArrowLeft/Right
 const TURN_PIVOT_LIN_SPEED = 0.18 // m/s when turning in place with A/D only
 const DEFAULT_TRACK_WIDTH = 0.17
 const ACTIVE_TILT_DAMP = 0.18
+const UPRIGHT_THRESHOLD = 0.25
+const RAYCAST_WHEEL_RAISE = 0.015
 
 type KeyState = {
   ArrowUp?: boolean
@@ -26,9 +29,23 @@ type KeyState = {
 // NEGATIVE maxSpeed for "forward"). We replicate that convention here.
 const _localForward = new THREE.Vector3(0, 0, -1)
 const _worldForward = new THREE.Vector3()
+const _worldUp = new THREE.Vector3()
 const _q = new THREE.Quaternion()
+const _rayOrigin = new THREE.Vector3()
+const _rayDir = new THREE.Vector3()
 
 export function applyInput(body: RAPIER.RigidBody, keys: KeyState): void {
+  if (getUprightFactor(body) < UPRIGHT_THRESHOLD) {
+    const curVel = body.linvel()
+    body.setLinvel({ x: 0, y: curVel.y, z: 0 }, true)
+    body.setAngvel({ x: 0, y: 0, z: 0 }, true)
+    return
+  }
+
+  if (!hasWheelGroundContact(body)) {
+    return
+  }
+
   const rot = body.rotation()
   _q.set(rot.x, rot.y, rot.z, rot.w)
   _worldForward.copy(_localForward).applyQuaternion(_q)
@@ -77,6 +94,44 @@ export function applyInput(body: RAPIER.RigidBody, keys: KeyState): void {
   // Keep pitch/roll free when idle (natural falling/settling), but damp
   // them while actively driving so slope contacts don't immediately flip.
   body.setAngvel({ x: tiltX, y: turn * ANG_SPEED, z: tiltZ }, true)
+}
+
+function hasWheelGroundContact(body: RAPIER.RigidBody): boolean {
+  const probes = (body as any).userData?.wheelProbeData as Array<{ x: number; y: number; z: number; length: number }> | undefined
+  if (!probes?.length) return true
+
+  const world = getWorld()
+  const bodyRot = body.rotation()
+  _q.set(bodyRot.x, bodyRot.y, bodyRot.z, bodyRot.w)
+  const bodyPos = body.translation()
+
+  for (const probe of probes) {
+    _rayOrigin.set(probe.x, probe.y + RAYCAST_WHEEL_RAISE, probe.z).applyQuaternion(_q).add(bodyPos)
+    _rayDir.set(0, -1, 0).applyQuaternion(_q)
+    const ray = new RAPIER.Ray(
+      { x: _rayOrigin.x, y: _rayOrigin.y, z: _rayOrigin.z },
+      { x: _rayDir.x, y: _rayDir.y, z: _rayDir.z },
+    )
+    const hit = world.castRay(
+      ray,
+      probe.length,
+      true,
+      RAPIER.QueryFilterFlags.EXCLUDE_SENSORS,
+      undefined,
+      undefined,
+      body,
+    )
+    if (hit) return true
+  }
+
+  return false
+}
+
+function getUprightFactor(body: RAPIER.RigidBody): number {
+  const rot = body.rotation()
+  _q.set(rot.x, rot.y, rot.z, rot.w)
+  _worldUp.set(0, 1, 0).applyQuaternion(_q)
+  return Math.max(_worldUp.y, 0)
 }
 
 // Promise-based preset move: drive the body along forward (or rotate) until

@@ -39,6 +39,7 @@ const _tmpVertex = new THREE.Vector3()
 const _tmpWheelCenter = new THREE.Vector3()
 const _tmpWheelLocalSize = new THREE.Vector3()
 const _tmpWheelWorldScale = new THREE.Vector3()
+const _tmpSyncOffset = new THREE.Vector3()
 
 export function createRobotBody(baseObject: THREE.Object3D, wheels: THREE.Object3D[]): RAPIER.RigidBody {
   const world = getWorld()
@@ -64,17 +65,17 @@ export function createRobotBody(baseObject: THREE.Object3D, wheels: THREE.Object
   baseObject.quaternion.copy(savedQ)
   baseObject.updateMatrixWorld(true)
 
+  // Preserve the rotation-invariant local offset, then derive the world center
+  // from it. The local offset is what syncMeshFromBody should rotate each frame.
+  const meshOffsetLocal = {
+    x: _tmpCenter.x,
+    y: _tmpCenter.y,
+    z: _tmpCenter.z,
+  }
+
   // World spawn position = baseObject.position + R(savedQ) × local_offset
   _tmpCenter.applyQuaternion(savedQ).add(baseObject.position)
   _tmpQ.copy(savedQ)
-
-  // Offset from baseObject.position → bbox center for mesh sync.
-  const meshPos = baseObject.position
-  const meshOffset = {
-    x: _tmpCenter.x - meshPos.x,
-    y: _tmpCenter.y - meshPos.y,
-    z: _tmpCenter.z - meshPos.z,
-  }
 
   const bodyDesc = RAPIER.RigidBodyDesc.dynamic()
     .setTranslation(_tmpCenter.x, _tmpCenter.y, _tmpCenter.z)
@@ -134,6 +135,7 @@ export function createRobotBody(baseObject: THREE.Object3D, wheels: THREE.Object
     .setRestitution(0)
   world.createCollider(casterCollider, body)
 
+  const wheelProbeData: Array<{ x: number; y: number; z: number; length: number }> = []
   for (const shape of wheelShapes) {
     const wheelRadius = Math.max(shape.radius * WHEEL_SPHERE_SCALE, 0.003)
     const wheelCollider = RAPIER.ColliderDesc.ball(wheelRadius)
@@ -143,6 +145,12 @@ export function createRobotBody(baseObject: THREE.Object3D, wheels: THREE.Object
       .setRestitution(0)
     world.createCollider(wheelCollider, body)
     shape.wheel.userData.physicsWheelRadius = wheelRadius
+    wheelProbeData.push({
+      x: shape.centerLocal.x,
+      y: shape.centerLocal.y,
+      z: shape.centerLocal.z,
+      length: Math.max(wheelRadius + 0.18, 0.2),
+    })
   }
 
   // Lock pitch/roll by default so behavior matches existing UI toggle semantics.
@@ -150,7 +158,7 @@ export function createRobotBody(baseObject: THREE.Object3D, wheels: THREE.Object
   body.setEnabledRotations(false, true, false, true)
   body.setEnabledTranslations(true, true, true, true)
 
-    ; (body as any).userData = { meshOffset, wheelTrackWidth }
+  ; (body as any).userData = { meshOffsetLocal, wheelTrackWidth, wheelProbeData }
 
   const com = body.localCom()
   const principalInertia = body.principalInertia()
@@ -203,15 +211,20 @@ function getBodyLocalMinY(bodyHulls: Float32Array[]): number | null {
 }
 
 export function syncMeshFromBody(baseObject: THREE.Object3D, body: RAPIER.RigidBody): void {
-  const offset = (body as any).userData?.meshOffset as { x: number; y: number; z: number } | undefined
+  const userData = (body as any).userData as {
+    meshOffsetLocal?: { x: number; y: number; z: number }
+  } | undefined
   const pos = body.translation()
-  if (offset) {
-    baseObject.position.set(pos.x - offset.x, pos.y - offset.y, pos.z - offset.z)
+  const rot = body.rotation()
+  baseObject.quaternion.set(rot.x, rot.y, rot.z, rot.w)
+
+  const offsetLocal = userData?.meshOffsetLocal
+  if (offsetLocal) {
+    _tmpSyncOffset.set(offsetLocal.x, offsetLocal.y, offsetLocal.z).applyQuaternion(baseObject.quaternion)
+    baseObject.position.set(pos.x - _tmpSyncOffset.x, pos.y - _tmpSyncOffset.y, pos.z - _tmpSyncOffset.z)
   } else {
     baseObject.position.set(pos.x, pos.y, pos.z)
   }
-  const rot = body.rotation()
-  baseObject.quaternion.set(rot.x, rot.y, rot.z, rot.w)
 }
 
 function resolveBodySource(baseObject: THREE.Object3D): THREE.Object3D {
