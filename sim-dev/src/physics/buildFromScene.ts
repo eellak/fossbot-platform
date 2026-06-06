@@ -23,6 +23,11 @@ const _tmpS = new THREE.Vector3()
 const _tmpPos = new THREE.Vector3()
 const _tmpInvQ = new THREE.Quaternion()
 const _tmpVertex = new THREE.Vector3()
+const _tmpMeshPos = new THREE.Vector3()
+const _tmpMeshQ = new THREE.Quaternion()
+const _tmpMeshS = new THREE.Vector3()
+const _tmpLocalPos = new THREE.Vector3()
+const _tmpLocalQ = new THREE.Quaternion()
 
 type BodyMode = { kind: 'fixed' } | { kind: 'dynamic'; mass: number }
 
@@ -271,6 +276,65 @@ function buildDynamicForOwner(owner: THREE.Object3D, world: RAPIER.World, mode: 
   return createBody(world, desc, _tmpPos, _tmpQ, mode)
 }
 
+function isCoacdOwner(owner: THREE.Object3D): boolean {
+  return owner.userData?.hasCoacd === true
+}
+
+function buildDynamicFromCoacd(owner: THREE.Object3D, world: RAPIER.World, mode: Extract<BodyMode, { kind: 'dynamic' }>): RAPIER.RigidBody | null {
+  owner.updateWorldMatrix(true, false)
+  owner.matrixWorld.decompose(_tmpPos, _tmpQ, _tmpS)
+  _tmpInvQ.copy(_tmpQ).invert()
+
+  const parts: Array<{ desc: RAPIER.ColliderDesc }> = []
+
+  owner.traverse((child) => {
+    if (!(child as THREE.Mesh).isMesh) return
+
+    const mesh = child as THREE.Mesh
+    const geom = mesh.geometry as THREE.BufferGeometry | undefined
+    if (!geom) return
+
+    const posAttr = geom.getAttribute('position') as THREE.BufferAttribute | undefined
+    if (!posAttr) return
+
+    mesh.updateWorldMatrix(true, false)
+    mesh.matrixWorld.decompose(_tmpMeshPos, _tmpMeshQ, _tmpMeshS)
+
+    const vertices = buildScaledVertices(posAttr, _tmpMeshS)
+    const desc = RAPIER.ColliderDesc.convexHull(vertices)
+    if (!desc) return
+
+    _tmpLocalPos.copy(_tmpMeshPos).sub(_tmpPos).applyQuaternion(_tmpInvQ)
+    _tmpLocalQ.copy(_tmpInvQ).multiply(_tmpMeshQ)
+
+    desc
+      .setTranslation(_tmpLocalPos.x, _tmpLocalPos.y, _tmpLocalPos.z)
+      .setRotation({ x: _tmpLocalQ.x, y: _tmpLocalQ.y, z: _tmpLocalQ.z, w: _tmpLocalQ.w })
+
+    parts.push({ desc })
+  })
+
+  if (!parts.length) {
+    return addBoundingBoxFallback(owner, world, mode)
+  }
+
+  const body = world.createRigidBody(
+    RAPIER.RigidBodyDesc.dynamic()
+      .setTranslation(_tmpPos.x, _tmpPos.y, _tmpPos.z)
+      .setRotation({ x: _tmpQ.x, y: _tmpQ.y, z: _tmpQ.z, w: _tmpQ.w })
+      .setLinearDamping(DYNAMIC_LINEAR_DAMPING)
+      .setAngularDamping(DYNAMIC_ANGULAR_DAMPING),
+  )
+
+  const massPerPart = mode.mass / parts.length
+  for (const part of parts) {
+    part.desc.setMass(massPerPart)
+    world.createCollider(part.desc, body)
+  }
+
+  return body
+}
+
 function buildForMesh(mesh: THREE.Mesh, world: RAPIER.World, mode: BodyMode): RAPIER.RigidBody | null {
   const geom = mesh.geometry
 
@@ -360,7 +424,9 @@ export function mirrorStageToWorld(scene: THREE.Scene): MirrorSummary {
       if (dynamicOwners.has(owner.uuid)) return
       dynamicOwners.add(owner.uuid)
 
-      const body = buildDynamicForOwner(owner, world, mode)
+      const body = isCoacdOwner(owner)
+        ? buildDynamicFromCoacd(owner, world, mode) ?? buildDynamicForOwner(owner, world, mode)
+        : buildDynamicForOwner(owner, world, mode)
       if (!body) {
         skipped++
         return
