@@ -27,6 +27,9 @@ const WHITE = '#f2f2f0'
 const NAVY = '#202aa0'
 const DARK_GRAY = '#4a4a4a'
 const BLACK = '#0a0a0a'
+const CASTER_RADIUS_M = 0.005
+const CASTER_TOP_CLEARANCE_M = 0.0005
+const CASTER_LOCAL_Z_V2_M = 0.07
 
 const PART_COLOR: Record<PartName, string> = {
   b1_p_f: WHITE, b2_p_f: WHITE, b3_p_f: NAVY,
@@ -131,6 +134,7 @@ export const WHEEL_ADJUST = {
 
 export interface RobotV2 {
   pivot: THREE.Group
+  caster: THREE.Object3D | null
   leftFenderCenter: THREE.Vector3
   rightFenderCenter: THREE.Vector3
 }
@@ -415,5 +419,31 @@ export async function createRobotV2Pivot(targetWidth: number): Promise<RobotV2> 
   pivot.add(mergedBody)
   pivot.add(collisionGroup)
 
-  return { pivot, leftFenderCenter: leftFenderLocal, rightFenderCenter: rightFenderLocal }
+  const bodyBounds = new THREE.Box3().setFromObject(collisionGroup)
+  const bodyCenter = new THREE.Vector3()
+  bodyBounds.getCenter(bodyCenter)
+  const caster = new THREE.Mesh(
+    new THREE.SphereGeometry(CASTER_RADIUS_M, 28, 18),
+    new THREE.MeshStandardMaterial({
+      color: WHITE,
+      roughness: 0.45,
+      metalness: 0.0,
+    }),
+  )
+  caster.name = 'v2_caster'
+  caster.castShadow = true
+  caster.receiveShadow = true
+  caster.userData.isRobotPart = true
+  caster.position.set(
+    bodyCenter.x,
+    bodyBounds.min.y + CASTER_TOP_CLEARANCE_M - CASTER_RADIUS_M,
+    bodyCenter.z + CASTER_LOCAL_Z_V2_M,
+  )
+
+  // Caster: parented under baseObject (not pivot) by attachV2.ts, mirroring
+  // v1's loadCaster (scale 0.001, no rotation). The OBJ is in Y-up native
+  // coords designed for v1's robot_body, so routing it through pivot's
+  // Z-up→Y-up rotation would tilt it. Returned separately so attachV2 can
+  // attach it to the same parent (baseObject) v1 used.
+  return { pivot, caster, leftFenderCenter: leftFenderLocal, rightFenderCenter: rightFenderLocal }
 }

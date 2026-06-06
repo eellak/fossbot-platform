@@ -12,6 +12,7 @@ const LIN_SPEED = 0.5        // m/s along local forward when ArrowUp/Down
 const ANG_SPEED = Math.PI    // rad/s about world Y when ArrowLeft/Right
 const TURN_PIVOT_LIN_SPEED = 0.18 // m/s when turning in place with A/D only
 const DEFAULT_TRACK_WIDTH = 0.17
+const ACTIVE_TILT_DAMP = 0.18
 
 type KeyState = {
   ArrowUp?: boolean
@@ -41,6 +42,11 @@ export function applyInput(body: RAPIER.RigidBody, keys: KeyState): void {
   if (keys.ArrowRight) turn -= 1
 
   const curVel = body.linvel()
+  const curAng = body.angvel()
+
+  const hasDriveInput = linear !== 0 || turn !== 0
+  const tiltX = hasDriveInput ? curAng.x * ACTIVE_TILT_DAMP : curAng.x
+  const tiltZ = hasDriveInput ? curAng.z * ACTIVE_TILT_DAMP : curAng.z
 
   // Pivot-turn mode for A/D only:
   // - inner wheel stops
@@ -56,7 +62,7 @@ export function applyInput(body: RAPIER.RigidBody, keys: KeyState): void {
       { x: _worldForward.x * TURN_PIVOT_LIN_SPEED, y: curVel.y, z: _worldForward.z * TURN_PIVOT_LIN_SPEED },
       true,
     )
-    body.setAngvel({ x: 0, y: yawRate, z: 0 }, true)
+    body.setAngvel({ x: tiltX, y: yawRate, z: tiltZ }, true)
     return
   }
 
@@ -68,7 +74,9 @@ export function applyInput(body: RAPIER.RigidBody, keys: KeyState): void {
   }
   // Not zeroing velocity when no key — let damping + contacts bring it to rest.
 
-  body.setAngvel({ x: 0, y: turn * ANG_SPEED, z: 0 }, true)
+  // Keep pitch/roll free when idle (natural falling/settling), but damp
+  // them while actively driving so slope contacts don't immediately flip.
+  body.setAngvel({ x: tiltX, y: turn * ANG_SPEED, z: tiltZ }, true)
 }
 
 // Promise-based preset move: drive the body along forward (or rotate) until

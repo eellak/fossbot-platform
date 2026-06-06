@@ -24,6 +24,7 @@ function shouldHide(child: THREE.Object3D, wheelSet: Set<THREE.Object3D>, pivot:
   if (child.name === 'wheel') return false
   if ((child as any).isLight) return false
   if (child === pivot) return false
+  if (child.name === 'v2_caster') return false
   if (child.userData.v2Hidden) return false
   return child.visible
 }
@@ -66,8 +67,12 @@ export async function attachV2ToBase(
   }
 
   const TARGET_WIDTH = 0.17
-  const { pivot, leftFenderCenter, rightFenderCenter } = await createRobotV2Pivot(TARGET_WIDTH)
+  const { pivot, caster, leftFenderCenter, rightFenderCenter } = await createRobotV2Pivot(TARGET_WIDTH)
   baseObject.add(pivot)
+  if (caster) {
+    caster.userData.isRobotPart = true
+    baseObject.add(caster)
+  }
 
   if (wheels.length < 2) {
     return pivot
@@ -138,10 +143,8 @@ export async function attachV2ToBase(
 }
 
 export function detachV2FromBase(baseObject: THREE.Object3D): void {
-  const pivot = baseObject.getObjectByName(V2_PIVOT_NAME)
-  if (pivot) {
-    baseObject.remove(pivot)
-    pivot.traverse(obj => {
+  const disposeTree = (root: THREE.Object3D) => {
+    root.traverse(obj => {
       const m = obj as THREE.Mesh
       if (m.isMesh) {
         m.geometry?.dispose()
@@ -150,6 +153,16 @@ export function detachV2FromBase(baseObject: THREE.Object3D): void {
         else mat?.dispose()
       }
     })
+  }
+  const pivot = baseObject.getObjectByName(V2_PIVOT_NAME)
+  if (pivot) {
+    baseObject.remove(pivot)
+    disposeTree(pivot)
+  }
+  const caster = baseObject.getObjectByName('v2_caster')
+  if (caster) {
+    baseObject.remove(caster)
+    disposeTree(caster)
   }
   // Restore original add.
   const orig = baseObject.userData[V1_ORIG_ADD_KEY] as ((...o: THREE.Object3D[]) => THREE.Object3D) | undefined
