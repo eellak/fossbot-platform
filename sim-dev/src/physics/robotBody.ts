@@ -9,12 +9,25 @@ import { getWorld } from './world'
 // This keeps body and wheels as distinct physics shapes while remaining stable
 // and simple (no wheel joints/motors yet).
 
-const ROBOT_BODY_MASS_KG = 2.0
-const WHEEL_MASS_KG = 0.15
-const LINEAR_DAMPING = 0.4
-const ANGULAR_DAMPING = 1.6
+const ROBOT_BODY_MASS_KG = 3.0
+const WHEEL_MASS_KG = 0.5
+const CASTER_MASS_KG = 0.3
+const CASTER_RADIUS_M = 0.005
+const CASTER_TOP_CLEARANCE_M = 0.0005
+// Caster ball position in body-LOCAL meters (rigid-body frame, Y-up).
+// X = 0 (centered), Y = down from body bbox center, Z = front(−)/back(+)
+// relative to the chassis. Absolute coords (not bbox factors) so the
+// position is invariant to anything that could change the bbox: body
+// rotation, attached debug overlays, sibling visual meshes, etc.
+const CASTER_LOCAL_Y_V1_M = -0.040
+const CASTER_LOCAL_Z_V1_M = -0.060
+const CASTER_LOCAL_Y_V2_FALLBACK_M = -0.060
+const CASTER_LOCAL_Z_V2_M = 0.07
+const LINEAR_DAMPING = 0.25
+const ANGULAR_DAMPING = 0.55
 const BODY_FRICTION = 0.03
 const WHEEL_FRICTION = 0.05
+const CASTER_FRICTION = 0.01
 const WHEEL_SPHERE_SCALE = 1.0
 
 const _tmpBox = new THREE.Box3()
@@ -30,9 +43,30 @@ const _tmpWheelWorldScale = new THREE.Vector3()
 export function createRobotBody(baseObject: THREE.Object3D, wheels: THREE.Object3D[]): RAPIER.RigidBody {
   const world = getWorld()
 
-  _tmpBox.setFromObject(baseObject)
+  const bodySource = resolveBodySource(baseObject)
+
+  // Compute body size/center invariant to:
+  //   1) baseObject's current rotation (after physics has been running, so a
+  //      recreate — e.g. toggling debug wireframes — doesn't pick up an
+  //      AABB inflated by yaw/tilt)
+  //   2) what's currently parented under baseObject (caster mesh, debug
+  //      overlays, etc.) — by measuring bodySource only, not baseObject
+  // We zero the rotation, sample the bbox, then restore.
+  const savedQ = baseObject.quaternion.clone()
+  baseObject.quaternion.identity()
+  baseObject.updateMatrixWorld(true)
+
+  _tmpBox.setFromObject(bodySource)
   _tmpBox.getSize(_tmpSize)
   _tmpBox.getCenter(_tmpCenter)
+  _tmpCenter.sub(baseObject.position) // → baseObject-local offset (rot-invariant)
+
+  baseObject.quaternion.copy(savedQ)
+  baseObject.updateMatrixWorld(true)
+
+  // World spawn position = baseObject.position + R(savedQ) × local_offset
+  _tmpCenter.applyQuaternion(savedQ).add(baseObject.position)
+  _tmpQ.copy(savedQ)
 
   // Offset from baseObject.position → bbox center for mesh sync.
   const meshPos = baseObject.position
@@ -42,17 +76,14 @@ export function createRobotBody(baseObject: THREE.Object3D, wheels: THREE.Object
     z: _tmpCenter.z - meshPos.z,
   }
 
-  const q = baseObject.quaternion
-  _tmpQ.set(q.x, q.y, q.z, q.w)
   const bodyDesc = RAPIER.RigidBodyDesc.dynamic()
     .setTranslation(_tmpCenter.x, _tmpCenter.y, _tmpCenter.z)
-    .setRotation({ x: q.x, y: q.y, z: q.z, w: q.w })
+    .setRotation({ x: savedQ.x, y: savedQ.y, z: savedQ.z, w: savedQ.w })
     .setLinearDamping(LINEAR_DAMPING)
     .setAngularDamping(ANGULAR_DAMPING)
 
   const body = world.createRigidBody(bodyDesc)
 
-  const bodySource = resolveBodySource(baseObject)
   const bodyHulls = collectBodyHullVertices(bodySource, _tmpCenter, _tmpQ)
 
   let hasBodyCollider = false
@@ -71,8 +102,8 @@ export function createRobotBody(baseObject: THREE.Object3D, wheels: THREE.Object
   }
 
   if (!hasBodyCollider) {
-    _tmpBox.setFromObject(bodySource)
-    _tmpBox.getSize(_tmpSize)
+    // Reuse the rotation-invariant _tmpSize captured above instead of
+    // re-sampling the world AABB (which would be inflated by current rotation).
     const halfX = Math.max(_tmpSize.x / 2, 0.05)
     const halfY = Math.max(_tmpSize.y / 2, 0.04)
     const halfZ = Math.max(_tmpSize.z / 2, 0.05)
@@ -87,6 +118,22 @@ export function createRobotBody(baseObject: THREE.Object3D, wheels: THREE.Object
   const wheelTrackWidth = wheelShapes.length >= 2
     ? Math.max(Math.abs(wheelShapes[0].centerLocal.x - wheelShapes[1].centerLocal.x), 0.01)
     : 0.17
+
+  const bodyLocalMinY = getBodyLocalMinY(bodyHulls)
+
+  // Caster ball: passive roller. For v2, derive Y from wheel support plane so
+  // it is anchored to the body underside and therefore scales with radius.
+  const isV2 = !!baseObject.getObjectByName('v2_collision') || !!baseObject.getObjectByName('v2_body')
+  const casterY = resolveCasterLocalY(isV2, wheelShapes, bodyLocalMinY)
+  const casterZ = isV2 ? CASTER_LOCAL_Z_V2_M : CASTER_LOCAL_Z_V1_M
+  const casterLocal = new THREE.Vector3(0, casterY, casterZ)
+  const casterCollider = RAPIER.ColliderDesc.ball(CASTER_RADIUS_M)
+    .setTranslation(casterLocal.x, casterLocal.y, casterLocal.z)
+    .setMass(CASTER_MASS_KG)
+    .setFriction(CASTER_FRICTION)
+    .setRestitution(0)
+  world.createCollider(casterCollider, body)
+
   for (const shape of wheelShapes) {
     const wheelRadius = Math.max(shape.radius * WHEEL_SPHERE_SCALE, 0.003)
     const wheelCollider = RAPIER.ColliderDesc.ball(wheelRadius)
@@ -103,9 +150,56 @@ export function createRobotBody(baseObject: THREE.Object3D, wheels: THREE.Object
   body.setEnabledRotations(false, true, false, true)
   body.setEnabledTranslations(true, true, true, true)
 
-  ; (body as any).userData = { meshOffset, wheelTrackWidth }
+    ; (body as any).userData = { meshOffset, wheelTrackWidth }
+
+  const com = body.localCom()
+  const principalInertia = body.principalInertia()
+  const wheelYs = wheelShapes.map((s) => s.centerLocal.y.toFixed(4)).join(', ')
+  console.log('[robotBody] mass=%f kg  localCOM=(%f, %f, %f)  principalInertia=(%f, %f, %f)  wheelLocalY=[%s]  bodySize=(%f, %f, %f)  casterLocal=(%f, %f, %f)  isV2=%s  bodyCenterWorldY=%f',
+    body.mass(),
+    com.x, com.y, com.z,
+    principalInertia.x, principalInertia.y, principalInertia.z,
+    wheelYs,
+    _tmpSize.x, _tmpSize.y, _tmpSize.z,
+    casterLocal.x, casterLocal.y, casterLocal.z,
+    isV2,
+    _tmpCenter.y,
+  )
 
   return body
+}
+
+function resolveCasterLocalY(isV2: boolean, wheelShapes: WheelShape[], bodyLocalMinY: number | null): number {
+  if (!isV2) return CASTER_LOCAL_Y_V1_M
+
+  // Primary relation for v2: caster is mounted under the body.
+  // If ball radius changes, center moves so the ball's TOP stays tied to the
+  // underside (instead of keeping the bottom fixed as before).
+  if (typeof bodyLocalMinY === 'number') {
+    return bodyLocalMinY + CASTER_TOP_CLEARANCE_M - CASTER_RADIUS_M
+  }
+
+  if (!wheelShapes.length) return CASTER_LOCAL_Y_V2_FALLBACK_M
+
+  const wheelGroundY = wheelShapes.reduce((sum, shape) => {
+    return sum + (shape.centerLocal.y - shape.radius)
+  }, 0) / wheelShapes.length
+
+  return wheelGroundY + CASTER_RADIUS_M
+}
+
+function getBodyLocalMinY(bodyHulls: Float32Array[]): number | null {
+  let minY = Number.POSITIVE_INFINITY
+  let hasAny = false
+
+  for (const vertices of bodyHulls) {
+    for (let i = 1; i < vertices.length; i += 3) {
+      if (vertices[i] < minY) minY = vertices[i]
+      hasAny = true
+    }
+  }
+
+  return hasAny ? minY : null
 }
 
 export function syncMeshFromBody(baseObject: THREE.Object3D, body: RAPIER.RigidBody): void {

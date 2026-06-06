@@ -21,6 +21,7 @@ import { PhysicsPanel } from './physics/PhysicsPanel'
 import type { PhysicsOptions } from './physics/PhysicsPanel'
 
 const STAGES = [
+  { label: "Ramp", url: '/js-simulator/stages/stage_ramp.json' },
   { label: 'White Rectangle', url: '/js-simulator/stages/stage_white_rect.json' },
   { label: 'White Paper', url: '/js-simulator/stages/stage_white_paper.json' },
   { label: 'Numbers', url: '/js-simulator/stages/stage_numbers.json' },
@@ -441,8 +442,8 @@ export default function App() {
   const [physicsPanel, setPhysicsPanel] = useState(false)
   const [physicsOptions, setPhysicsOptions] = useState<PhysicsOptions>({
     collisionEnabled: true,
-    debugWireframes: false,
-    lockRollPitch: true,
+    debugWireframes: true,
+    lockRollPitch: false,
     gravityEnabled: true,
   })
   const [benchRunning, setBenchRunning] = useState(false)
