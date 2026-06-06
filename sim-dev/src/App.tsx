@@ -3,7 +3,8 @@ import * as THREE from 'three'
 import type RAPIER from '@dimforge/rapier3d-compat'
 import { scene, camera, renderer } from '@simulator/scene.js'
 import { ambientLight, directionalLight } from '@simulator/environment_lights.js'
-import { loadBaseObject } from '@simulator/robot_loader.js'
+import { loadBaseObject, wheels as v1Wheels } from '@simulator/robot_loader.js'
+import { attachV2ToBase, detachV2FromBase } from './robot/attachV2'
 import { startAnimation, stopAnimation, rgb_set_color, drawLine, moveStep, rotateStep, stopMotion, changeCamera, controls } from '@simulator/animate.js'
 import { loadObjectsFromJSON } from '@simulator/stage_loader.js'
 import { traceLine } from '@simulator/sensors.js'
@@ -431,6 +432,7 @@ export default function App() {
   const [showMetrics, setShowMetrics] = useState(false)
   const [physicsOn, setPhysicsOn] = useState(true)
   const [physicsReady, setPhysicsReady] = useState(false)
+  const [modelVersion, setModelVersion] = useState<'v1' | 'v2'>('v2')
   const [physicsPanel, setPhysicsPanel] = useState(false)
   const [physicsOptions, setPhysicsOptions] = useState<PhysicsOptions>({
     collisionEnabled: true,
@@ -601,7 +603,29 @@ export default function App() {
       const robotLoaded = await waitForRobot(8000)
       if (cancelled) return
       if (!robotLoaded) { console.warn('[physics] robot failed to load'); return }
-      await sleep(500)
+
+      // Wait for v1 wheels to be populated (async OBJ load inside robot_loader).
+      for (let i = 0; i < 100; i++) {
+        if (v1Wheels.length >= 2) break
+        await sleep(50)
+        if (cancelled) return
+      }
+
+      const base = scene.getObjectByName('robot_body')
+      if (!base) { console.warn('[physics] no robot_body in scene'); return }
+
+      // Apply model version BEFORE creating the physics body — the rigid
+      // body's AABB is measured from this Object3D's current world bbox, so
+      // swapping visuals later would leave a stale collider.
+      if (modelVersion === 'v2') {
+        try { await attachV2ToBase(base, v1Wheels) }
+        catch (e) { console.warn('[physics] v2 attach failed', e) }
+      } else {
+        detachV2FromBase(base)
+      }
+      if (cancelled) return
+
+      await sleep(100)
       if (cancelled) return
 
       // Cut over: stop animate.js's loop, build world, start physics loop.
@@ -613,8 +637,6 @@ export default function App() {
         console.log('[physics] mirrored stage →', summary)
       }
 
-      const base = scene.getObjectByName('robot_body')
-      if (!base) { console.warn('[physics] no robot_body in scene'); return }
       robotBodyRef.current = createRobotBody(base)
 
       // Apply options that are set before the body was created.
@@ -673,7 +695,33 @@ export default function App() {
       physicsDebuggerRef.current?.dispose()
       physicsDebuggerRef.current = null
     }
-  }, [physicsOn, currentStage, physicsOptions.collisionEnabled, physicsOptions.debugWireframes])
+  }, [physicsOn, currentStage, modelVersion, physicsOptions.collisionEnabled, physicsOptions.debugWireframes])
+
+  // ── Model version visual swap (works even with physics off) ─────────────
+  // Idempotent; safe to run alongside the physics effect which also calls
+  // attach/detach before creating the rigid body.
+  useEffect(() => {
+    let cancelled = false
+    async function apply() {
+      const loaded = await waitForRobot(8000)
+      if (cancelled || !loaded) return
+      for (let i = 0; i < 100; i++) {
+        if (v1Wheels.length >= 2) break
+        await sleep(50)
+        if (cancelled) return
+      }
+      const base = scene.getObjectByName('robot_body')
+      if (!base) return
+      if (modelVersion === 'v2') {
+        try { await attachV2ToBase(base, v1Wheels) }
+        catch (e) { console.warn('[model] v2 attach failed', e) }
+      } else {
+        detachV2FromBase(base)
+      }
+    }
+    apply()
+    return () => { cancelled = true }
+  }, [currentStage, modelVersion])
 
   // Live option toggles — no physics restart needed.
   useEffect(() => {
@@ -942,6 +990,18 @@ export default function App() {
           title={{ orbit: 'Switch to follow camera', follow: 'Switch to top view', top: 'Switch to orbit camera' }[camMode]}
         >
           🎥 {camMode}
+        </Toggle>
+
+        <Divider />
+
+        {/* Robot model version */}
+        <span style={{ color: '#666', fontFamily: 'monospace', fontSize: 12 }}>model</span>
+        <Toggle
+          active={modelVersion === 'v2'}
+          onClick={() => !benchRunning && setModelVersion(v => v === 'v2' ? 'v1' : 'v2')}
+          title={modelVersion === 'v2' ? 'Switch to v1 (legacy OBJ)' : 'Switch to v2 (STL, default)'}
+        >
+          🤖 {modelVersion}
         </Toggle>
 
         <Divider />
