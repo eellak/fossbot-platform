@@ -589,22 +589,10 @@
     ]
   },
   {
-    "type": "model",
-    "filename": "/js-simulator/models/static/Ramp.obj",
-    "position": [
-      -0.1,
-      -0.05,
-      1
-    ],
-    "name": "ramp_step1",
-    "castShadow": true,
-    "immovable": true
-  },
-  {
     "type": "floor",
     "dimensions": [
-      0,
-      0
+      0.8,
+      0.8
     ],
     "material": {
       "color": "white"
