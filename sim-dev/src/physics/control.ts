@@ -10,6 +10,8 @@ import RAPIER from '@dimforge/rapier3d-compat'
 // damping-driven slowdown near walls.
 const LIN_SPEED = 0.5        // m/s along local forward when ArrowUp/Down
 const ANG_SPEED = Math.PI    // rad/s about world Y when ArrowLeft/Right
+const TURN_PIVOT_LIN_SPEED = 0.18 // m/s when turning in place with A/D only
+const DEFAULT_TRACK_WIDTH = 0.17
 
 type KeyState = {
   ArrowUp?: boolean
@@ -34,7 +36,30 @@ export function applyInput(body: RAPIER.RigidBody, keys: KeyState): void {
   if (keys.ArrowUp) linear += 1
   if (keys.ArrowDown) linear -= 1
 
+  let turn = 0
+  if (keys.ArrowLeft) turn += 1
+  if (keys.ArrowRight) turn -= 1
+
   const curVel = body.linvel()
+
+  // Pivot-turn mode for A/D only:
+  // - inner wheel stops
+  // - outer wheel moves forward
+  // This matches the user-facing expectation for simple turning behavior.
+  if (linear === 0 && turn !== 0) {
+    const trackRaw = Number((body as any).userData?.wheelTrackWidth)
+    const trackWidth = Number.isFinite(trackRaw) && trackRaw > 0 ? trackRaw : DEFAULT_TRACK_WIDTH
+    const halfTrack = Math.max(trackWidth * 0.5, 0.04)
+    const yawRate = turn * (TURN_PIVOT_LIN_SPEED / halfTrack)
+
+    body.setLinvel(
+      { x: _worldForward.x * TURN_PIVOT_LIN_SPEED, y: curVel.y, z: _worldForward.z * TURN_PIVOT_LIN_SPEED },
+      true,
+    )
+    body.setAngvel({ x: 0, y: yawRate, z: 0 }, true)
+    return
+  }
+
   if (linear !== 0) {
     body.setLinvel(
       { x: _worldForward.x * LIN_SPEED * linear, y: curVel.y, z: _worldForward.z * LIN_SPEED * linear },
@@ -43,10 +68,7 @@ export function applyInput(body: RAPIER.RigidBody, keys: KeyState): void {
   }
   // Not zeroing velocity when no key — let damping + contacts bring it to rest.
 
-  let ang = 0
-  if (keys.ArrowLeft) ang += 1
-  if (keys.ArrowRight) ang -= 1
-  body.setAngvel({ x: 0, y: ang * ANG_SPEED, z: 0 }, true)
+  body.setAngvel({ x: 0, y: turn * ANG_SPEED, z: 0 }, true)
 }
 
 // Promise-based preset move: drive the body along forward (or rotate) until

@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js'
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 
 // v2 robot model loader. Parallel to the v1 OBJ/MTL pipeline.
 //
@@ -136,27 +137,52 @@ export interface RobotV2 {
 
 const _stlLoader = new STLLoader()
 
-function loadPart(name: PartName): Promise<THREE.Mesh> {
+interface LoadedPart {
+  mesh: THREE.Mesh
+  collisionGeometry: THREE.BufferGeometry
+  hasCoacd: boolean
+}
+
+function loadStl(url: string): Promise<THREE.BufferGeometry> {
   return new Promise((resolve, reject) => {
-    _stlLoader.load(
-      `${BASE_URL}/${name}.stl`,
-      (geom) => {
-        geom.computeVertexNormals()
-        const mat = new THREE.MeshStandardMaterial({
-          color: PART_COLOR[name],
-          roughness: 0.55,
-          metalness: 0.05,
-        })
-        const mesh = new THREE.Mesh(geom, mat)
-        mesh.name = `v2_${name}`
-        mesh.castShadow = true
-        mesh.receiveShadow = true
-        mesh.userData.isRobotPart = true
-        resolve(mesh)
-      },
-      undefined,
-      (err) => reject(err),
-    )
+    _stlLoader.load(url, resolve, undefined, reject)
+  })
+}
+
+function makePartMesh(name: PartName, geom: THREE.BufferGeometry): THREE.Mesh {
+  geom.computeVertexNormals()
+  const mat = new THREE.MeshStandardMaterial({
+    color: PART_COLOR[name],
+    roughness: 0.55,
+    metalness: 0.05,
+  })
+  const mesh = new THREE.Mesh(geom, mat)
+  mesh.name = `v2_${name}`
+  mesh.castShadow = true
+  mesh.receiveShadow = true
+  mesh.userData.isRobotPart = true
+  return mesh
+}
+
+function loadPart(name: PartName): Promise<LoadedPart> {
+  return new Promise((resolve, reject) => {
+    loadStl(`${BASE_URL}/${name}.stl`)
+      .then((visualGeom) => {
+        const visualMesh = makePartMesh(name, visualGeom)
+        const coacdUrl = `${BASE_URL}/${name}_coacd.stl`
+        loadStl(coacdUrl)
+          .then((coacdGeom) => resolve({
+            mesh: visualMesh,
+            collisionGeometry: coacdGeom,
+            hasCoacd: true,
+          }))
+          .catch(() => resolve({
+            mesh: visualMesh,
+            collisionGeometry: visualGeom.clone(),
+            hasCoacd: false,
+          }))
+      })
+      .catch(reject)
   })
 }
 
@@ -187,19 +213,39 @@ function mirrorGeometryX(src: THREE.BufferGeometry): THREE.BufferGeometry {
  * @param targetWidth meters. Bottom base's X extent is scaled to this.
  */
 export async function createRobotV2Pivot(targetWidth: number): Promise<RobotV2> {
-  const meshes = await Promise.all(PARTS.map(p => loadPart(p)))
+  const loaded = await Promise.all(PARTS.map(p => loadPart(p)))
+  const meshes = loaded.map(l => l.mesh)
   const byName: Partial<Record<PartName, THREE.Mesh>> = {}
+  const byNameCollision: Partial<Record<PartName, THREE.BufferGeometry>> = {}
+  const byNameHasCoacd: Partial<Record<PartName, boolean>> = {}
   PARTS.forEach((p, i) => { byName[p] = meshes[i] })
+  PARTS.forEach((p, i) => { byNameCollision[p] = loaded[i].collisionGeometry })
+  PARTS.forEach((p, i) => { byNameHasCoacd[p] = loaded[i].hasCoacd })
 
   // 1. Fix broken right_fender.stl — CAD export mirrored along Z (vertical)
   //    instead of X (left/right), leaving right_fender half below ground and
   //    sharing X with left_fender. Regenerate by mirroring left_fender's
   //    geometry across X.
   {
+    // Visual mesh: ALWAYS mirror from left_fender because shipped
+    // right_fender.stl is broken regardless of CoACD availability.
     const leftGeo = byName.left_fender!.geometry
     const mirroredGeo = mirrorGeometryX(leftGeo)
     byName.right_fender!.geometry.dispose()
     byName.right_fender!.geometry = mirroredGeo
+
+    // Collision geometry: mirror X of right_fender's CoACD regardless of whether it exists,
+    // otherwise the geometry is broken
+    if (byNameHasCoacd.right_fender) {
+      const leftCollisionGeo = byNameCollision.left_fender!
+      const mirroredCollisionGeo = mirrorGeometryX(leftCollisionGeo)
+      byNameCollision.right_fender?.dispose()
+      byNameCollision.right_fender = mirroredCollisionGeo
+    } else {
+      // If right_fender has no CoACD, just mirror the visual geometry for collision too.
+      byNameCollision.right_fender?.dispose()
+      byNameCollision.right_fender = mirroredGeo.clone()
+    }
   }
 
   // 2. Assemble FIRST (before any PART_ADJUST) so bbox / ground-alignment are
@@ -301,5 +347,73 @@ export async function createRobotV2Pivot(targetWidth: number): Promise<RobotV2> 
   leftFenderBox.getCenter(leftFenderCenter)
   rightFenderBox.getCenter(rightFenderCenter)
 
-  return { pivot, leftFenderCenter, rightFenderCenter }
+  // Convert fender centers from world to pivot-local coordinates so callers can
+  // parent the pivot under any transform and still dock wheels reliably.
+  const leftFenderLocal = leftFenderCenter.clone()
+  const rightFenderLocal = rightFenderCenter.clone()
+  pivot.worldToLocal(leftFenderLocal)
+  pivot.worldToLocal(rightFenderLocal)
+
+  // Merge all v2 body parts into one draw object while preserving per-part
+  // colors via material groups.
+  const invPivotMatrix = pivot.matrixWorld.clone().invert()
+  const mergedParts: THREE.BufferGeometry[] = []
+  const mergedMaterials: THREE.Material[] = []
+  const collisionGroup = new THREE.Group()
+  collisionGroup.name = 'v2_collision'
+  collisionGroup.visible = false
+  collisionGroup.userData.isRobotPart = true
+  collisionGroup.userData.hasCoacd = loaded.some((p) => p.hasCoacd)
+
+  for (const p of PARTS) {
+    const part = byName[p]!
+    part.updateMatrixWorld(true)
+
+    const localMatrix = new THREE.Matrix4().multiplyMatrices(invPivotMatrix, part.matrixWorld)
+    const g = part.geometry.clone()
+    g.applyMatrix4(localMatrix)
+    mergedParts.push(g)
+
+    const collisionGeometry = (byNameCollision[p] ?? part.geometry).clone()
+    collisionGeometry.applyMatrix4(localMatrix)
+    const collisionMesh = new THREE.Mesh(collisionGeometry, new THREE.MeshBasicMaterial({ visible: false }))
+    collisionMesh.name = `v2_collision_${p}`
+    collisionMesh.userData.isRobotPart = true
+    collisionGroup.add(collisionMesh)
+
+    mergedMaterials.push(
+      new THREE.MeshStandardMaterial({
+        color: PART_COLOR[p],
+        roughness: 0.55,
+        metalness: 0.05,
+      }),
+    )
+  }
+
+  const mergedGeometry = mergeGeometries(mergedParts, true)
+  if (!mergedGeometry) {
+    throw new Error('[robotV2] failed to merge body geometries')
+  }
+  for (const g of mergedParts) g.dispose()
+
+  const mergedBody = new THREE.Mesh(mergedGeometry, mergedMaterials)
+  mergedBody.name = 'v2_body'
+  mergedBody.castShadow = true
+  mergedBody.receiveShadow = true
+  mergedBody.userData.isRobotPart = true
+
+  pivot.remove(assembly)
+  for (const m of meshes) {
+    m.geometry.dispose()
+    const mat = m.material
+    if (Array.isArray(mat)) mat.forEach(mm => mm.dispose())
+    else mat.dispose()
+  }
+  for (const p of PARTS) {
+    byNameCollision[p]?.dispose()
+  }
+  pivot.add(mergedBody)
+  pivot.add(collisionGroup)
+
+  return { pivot, leftFenderCenter: leftFenderLocal, rightFenderCenter: rightFenderLocal }
 }

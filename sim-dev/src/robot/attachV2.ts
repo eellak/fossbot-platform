@@ -21,6 +21,7 @@ const V1_ORIG_ADD_KEY = 'v2OrigAdd'
 
 function shouldHide(child: THREE.Object3D, wheelSet: Set<THREE.Object3D>, pivot: THREE.Object3D | null): boolean {
   if (wheelSet.has(child)) return false
+  if (child.name === 'wheel') return false
   if ((child as any).isLight) return false
   if (child === pivot) return false
   if (child.userData.v2Hidden) return false
@@ -65,70 +66,72 @@ export async function attachV2ToBase(
   }
 
   const TARGET_WIDTH = 0.17
-  const { pivot } = await createRobotV2Pivot(TARGET_WIDTH)
+  const { pivot, leftFenderCenter, rightFenderCenter } = await createRobotV2Pivot(TARGET_WIDTH)
   baseObject.add(pivot)
+
+  if (wheels.length < 2) {
+    return pivot
+  }
 
   // 3. Reposition wheels to v2 fender mountpoints. Compute each fender's
   //    center in world space (after parenting, so baseObject's transform is
   //    included), then convert to baseObject-local for wheel placement.
   pivot.updateMatrixWorld(true)
-  const left = pivot.getObjectByName('v2_left_fender')
-  const right = pivot.getObjectByName('v2_right_fender')
-  if (left && right) {
-    const lc = new THREE.Vector3(); new THREE.Box3().setFromObject(left).getCenter(lc)
-    const rc = new THREE.Vector3(); new THREE.Box3().setFromObject(right).getCenter(rc)
-    baseObject.worldToLocal(lc)
-    baseObject.worldToLocal(rc)
+  const lc = leftFenderCenter.clone()
+  const rc = rightFenderCenter.clone()
+  lc.applyMatrix4(pivot.matrixWorld)
+  rc.applyMatrix4(pivot.matrixWorld)
+  baseObject.worldToLocal(lc)
+  baseObject.worldToLocal(rc)
 
-    const [rightWheel, leftWheel] = wheels[0].position.x > wheels[1].position.x
-      ? [wheels[0], wheels[1]]
-      : [wheels[1], wheels[0]]
-    const positiveX = lc.x > rc.x ? lc : rc
-    const negativeX = lc.x > rc.x ? rc : lc
+  const [rightWheel, leftWheel] = wheels[0].position.x > wheels[1].position.x
+    ? [wheels[0], wheels[1]]
+    : [wheels[1], wheels[0]]
+  const positiveX = lc.x > rc.x ? lc : rc
+  const negativeX = lc.x > rc.x ? rc : lc
 
-    // Back up v1 wheel transforms once so detach can restore them. We reuse the
-    // v1 wheel MODEL but override its transform for v2.
-    for (const w of [rightWheel, leftWheel]) {
-      if (!w.userData.v1Position) {
-        w.userData.v1Position = w.position.clone()
-        w.userData.v1Rotation = w.rotation.clone()
-        w.userData.v1Scale = w.scale.clone()
-      }
+  // Back up v1 wheel transforms once so detach can restore them. We reuse the
+  // v1 wheel MODEL but override its transform for v2.
+  for (const w of [rightWheel, leftWheel]) {
+    if (!w.userData.v1Position) {
+      w.userData.v1Position = w.position.clone()
+      w.userData.v1Rotation = w.rotation.clone()
+      w.userData.v1Scale = w.scale.clone()
     }
+  }
 
-    // Dock at fender centers (keep v1's Y), then apply WHEEL_DEFAULTS + WHEEL_ADJUST.
-    // pos is MM → multiply by 0.001 to get world meters.
-    // rot is DEGREES → multiply by π/180 to get radians.
-    // scale is a multiplier — defaults * adjust.
-    const MM = 0.001
-    const DEG = Math.PI / 180
-    const wp = [
-      WHEEL_DEFAULTS.pos[0] + WHEEL_ADJUST.pos[0],
-      WHEEL_DEFAULTS.pos[1] + WHEEL_ADJUST.pos[1],
-      WHEEL_DEFAULTS.pos[2] + WHEEL_ADJUST.pos[2],
-    ]
-    const wr = [
-      WHEEL_DEFAULTS.rot[0] + WHEEL_ADJUST.rot[0],
-      WHEEL_DEFAULTS.rot[1] + WHEEL_ADJUST.rot[1],
-      WHEEL_DEFAULTS.rot[2] + WHEEL_ADJUST.rot[2],
-    ]
-    const ws = WHEEL_DEFAULTS.scale * WHEEL_ADJUST.scale
-    rightWheel.position.set(
-      positiveX.x + wp[0] * MM,
-      rightWheel.userData.v1Position.y + wp[1] * MM,
-      positiveX.z + wp[2] * MM,
-    )
-    leftWheel.position.set(
-      negativeX.x - wp[0] * MM, // mirror X delta for the left side
-      leftWheel.userData.v1Position.y + wp[1] * MM,
-      negativeX.z + wp[2] * MM,
-    )
-    for (const w of [rightWheel, leftWheel]) {
-      const r0 = w.userData.v1Rotation as THREE.Euler
-      w.rotation.set(r0.x + wr[0] * DEG, r0.y + wr[1] * DEG, r0.z + wr[2] * DEG)
-      const s0 = w.userData.v1Scale as THREE.Vector3
-      w.scale.set(s0.x * ws, s0.y * ws, s0.z * ws)
-    }
+  // Dock at fender centers (keep v1's Y), then apply WHEEL_DEFAULTS + WHEEL_ADJUST.
+  // pos is MM → multiply by 0.001 to get world meters.
+  // rot is DEGREES → multiply by π/180 to get radians.
+  // scale is a multiplier — defaults * adjust.
+  const MM = 0.001
+  const DEG = Math.PI / 180
+  const wp = [
+    WHEEL_DEFAULTS.pos[0] + WHEEL_ADJUST.pos[0],
+    WHEEL_DEFAULTS.pos[1] + WHEEL_ADJUST.pos[1],
+    WHEEL_DEFAULTS.pos[2] + WHEEL_ADJUST.pos[2],
+  ]
+  const wr = [
+    WHEEL_DEFAULTS.rot[0] + WHEEL_ADJUST.rot[0],
+    WHEEL_DEFAULTS.rot[1] + WHEEL_ADJUST.rot[1],
+    WHEEL_DEFAULTS.rot[2] + WHEEL_ADJUST.rot[2],
+  ]
+  const ws = WHEEL_DEFAULTS.scale * WHEEL_ADJUST.scale
+  rightWheel.position.set(
+    positiveX.x + wp[0] * MM,
+    rightWheel.userData.v1Position.y + wp[1] * MM,
+    positiveX.z + wp[2] * MM,
+  )
+  leftWheel.position.set(
+    negativeX.x - wp[0] * MM, // mirror X delta for the left side
+    leftWheel.userData.v1Position.y + wp[1] * MM,
+    negativeX.z + wp[2] * MM,
+  )
+  for (const w of [rightWheel, leftWheel]) {
+    const r0 = w.userData.v1Rotation as THREE.Euler
+    w.rotation.set(r0.x + wr[0] * DEG, r0.y + wr[1] * DEG, r0.z + wr[2] * DEG)
+    const s0 = w.userData.v1Scale as THREE.Vector3
+    w.scale.set(s0.x * ws, s0.y * ws, s0.z * ws)
   }
 
   return pivot

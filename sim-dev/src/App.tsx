@@ -3,7 +3,7 @@ import * as THREE from 'three'
 import type RAPIER from '@dimforge/rapier3d-compat'
 import { scene, camera, renderer } from '@simulator/scene.js'
 import { ambientLight, directionalLight } from '@simulator/environment_lights.js'
-import { loadBaseObject, wheels as v1Wheels } from '@simulator/robot_loader.js'
+import { loadBaseObject } from '@simulator/robot_loader.js'
 import { attachV2ToBase, detachV2FromBase } from './robot/attachV2'
 import { startAnimation, stopAnimation, rgb_set_color, drawLine, moveStep, rotateStep, stopMotion, changeCamera, controls } from '@simulator/animate.js'
 import { loadObjectsFromJSON } from '@simulator/stage_loader.js'
@@ -14,7 +14,7 @@ import { mirrorStageToWorld } from './physics/buildFromScene'
 import { createRobotBody } from './physics/robotBody'
 import { runPresetMoveWithTimeout, stopBody } from './physics/control'
 import { startPhysicsLoop } from './physics/loop'
-import type { PhysicsLoopHandle } from './physics/loop'
+import type { PhysicsLoopHandle, WheelDebugData } from './physics/loop'
 import { createDebugger } from './physics/debug'
 import type { DebuggerHandle } from './physics/debug'
 import { PhysicsPanel } from './physics/PhysicsPanel'
@@ -44,6 +44,11 @@ function resetScene(url: string) {
   scene.add(traceLine)
   loadObjectsFromJSON(url, scene)
   loadBaseObject(scene)
+}
+
+function getRobotWheels(baseObject: THREE.Object3D | null | undefined): THREE.Object3D[] {
+  if (!baseObject) return []
+  return baseObject.children.filter((obj) => obj.name === 'wheel')
 }
 
 const KEY_MAP: Record<string, keyof typeof keys> = {
@@ -444,6 +449,7 @@ export default function App() {
   const [benchStage, setBenchStage] = useState('')
   const [benchResults, setBenchResults] = useState<StageResult[] | null>(null)
   const [sweepResults, setSweepResults] = useState<SweepResults | null>(null)
+  const [wheelDebug, setWheelDebug] = useState<WheelDebugData | null>(null)
 
   const showMetricsRef = useRef(false)
   const physicsOnRef = useRef(false)
@@ -459,6 +465,7 @@ export default function App() {
   const physicsHandleRef = useRef<PhysicsLoopHandle | null>(null)
   const robotBodyRef = useRef<RAPIER.RigidBody | null>(null)
   const physicsDebuggerRef = useRef<DebuggerHandle | null>(null)
+  const wheelDebugRef = useRef<WheelDebugData | null>(null)
   const physicsOptionsRef = useRef(physicsOptions)
   useEffect(() => { physicsOptionsRef.current = physicsOptions }, [physicsOptions])
 
@@ -562,6 +569,7 @@ export default function App() {
       if (now - posTimer.current >= 100) {
         const robot = scene.getObjectByName('robot_body')
         if (robot) setRobotPos({ x: robot.position.x, y: robot.position.y, z: robot.position.z })
+        setWheelDebug(wheelDebugRef.current)
         const count = scene.children.filter(c =>
           !(c instanceof THREE.Light) &&
           !(c as any).userData?.isPlane &&
@@ -604,26 +612,32 @@ export default function App() {
       if (cancelled) return
       if (!robotLoaded) { console.warn('[physics] robot failed to load'); return }
 
-      // Wait for v1 wheels to be populated (async OBJ load inside robot_loader).
-      for (let i = 0; i < 100; i++) {
-        if (v1Wheels.length >= 2) break
-        await sleep(50)
-        if (cancelled) return
-      }
-
       const base = scene.getObjectByName('robot_body')
       if (!base) { console.warn('[physics] no robot_body in scene'); return }
+
+      // Wait for wheel objects to be present under robot_body.
+      let wheels = getRobotWheels(base)
+      for (let i = 0; i < 100 && wheels.length < 2; i++) {
+        await sleep(50)
+        if (cancelled) return
+        wheels = getRobotWheels(base)
+      }
 
       // Apply model version BEFORE creating the physics body — the rigid
       // body's AABB is measured from this Object3D's current world bbox, so
       // swapping visuals later would leave a stale collider.
       if (modelVersion === 'v2') {
-        try { await attachV2ToBase(base, v1Wheels) }
+        try { await attachV2ToBase(base, wheels) }
         catch (e) { console.warn('[physics] v2 attach failed', e) }
       } else {
         detachV2FromBase(base)
       }
       if (cancelled) return
+
+      wheels = getRobotWheels(base)
+      if (wheels.length < 2) {
+        console.warn('[physics] robot wheels not found under robot_body')
+      }
 
       await sleep(100)
       if (cancelled) return
@@ -637,15 +651,13 @@ export default function App() {
         console.log('[physics] mirrored stage →', summary)
       }
 
-      robotBodyRef.current = createRobotBody(base)
+      robotBodyRef.current = createRobotBody(base, wheels)
 
       // Apply options that are set before the body was created.
       const { lockRollPitch, gravityEnabled, debugWireframes } = physicsOptionsRef.current
       robotBodyRef.current.setEnabledRotations(!lockRollPitch, true, !lockRollPitch, true)
       getWorld().gravity.y = gravityEnabled ? -9.82 : 0
-      // Y is locked by default in createRobotBody to prevent lift from contact normals.
-      // Unlock it when gravity is off so the toggle has a visible effect.
-      if (!gravityEnabled) robotBodyRef.current.setEnabledTranslations(true, true, true, true)
+      robotBodyRef.current.setEnabledTranslations(true, true, true, true)
 
       if (debugWireframes) {
         physicsDebuggerRef.current = createDebugger(scene, getWorld())
@@ -655,6 +667,7 @@ export default function App() {
         scene, camera, renderer,
         getBaseObject: () => scene.getObjectByName('robot_body') ?? null,
         getRobotBody: () => robotBodyRef.current,
+        getWheels: () => getRobotWheels(scene.getObjectByName('robot_body')),
         getKeys: () => ({
           ArrowUp: !!keys.ArrowUp, ArrowDown: !!keys.ArrowDown,
           ArrowLeft: !!keys.ArrowLeft, ArrowRight: !!keys.ArrowRight,
@@ -666,6 +679,7 @@ export default function App() {
           if (benchCollecting.current) benchSamples.current.push(dtMs)
         },
         onPostRender: () => { physicsDebuggerRef.current?.update() },
+        onWheelDebug: (data) => { wheelDebugRef.current = data },
       })
       setPhysicsReady(true)
     }
@@ -676,6 +690,8 @@ export default function App() {
       physicsDebuggerRef.current?.dispose()
       physicsDebuggerRef.current = null
       robotBodyRef.current = null
+      wheelDebugRef.current = null
+      setWheelDebug(null)
       resetWorld()
       setPhysicsReady(false)
       // Restart kinematic animate.js loop (only if the component is still mounted).
@@ -694,6 +710,7 @@ export default function App() {
       physicsHandleRef.current = null
       physicsDebuggerRef.current?.dispose()
       physicsDebuggerRef.current = null
+      wheelDebugRef.current = null
     }
   }, [physicsOn, currentStage, modelVersion, physicsOptions.collisionEnabled, physicsOptions.debugWireframes])
 
@@ -705,15 +722,17 @@ export default function App() {
     async function apply() {
       const loaded = await waitForRobot(8000)
       if (cancelled || !loaded) return
-      for (let i = 0; i < 100; i++) {
-        if (v1Wheels.length >= 2) break
-        await sleep(50)
-        if (cancelled) return
-      }
       const base = scene.getObjectByName('robot_body')
       if (!base) return
+      let wheels = getRobotWheels(base)
+      for (let i = 0; i < 100; i++) {
+        if (wheels.length >= 2) break
+        await sleep(50)
+        if (cancelled) return
+        wheels = getRobotWheels(base)
+      }
       if (modelVersion === 'v2') {
-        try { await attachV2ToBase(base, v1Wheels) }
+        try { await attachV2ToBase(base, wheels) }
         catch (e) { console.warn('[model] v2 attach failed', e) }
       } else {
         detachV2FromBase(base)
@@ -733,11 +752,7 @@ export default function App() {
   useEffect(() => {
     try {
       getWorld().gravity.y = physicsOptions.gravityEnabled ? -9.82 : 0
-      // Only unlock Y when gravity is disabled — never re-lock it from the toggle.
-      // Y re-locks automatically on the next physics restart via createRobotBody.
-      if (!physicsOptions.gravityEnabled) {
-        robotBodyRef.current?.setEnabledTranslations(true, true, true, true)
-      }
+      robotBodyRef.current?.setEnabledTranslations(true, true, true, true)
     } catch { /* physics not yet init */ }
   }, [physicsOptions.gravityEnabled])
 
@@ -1067,6 +1082,17 @@ export default function App() {
           <div><span style={{ color: '#f55' }}>x</span> {robotPos.x.toFixed(3)}</div>
           <div><span style={{ color: '#5f5' }}>y</span> {robotPos.y.toFixed(3)}</div>
           <div><span style={{ color: '#55f' }}>z</span> {robotPos.z.toFixed(3)}</div>
+          {wheelDebug && physicsOn && (
+            <>
+              <div style={{ color: '#444' }}>---</div>
+              <div><span style={{ color: '#fa5' }}>v</span> {wheelDebug.forwardSpeed.toFixed(3)} m/s</div>
+              <div><span style={{ color: '#aa5' }}>yaw</span> {wheelDebug.yawRate.toFixed(3)} rad/s</div>
+              <div><span style={{ color: '#5af' }}>wL</span> {wheelDebug.leftOmega.toFixed(2)} rad/s</div>
+              <div><span style={{ color: '#5af' }}>wR</span> {wheelDebug.rightOmega.toFixed(2)} rad/s</div>
+              <div><span style={{ color: '#777' }}>r</span> {wheelDebug.wheelRadius.toFixed(3)} m</div>
+              <div><span style={{ color: '#777' }}>track</span> {wheelDebug.trackWidth.toFixed(3)} m</div>
+            </>
+          )}
         </div>
 
         {/* Benchmark results overlay */}
