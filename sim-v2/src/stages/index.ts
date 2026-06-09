@@ -21,6 +21,6 @@ for (const [path, data] of Object.entries(modules)) {
 
 export const STAGE_NAMES: StageName[] = Object.keys(STAGES).sort()
 
-export const DEFAULT_STAGE: StageName = 'stage_object'
+export const DEFAULT_STAGE: StageName = 'stage_white_rect'
 
 export { loadStage, type StageHandle } from './loader'
