@@ -101,7 +101,7 @@ function createDebugMesh(cfg: PrimitiveColliderConfig): THREE.Mesh | null {
 
 /**
  * Create the chassis rigid body with primitive colliders defined in
- * `src/tuner/colliders.ts` and a debug wireframe group.
+ * `src/physics/colliders.ts` and a debug wireframe group.
  */
 export async function createRobotBody(
   robot: RobotV2,

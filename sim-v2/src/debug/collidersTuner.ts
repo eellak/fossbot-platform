@@ -1,7 +1,7 @@
 /**
  * Colliders Tuner — lil-gui panel for adjusting primitive physics colliders
  * in real time.  Updates debug wireframe meshes live; the user can dump the
- * final values back into src/tuner/colliders.ts.
+ * final values back into src/physics/colliders.ts.
  */
 import GUI from 'lil-gui'
 import * as THREE from 'three'
