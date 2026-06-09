@@ -1,0 +1,19 @@
+[
+    
+    {
+        "type": "floor",
+        "dimensions": [0.8, 0.8],
+        "material": {"color": "white"},
+        "name": "floor",
+        "texture": "",
+        "repeat": [25,25],
+        "offset": [0,0]
+    },
+    { 
+        "type": "fossbot",
+        "position":[0, 0,2],
+        "orientation": [0, 0, 0]
+    }
+
+
+]
