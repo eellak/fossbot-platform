@@ -22,6 +22,8 @@ import { parseColor } from './parseColor'
 export interface Built {
   object: THREE.Object3D
   collider?: RAPIER.ColliderDesc
+  /** Wireframe mesh matching the collider shape & transform, for debug overlay. */
+  debugMesh?: THREE.Mesh | THREE.LineSegments
 }
 
 interface FloorEntry {
@@ -111,7 +113,14 @@ export function buildFloor(entry: FloorEntry): Built {
     .setTranslation(0, -0.005, 0)
     .setFriction(0.8)
 
-  return { object: mesh, collider }
+  // Debug wireframe
+  const debugGeom = new THREE.BoxGeometry(w, 0.01, h)
+  const debugMat = new THREE.MeshBasicMaterial({ color: 0xff8800, wireframe: true })
+  const debugMesh = new THREE.Mesh(debugGeom, debugMat)
+  debugMesh.name = 'collider_floor'
+  debugMesh.position.set(0, -0.005, 0)
+
+  return { object: mesh, collider, debugMesh }
 }
 
 export function buildCube(entry: CubeEntry): Built {
@@ -125,7 +134,15 @@ export function buildCube(entry: CubeEntry): Built {
 
   const collider = RAPIER.ColliderDesc.cuboid(w / 2, h / 2, d / 2)
     .setTranslation(entry.position[0], entry.position[1], entry.position[2])
-  return { object: mesh, collider }
+
+  // Debug wireframe
+  const debugGeom = new THREE.BoxGeometry(w, h, d)
+  const debugMat = new THREE.MeshBasicMaterial({ color: 0xff8800, wireframe: true })
+  const debugMesh = new THREE.Mesh(debugGeom, debugMat)
+  debugMesh.name = `collider_${entry.name ?? 'cube'}`
+  debugMesh.position.fromArray(entry.position)
+
+  return { object: mesh, collider, debugMesh }
 }
 
 export function buildCylinder(entry: CylinderEntry): Built {
@@ -142,7 +159,15 @@ export function buildCylinder(entry: CylinderEntry): Built {
   const r = (rTop + rBottom) / 2
   const collider = RAPIER.ColliderDesc.cylinder(height / 2, r)
     .setTranslation(entry.position[0], entry.position[1], entry.position[2])
-  return { object: mesh, collider }
+
+  // Debug wireframe
+  const debugGeom = new THREE.CylinderGeometry(r, r, height, 16)
+  const debugMat = new THREE.MeshBasicMaterial({ color: 0xff8800, wireframe: true })
+  const debugMesh = new THREE.Mesh(debugGeom, debugMat)
+  debugMesh.name = `collider_${entry.name ?? 'cylinder'}`
+  debugMesh.position.fromArray(entry.position)
+
+  return { object: mesh, collider, debugMesh }
 }
 
 const objLoader = new OBJLoader()
@@ -201,6 +226,7 @@ export async function buildModel(entry: ModelEntry): Promise<Built> {
       const m = c as THREE.Mesh
       if (m.isMesh) meshes.push(m)
     })
+    let debugMesh: THREE.LineSegments | undefined
     if (meshes.length > 0) {
       const m = meshes[0]
       const geom = m.geometry.clone()
@@ -213,12 +239,20 @@ export async function buildModel(entry: ModelEntry): Promise<Built> {
         for (let i = 0; i < indices.length; i++) indices[i] = i
       }
       collider = RAPIER.ColliderDesc.trimesh(positions, indices)
+
+      // Debug wireframe from the same baked geometry
+      const edgeGeom = new THREE.EdgesGeometry(geom)
+      const edgeMat = new THREE.LineBasicMaterial({ color: 0xff8800 })
+      debugMesh = new THREE.LineSegments(edgeGeom, edgeMat)
+      debugMesh.name = `collider_${entry.name ?? 'model'}`
+
       if (meshes.length > 1) {
         console.warn(
           `[stage] model ${entry.name ?? entry.filename} has ${meshes.length} sub-meshes; only the first contributes to the collider`,
         )
       }
     }
+    return { object: root, collider, debugMesh }
   }
 
   return { object: root, collider }

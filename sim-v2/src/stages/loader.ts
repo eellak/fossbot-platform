@@ -8,6 +8,8 @@ export interface StageHandle {
   name: StageName
   spawnPosition: THREE.Vector3
   spawnOrientation: THREE.Euler
+  /** Group containing debug wireframes for every stage collider. Hidden by default. */
+  collidersGroup: THREE.Group
   dispose: () => void
 }
 
@@ -28,6 +30,12 @@ export async function loadStage(
   const spawnOrientation = DEFAULT_ORIENT.clone()
   const modelLoads: Promise<void>[] = []
 
+  // Collect debug wireframes for every stage collider here.
+  const stgCollidersGrp = new THREE.Group()
+  stgCollidersGrp.name = 'stage_colliders'
+  stgCollidersGrp.visible = false
+  scene.add(stgCollidersGrp)
+
   for (const entry of entries) {
     const type = entry.type as string
     log.world(
@@ -39,6 +47,7 @@ export async function loadStage(
         scene.add(built.object)
         objects.push(built.object)
         if (built.collider) world.createCollider(built.collider, stageBody)
+        if (built.debugMesh) stgCollidersGrp.add(built.debugMesh)
         break
       }
       case 'cube': {
@@ -46,6 +55,7 @@ export async function loadStage(
         scene.add(built.object)
         objects.push(built.object)
         if (built.collider) world.createCollider(built.collider, stageBody)
+        if (built.debugMesh) stgCollidersGrp.add(built.debugMesh)
         break
       }
       case 'cylinder': {
@@ -53,6 +63,7 @@ export async function loadStage(
         scene.add(built.object)
         objects.push(built.object)
         if (built.collider) world.createCollider(built.collider, stageBody)
+        if (built.debugMesh) stgCollidersGrp.add(built.debugMesh)
         break
       }
       case 'fossbot': {
@@ -68,6 +79,7 @@ export async function loadStage(
             scene.add(built.object)
             objects.push(built.object)
             if (built.collider) world.createCollider(built.collider, stageBody)
+            if (built.debugMesh) stgCollidersGrp.add(built.debugMesh)
           })
           .catch((err) => {
             console.warn(`[stage] model load failed: ${(entry as any).filename}`, err)
@@ -81,12 +93,13 @@ export async function loadStage(
   }
 
   await Promise.all(modelLoads)
-  log.world(`loaded stage ${name}: ${objects.length} objects`)
+  log.world(`loaded stage ${name}: ${objects.length} objects, ${stgCollidersGrp.children.length} collider wireframes`)
 
   return {
     name,
     spawnPosition,
     spawnOrientation,
+    collidersGroup: stgCollidersGrp,
     dispose() {
       for (const obj of objects) {
         scene.remove(obj)
@@ -100,6 +113,17 @@ export async function loadStage(
           }
         })
       }
+      // Dispose stage collider wireframes.
+      scene.remove(stgCollidersGrp)
+      stgCollidersGrp.traverse((child) => {
+        if ((child as any).isMesh || (child as any).isLineSegments) {
+          const m = child as THREE.Mesh | THREE.LineSegments
+          m.geometry?.dispose()
+          const mat = m.material as THREE.Material | THREE.Material[]
+          if (Array.isArray(mat)) mat.forEach((mt) => mt.dispose())
+          else mat?.dispose()
+        }
+      })
       // Removing the body cascades to its colliders.
       world.removeRigidBody(stageBody)
     },
