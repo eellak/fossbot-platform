@@ -6,6 +6,7 @@ import { attachDebugMenu, type DebugMenuHandle } from './tuner/debug'
 import { initializeWorld, stepWorld } from './physics/world'
 import { createRobotBody, type RobotPhysicsState } from './physics/robotBody'
 import { syncMeshFromBody, syncObjectToBody } from './physics/mesh-sync'
+import { log } from './util/log'
 
 export function App() {
   const containerRef = useRef<HTMLDivElement | null>(null)
@@ -20,24 +21,21 @@ export function App() {
 
     const initializePhysics = async () => {
       try {
-        console.log('[physics] initializePhysics start')
-        // Initialize physics world
+        log.physics('initializePhysics start')
         await initializeWorld()
-        console.log('[physics] world initialized')
+        log.physics('world initialized')
 
-        // Load robot model
         const robot = await loadRobotV2()
-        console.log('[physics] robot loaded')
+        log.physics('robot loaded')
         if (cancelled) return
 
         handle.scene.add(robot.root)
-        console.log('[physics] robot added to scene')
+        log.physics('robot added to scene')
         handle.gizmoTarget = robot.root
         robotRoot = robot.root
 
-        // Create physics body for the robot (uses default spawn position)
         robotPhysics = await createRobotBody(robot, new THREE.Vector3(0, 1.05, 0))
-        console.log('[physics] createRobotBody returned', !!robotPhysics)
+        log.physics('createRobotBody returned', !!robotPhysics)
         if (cancelled) return
 
         // Attach position tuner (includes collider toggle in Actions folder)
@@ -69,7 +67,7 @@ export function App() {
             if (robotPhysics && robotRoot) {
               const dbgPos = robotPhysics.body.translation()
               if (!highYLogged && dbgPos.y > 1.9) {
-                console.log('[physics] body exceeded 1.9m at start of step', dbgPos)
+                log.physics('body exceeded 1.9m at start of step', dbgPos)
                 highYLogged = true
               }
               if (!fellThroughLogged && dbgPos.y < -5) {

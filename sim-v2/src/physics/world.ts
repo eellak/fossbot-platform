@@ -1,4 +1,5 @@
 import * as RAPIER from "@dimforge/rapier3d-compat";
+import { log } from "../util/log";
 
 let worldInstance: RAPIER.World | null = null;
 let initialized = false;
@@ -26,8 +27,7 @@ export async function initializeWorld(): Promise<RAPIER.World> {
   const groundShape = RAPIER.ColliderDesc.cuboid(50, 0.01, 50); // 100m x 0.02m x 100m
   world.createCollider(groundShape, groundBody);
 
-  console.log('[physics] world initialized with timestep', world.timestep, 'ground body:', groundBody, 'gravity:', world.gravity);
-  console.log('[physics] ground body handle:', groundBody, '(should have 1 cuboid collider)');
+  log.world('initialized', { timestep: world.timestep, gravity: world.gravity });
 
   worldInstance = world;
   initialized = true;

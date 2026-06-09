@@ -1,5 +1,6 @@
 import * as RAPIER from "@dimforge/rapier3d-compat";
 import * as THREE from "three";
+import { isLogEnabled, log } from "../util/log";
 
 /**
  * Syncs a Three.js mesh position/rotation to match a Rapier RigidBody,
@@ -15,6 +16,7 @@ import * as THREE from "three";
  */
 
 const tmpVec3 = new THREE.Vector3();
+let firstSyncLogged = false;
 
 export interface MeshSyncState {
   meshOffsetLocal?: { x: number; y: number; z: number };
@@ -42,15 +44,15 @@ export function syncMeshFromBody(
       z: pos.z - tmpVec3.z,
     };
 
-    // Log first frame only to avoid spam
-    if (globalThis._syncLogOnce === undefined) {
-      globalThis._syncLogOnce = true;
-      console.log('[mesh-sync] FIRST SYNC:');
-      console.log(`  body.translation() = (${pos.x.toFixed(5)}, ${pos.y.toFixed(5)}, ${pos.z.toFixed(5)})`);
-      console.log(`  meshOffsetLocal = (${state.meshOffsetLocal.x.toFixed(5)}, ${state.meshOffsetLocal.y.toFixed(5)}, ${state.meshOffsetLocal.z.toFixed(5)})`);
-      console.log(`  rotatedOffset = (${tmpVec3.x.toFixed(5)}, ${tmpVec3.y.toFixed(5)}, ${tmpVec3.z.toFixed(5)})`);
-      console.log(`  setting meshRoot.position = (${newPos.x.toFixed(5)}, ${newPos.y.toFixed(5)}, ${newPos.z.toFixed(5)})`);
-      console.log(`  meshRoot currently at = (${meshRoot.position.x.toFixed(5)}, ${meshRoot.position.y.toFixed(5)}, ${meshRoot.position.z.toFixed(5)})`);
+    if (!firstSyncLogged && isLogEnabled('sync')) {
+      firstSyncLogged = true;
+      log.sync('first sync', {
+        bodyTranslation: { x: pos.x, y: pos.y, z: pos.z },
+        meshOffsetLocal: state.meshOffsetLocal,
+        rotatedOffset: { x: tmpVec3.x, y: tmpVec3.y, z: tmpVec3.z },
+        targetMeshPos: newPos,
+        currentMeshPos: { x: meshRoot.position.x, y: meshRoot.position.y, z: meshRoot.position.z },
+      });
     }
 
     meshRoot.position.set(newPos.x, newPos.y, newPos.z);
