@@ -4,19 +4,39 @@ import type { RobotV2 } from '../robot/v2'
 import { ROBOT_COLLIDERS } from './colliders'
 
 // ── Tunable parameters ───────────────────────────────────────────────────────
-const MOTOR_FORCE = 12        // forward drive strength
-const BRAKE_STRENGTH = 12     // how hard it resists rolling
-const GRIP_STRENGTH = 20      // lateral anti-slip
-const SUSPENSION_STIFFNESS = 650
-const SUSPENSION_DAMPING = 35
-const SUSPENSION_REST_LENGTH = 0.02
-const MAX_SUSPENSION_FORCE = 40
-const MAX_TIRE_FORCE = 80
-const TIRE_LOAD_FACTOR = 1.5
-const FREE_SPIN_SPEED = 8
+export interface VehicleSettings {
+  motorForce: number
+  brakeStrength: number
+  gripStrength: number
+  suspensionStiffness: number
+  suspensionDamping: number
+  suspensionRestLength: number
+  maxSuspensionForce: number
+  maxTireForce: number
+  tireLoadFactor: number
+  freeSpinSpeed: number
+  slopeFactor: number
+  wheelRadius: number
+}
+
+export function createDefaultVehicleSettings(wheelRadius: number): VehicleSettings {
+  return {
+    motorForce: 12,
+    brakeStrength: 12,
+    gripStrength: 20,
+    suspensionStiffness: 650,
+    suspensionDamping: 35,
+    suspensionRestLength: 0.02,
+    maxSuspensionForce: 40,
+    maxTireForce: 80,
+    tireLoadFactor: 1.5,
+    freeSpinSpeed: 8,
+    slopeFactor: 0.4,
+    wheelRadius,
+  }
+}
+
 const GRAVITY = 9.81
-const SLOPE_FACTOR = 0.4      // how hard gravity pulls on slopes (0..1)
-const SLOPE_SLEEP_THRESHOLD = 0.3 // m/s — below this, switch to slope hold
 
 // ── Interface ────────────────────────────────────────────────────────────────
 export interface VehicleHandle {
@@ -26,6 +46,7 @@ export interface VehicleHandle {
   ) => void
   step: (dt: number) => void
   getTelemetry: () => VehicleTelemetry
+  settings: VehicleSettings
   dispose: () => void
 }
 
@@ -60,10 +81,10 @@ const _vPoint = new THREE.Vector3()
 const _force = new THREE.Vector3()
 const _tmp = new THREE.Vector3()
 
-function createWheelTelemetry(): WheelTelemetry {
+function createWheelTelemetry(settings: VehicleSettings): WheelTelemetry {
   return {
     contact: false,
-    suspensionLength: SUSPENSION_REST_LENGTH,
+    suspensionLength: settings.suspensionRestLength,
     normalY: 1,
     longitudinalVelocity: 0,
     lateralVelocity: 0,
@@ -77,13 +98,14 @@ export function createVehicle(
   chassis: RAPIER.RigidBody,
   robot: RobotV2,
 ): VehicleHandle {
+  const settings = createDefaultVehicleSettings(robot.wheelRadius)
   let leftInput = 0
   let rightInput = 0
   const wheelSpin = [0, 0]
   const wheelHadContact = [false, false]
   const telemetry: VehicleTelemetry = {
-    left: createWheelTelemetry(),
-    right: createWheelTelemetry(),
+    left: createWheelTelemetry(settings),
+    right: createWheelTelemetry(settings),
   }
   const wheelTelemetry = [telemetry.left, telemetry.right]
   const visualWheels = [robot.leftWheel, robot.rightWheel]
@@ -138,7 +160,7 @@ export function createVehicle(
     wheels.forEach((localPos, i) => {
       const wheelData = wheelTelemetry[i]
       wheelData.contact = false
-      wheelData.suspensionLength = SUSPENSION_REST_LENGTH
+      wheelData.suspensionLength = settings.suspensionRestLength
       wheelData.normalY = 1
       wheelData.longitudinalVelocity = 0
       wheelData.lateralVelocity = 0
@@ -148,7 +170,7 @@ export function createVehicle(
       // --- wheel world position ---
       _wheelWorld
         .copy(localPos)
-        .addScaledVector(_localSuspensionDir, -SUSPENSION_REST_LENGTH)
+        .addScaledVector(_localSuspensionDir, -settings.suspensionRestLength)
         .applyQuaternion(quat)
       _wheelWorld.add(_chassisWorld)
 
@@ -160,7 +182,7 @@ export function createVehicle(
 
       const hit = world.castRayAndGetNormal(
         ray,
-        SUSPENSION_REST_LENGTH + robot.wheelRadius,
+        settings.suspensionRestLength + settings.wheelRadius,
         true,
         undefined,
         undefined,
@@ -168,7 +190,7 @@ export function createVehicle(
         chassis,
       )
 
-      if (!hit || hit.timeOfImpact >= SUSPENSION_REST_LENGTH + robot.wheelRadius) return
+      if (!hit || hit.timeOfImpact >= settings.suspensionRestLength + settings.wheelRadius) return
 
       const toi = hit.timeOfImpact
 
@@ -182,14 +204,14 @@ export function createVehicle(
       _vPoint.copy(_vel).add(_tmp.copy(_ang).cross(_r))
 
       // --- suspension: spring compression plus damping along the contact normal ---
-      const suspensionLength = Math.max(0, toi - robot.wheelRadius)
-      const compression = SUSPENSION_REST_LENGTH - suspensionLength
-      const spring = compression * SUSPENSION_STIFFNESS
-      const damper = -_vPoint.dot(_normal) * SUSPENSION_DAMPING
+      const suspensionLength = Math.max(0, toi - settings.wheelRadius)
+      const compression = settings.suspensionRestLength - suspensionLength
+      const spring = compression * settings.suspensionStiffness
+      const damper = -_vPoint.dot(_normal) * settings.suspensionDamping
       const suspensionForce = THREE.MathUtils.clamp(
         spring + damper,
         0,
-        MAX_SUSPENSION_FORCE,
+        settings.maxSuspensionForce,
       )
 
       if (suspensionForce > 0) {
@@ -217,21 +239,20 @@ export function createVehicle(
       wheelData.normalY = _normal.y
       wheelData.longitudinalVelocity = vLong
       wheelData.lateralVelocity = vLat
-      wheelSpin[i] += (vLong / robot.wheelRadius) * dt
+      wheelSpin[i] += (vLong / settings.wheelRadius) * dt
       visualWheels[i].rotation.x = wheelSpin[i]
       visualWheels[i].position.copy(visualWheelBasePositions[i])
-      visualWheels[i].position.y += SUSPENSION_REST_LENGTH - suspensionLength
+      visualWheels[i].position.y += settings.suspensionRestLength - suspensionLength
 
-      const groundedRatio = suspensionForce / MAX_SUSPENSION_FORCE
       const maxLoadedTireForce = Math.min(
-        MAX_TIRE_FORCE,
-        suspensionForce * TIRE_LOAD_FACTOR,
+        settings.maxTireForce,
+        suspensionForce * settings.tireLoadFactor,
       )
 
       // Slope detection: sin(angle) of the incline from the contact normal.
       // _normal.y = 1 on flat, < 1 on slope. sqrt(1 - n.y²) gives sin(angle).
       const slopeSin = Math.sqrt(Math.max(0, 1 - _normal.y * _normal.y))
-      const slopeHold = chassis.mass() * GRAVITY * slopeSin * SLOPE_FACTOR
+      const slopeHold = chassis.mass() * GRAVITY * slopeSin * settings.slopeFactor
 
       // Slope hold sign: opposite to the direction the robot is sliding along the slope.
       // vLong > 0 = moving forward/down the slope → need negative (uphill) hold force.
@@ -241,14 +262,14 @@ export function createVehicle(
 
       // --- longitudinal tire force: motor plus rolling brake to cancel slip ---
       const fLong = THREE.MathUtils.clamp(
-        input * MOTOR_FORCE - vLong * BRAKE_STRENGTH + slopeDirSign * slopeHold * _forward.y,
+        input * settings.motorForce - vLong * settings.brakeStrength + slopeDirSign * slopeHold * _forward.y,
         -maxLoadedTireForce,
         maxLoadedTireForce,
       )
 
       // --- lateral tire force: grip cancels sideways velocity on the contact plane ---
       const fLat = THREE.MathUtils.clamp(
-        -vLat * GRIP_STRENGTH + slopeDirSign * slopeHold * _right.y,
+        -vLat * settings.gripStrength + slopeDirSign * slopeHold * _right.y,
         -maxLoadedTireForce,
         maxLoadedTireForce,
       )
@@ -271,7 +292,7 @@ export function createVehicle(
     wheels.forEach((_, i) => {
       const input = i === 0 ? leftInput : rightInput
       if (wheelHadContact[i] || Math.abs(input) <= 0.01) return
-      wheelSpin[i] += input * FREE_SPIN_SPEED * dt
+      wheelSpin[i] += input * settings.freeSpinSpeed * dt
       visualWheels[i].rotation.x = wheelSpin[i]
       visualWheels[i].position.copy(visualWheelBasePositions[i])
     })
@@ -280,6 +301,7 @@ export function createVehicle(
   return {
     setDrive,
     step,
+    settings,
     getTelemetry() {
       return telemetry
     },

@@ -1,5 +1,5 @@
 import GUI from 'lil-gui'
-import type { RobotV2 } from '../robot/v2'
+import type { RobotV2 } from '../../robot/v2'
 
 // Fender values are in CAD-mm pre-flip frame (the same units as PART_DEFAULTS in v2.ts).
 // Wheel values are in WORLD-mm Y-up frame (root-local). We display mm and write
@@ -30,13 +30,13 @@ interface TunerState {
   wheelScale: number
 }
 
-export interface PositionTunerHandle {
+export interface VisualTunerHandle {
   dispose: () => void
   /** If embedded, this is the Actions folder where caller can attach toggles */
   actionsFolder?: ReturnType<GUI['addFolder']>
 }
 
-export function buildPositionTunerFolder(parentGui: GUI, robot: RobotV2): PositionTunerHandle {
+export function buildVisualTunerFolder(parentGui: GUI, robot: RobotV2): VisualTunerHandle {
   const d = robot.defaults
 
   const state: TunerState = {
@@ -163,7 +163,7 @@ export function buildPositionTunerFolder(parentGui: GUI, robot: RobotV2): Positi
   }
 
   // Create a folder under the provided parent GUI
-  const gui = parentGui.addFolder('v2 Position Tuner')
+  const gui = parentGui.addFolder('v2 Visual Tuner')
 
   const onChange = () => apply()
 

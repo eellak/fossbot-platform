@@ -5,8 +5,8 @@
  */
 import GUI from 'lil-gui'
 import * as THREE from 'three'
-import type { RobotV2 } from '../robot/v2'
-import { ROBOT_COLLIDERS, type PrimitiveColliderConfig } from '../physics/colliders'
+import type { RobotV2 } from '../../robot/v2'
+import { ROBOT_COLLIDERS, type PrimitiveColliderConfig } from '../../physics/colliders'
 
 export interface CollidersTunerHandle {
   dispose: () => void
@@ -258,21 +258,6 @@ export function buildCollidersTunerFolder(
 
   // ── Actions ───────────────────────────────────────────
   const actions = gui.addFolder('Actions')
-
-  // Collider visibility toggle — controls both robot and stage wireframes.
-  const toggleState = { show: false }
-  actions
-    .add(toggleState, 'show')
-    .name('Show Colliders')
-    .onChange((v: boolean) => {
-      if (collidersGroup) collidersGroup.visible = v
-      // Also toggle the stage colliders group (sibling in the scene).
-      const scene = robot.root.parent
-      if (scene) {
-        const stgGrp = scene.getObjectByName('stage_colliders')
-        if (stgGrp) stgGrp.visible = v
-      }
-    })
 
   const dump = () => {
     let out = `export const ROBOT_COLLIDERS: PrimitiveColliderConfig[] = [\n`
