@@ -1,223 +1,288 @@
 import * as RAPIER from '@dimforge/rapier3d-compat'
+import * as THREE from 'three'
 import type { RobotV2 } from '../robot/v2'
-import { log } from '../util/log'
-import { checkSuspensionHealth } from '../util/suspension'
-import { ROBOT_MASS_KG } from './robotBody'
+import { ROBOT_COLLIDERS } from './colliders'
 
-/**
- * Phase 5: DynamicRayCastVehicleController wrapper for the v2 robot's two
- * drive wheels. The caster stays a passive Ball collider on the chassis —
- * the controller is car-shaped (N raycast wheels) and treats wheel 0 / 1 as
- * left / right drives. No steering: differential drive comes from asymmetric
- * engine forces.
- *
- * Update order each physics step (per Rapier API contract):
- *   vehicle.setDrive(...)       // once per frame, persists on the controller
- *   vehicle.updateBeforeStep(dt) // applies suspension/friction/engine/brake
- *   world.step()                // integrates the resulting velocities
- *   vehicle.updateVisualWheels(robot)  // sync wheel meshes from controller
- *
- * The visual wheel groups are children of the chassis pivot (`robot.root`),
- * so we can set wheel local position from the controller's body-local state
- * directly — no need to transform through the chassis world matrix.
- */
+// ── Tunable parameters ───────────────────────────────────────────────────────
+const MOTOR_FORCE = 12        // forward drive strength
+const BRAKE_STRENGTH = 12     // how hard it resists rolling
+const GRIP_STRENGTH = 20      // lateral anti-slip
+const SUSPENSION_STIFFNESS = 650
+const SUSPENSION_DAMPING = 35
+const SUSPENSION_REST_LENGTH = 0.02
+const MAX_SUSPENSION_FORCE = 40
+const MAX_TIRE_FORCE = 80
+const TIRE_LOAD_FACTOR = 1.5
+const FREE_SPIN_SPEED = 8
+const GRAVITY = 9.81
+const SLOPE_FACTOR = 0.4      // how hard gravity pulls on slopes (0..1)
+const SLOPE_SLEEP_THRESHOLD = 0.3 // m/s — below this, switch to slope hold
 
-// Wheel geometry — radius matches the existing wheel cylinder collider in
-// `physics/colliders.ts` (per the user's note: "wheels as large as current
-// collisions"). Suspension rest length is small (2 cm) since the robot is
-// small and we don't want noticeable bobbing.
-export const WHEEL_RADIUS = 0.035
-export const SUSPENSION_REST_LENGTH = 0.01
-
-// Visual wheel y in body-local (matches LEFT_WHEEL_POS_M.y in robot/v2.ts).
-// Placing the suspension TOP at this y + restLength means the wheel center
-// sits at exactly this y when the suspension is fully extended (in air).
-const VISUAL_WHEEL_Y = 0.029
-
-// Chassis-local connection points (suspension TOP).
-const CONN_LEFT = { x: -0.079, y: VISUAL_WHEEL_Y + SUSPENSION_REST_LENGTH, z: -0.0407 }
-const CONN_RIGHT = { x: 0.079, y: VISUAL_WHEEL_Y + SUSPENSION_REST_LENGTH, z: -0.0407 }
-
-const SUSPENSION_DIR = { x: 0, y: -1, z: 0 } // ray casts downward
-const AXLE_DIR = { x: 1, y: 0, z: 0 }        // wheels spin around body-local X
-
-// Tunable parameters — sane defaults for ~2 kg robot. Car-scale numbers
-// (e.g. friction 1000, stiffness 24, restLength 0.8) flip a small chassis;
-// see the API docs warning on wheelFrictionSlip.
-const SUSPENSION_STIFFNESS = 2000
-const MAX_SUSPENSION_TRAVEL = 0.02
-const FRICTION_SLIP = 1.2
-const SIDE_FRICTION_STIFFNESS = 0.5
-const SUSPENSION_COMPRESSION = 10.0
-const SUSPENSION_RELAXATION = 25.0
-
-export const MAX_ENGINE_FORCE = 3.0 // Newtons per wheel
-export const MAX_BRAKE = 10.0
-export const TURN_FORCE_SCALAR = 0.4
-
-const LEFT = 0
-const RIGHT = 1
-
+// ── Interface ────────────────────────────────────────────────────────────────
 export interface VehicleHandle {
-  controller: RAPIER.DynamicRayCastVehicleController
-  /** Set engine force per wheel (Newtons) and brake (0..MAX_BRAKE). Persists. */
-  setDrive: (leftForce: number, rightForce: number, leftBrake: number, rightBrake: number) => void
-  /** Call BEFORE world.step() each physics step. */
-  updateBeforeStep: (dt: number) => void
-  /** Call AFTER mesh sync each frame to position the wheel meshes. */
-  updateVisualWheels: (robot: RobotV2) => void
+  setDrive: (
+    left: number,   // -1..1
+    right: number,  // -1..1
+  ) => void
+  step: (dt: number) => void
+  getTelemetry: () => VehicleTelemetry
   dispose: () => void
+}
+
+export interface VehicleTelemetry {
+  left: WheelTelemetry
+  right: WheelTelemetry
+}
+
+export interface WheelTelemetry {
+  contact: boolean
+  suspensionLength: number
+  normalY: number
+  longitudinalVelocity: number
+  lateralVelocity: number
+  longitudinalForce: number
+  lateralForce: number
+}
+
+// ── Temp vectors (avoid allocations) ─────────────────────────────────────────
+const _forward = new THREE.Vector3()
+const _right = new THREE.Vector3()
+const _normal = new THREE.Vector3()
+const _contact = new THREE.Vector3()
+const _wheelWorld = new THREE.Vector3()
+const _chassisWorld = new THREE.Vector3()
+const _rayDir = new THREE.Vector3()
+const _localSuspensionDir = new THREE.Vector3()
+const _r = new THREE.Vector3()
+const _vel = new THREE.Vector3()
+const _ang = new THREE.Vector3()
+const _vPoint = new THREE.Vector3()
+const _force = new THREE.Vector3()
+const _tmp = new THREE.Vector3()
+
+function createWheelTelemetry(): WheelTelemetry {
+  return {
+    contact: false,
+    suspensionLength: SUSPENSION_REST_LENGTH,
+    normalY: 1,
+    longitudinalVelocity: 0,
+    lateralVelocity: 0,
+    longitudinalForce: 0,
+    lateralForce: 0,
+  }
 }
 
 export function createVehicle(
   world: RAPIER.World,
   chassis: RAPIER.RigidBody,
+  robot: RobotV2,
 ): VehicleHandle {
-  const vc = world.createVehicleController(chassis)
-  // Rapier exposes these as property setters (NOT methods). The forward-axis
-  // setter is awkwardly named `setIndexForwardAxis` but is still a setter.
-  vc.indexUpAxis = 1 // Y up
-    ; (vc as any).setIndexForwardAxis = 2 // Z forward (matches v2 robot's "front")
-
-  // Wheel order matters: 0 = left, 1 = right.
-  vc.addWheel(CONN_LEFT, SUSPENSION_DIR, AXLE_DIR, SUSPENSION_REST_LENGTH, WHEEL_RADIUS)
-  vc.addWheel(CONN_RIGHT, SUSPENSION_DIR, AXLE_DIR, SUSPENSION_REST_LENGTH, WHEEL_RADIUS)
-
-  for (const i of [LEFT, RIGHT]) {
-    vc.setWheelSuspensionStiffness(i, SUSPENSION_STIFFNESS)
-    vc.setWheelMaxSuspensionTravel(i, MAX_SUSPENSION_TRAVEL)
-    vc.setWheelFrictionSlip(i, FRICTION_SLIP)
-    vc.setWheelSideFrictionStiffness(i, SIDE_FRICTION_STIFFNESS)
-    vc.setWheelSuspensionCompression(i, SUSPENSION_COMPRESSION)
-    vc.setWheelSuspensionRelaxation(i, SUSPENSION_RELAXATION)
+  let leftInput = 0
+  let rightInput = 0
+  const wheelSpin = [0, 0]
+  const wheelHadContact = [false, false]
+  const telemetry: VehicleTelemetry = {
+    left: createWheelTelemetry(),
+    right: createWheelTelemetry(),
   }
+  const wheelTelemetry = [telemetry.left, telemetry.right]
+  const visualWheels = [robot.leftWheel, robot.rightWheel]
+  const visualWheelBasePositions = [
+    robot.leftWheel.position.clone(),
+    robot.rightWheel.position.clone(),
+  ]
 
-  log.physics(
-    `vehicle created: 2 raycast wheels @ r=${WHEEL_RADIUS}, restLen=${SUSPENSION_REST_LENGTH}`,
-  )
+  const leftWheelCollider = ROBOT_COLLIDERS.find((cfg) => cfg.name === 'left_wheel')
+  const rightWheelCollider = ROBOT_COLLIDERS.find((cfg) => cfg.name === 'right_wheel')
+  const wheels = [
+    leftWheelCollider
+      ? new THREE.Vector3(...leftWheelCollider.position)
+      : robot.leftWheel.position.clone(),
+    rightWheelCollider
+      ? new THREE.Vector3(...rightWheelCollider.position)
+      : robot.rightWheel.position.clone(),
+  ]
 
-  checkSuspensionHealth(
-    ROBOT_MASS_KG,
-    world.gravity.y,
-    2,
-    SUSPENSION_STIFFNESS,
-    SUSPENSION_REST_LENGTH,
-    MAX_SUSPENSION_TRAVEL
-  )
-
-  return {
-    controller: vc,
-    setDrive(leftForce, rightForce, leftBrake, rightBrake) {
-      vc.setWheelEngineForce(LEFT, leftForce)
-      vc.setWheelEngineForce(RIGHT, rightForce)
-      vc.setWheelBrake(LEFT, leftBrake)
-      vc.setWheelBrake(RIGHT, rightBrake)
-      if (Math.abs(leftForce) > 0 && Math.abs(rightForce) > 0) {
-        if (chassis.isSleeping()) chassis.wakeUp()
-      }
-    },
-    updateBeforeStep(dt) {
-      vc.updateVehicle(dt)
-    },
-    updateVisualWheels(robot) {
-      // Wheel groups are children of robot.root (chassis frame) — set their
-      // body-local transforms directly from the controller state.
-      const wheels: ReadonlyArray<readonly [number, typeof robot.leftWheel]> = [
-        [LEFT, robot.leftWheel],
-        [RIGHT, robot.rightWheel],
-      ]
-
-      const MAX_UPDWARD_TRAVEL = 0.005
-
-      for (const [i, group] of wheels) {
-        const conn = vc.wheelChassisConnectionPointCs(i)
-        const susp = vc.wheelSuspensionLength(i)
-        const roll = vc.wheelRotation(i)
-        if (!conn || susp == null || roll == null) continue
-
-        const clampedSusp = Math.max(susp, MAX_UPDWARD_TRAVEL);
-
-        // Wheel center (body-local) = connection + susp * (0, -1, 0).
-        group.position.set(conn.x, conn.y - clampedSusp, conn.z)
-        // Spin around body-local X (axle).
-        group.rotation.set(roll, 0, 0)
-      }
-    },
-    dispose() {
-      world.removeVehicleController(vc)
-    },
-  }
-}
-
-/**
- * Map a set of pressed keys (lower-cased) to (leftForce, rightForce, brake).
- * Differential drive: forward/back are symmetric; A/D produce asymmetric
- * forces for skid-steer turns. Space brakes both wheels.
- *
- * Handedness: with Y up and +Z forward, "turn right" (D) means the robot
- * yaws clockwise when viewed from above — left wheel forward, right reverse.
- */
-export function computeDrive(pressed: ReadonlySet<string>): {
-  left: number
-  right: number
-  leftBrake: number
-  rightBrake: number
-} {
-  const fwd = pressed.has('w') || pressed.has('arrowup')
-  const back = pressed.has('s') || pressed.has('arrowdown')
-  const a = pressed.has('a') || pressed.has('arrowleft')
-  const d = pressed.has('d') || pressed.has('arrowright')
-  const spacebar = pressed.has(' ')
-
-  let left = 0
-  let right = 0
-  let leftBrake = 0
-  let rightBrake = 0
-
-  // Forward / backward
-  if (fwd) {
-    left = 1;
-    right = 1;
-  } else if (back) {
-    left = -1;
-    right = -1;
-  }
-
-  if (d) {
-    if (fwd || back) {
-      right *= 0.2;
-    } else {
-      right = -TURN_FORCE_SCALAR;
-      left = TURN_FORCE_SCALAR;
-    }
-  } else if (a) {
-    if (fwd || back) {
-      left *= 0.2;
-    } else {
-      left = -TURN_FORCE_SCALAR;
-      right = TURN_FORCE_SCALAR;
+  function setDrive(left: number, right: number) {
+    leftInput = left
+    rightInput = right
+    if ((left !== 0 || right !== 0) && chassis.isSleeping()) {
+      chassis.wakeUp()
     }
   }
 
-  // Braking
-  if (spacebar) {
-    // Hard stop — also cancels any in-place rotation.
-    leftBrake = MAX_BRAKE;
-    rightBrake = MAX_BRAKE;
-    left = 0;
-    right = 0;
-  } else if (!fwd && !back && !a && !d) {
-    // Idle state: hold the robot still so micro-oscillations from suspension
-    // settling don't creep the wheels. 2.0 out of MAX_BRAKE=10 is enough
-    // to resist drift without feeling sticky when driving starts.
-    leftBrake = 0.05;
-    rightBrake = 0.05;
+  function step(dt: number) {
+    chassis.resetForces(true)
+    chassis.resetTorques(true)
+
+    const linvel = chassis.linvel()
+    const angvel = chassis.angvel()
+
+    _vel.set(linvel.x, linvel.y, linvel.z)
+    _ang.set(angvel.x, angvel.y, angvel.z)
+
+    const chassisPos = chassis.translation()
+    const chassisRot = chassis.rotation()
+    _chassisWorld.set(chassisPos.x, chassisPos.y, chassisPos.z)
+    const quat = new THREE.Quaternion(
+      chassisRot.x,
+      chassisRot.y,
+      chassisRot.z,
+      chassisRot.w,
+    )
+    _localSuspensionDir.set(0, -1, 0)
+    _rayDir.copy(_localSuspensionDir).applyQuaternion(quat).normalize()
+    wheelHadContact[0] = false
+    wheelHadContact[1] = false
+
+    wheels.forEach((localPos, i) => {
+      const wheelData = wheelTelemetry[i]
+      wheelData.contact = false
+      wheelData.suspensionLength = SUSPENSION_REST_LENGTH
+      wheelData.normalY = 1
+      wheelData.longitudinalVelocity = 0
+      wheelData.lateralVelocity = 0
+      wheelData.longitudinalForce = 0
+      wheelData.lateralForce = 0
+
+      // --- wheel world position ---
+      _wheelWorld
+        .copy(localPos)
+        .addScaledVector(_localSuspensionDir, -SUSPENSION_REST_LENGTH)
+        .applyQuaternion(quat)
+      _wheelWorld.add(_chassisWorld)
+
+      // --- raycast down ---
+      const ray = new RAPIER.Ray(
+        { x: _wheelWorld.x, y: _wheelWorld.y, z: _wheelWorld.z },
+        { x: _rayDir.x, y: _rayDir.y, z: _rayDir.z },
+      )
+
+      const hit = world.castRayAndGetNormal(
+        ray,
+        SUSPENSION_REST_LENGTH + robot.wheelRadius,
+        true,
+        undefined,
+        undefined,
+        undefined,
+        chassis,
+      )
+
+      if (!hit || hit.timeOfImpact >= SUSPENSION_REST_LENGTH + robot.wheelRadius) return
+
+      const toi = hit.timeOfImpact
+
+      _contact.copy(_wheelWorld).addScaledVector(_rayDir, toi)
+      _normal.set(hit.normal.x, hit.normal.y, hit.normal.z).normalize()
+      if (_normal.dot(_rayDir) >= -0.1) return
+
+      // Velocity at the tire contact patch: chassis linear velocity plus
+      // angular velocity around the chassis COM.
+      _r.copy(_contact).sub(_chassisWorld)
+      _vPoint.copy(_vel).add(_tmp.copy(_ang).cross(_r))
+
+      // --- suspension: spring compression plus damping along the contact normal ---
+      const suspensionLength = Math.max(0, toi - robot.wheelRadius)
+      const compression = SUSPENSION_REST_LENGTH - suspensionLength
+      const spring = compression * SUSPENSION_STIFFNESS
+      const damper = -_vPoint.dot(_normal) * SUSPENSION_DAMPING
+      const suspensionForce = THREE.MathUtils.clamp(
+        spring + damper,
+        0,
+        MAX_SUSPENSION_FORCE,
+      )
+
+      if (suspensionForce > 0) {
+        _force.copy(_normal).multiplyScalar(suspensionForce)
+        chassis.addForceAtPoint(
+          { x: _force.x, y: _force.y, z: _force.z },
+          { x: _contact.x, y: _contact.y, z: _contact.z },
+          true,
+        )
+      }
+
+      // --- tire basis: chassis forward/right flattened onto the contact plane ---
+      _forward.set(0, 0, -1).applyQuaternion(quat)
+      _forward.projectOnPlane(_normal).normalize()
+
+      _right.crossVectors(_forward, _normal).normalize()
+
+      const vLong = _vPoint.dot(_forward)
+      const vLat = _vPoint.dot(_right)
+
+      const input = i === 0 ? leftInput : rightInput
+      wheelHadContact[i] = true
+      wheelData.contact = true
+      wheelData.suspensionLength = suspensionLength
+      wheelData.normalY = _normal.y
+      wheelData.longitudinalVelocity = vLong
+      wheelData.lateralVelocity = vLat
+      wheelSpin[i] += (vLong / robot.wheelRadius) * dt
+      visualWheels[i].rotation.x = wheelSpin[i]
+      visualWheels[i].position.copy(visualWheelBasePositions[i])
+      visualWheels[i].position.y += SUSPENSION_REST_LENGTH - suspensionLength
+
+      const groundedRatio = suspensionForce / MAX_SUSPENSION_FORCE
+      const maxLoadedTireForce = Math.min(
+        MAX_TIRE_FORCE,
+        suspensionForce * TIRE_LOAD_FACTOR,
+      )
+
+      // Slope detection: sin(angle) of the incline from the contact normal.
+      // _normal.y = 1 on flat, < 1 on slope. sqrt(1 - n.y²) gives sin(angle).
+      const slopeSin = Math.sqrt(Math.max(0, 1 - _normal.y * _normal.y))
+      const slopeHold = chassis.mass() * GRAVITY * slopeSin * SLOPE_FACTOR
+
+      // Slope hold sign: opposite to the direction the robot is sliding along the slope.
+      // vLong > 0 = moving forward/down the slope → need negative (uphill) hold force.
+      // vLong < 0 = moving backward/up the slope → need positive (downhill) hold force.
+      // This ensures the robot can descent controllably and climb without stalling.
+      const slopeDirSign = vLong > 0 ? -1 : 1
+
+      // --- longitudinal tire force: motor plus rolling brake to cancel slip ---
+      const fLong = THREE.MathUtils.clamp(
+        input * MOTOR_FORCE - vLong * BRAKE_STRENGTH + slopeDirSign * slopeHold * _forward.y,
+        -maxLoadedTireForce,
+        maxLoadedTireForce,
+      )
+
+      // --- lateral tire force: grip cancels sideways velocity on the contact plane ---
+      const fLat = THREE.MathUtils.clamp(
+        -vLat * GRIP_STRENGTH + slopeDirSign * slopeHold * _right.y,
+        -maxLoadedTireForce,
+        maxLoadedTireForce,
+      )
+
+      wheelData.longitudinalForce = fLong
+      wheelData.lateralForce = fLat
+
+      _force
+        .copy(_forward)
+        .multiplyScalar(fLong)
+        .add(_tmp.copy(_right).multiplyScalar(fLat))
+
+      chassis.addForceAtPoint(
+        { x: _force.x, y: _force.y, z: _force.z },
+        { x: _contact.x, y: _contact.y, z: _contact.z },
+        true,
+      )
+    })
+
+    wheels.forEach((_, i) => {
+      const input = i === 0 ? leftInput : rightInput
+      if (wheelHadContact[i] || Math.abs(input) <= 0.01) return
+      wheelSpin[i] += input * FREE_SPIN_SPEED * dt
+      visualWheels[i].rotation.x = wheelSpin[i]
+      visualWheels[i].position.copy(visualWheelBasePositions[i])
+    })
   }
 
   return {
-    left: left * MAX_ENGINE_FORCE,
-    right: right * MAX_ENGINE_FORCE,
-    leftBrake,
-    rightBrake
+    setDrive,
+    step,
+    getTelemetry() {
+      return telemetry
+    },
+    dispose() { },
   }
 }

@@ -1,7 +1,7 @@
 import * as RAPIER from '@dimforge/rapier3d-compat'
 import * as THREE from 'three'
 import { STAGES, type StageName } from './index'
-import { buildFloor, buildCube, buildCylinder, buildModel } from './builders'
+import { buildFloor, buildCube, buildCylinder, buildModel, buildText } from './builders'
 import { log } from '../util/log'
 
 export interface StageHandle {
@@ -85,6 +85,12 @@ export async function loadStage(
             console.warn(`[stage] model load failed: ${(entry as any).filename}`, err)
           })
         modelLoads.push(p)
+        break
+      }
+      case 'text': {
+        const built = buildText(entry as any)
+        scene.add(built.object)
+        objects.push(built.object)
         break
       }
       default:

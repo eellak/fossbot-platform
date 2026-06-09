@@ -41,6 +41,7 @@ interface CubeEntry {
   dimensions: [number, number, number]
   material?: { color?: string | number }
   position: [number, number, number]
+  orientation?: [number, number, number]
   name?: string
   castShadow?: boolean
 }
@@ -65,6 +66,16 @@ interface ModelEntry {
   castShadow?: boolean
   immovable?: boolean
   mass?: number
+}
+
+interface TextEntry {
+  type: 'text'
+  text: string
+  position: [number, number, number]
+  color?: string | number
+  scale?: number
+  onFloor?: boolean
+  name?: string
 }
 
 const textureLoader = new THREE.TextureLoader()
@@ -129,11 +140,20 @@ export function buildCube(entry: CubeEntry): Built {
   const mat = new THREE.MeshStandardMaterial({ color: parseColor(entry.material?.color) })
   const mesh = new THREE.Mesh(geom, mat)
   mesh.position.fromArray(entry.position)
+  if (entry.orientation) {
+    mesh.rotation.set(entry.orientation[0], entry.orientation[1], entry.orientation[2])
+  }
   mesh.name = entry.name ?? 'cube'
   if (entry.castShadow) mesh.castShadow = true
 
   const collider = RAPIER.ColliderDesc.cuboid(w / 2, h / 2, d / 2)
     .setTranslation(entry.position[0], entry.position[1], entry.position[2])
+  if (entry.orientation) {
+    const q = new THREE.Quaternion().setFromEuler(
+      new THREE.Euler(entry.orientation[0], entry.orientation[1], entry.orientation[2]),
+    )
+    collider.setRotation({ x: q.x, y: q.y, z: q.z, w: q.w })
+  }
 
   // Debug wireframe
   const debugGeom = new THREE.BoxGeometry(w, h, d)
@@ -141,6 +161,9 @@ export function buildCube(entry: CubeEntry): Built {
   const debugMesh = new THREE.Mesh(debugGeom, debugMat)
   debugMesh.name = `collider_${entry.name ?? 'cube'}`
   debugMesh.position.fromArray(entry.position)
+  if (entry.orientation) {
+    debugMesh.rotation.set(entry.orientation[0], entry.orientation[1], entry.orientation[2])
+  }
 
   return { object: mesh, collider, debugMesh }
 }
@@ -256,4 +279,55 @@ export async function buildModel(entry: ModelEntry): Promise<Built> {
   }
 
   return { object: root, collider }
+}
+
+export function buildText(entry: TextEntry): Built {
+  const canvas = document.createElement('canvas')
+  canvas.width = 512
+  canvas.height = 160
+  const ctx = canvas.getContext('2d')
+  if (!ctx) throw new Error('Could not create text label canvas')
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height)
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.88)'
+  ctx.fillRect(0, 0, canvas.width, canvas.height)
+  ctx.strokeStyle = 'rgba(0, 0, 0, 0.35)'
+  ctx.lineWidth = 8
+  ctx.strokeRect(4, 4, canvas.width - 8, canvas.height - 8)
+  ctx.fillStyle = new THREE.Color(parseColor(entry.color)).getStyle()
+  ctx.font = '700 56px sans-serif'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(entry.text, canvas.width / 2, canvas.height / 2)
+
+  const texture = new THREE.CanvasTexture(canvas)
+  const scale = entry.scale ?? 0.75
+
+  if (entry.onFloor) {
+    const geometry = new THREE.PlaneGeometry(scale, scale * (canvas.height / canvas.width))
+    geometry.rotateX(-Math.PI / 2)
+    const material = new THREE.MeshBasicMaterial({
+      map: texture,
+      transparent: true,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      polygonOffset: true,
+      polygonOffsetFactor: -1,
+      polygonOffsetUnits: -1,
+    })
+    const mesh = new THREE.Mesh(geometry, material)
+    mesh.position.fromArray(entry.position)
+    mesh.renderOrder = 10
+    mesh.name = entry.name ?? 'floor_text_label'
+
+    return { object: mesh }
+  }
+
+  const material = new THREE.SpriteMaterial({ map: texture, transparent: true })
+  const sprite = new THREE.Sprite(material)
+  sprite.scale.set(scale, scale * (canvas.height / canvas.width), 1)
+  sprite.position.fromArray(entry.position)
+  sprite.name = entry.name ?? 'text_label'
+
+  return { object: sprite }
 }
