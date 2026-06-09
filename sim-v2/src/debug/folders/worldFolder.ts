@@ -1,6 +1,7 @@
 import GUI from 'lil-gui'
 import type { RobotV2 } from '../../robot/v2'
 import type { DebugMenuOptions } from '../types'
+import { setSplashEnabled, setSplashExtraTime } from '../utils/localStorage'
 
 export function buildWorldFolder(parentGui: GUI, robot: RobotV2, opts: DebugMenuOptions) {
   const folder = parentGui.addFolder('World')
@@ -9,6 +10,8 @@ export function buildWorldFolder(parentGui: GUI, robot: RobotV2, opts: DebugMenu
     timeScale: opts.controls.world.timeScale,
     gravityY: opts.world.gravity.y,
     showColliders: opts.controls.world.showColliders,
+    splashEnabled: opts.controls.world.splashEnabled,
+    splashExtraTime: opts.controls.world.splashExtraTime,
     stepOnce: () => {
       opts.controls.world.stepOnce = true
     },
@@ -32,5 +35,13 @@ export function buildWorldFolder(parentGui: GUI, robot: RobotV2, opts: DebugMenu
     opts.world.gravity.y = v
   })
   folder.add(state, 'showColliders').name('Show colliders').onChange(setColliderVisibility)
+  folder.add(state, 'splashEnabled').name('Startup splash').onChange((v: boolean) => {
+    opts.controls.world.splashEnabled = v
+    setSplashEnabled(v)
+  })
+  folder.add(state, 'splashExtraTime', 0, 10, 0.25).name('Splash extra seconds').onChange((v: number) => {
+    opts.controls.world.splashExtraTime = v
+    setSplashExtraTime(v)
+  })
   folder.close()
 }

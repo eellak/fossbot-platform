@@ -50,7 +50,7 @@ const PART_DEFAULTS: Partial<Record<PartName, PartAdjust>> = {
 
 // Tuned defaults from the position tuner. Body / wheel poses below override
 // the geometric auto-alignment so the spawned robot matches the saved config.
-const BODY_OFFSET_M: [number, number, number] = [0, -0.007, 0]
+const BODY_OFFSET_M: [number, number, number] = [0, 0.008, 0]
 const LEFT_WHEEL_POS_M: [number, number, number] = [-0.079, 0.039, -0.0407]
 const RIGHT_WHEEL_POS_M: [number, number, number] = [0.079, 0.039, -0.0407]
 const WHEEL_SCALE_MULT = 1.1

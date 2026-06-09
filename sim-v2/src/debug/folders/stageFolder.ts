@@ -6,6 +6,7 @@ import type { StageFolderHandle } from '../types'
 export interface StageFolderOptions {
   initial: StageName
   onChange: (next: StageName) => void
+  resetRobotToSpawn: () => void
 }
 
 export function buildStageFolder(
@@ -31,6 +32,8 @@ export function buildStageFolder(
     .onChange((value: boolean) => {
       setRememberLastStage(value, state.stage)
     })
+
+  folder.add({ resetRobotToSpawn: opts.resetRobotToSpawn }, 'resetRobotToSpawn').name('Reset to spawn')
 
   return {
     setStage(name) {
