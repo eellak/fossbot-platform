@@ -4,6 +4,7 @@ import { MeshSyncState } from "./mesh-sync";
 import { getWorld } from "./world";
 import type { RobotV2 } from "../robot/v2";
 import { ROBOT_COLLIDERS, type PrimitiveColliderConfig } from "./colliders";
+import { log } from "../util/log";
 
 const ROBOT_MASS_KG = 2.0;
 
@@ -139,14 +140,12 @@ export async function createRobotBody(
     }
   }
 
-  console.log(
-    `[physics] Created ${colliderCount} primitive colliders, ${visualCount} debug meshes`
-  );
+  log.physics(`created ${colliderCount} primitive colliders, ${visualCount} debug meshes`);
 
   // Enforce total mass to exactly ROBOT_MASS_KG
   body.setAdditionalMass(ROBOT_MASS_KG - body.mass(), true);
   body.recomputeMassPropertiesFromColliders();
-  console.log(`[physics] Robot body mass: ${body.mass().toFixed(3)} kg`);
+  log.physics(`robot body mass: ${body.mass().toFixed(3)} kg`);
 
   body.setLinearDamping(0.5);
   body.setAngularDamping(0.5);
