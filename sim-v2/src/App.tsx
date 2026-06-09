@@ -37,11 +37,12 @@ export function App() {
       body.setAngvel({ x: 0, y: 0, z: 0 }, true)
     }
 
-    const swapStage = (next: StageName) => {
+    const swapStage = async (next: StageName) => {
       if (!currentStage || cancelled) return
       log.world('swap stage', currentStage.name, '→', next)
       currentStage.dispose()
-      currentStage = loadStage(next, handle.scene, getWorld())
+      currentStage = await loadStage(next, handle.scene, getWorld())
+      if (cancelled) return
       applySpawnPose(currentStage)
     }
 
@@ -51,7 +52,7 @@ export function App() {
         await initializeWorld()
         log.physics('world initialized')
 
-        currentStage = loadStage(DEFAULT_STAGE, handle.scene, getWorld())
+        currentStage = await loadStage(DEFAULT_STAGE, handle.scene, getWorld())
 
         const robot = await loadRobotV2()
         log.physics('robot loaded')

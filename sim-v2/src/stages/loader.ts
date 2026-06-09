@@ -1,7 +1,7 @@
 import * as RAPIER from '@dimforge/rapier3d-compat'
 import * as THREE from 'three'
 import { STAGES, type StageName } from './index'
-import { buildFloor, buildCube, buildCylinder } from './builders'
+import { buildFloor, buildCube, buildCylinder, buildModel } from './builders'
 import { log } from '../util/log'
 
 export interface StageHandle {
@@ -14,41 +14,45 @@ export interface StageHandle {
 const DEFAULT_SPAWN = new THREE.Vector3(0, 0, 0)
 const DEFAULT_ORIENT = new THREE.Euler(0, 0, 0)
 
-export function loadStage(
+export async function loadStage(
   name: StageName,
   scene: THREE.Scene,
   world: RAPIER.World,
-): StageHandle {
+): Promise<StageHandle> {
   const entries = STAGES[name]
   if (!entries) throw new Error(`Stage not found: ${name}`)
 
   const stageBody = world.createRigidBody(RAPIER.RigidBodyDesc.fixed())
-  const meshes: THREE.Mesh[] = []
-  let spawnPosition = DEFAULT_SPAWN.clone()
-  let spawnOrientation = DEFAULT_ORIENT.clone()
+  const objects: THREE.Object3D[] = []
+  const spawnPosition = DEFAULT_SPAWN.clone()
+  const spawnOrientation = DEFAULT_ORIENT.clone()
+  const modelLoads: Promise<void>[] = []
 
   for (const entry of entries) {
     const type = entry.type as string
+    log.world(
+      `dimensions: ${JSON.stringify((entry as any).dimensions)}, position: ${JSON.stringify((entry as any).position)}, orientation: ${JSON.stringify((entry as any).orientation)}`
+    )
     switch (type) {
       case 'floor': {
-        const { mesh, collider } = buildFloor(entry as any)
-        scene.add(mesh)
-        meshes.push(mesh)
-        world.createCollider(collider, stageBody)
+        const built = buildFloor(entry as any)
+        scene.add(built.object)
+        objects.push(built.object)
+        if (built.collider) world.createCollider(built.collider, stageBody)
         break
       }
       case 'cube': {
-        const { mesh, collider } = buildCube(entry as any)
-        scene.add(mesh)
-        meshes.push(mesh)
-        world.createCollider(collider, stageBody)
+        const built = buildCube(entry as any)
+        scene.add(built.object)
+        objects.push(built.object)
+        if (built.collider) world.createCollider(built.collider, stageBody)
         break
       }
       case 'cylinder': {
-        const { mesh, collider } = buildCylinder(entry as any)
-        scene.add(mesh)
-        meshes.push(mesh)
-        world.createCollider(collider, stageBody)
+        const built = buildCylinder(entry as any)
+        scene.add(built.object)
+        objects.push(built.object)
+        if (built.collider) world.createCollider(built.collider, stageBody)
         break
       }
       case 'fossbot': {
@@ -59,7 +63,16 @@ export function loadStage(
         break
       }
       case 'model': {
-        log.world(`stage ${name}: skipping 'model' entry (Phase 4 minimum slice)`, entry.name)
+        const p = buildModel(entry as any)
+          .then((built) => {
+            scene.add(built.object)
+            objects.push(built.object)
+            if (built.collider) world.createCollider(built.collider, stageBody)
+          })
+          .catch((err) => {
+            console.warn(`[stage] model load failed: ${(entry as any).filename}`, err)
+          })
+        modelLoads.push(p)
         break
       }
       default:
@@ -67,19 +80,25 @@ export function loadStage(
     }
   }
 
-  log.world(`loaded stage ${name}: ${meshes.length} meshes`)
+  await Promise.all(modelLoads)
+  log.world(`loaded stage ${name}: ${objects.length} objects`)
 
   return {
     name,
     spawnPosition,
     spawnOrientation,
     dispose() {
-      for (const mesh of meshes) {
-        scene.remove(mesh)
-        mesh.geometry.dispose()
-        const mat = mesh.material
-        if (Array.isArray(mat)) mat.forEach((m) => m.dispose())
-        else mat.dispose()
+      for (const obj of objects) {
+        scene.remove(obj)
+        obj.traverse((child) => {
+          const mesh = child as THREE.Mesh
+          if (mesh.isMesh) {
+            mesh.geometry?.dispose()
+            const mat = mesh.material
+            if (Array.isArray(mat)) mat.forEach((m) => m.dispose())
+            else mat?.dispose()
+          }
+        })
       }
       // Removing the body cascades to its colliders.
       world.removeRigidBody(stageBody)

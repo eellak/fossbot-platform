@@ -68,23 +68,9 @@ export function initScene(container: HTMLElement): SceneHandle {
   dir.shadow.camera.bottom = -5
   scene.add(dir)
 
-  // Ground plane (visual only in Phase 1; physics ground comes in Phase 3)
-  const groundGeo = new THREE.PlaneGeometry(20, 20)
-  const groundMat = new THREE.MeshStandardMaterial({
-    color: 0x2a2f36,
-    roughness: 0.95,
-    metalness: 0.0,
-  })
-  const ground = new THREE.Mesh(groundGeo, groundMat)
-  ground.rotation.x = -Math.PI / 2
-  ground.receiveShadow = true
-  scene.add(ground)
-
-  const grid = new THREE.GridHelper(20, 40, 0x4a5260, 0x303640)
-  grid.position.y = 0.001
-  scene.add(grid)
-
   // World axes at origin: X red, Y green, Z blue. 0.3m so it's visible but not noisy.
+  // Floor / ground are owned by the active stage (Phase 4) — no default plane
+  // here, otherwise it z-fights with stage floors.
   const worldAxes = new THREE.AxesHelper(0.3)
   worldAxes.position.y = 0.002
   scene.add(worldAxes)
