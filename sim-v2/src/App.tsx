@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
 import { initScene, disposeScene, type SceneHandle } from './scene/scene'
 import { loadRobotV2, type RobotV2 } from './robot/v2'
-import { attachDebugMenu, type DebugMenuHandle } from './debug'
+import { attachDebugMenu, type DebugMenuHandle, type RuntimeControls } from './debug'
 import { initializeWorld, getWorld, stepWorld } from './physics/world'
 import { createRobotBody, type RobotPhysicsState } from './physics/robotBody'
 import { syncMeshFromBody, syncObjectToBody } from './physics/mesh-sync'
@@ -10,7 +10,13 @@ import { createVehicle, type VehicleHandle } from './physics/vehicle'
 import { loadStage, DEFAULT_STAGE, type StageHandle, type StageName } from './stages'
 import { installKeyboard, type KeyboardHandle } from './util/keyboard'
 import { log } from './util/log'
-import { getRememberedStage, rememberStage, shouldRememberLastStage } from './debug/mapPicker'
+import {
+  getRememberedStage,
+  getTelemetryOverlayDefault,
+  rememberStage,
+  setTelemetryOverlayVisible,
+  shouldRememberLastStage,
+} from './debug/utils/localStorage'
 
 export function App() {
   const containerRef = useRef<HTMLDivElement | null>(null)
@@ -26,6 +32,44 @@ export function App() {
     let currentStage: StageHandle | null = null
     let vehicle: VehicleHandle | null = null
     let keyboard: KeyboardHandle | null = null
+    let telemetryElapsed = 0
+    const telemetryOverlayDefault = getTelemetryOverlayDefault()
+    const runtimeControls: RuntimeControls = {
+      world: {
+        paused: false,
+        timeScale: 1,
+        stepOnce: false,
+        showColliders: false,
+      },
+      drive: {
+        turnScale: 0.35,
+      },
+      telemetry: {
+        show: telemetryOverlayDefault,
+        updateInterval: 0.2,
+      },
+    }
+
+    const telemetryOverlay = document.createElement('pre')
+    telemetryOverlay.style.position = 'absolute'
+    telemetryOverlay.style.left = '8px'
+    telemetryOverlay.style.bottom = '8px'
+    telemetryOverlay.style.zIndex = '10'
+    telemetryOverlay.style.margin = '0'
+    telemetryOverlay.style.padding = '8px 10px'
+    telemetryOverlay.style.maxWidth = '390px'
+    telemetryOverlay.style.background = 'rgba(0, 0, 0, 0.72)'
+    telemetryOverlay.style.color = '#d8f5d0'
+    telemetryOverlay.style.font = '12px/1.35 ui-monospace, SFMono-Regular, Menlo, monospace'
+    telemetryOverlay.style.pointerEvents = 'none'
+    telemetryOverlay.style.display = telemetryOverlayDefault ? 'block' : 'none'
+    telemetryOverlay.textContent = 'Vehicle telemetry pending...'
+    containerRef.current.appendChild(telemetryOverlay)
+
+    const setTelemetryVisible = (visible: boolean) => {
+      telemetryOverlay.style.display = visible ? 'block' : 'none'
+      setTelemetryOverlayVisible(visible)
+    }
 
     const applySpawnPose = (stage: StageHandle) => {
       if (!robotPhysics) return
@@ -54,6 +98,7 @@ export function App() {
       if (cancelled) return
       rememberStage(next)
       currentStage.collidersGroup.visible = stageCollidersWereVisible
+      if (runtimeControls.world.showColliders) currentStage.collidersGroup.visible = true
       applySpawnPose(currentStage)
     }
 
@@ -92,6 +137,15 @@ export function App() {
         debugMenu = attachDebugMenu(robot, {
           initialStage: currentStage.name,
           onStageChange: swapStage,
+          world: getWorld(),
+          robotPhysics,
+          vehicle,
+          controls: runtimeControls,
+          getCurrentStage: () => currentStage,
+          resetRobotToSpawn: () => {
+            if (currentStage) applySpawnPose(currentStage)
+          },
+          setTelemetryVisible,
         })
 
         let accumulator = 0
@@ -111,14 +165,18 @@ export function App() {
           // persist on the joint until changed.
           if (vehicle && keyboard) {
             const throttle = keyboard.pressed.has('w') ? 1 : keyboard.pressed.has('s') ? -1 : 0
-            const turn = keyboard.pressed.has('d') ? 0.35 : keyboard.pressed.has('a') ? -0.35 : 0
+            const turn = keyboard.pressed.has('d') ? runtimeControls.drive.turnScale : keyboard.pressed.has('a') ? -runtimeControls.drive.turnScale : 0
             vehicle.setDrive(
               THREE.MathUtils.clamp(throttle + turn, -1, 1),
               THREE.MathUtils.clamp(throttle - turn, -1, 1),
             )
           }
 
-          accumulator += clampedDt
+          const shouldStepOnce = runtimeControls.world.stepOnce
+          if (shouldStepOnce) runtimeControls.world.stepOnce = false
+          if (!runtimeControls.world.paused || shouldStepOnce) {
+            accumulator += shouldStepOnce ? dt : clampedDt * runtimeControls.world.timeScale
+          }
           try {
             while (accumulator >= dt) {
               if (vehicle) vehicle.step(dt)
@@ -151,6 +209,22 @@ export function App() {
 
               syncMeshFromBody(robotRoot, robotPhysics.body, robotPhysics.meshSync)
               syncObjectToBody(robotPhysics.collidersGroup, robotPhysics.body)
+
+              telemetryElapsed += clampedDt
+              if (vehicle && runtimeControls.telemetry.show && telemetryElapsed >= runtimeControls.telemetry.updateInterval) {
+                telemetryElapsed = 0
+                const linvel = robotPhysics.body.linvel()
+                const q = new THREE.Quaternion(rot.x, rot.y, rot.z, rot.w)
+                const yaw = new THREE.Euler().setFromQuaternion(q, 'YXZ').y
+                const wheel = vehicle.getTelemetry()
+                telemetryOverlay.textContent = [
+                  `stage: ${currentStage?.name ?? 'unknown'}`,
+                  `pos: x=${pos.x.toFixed(2)} y=${pos.y.toFixed(2)} z=${pos.z.toFixed(2)} yaw=${yaw.toFixed(2)}`,
+                  `speed: ${Math.hypot(linvel.x, linvel.z).toFixed(2)} m/s vy=${linvel.y.toFixed(2)} m/s`,
+                  `L: contact=${wheel.left.contact ? 'yes' : 'no'} susp=${wheel.left.suspensionLength.toFixed(3)} nY=${wheel.left.normalY.toFixed(2)} vLong=${wheel.left.longitudinalVelocity.toFixed(2)} fLong=${wheel.left.longitudinalForce.toFixed(1)}`,
+                  `R: contact=${wheel.right.contact ? 'yes' : 'no'} susp=${wheel.right.suspensionLength.toFixed(3)} nY=${wheel.right.normalY.toFixed(2)} vLong=${wheel.right.longitudinalVelocity.toFixed(2)} fLong=${wheel.right.longitudinalForce.toFixed(1)}`,
+                ].join('\n')
+              }
             }
           } catch (err) {
             console.error('[physics] Exception during physics step/sync:', err)
@@ -179,6 +253,7 @@ export function App() {
       vehicle?.dispose()
       debugMenu?.dispose()
       currentStage?.dispose()
+      telemetryOverlay.remove()
       disposeScene(handle)
     }
   }, [])
