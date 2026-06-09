@@ -31,7 +31,7 @@ export function createDefaultVehicleSettings(wheelRadius: number): VehicleSettin
     maxTireForce: 80,
     tireLoadFactor: 1.5,
     freeSpinSpeed: 8,
-    slopeFactor: 0.4,
+    slopeFactor: 1.0,
     wheelRadius,
   }
 }
@@ -80,6 +80,8 @@ const _ang = new THREE.Vector3()
 const _vPoint = new THREE.Vector3()
 const _force = new THREE.Vector3()
 const _tmp = new THREE.Vector3()
+const _downSlope = new THREE.Vector3()
+const _holdVec = new THREE.Vector3()
 
 function createWheelTelemetry(settings: VehicleSettings): WheelTelemetry {
   return {
@@ -249,27 +251,40 @@ export function createVehicle(
         suspensionForce * settings.tireLoadFactor,
       )
 
-      // Slope detection: sin(angle) of the incline from the contact normal.
-      // _normal.y = 1 on flat, < 1 on slope. sqrt(1 - n.y²) gives sin(angle).
+      // Slope-hold via direct gravity projection onto the contact plane.
+      // No velocity-based sign: the anti-gravity force is a function of
+      // geometry, not motion, so it works correctly at rest, across-slope,
+      // or at any yaw.
+      //
+      // Applied at the chassis CoM (NOT the wheel contact point) so the two
+      // wheels' identical world-frame slope-hold forces don't induce a
+      // spurious torque about the CoM through their offset wheel contacts.
+      // That offset-induced yaw torque was what caused cross-slope chassis
+      // to slowly self-rotate toward slope-aligned, drifting visually.
+      // Side effect: slope-hold bypasses the per-wheel maxLoadedTireForce
+      // clamp — accept that, since the goal is stable hold, and the
+      // physical "tire would slip" case is rare on our 25° ceiling.
+      //
+      // _downSlope = world-frame "downhill" unit vector in the contact
+      //   plane: project (0,-1,0) onto the plane perpendicular to the
+      //   contact normal. (-Y) − (−Y · n)·n = (-Y) + n.y·n.
       const slopeSin = Math.sqrt(Math.max(0, 1 - _normal.y * _normal.y))
-      const slopeHold = chassis.mass() * GRAVITY * slopeSin * settings.slopeFactor
-
-      // Slope hold sign: opposite to the direction the robot is sliding along the slope.
-      // vLong > 0 = moving forward/down the slope → need negative (uphill) hold force.
-      // vLong < 0 = moving backward/up the slope → need positive (downhill) hold force.
-      // This ensures the robot can descent controllably and climb without stalling.
-      const slopeDirSign = vLong > 0 ? -1 : 1
+      _downSlope.set(0, -1, 0).addScaledVector(_normal, _normal.y)
+      if (_downSlope.lengthSq() > 1e-8) _downSlope.normalize()
+      const holdMag = (chassis.mass() * GRAVITY * slopeSin * settings.slopeFactor) / 2
+      _holdVec.copy(_downSlope).multiplyScalar(-holdMag)
+      chassis.addForce({ x: _holdVec.x, y: _holdVec.y, z: _holdVec.z }, true)
 
       // --- longitudinal tire force: motor plus rolling brake to cancel slip ---
       const fLong = THREE.MathUtils.clamp(
-        input * settings.motorForce - vLong * settings.brakeStrength + slopeDirSign * slopeHold * _forward.y,
+        input * settings.motorForce - vLong * settings.brakeStrength,
         -maxLoadedTireForce,
         maxLoadedTireForce,
       )
 
       // --- lateral tire force: grip cancels sideways velocity on the contact plane ---
       const fLat = THREE.MathUtils.clamp(
-        -vLat * settings.gripStrength + slopeDirSign * slopeHold * _right.y,
+        -vLat * settings.gripStrength,
         -maxLoadedTireForce,
         maxLoadedTireForce,
       )
