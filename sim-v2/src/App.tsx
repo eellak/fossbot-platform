@@ -2,10 +2,11 @@ import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
 import { initScene, disposeScene, type SceneHandle } from './scene/scene'
 import { loadRobotV2 } from './robot/v2'
-import { attachDebugMenu, type DebugMenuHandle } from './tuner/debug'
-import { initializeWorld, stepWorld } from './physics/world'
+import { attachDebugMenu, type DebugMenuHandle } from './debug'
+import { initializeWorld, getWorld, stepWorld } from './physics/world'
 import { createRobotBody, type RobotPhysicsState } from './physics/robotBody'
 import { syncMeshFromBody, syncObjectToBody } from './physics/mesh-sync'
+import { loadStage, DEFAULT_STAGE, type StageHandle, type StageName } from './stages'
 import { log } from './util/log'
 
 export function App() {
@@ -18,12 +19,39 @@ export function App() {
     let debugMenu: DebugMenuHandle | null = null
     let robotPhysics: RobotPhysicsState | null = null
     let robotRoot: any = null
+    let currentStage: StageHandle | null = null
+
+    const applySpawnPose = (stage: StageHandle) => {
+      if (!robotPhysics) return
+      const body = robotPhysics.body
+      // Lift the body slightly above the floor so it settles on its wheels
+      // rather than spawning intersecting the ground plane.
+      const spawnY = stage.spawnPosition.y + 0.05
+      body.setTranslation(
+        { x: stage.spawnPosition.x, y: spawnY, z: stage.spawnPosition.z },
+        true,
+      )
+      const q = new THREE.Quaternion().setFromEuler(stage.spawnOrientation)
+      body.setRotation({ x: q.x, y: q.y, z: q.z, w: q.w }, true)
+      body.setLinvel({ x: 0, y: 0, z: 0 }, true)
+      body.setAngvel({ x: 0, y: 0, z: 0 }, true)
+    }
+
+    const swapStage = (next: StageName) => {
+      if (!currentStage || cancelled) return
+      log.world('swap stage', currentStage.name, '→', next)
+      currentStage.dispose()
+      currentStage = loadStage(next, handle.scene, getWorld())
+      applySpawnPose(currentStage)
+    }
 
     const initializePhysics = async () => {
       try {
         log.physics('initializePhysics start')
         await initializeWorld()
         log.physics('world initialized')
+
+        currentStage = loadStage(DEFAULT_STAGE, handle.scene, getWorld())
 
         const robot = await loadRobotV2()
         log.physics('robot loaded')
@@ -34,16 +62,23 @@ export function App() {
         handle.gizmoTarget = robot.root
         robotRoot = robot.root
 
-        robotPhysics = await createRobotBody(robot, new THREE.Vector3(0, 1.05, 0))
+        const initialSpawn = new THREE.Vector3(
+          currentStage.spawnPosition.x,
+          currentStage.spawnPosition.y + 0.05,
+          currentStage.spawnPosition.z,
+        )
+        robotPhysics = await createRobotBody(robot, initialSpawn)
+        applySpawnPose(currentStage)
         log.physics('createRobotBody returned', !!robotPhysics)
         if (cancelled) return
 
-        // Attach position tuner (includes collider toggle in Actions folder)
-        debugMenu = attachDebugMenu(robot)
+        debugMenu = attachDebugMenu(robot, {
+          initialStage: currentStage.name,
+          onStageChange: swapStage,
+        })
 
-        // Set up physics callback to run each frame
         let accumulator = 0
-        const dt = 1 / 60 // Fixed timestep (16.67ms)
+        const dt = 1 / 60
         let physicsCrashed = false
         let highYLogged = false
         let fellThroughLogged = false
@@ -51,11 +86,10 @@ export function App() {
         handle.onRender = (deltaTime: number) => {
           if (physicsCrashed) return
 
-          // Clamp large frame times (e.g., on initial page load, tab background)
-          // to avoid accumulating dozens of physics steps in one frame.
-          const clampedDt = Math.min(deltaTime, 0.05); // Max 50ms per frame
+          // Clamp large frame times (e.g., initial page load, backgrounded tab)
+          // so we don't accumulate dozens of physics steps in one frame.
+          const clampedDt = Math.min(deltaTime, 0.05)
 
-          // Accumulator pattern for fixed physics timestep
           accumulator += clampedDt
           try {
             while (accumulator >= dt) {
@@ -63,7 +97,6 @@ export function App() {
               accumulator -= dt
             }
 
-            // Sync robot mesh to physics body with sanity checks
             if (robotPhysics && robotRoot) {
               const dbgPos = robotPhysics.body.translation()
               if (!highYLogged && dbgPos.y > 1.9) {
@@ -105,7 +138,7 @@ export function App() {
           }
         }
       } catch (err) {
-        console.error('[Phase 3] Physics initialization failed:', err)
+        console.error('[Phase 4] Init failed:', err)
       }
     }
 
@@ -114,6 +147,7 @@ export function App() {
     return () => {
       cancelled = true
       debugMenu?.dispose()
+      currentStage?.dispose()
       disposeScene(handle)
     }
   }, [])
