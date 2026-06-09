@@ -65,6 +65,8 @@ export const DEFAULT_TARGET_WIDTH_M = 0.17
 export interface RobotV2 {
   /** Outer group rotated by yaw in the physics sync; everything else is a child. */
   root: THREE.Group
+  /** Optional debug collider group created by the physics layer. */
+  collidersGroup?: THREE.Object3D
   /** Pivot carrying the Z-up→Y-up correction and uniform scale. */
   pivot: THREE.Group
   /** Visual meshes for the two drive wheels, parented under root. */
@@ -266,7 +268,7 @@ export async function loadRobotV2(targetWidth = DEFAULT_TARGET_WIDTH_M): Promise
 
   console.log(
     `[v2] scale=${scale.toExponential(2)} targetWidth=${targetWidth.toFixed(3)}m ` +
-      `wheelRadius=${wheelRadius.toFixed(4)}m wheelTrack=${wheelTrack.toFixed(4)}m`,
+    `wheelRadius=${wheelRadius.toFixed(4)}m wheelTrack=${wheelTrack.toFixed(4)}m`,
   )
 
   // Capture defaults (after right_fender auto-mirror, before any tuner edits).

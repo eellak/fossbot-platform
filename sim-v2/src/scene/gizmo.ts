@@ -98,8 +98,8 @@ export function createGizmo(renderer: THREE.WebGLRenderer): GizmoHandle {
       // viewport rectangle, but inside the scissor we get a fresh draw.
       renderer.clearDepth()
       // Paint a subtle backdrop so the gizmo reads on light/dark scenes.
-      renderer.setClearColor("#010000", 0.25)
-      renderer.clearColor()
+      // renderer.setClearColor("#010000", 0.25)
+      // renderer.clearColor()
       renderer.render(scene, camera)
       renderer.setScissorTest(false)
     },

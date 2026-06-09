@@ -32,9 +32,11 @@ interface TunerState {
 
 export interface PositionTunerHandle {
   dispose: () => void
+  /** If embedded, this is the Actions folder where caller can attach toggles */
+  actionsFolder?: ReturnType<GUI['addFolder']>
 }
 
-export function attachPositionTuner(robot: RobotV2): PositionTunerHandle {
+export function buildPositionTunerFolder(parentGui: GUI, robot: RobotV2): PositionTunerHandle {
   const d = robot.defaults
 
   const state: TunerState = {
@@ -134,7 +136,7 @@ export function attachPositionTuner(robot: RobotV2): PositionTunerHandle {
     if (navigator.clipboard?.writeText) {
       navigator.clipboard.writeText(block).then(
         () => console.log('[tuner] dump copied to clipboard'),
-        () => {/* clipboard may be denied; log only */},
+        () => {/* clipboard may be denied; log only */ },
       )
     }
   }
@@ -160,14 +162,8 @@ export function attachPositionTuner(robot: RobotV2): PositionTunerHandle {
     allControllers.forEach((c) => c.updateDisplay())
   }
 
-  const gui = new GUI({ title: 'v2 Position Tuner', width: 320 })
-
-  // Mount top-left so it doesn't fight the gizmo (top-right).
-  const root = gui.domElement
-  root.style.position = 'absolute'
-  root.style.top = '8px'
-  root.style.left = '8px'
-  root.style.zIndex = '10'
+  // Create a folder under the provided parent GUI
+  const gui = parentGui.addFolder('v2 Position Tuner')
 
   const onChange = () => apply()
 
@@ -179,6 +175,7 @@ export function attachPositionTuner(robot: RobotV2): PositionTunerHandle {
   allControllers.push(bodyFolder.add(state, 'bodyX', -200, 200, 0.5).name('x').onChange(onChange))
   allControllers.push(bodyFolder.add(state, 'bodyY', -100, 200, 0.5).name('y').onChange(onChange))
   allControllers.push(bodyFolder.add(state, 'bodyZ', -200, 200, 0.5).name('z').onChange(onChange))
+  bodyFolder.close()
 
   const fenderFolder = gui.addFolder('Fenders (CAD-mm, pre-flip)')
   const lf = fenderFolder.addFolder('Left fender')
@@ -196,6 +193,7 @@ export function attachPositionTuner(robot: RobotV2): PositionTunerHandle {
   rightFenderControllers.push(rf.add(state, 'rightFenderX', -100, 100, 0.5).name('x').onChange(onChange))
   rightFenderControllers.push(rf.add(state, 'rightFenderY', -100, 100, 0.5).name('y').onChange(onChange))
   rightFenderControllers.push(rf.add(state, 'rightFenderZ', -50, 100, 0.5).name('z').onChange(onChange))
+  fenderFolder.close()
   allControllers.push(...rightFenderControllers)
 
   const wheelFolder = gui.addFolder('Wheels (world-mm, Y-up)')
@@ -203,6 +201,7 @@ export function attachPositionTuner(robot: RobotV2): PositionTunerHandle {
   allControllers.push(lw.add(state, 'leftWheelX', -200, 200, 0.5).name('x').onChange(onChange))
   allControllers.push(lw.add(state, 'leftWheelY', -50, 100, 0.5).name('y').onChange(onChange))
   allControllers.push(lw.add(state, 'leftWheelZ', -200, 200, 0.5).name('z').onChange(onChange))
+  wheelFolder.close()
 
   const rw = wheelFolder.addFolder('Right wheel')
   allControllers.push(
@@ -218,15 +217,26 @@ export function attachPositionTuner(robot: RobotV2): PositionTunerHandle {
   )
 
   const actions = gui.addFolder('Actions')
+
+
   actions.add({ dump }, 'dump').name('Dump values (console + clipboard)')
   actions.add({ reset }, 'reset').name('Reset to defaults')
+
+  gui.close()
 
   // Initial apply (also disables mirrored controllers).
   apply()
 
   return {
+    mainFolder: gui,
     dispose() {
-      gui.destroy()
+      // Remove the folder DOM element from the parent (best-effort)
+      try {
+        const el = (gui as any).domElement as HTMLElement | undefined
+        if (el && el.parentElement) el.parentElement.removeChild(el)
+      } catch (e) {
+        // ignore
+      }
     },
   }
 }
