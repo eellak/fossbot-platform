@@ -29,9 +29,9 @@ export function createDefaultVehicleSettings(wheelRadius: number): VehicleSettin
     suspensionRestLength: 0.02,
     maxSuspensionForce: 40,
     maxTireForce: 80,
-    tireLoadFactor: 1.5,
+    tireLoadFactor: 0.7,
     freeSpinSpeed: 8,
-    slopeFactor: 1.0,
+    slopeFactor: 0.9,
     wheelRadius,
   }
 }
