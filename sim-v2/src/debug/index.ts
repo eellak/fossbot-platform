@@ -26,6 +26,7 @@ export function attachDebugMenu(
   const stage = buildStageFolder(gui as any, {
     initial: opts.initialStage,
     onChange: opts.onStageChange,
+    resetRobotToSpawn: opts.resetRobotToSpawn,
   })
 
   buildWorldFolder(gui as any, robot, opts)

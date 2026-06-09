@@ -12,13 +12,18 @@ import { installKeyboard, type KeyboardHandle } from './util/keyboard'
 import { log } from './util/log'
 import {
   getRememberedStage,
+  getSplashEnabledDefault,
+  getSplashExtraTimeDefault,
   getTelemetryOverlayDefault,
   rememberStage,
   setTelemetryOverlayVisible,
   shouldRememberLastStage,
 } from './debug/utils/localStorage'
-
-type CameraMode = 'orbit' | 'follow' | 'top'
+import { createTelemetryOverlay } from './ui/telemetryOverlay'
+import { createSplashScreen } from './ui/splashScreen'
+import { createCameraControls } from './ui/cameraControls'
+import { createMovementPresets } from './ui/movementPresets'
+import type { CameraMode } from './ui/cameraTypes'
 
 export function App() {
   const containerRef = useRef<HTMLDivElement | null>(null)
@@ -35,6 +40,10 @@ export function App() {
     let vehicle: VehicleHandle | null = null
     let keyboard: KeyboardHandle | null = null
     let telemetryElapsed = 0
+    let presetLeftInput = 0
+    let presetRightInput = 0
+    let presetRemainingSec = 0
+    let presetTurnTargetYaw: number | null = null
     let cameraMode: CameraMode = 'orbit'
     const savedOrbitCamera = {
       position: handle.camera.position.clone(),
@@ -43,16 +52,19 @@ export function App() {
       target: handle.controls.target.clone(),
     }
     const tmpFollowTarget = new THREE.Vector3()
-    const tmpFollowForward = new THREE.Vector3()
     const tmpFollowPosition = new THREE.Vector3()
     const tmpLookAt = new THREE.Vector3()
     const telemetryOverlayDefault = getTelemetryOverlayDefault()
+    const splashEnabledDefault = getSplashEnabledDefault()
+    const splashExtraTimeDefault = getSplashExtraTimeDefault()
     const runtimeControls: RuntimeControls = {
       world: {
         paused: false,
         timeScale: 1,
         stepOnce: false,
         showColliders: false,
+        splashEnabled: splashEnabledDefault,
+        splashExtraTime: splashExtraTimeDefault,
       },
       drive: {
         turnScale: 0.35,
@@ -63,42 +75,44 @@ export function App() {
       },
     }
 
-    const telemetryOverlay = document.createElement('pre')
-    telemetryOverlay.style.position = 'absolute'
-    telemetryOverlay.style.left = '8px'
-    telemetryOverlay.style.bottom = '8px'
-    telemetryOverlay.style.zIndex = '10'
-    telemetryOverlay.style.margin = '0'
-    telemetryOverlay.style.padding = '8px 10px'
-    telemetryOverlay.style.maxWidth = '390px'
-    telemetryOverlay.style.background = 'rgba(0, 0, 0, 0.72)'
-    telemetryOverlay.style.color = '#d8f5d0'
-    telemetryOverlay.style.font = '12px/1.35 ui-monospace, SFMono-Regular, Menlo, monospace'
-    telemetryOverlay.style.pointerEvents = 'none'
-    telemetryOverlay.style.display = telemetryOverlayDefault ? 'block' : 'none'
-    telemetryOverlay.textContent = 'Vehicle telemetry pending...'
-    containerRef.current.appendChild(telemetryOverlay)
+    const telemetryOverlay = createTelemetryOverlay(containerRef.current, telemetryOverlayDefault)
+    const splash = createSplashScreen(containerRef.current, splashEnabledDefault)
 
     const setTelemetryVisible = (visible: boolean) => {
-      telemetryOverlay.style.display = visible ? 'block' : 'none'
+      telemetryOverlay.setVisible(visible)
       setTelemetryOverlayVisible(visible)
     }
 
-    const cameraModeButton = document.createElement('button')
-    cameraModeButton.type = 'button'
-    cameraModeButton.textContent = 'View: Orbit'
-    cameraModeButton.style.position = 'absolute'
-    cameraModeButton.style.top = '8px'
-    cameraModeButton.style.left = '356px'
-    cameraModeButton.style.zIndex = '11'
-    cameraModeButton.style.padding = '8px 12px'
-    cameraModeButton.style.border = '1px solid rgba(255, 255, 255, 0.18)'
-    cameraModeButton.style.borderRadius = '6px'
-    cameraModeButton.style.background = 'rgba(0, 0, 0, 0.72)'
-    cameraModeButton.style.color = '#ffffff'
-    cameraModeButton.style.font = '600 13px sans-serif'
-    cameraModeButton.style.cursor = 'pointer'
-    containerRef.current.appendChild(cameraModeButton)
+    const triggerPresetDrive = (left: number, right: number, durationSec: number) => {
+      presetLeftInput = left
+      presetRightInput = right
+      presetRemainingSec = durationSec
+      presetTurnTargetYaw = null
+      if (robotPhysics?.body.isSleeping()) robotPhysics.body.wakeUp()
+    }
+
+    const normalizeAngle = (angle: number) => Math.atan2(Math.sin(angle), Math.cos(angle))
+
+    const shortestAngleTo = (current: number, target: number) => normalizeAngle(target - current)
+
+    const getBodyYaw = (body: RobotPhysicsState['body']) => {
+      const rot = body.rotation()
+      return new THREE.Euler().setFromQuaternion(
+        new THREE.Quaternion(rot.x, rot.y, rot.z, rot.w),
+        'YXZ',
+      ).y
+    }
+
+    const triggerPresetTurn = (angle: number) => {
+      if (!robotPhysics) return
+      presetRemainingSec = 0
+      presetLeftInput = 0
+      presetRightInput = 0
+      presetTurnTargetYaw = normalizeAngle(getBodyYaw(robotPhysics.body) + angle)
+      if (robotPhysics.body.isSleeping()) robotPhysics.body.wakeUp()
+    }
+
+    let setCameraModeLabel = (_mode: CameraMode) => {}
 
     const setCameraMode = (next: CameraMode) => {
       if (cameraMode === 'orbit') {
@@ -110,7 +124,7 @@ export function App() {
 
       cameraMode = next
       handle.controls.enabled = next === 'orbit'
-      cameraModeButton.textContent = `View: ${next === 'orbit' ? 'Orbit' : next === 'follow' ? 'Follow' : 'Top'}`
+      setCameraModeLabel(next)
 
       if (next === 'orbit') {
         handle.camera.position.copy(savedOrbitCamera.position)
@@ -122,15 +136,23 @@ export function App() {
       }
     }
 
-    cameraModeButton.addEventListener('click', () => {
+    const cycleCameraMode = () => {
       setCameraMode(cameraMode === 'orbit' ? 'follow' : cameraMode === 'follow' ? 'top' : 'orbit')
+    }
+
+    const cameraControls = createCameraControls(containerRef.current, cycleCameraMode)
+    setCameraModeLabel = cameraControls.setModeLabel
+    const movementPresets = createMovementPresets(containerRef.current, {
+      forward: () => triggerPresetDrive(0.9, 0.9, 0.8),
+      backward: () => triggerPresetDrive(-0.9, -0.9, 0.8),
+      rotateLeft: () => triggerPresetTurn(Math.PI / 2),
+      rotateRight: () => triggerPresetTurn(-Math.PI / 2),
     })
 
     const updateCameraMode = (body: RobotPhysicsState['body']) => {
       if (cameraMode === 'orbit') return
 
       const pos = body.translation()
-      const rot = body.rotation()
       tmpFollowTarget.set(pos.x, pos.y, pos.z)
 
       if (cameraMode === 'top') {
@@ -141,16 +163,12 @@ export function App() {
         return
       }
 
+      if (!robotRoot) return
       handle.camera.up.set(0, 1, 0)
-      const q = new THREE.Quaternion(rot.x, rot.y, rot.z, rot.w)
-      tmpFollowForward.set(0, 0, -1).applyQuaternion(q).normalize()
-      tmpLookAt.copy(tmpFollowTarget).addScaledVector(tmpFollowForward, 0.5)
-      tmpLookAt.y += 0.15
-      tmpFollowPosition
-        .copy(tmpFollowTarget)
-        .addScaledVector(tmpFollowForward, -1.6)
-      tmpFollowPosition.y += 0.75
-      handle.camera.position.lerp(tmpFollowPosition, 0.16)
+      robotRoot.updateMatrixWorld(true)
+      tmpFollowPosition.set(0, 1.15, 1.9).applyMatrix4(robotRoot.matrixWorld)
+      tmpLookAt.set(0, 0.18, -1.0).applyMatrix4(robotRoot.matrixWorld)
+      handle.camera.position.copy(tmpFollowPosition)
       handle.camera.lookAt(tmpLookAt)
       handle.controls.target.copy(tmpLookAt)
     }
@@ -189,12 +207,15 @@ export function App() {
     const initializePhysics = async () => {
       try {
         log.physics('initializePhysics start')
+        splash.setStatus('Initializing Rapier world...')
         await initializeWorld()
         log.physics('world initialized')
 
         const initialStage = shouldRememberLastStage() ? getRememberedStage() ?? DEFAULT_STAGE : DEFAULT_STAGE
+        splash.setStatus(`Loading stage ${initialStage}...`)
         currentStage = await loadStage(initialStage, handle.scene, getWorld())
 
+        splash.setStatus('Loading robot model...')
         robot = await loadRobotV2()
         log.physics('robot loaded')
         if (cancelled) return
@@ -212,6 +233,7 @@ export function App() {
         robotPhysics = await createRobotBody(robot, initialSpawn, {
           skipDriveWheels: true,
         })
+        splash.setStatus('Preparing wheel physics...')
         vehicle = createVehicle(getWorld(), robotPhysics.body, robot)
         keyboard = installKeyboard()
         applySpawnPose(currentStage)
@@ -231,6 +253,7 @@ export function App() {
           },
           setTelemetryVisible,
         })
+        splash.hide(runtimeControls.world.splashExtraTime)
 
         let accumulator = 0
         const dt = 1 / 60
@@ -248,12 +271,36 @@ export function App() {
           // Compute drive once per frame; motor velocity / torque targets
           // persist on the joint until changed.
           if (vehicle && keyboard) {
-            const throttle = keyboard.pressed.has('w') ? 1 : keyboard.pressed.has('s') ? -1 : 0
-            const turn = keyboard.pressed.has('d') ? runtimeControls.drive.turnScale : keyboard.pressed.has('a') ? -runtimeControls.drive.turnScale : 0
-            vehicle.setDrive(
-              THREE.MathUtils.clamp(throttle + turn, -1, 1),
-              THREE.MathUtils.clamp(throttle - turn, -1, 1),
-            )
+            let leftInput: number
+            let rightInput: number
+
+            if (presetTurnTargetYaw != null && robotPhysics) {
+              const yawError = shortestAngleTo(getBodyYaw(robotPhysics.body), presetTurnTargetYaw)
+              if (Math.abs(yawError) < 0.035) {
+                presetTurnTargetYaw = null
+                leftInput = 0
+                rightInput = 0
+              } else {
+                const turnInput = THREE.MathUtils.clamp(yawError * 1.6, -0.75, 0.75)
+                leftInput = -turnInput
+                rightInput = turnInput
+              }
+            } else if (presetRemainingSec > 0) {
+              presetRemainingSec = Math.max(0, presetRemainingSec - clampedDt)
+              leftInput = presetLeftInput
+              rightInput = presetRightInput
+              if (presetRemainingSec === 0) {
+                presetLeftInput = 0
+                presetRightInput = 0
+              }
+            } else {
+              const throttle = keyboard.pressed.has('w') ? 1 : keyboard.pressed.has('s') ? -1 : 0
+              const turn = keyboard.pressed.has('d') ? runtimeControls.drive.turnScale : keyboard.pressed.has('a') ? -runtimeControls.drive.turnScale : 0
+              leftInput = THREE.MathUtils.clamp(throttle + turn, -1, 1)
+              rightInput = THREE.MathUtils.clamp(throttle - turn, -1, 1)
+            }
+
+            vehicle.setDrive(leftInput, rightInput)
           }
 
           const shouldStepOnce = runtimeControls.world.stepOnce
@@ -302,13 +349,13 @@ export function App() {
                 const q = new THREE.Quaternion(rot.x, rot.y, rot.z, rot.w)
                 const yaw = new THREE.Euler().setFromQuaternion(q, 'YXZ').y
                 const wheel = vehicle.getTelemetry()
-                telemetryOverlay.textContent = [
+                telemetryOverlay.setText([
                   `stage: ${currentStage?.name ?? 'unknown'}`,
                   `pos: x=${pos.x.toFixed(2)} y=${pos.y.toFixed(2)} z=${pos.z.toFixed(2)} yaw=${yaw.toFixed(2)}`,
                   `speed: ${Math.hypot(linvel.x, linvel.z).toFixed(2)} m/s vy=${linvel.y.toFixed(2)} m/s`,
                   `L: contact=${wheel.left.contact ? 'yes' : 'no'} susp=${wheel.left.suspensionLength.toFixed(3)} nY=${wheel.left.normalY.toFixed(2)} vLong=${wheel.left.longitudinalVelocity.toFixed(2)} fLong=${wheel.left.longitudinalForce.toFixed(1)}`,
                   `R: contact=${wheel.right.contact ? 'yes' : 'no'} susp=${wheel.right.suspensionLength.toFixed(3)} nY=${wheel.right.normalY.toFixed(2)} vLong=${wheel.right.longitudinalVelocity.toFixed(2)} fLong=${wheel.right.longitudinalForce.toFixed(1)}`,
-                ].join('\n')
+                ].join('\n'))
               }
             }
           } catch (err) {
@@ -338,8 +385,10 @@ export function App() {
       vehicle?.dispose()
       debugMenu?.dispose()
       currentStage?.dispose()
-      telemetryOverlay.remove()
-      cameraModeButton.remove()
+      telemetryOverlay.dispose()
+      splash.dispose()
+      movementPresets.dispose()
+      cameraControls.dispose()
       disposeScene(handle)
     }
   }, [])

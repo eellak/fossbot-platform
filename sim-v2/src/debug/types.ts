@@ -9,6 +9,8 @@ export interface RuntimeControls {
     timeScale: number
     stepOnce: boolean
     showColliders: boolean
+    splashEnabled: boolean
+    splashExtraTime: number
   }
   drive: {
     turnScale: number
