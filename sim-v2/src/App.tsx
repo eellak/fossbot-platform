@@ -18,6 +18,8 @@ import {
   shouldRememberLastStage,
 } from './debug/utils/localStorage'
 
+type CameraMode = 'orbit' | 'follow' | 'top'
+
 export function App() {
   const containerRef = useRef<HTMLDivElement | null>(null)
 
@@ -33,6 +35,17 @@ export function App() {
     let vehicle: VehicleHandle | null = null
     let keyboard: KeyboardHandle | null = null
     let telemetryElapsed = 0
+    let cameraMode: CameraMode = 'orbit'
+    const savedOrbitCamera = {
+      position: handle.camera.position.clone(),
+      quaternion: handle.camera.quaternion.clone(),
+      up: handle.camera.up.clone(),
+      target: handle.controls.target.clone(),
+    }
+    const tmpFollowTarget = new THREE.Vector3()
+    const tmpFollowForward = new THREE.Vector3()
+    const tmpFollowPosition = new THREE.Vector3()
+    const tmpLookAt = new THREE.Vector3()
     const telemetryOverlayDefault = getTelemetryOverlayDefault()
     const runtimeControls: RuntimeControls = {
       world: {
@@ -69,6 +82,77 @@ export function App() {
     const setTelemetryVisible = (visible: boolean) => {
       telemetryOverlay.style.display = visible ? 'block' : 'none'
       setTelemetryOverlayVisible(visible)
+    }
+
+    const cameraModeButton = document.createElement('button')
+    cameraModeButton.type = 'button'
+    cameraModeButton.textContent = 'View: Orbit'
+    cameraModeButton.style.position = 'absolute'
+    cameraModeButton.style.top = '8px'
+    cameraModeButton.style.left = '356px'
+    cameraModeButton.style.zIndex = '11'
+    cameraModeButton.style.padding = '8px 12px'
+    cameraModeButton.style.border = '1px solid rgba(255, 255, 255, 0.18)'
+    cameraModeButton.style.borderRadius = '6px'
+    cameraModeButton.style.background = 'rgba(0, 0, 0, 0.72)'
+    cameraModeButton.style.color = '#ffffff'
+    cameraModeButton.style.font = '600 13px sans-serif'
+    cameraModeButton.style.cursor = 'pointer'
+    containerRef.current.appendChild(cameraModeButton)
+
+    const setCameraMode = (next: CameraMode) => {
+      if (cameraMode === 'orbit') {
+        savedOrbitCamera.position.copy(handle.camera.position)
+        savedOrbitCamera.quaternion.copy(handle.camera.quaternion)
+        savedOrbitCamera.up.copy(handle.camera.up)
+        savedOrbitCamera.target.copy(handle.controls.target)
+      }
+
+      cameraMode = next
+      handle.controls.enabled = next === 'orbit'
+      cameraModeButton.textContent = `View: ${next === 'orbit' ? 'Orbit' : next === 'follow' ? 'Follow' : 'Top'}`
+
+      if (next === 'orbit') {
+        handle.camera.position.copy(savedOrbitCamera.position)
+        handle.camera.quaternion.copy(savedOrbitCamera.quaternion)
+        handle.camera.up.copy(savedOrbitCamera.up)
+        handle.controls.target.copy(savedOrbitCamera.target)
+        handle.camera.updateProjectionMatrix()
+        handle.controls.update()
+      }
+    }
+
+    cameraModeButton.addEventListener('click', () => {
+      setCameraMode(cameraMode === 'orbit' ? 'follow' : cameraMode === 'follow' ? 'top' : 'orbit')
+    })
+
+    const updateCameraMode = (body: RobotPhysicsState['body']) => {
+      if (cameraMode === 'orbit') return
+
+      const pos = body.translation()
+      const rot = body.rotation()
+      tmpFollowTarget.set(pos.x, pos.y, pos.z)
+
+      if (cameraMode === 'top') {
+        handle.camera.position.set(0, 24, 0.001)
+        handle.camera.up.set(0, 0, -1)
+        handle.camera.lookAt(0, 0, 0)
+        handle.controls.target.set(0, 0, 0)
+        return
+      }
+
+      handle.camera.up.set(0, 1, 0)
+      const q = new THREE.Quaternion(rot.x, rot.y, rot.z, rot.w)
+      tmpFollowForward.set(0, 0, -1).applyQuaternion(q).normalize()
+      tmpLookAt.copy(tmpFollowTarget).addScaledVector(tmpFollowForward, 0.5)
+      tmpLookAt.y += 0.15
+      tmpFollowPosition
+        .copy(tmpFollowTarget)
+        .addScaledVector(tmpFollowForward, -1.6)
+      tmpFollowPosition.y += 0.75
+      handle.camera.position.lerp(tmpFollowPosition, 0.16)
+      handle.camera.lookAt(tmpLookAt)
+      handle.controls.target.copy(tmpLookAt)
     }
 
     const applySpawnPose = (stage: StageHandle) => {
@@ -209,6 +293,7 @@ export function App() {
 
               syncMeshFromBody(robotRoot, robotPhysics.body, robotPhysics.meshSync)
               syncObjectToBody(robotPhysics.collidersGroup, robotPhysics.body)
+              updateCameraMode(robotPhysics.body)
 
               telemetryElapsed += clampedDt
               if (vehicle && runtimeControls.telemetry.show && telemetryElapsed >= runtimeControls.telemetry.updateInterval) {
@@ -254,6 +339,7 @@ export function App() {
       debugMenu?.dispose()
       currentStage?.dispose()
       telemetryOverlay.remove()
+      cameraModeButton.remove()
       disposeScene(handle)
     }
   }, [])
