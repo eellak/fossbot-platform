@@ -1,0 +1,88 @@
+[
+    {
+        "type": "cube",
+        "dimensions": [2, 1, 2],
+        "material": {"color": 65280},
+        "position": [-3, 0.49, -3],
+        "name": "cube",
+        "castShadow": true
+    },
+    {
+        "type": "cube",
+        "dimensions": [2, 1, 2],
+        "material": {"color": 65280},
+        "position": [3, 0.49, -3],
+        "name": "cube",
+        "castShadow": true
+    },
+    {
+        "type": "cube",
+        "dimensions": [1, 1, 4],
+        "material": {"color": 65280},
+        "position": [0, 0.49, 3],
+        "name": "cube",
+        "castShadow": true
+    },
+    {
+        "type": "cube",
+        "dimensions": [1.5, 1, 1],
+        "material": {"color": 65280},
+        "position": [-3, 0.49, 0],
+        "name": "cube",
+        "castShadow": true
+    },
+    {
+        "type": "cube",
+        "dimensions": [1, 1, 2],
+        "material": {"color": 65280},
+        "position": [3, 0.49, 0],
+        "name": "cube",
+        "castShadow": true
+    },
+    {
+        "type": "cube",
+        "dimensions": [2, 1, 1],
+        "material": {"color": 65280},
+        "position": [0, 0.49, -3],
+        "name": "cube",
+        "castShadow": true
+    },
+    {
+        "type": "cube",
+        "dimensions": [1, 1, 2],
+        "material": {"color": 65280},
+        "position": [-1, 0.49, 1],
+        "name": "cube",
+        "castShadow": true
+    },
+    {
+        "type": "cube",
+        "dimensions": [1.5, 1, 1.5],
+        "material": {"color": 65280},
+        "position": [2, 0.49, 2],
+        "name": "cube",
+        "castShadow": true
+    },
+    {
+        "type": "cube",
+        "dimensions": [1.5, 1, 1.5],
+        "material": {"color": 65280},
+        "position": [-2, 0.49, -2],
+        "name": "cube",
+        "castShadow": true
+    },
+    {
+        "type": "floor",
+        "dimensions": [10, 10],
+        "material": {"color": "white"},
+        "name": "floor",
+        "texture": "",
+        "repeat": [25, 25],
+        "offset": [0, 0]
+    },
+    {
+        "type": "fossbot",
+        "position": [0, 0, 0],
+        "orientation": [0, 0, 0]
+    }
+]
