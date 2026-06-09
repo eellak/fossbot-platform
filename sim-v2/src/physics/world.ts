@@ -1,6 +1,8 @@
 import * as RAPIER from "@dimforge/rapier3d-compat";
 import { log } from "../util/log";
 
+const WORLD_GRAVITY = -9.81
+
 let worldInstance: RAPIER.World | null = null;
 let initialized = false;
 
@@ -13,7 +15,7 @@ export async function initializeWorld(): Promise<RAPIER.World> {
   await RAPIER.init();
 
   // Create world with gravity (0, -9.81, 0)
-  const world = new RAPIER.World(new RAPIER.Vector3(0, -9.81, 0));
+  const world = new RAPIER.World(new RAPIER.Vector3(0, WORLD_GRAVITY, 0));
 
   // Set fixed timestep (1/60 = 16.67ms) for stable physics
   world.timestep = 1 / 60;

@@ -190,13 +190,19 @@ export function buildCollidersTunerFolder(
   // ── Actions ───────────────────────────────────────────
   const actions = gui.addFolder('Actions')
 
-  // Collider visibility toggle
+  // Collider visibility toggle — controls both robot and stage wireframes.
   const toggleState = { show: false }
   actions
     .add(toggleState, 'show')
     .name('Show Colliders')
     .onChange((v: boolean) => {
       if (collidersGroup) collidersGroup.visible = v
+      // Also toggle the stage colliders group (sibling in the scene).
+      const scene = robot.root.parent
+      if (scene) {
+        const stgGrp = scene.getObjectByName('stage_colliders')
+        if (stgGrp) stgGrp.visible = v
+      }
     })
 
   const dump = () => {

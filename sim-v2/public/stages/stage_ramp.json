@@ -9,7 +9,8 @@
     ],
     "name": "ramp_step1",
     "castShadow": true,
-    "immovable": true
+    "immovable": true,
+    "color": "red"
   },
   {
     "type": "floor",

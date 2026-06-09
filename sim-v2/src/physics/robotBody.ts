@@ -6,7 +6,7 @@ import type { RobotV2 } from "../robot/v2";
 import { ROBOT_COLLIDERS, type PrimitiveColliderConfig } from "./colliders";
 import { log } from "../util/log";
 
-const ROBOT_MASS_KG = 2.0;
+export const ROBOT_MASS_KG = 2.0;
 
 export interface RobotPhysicsState {
   body: RAPIER.RigidBody;
@@ -46,7 +46,11 @@ function createColliderDesc(cfg: PrimitiveColliderConfig): RAPIER.ColliderDesc |
   }
 
   desc.setDensity(cfg.density ?? 1.0);
-  desc.setFriction(cfg.friction ?? 0.5);
+  if (cfg.name == "caster") {
+    desc.setFriction(cfg.friction)
+  } else {
+    desc.setFriction(cfg.friction ?? 0.5);
+  }
   desc.setRestitution(cfg.restitution ?? 0.0);
 
   return desc;
@@ -99,15 +103,28 @@ function createDebugMesh(cfg: PrimitiveColliderConfig): THREE.Mesh | null {
   return mesh;
 }
 
+export interface CreateRobotBodyOptions {
+  /**
+   * When true, drop the `left_wheel` / `right_wheel` cylinder colliders so the
+   * vehicle controller can own wheel physics via raycasts. Phase 5 sets this
+   * to true; flipping it back is the way to disable the vehicle controller.
+   */
+  skipDriveWheels?: boolean;
+}
+
+const DRIVE_WHEEL_NAMES = new Set(['left_wheel', 'right_wheel']);
+
 /**
  * Create the chassis rigid body with primitive colliders defined in
  * `src/physics/colliders.ts` and a debug wireframe group.
  */
 export async function createRobotBody(
   robot: RobotV2,
-  spawnPosition: THREE.Vector3 = new THREE.Vector3(0, 0.05, 0)
+  spawnPosition: THREE.Vector3 = new THREE.Vector3(0, 0.05, 0),
+  opts: CreateRobotBodyOptions = {}
 ): Promise<RobotPhysicsState> {
   const world = getWorld();
+  const skipDriveWheels = opts.skipDriveWheels ?? false;
 
   const bodyDesc = RAPIER.RigidBodyDesc.dynamic()
     .setTranslation(spawnPosition.x, spawnPosition.y, spawnPosition.z);
@@ -122,6 +139,7 @@ export async function createRobotBody(
   let visualCount = 0;
 
   for (const cfg of ROBOT_COLLIDERS) {
+    if (skipDriveWheels && DRIVE_WHEEL_NAMES.has(cfg.name)) continue;
     const desc = createColliderDesc(cfg);
     if (!desc) continue;
 

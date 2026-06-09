@@ -1,13 +1,20 @@
 import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
 import { initScene, disposeScene, type SceneHandle } from './scene/scene'
-import { loadRobotV2 } from './robot/v2'
+import { loadRobotV2, type RobotV2 } from './robot/v2'
 import { attachDebugMenu, type DebugMenuHandle } from './debug'
 import { initializeWorld, getWorld, stepWorld } from './physics/world'
 import { createRobotBody, type RobotPhysicsState } from './physics/robotBody'
 import { syncMeshFromBody, syncObjectToBody } from './physics/mesh-sync'
+import { createVehicle, computeDrive, type VehicleHandle } from './physics/vehicle'
 import { loadStage, DEFAULT_STAGE, type StageHandle, type StageName } from './stages'
+import { installKeyboard, type KeyboardHandle } from './util/keyboard'
 import { log } from './util/log'
+
+// when true, drop the rigid wheel cylinder colliders from the chassis
+// and let the vehicle controller's raycast wheels own wheel physics. Flip back
+// to false to disable the vehicle controller (e.g. for regression testing).
+const USE_VEHICLE_CONTROLLER = true
 
 export function App() {
   const containerRef = useRef<HTMLDivElement | null>(null)
@@ -18,8 +25,11 @@ export function App() {
     let cancelled = false
     let debugMenu: DebugMenuHandle | null = null
     let robotPhysics: RobotPhysicsState | null = null
+    let robot: RobotV2 | null = null
     let robotRoot: any = null
     let currentStage: StageHandle | null = null
+    let vehicle: VehicleHandle | null = null
+    let keyboard: KeyboardHandle | null = null
 
     const applySpawnPose = (stage: StageHandle) => {
       if (!robotPhysics) return
@@ -40,9 +50,13 @@ export function App() {
     const swapStage = async (next: StageName) => {
       if (!currentStage || cancelled) return
       log.world('swap stage', currentStage.name, '→', next)
+      // Preserve "Show Colliders" toggle state across the swap so the new
+      // stage's wireframes inherit the current visibility.
+      const stageCollidersWereVisible = currentStage.collidersGroup?.visible ?? false
       currentStage.dispose()
       currentStage = await loadStage(next, handle.scene, getWorld())
       if (cancelled) return
+      currentStage.collidersGroup.visible = stageCollidersWereVisible
       applySpawnPose(currentStage)
     }
 
@@ -54,7 +68,7 @@ export function App() {
 
         currentStage = await loadStage(DEFAULT_STAGE, handle.scene, getWorld())
 
-        const robot = await loadRobotV2()
+        robot = await loadRobotV2()
         log.physics('robot loaded')
         if (cancelled) return
 
@@ -68,7 +82,13 @@ export function App() {
           currentStage.spawnPosition.y + 0.05,
           currentStage.spawnPosition.z,
         )
-        robotPhysics = await createRobotBody(robot, initialSpawn)
+        robotPhysics = await createRobotBody(robot, initialSpawn, {
+          skipDriveWheels: USE_VEHICLE_CONTROLLER,
+        })
+        if (USE_VEHICLE_CONTROLLER) {
+          vehicle = createVehicle(getWorld(), robotPhysics.body)
+          keyboard = installKeyboard()
+        }
         applySpawnPose(currentStage)
         log.physics('createRobotBody returned', !!robotPhysics)
         if (cancelled) return
@@ -91,9 +111,20 @@ export function App() {
           // so we don't accumulate dozens of physics steps in one frame.
           const clampedDt = Math.min(deltaTime, 0.05)
 
+          // Compute drive once per frame; engine force / brake are
+          // persistent state on the controller until changed.
+          if (vehicle && keyboard) {
+            const drive = computeDrive(keyboard.pressed)
+            vehicle.setDrive(drive.left, drive.right, drive.leftBrake, drive.rightBrake)
+          }
+
           accumulator += clampedDt
           try {
             while (accumulator >= dt) {
+              // Order matters per the Rapier API contract: updateVehicle()
+              // computes suspension/friction/engine/brake forces and writes
+              // the chassis velocity, then world.step() integrates it.
+              vehicle?.updateBeforeStep(dt)
               stepWorld(dt)
               accumulator -= dt
             }
@@ -123,6 +154,7 @@ export function App() {
 
               syncMeshFromBody(robotRoot, robotPhysics.body, robotPhysics.meshSync)
               syncObjectToBody(robotPhysics.collidersGroup, robotPhysics.body)
+              if (vehicle && robot) vehicle.updateVisualWheels(robot)
             }
           } catch (err) {
             console.error('[physics] Exception during physics step/sync:', err)
@@ -147,6 +179,8 @@ export function App() {
 
     return () => {
       cancelled = true
+      keyboard?.dispose()
+      vehicle?.dispose()
       debugMenu?.dispose()
       currentStage?.dispose()
       disposeScene(handle)

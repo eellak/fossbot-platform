@@ -93,7 +93,7 @@ export const ROBOT_COLLIDERS: PrimitiveColliderConfig[] = [
     position: [0.0000, 0.0110, 0.0710],
     rotation: [0.0000, 0.0000, 0.0000],
     density: 1.0,
-    friction: 0.5,
+    friction: 0.0,
     restitution: 0.0,
   },
 ]
