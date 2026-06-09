@@ -13,6 +13,21 @@ export interface CollidersTunerHandle {
 }
 
 const D2R = Math.PI / 180
+const AXIS_ROTATIONS = {
+  y: [0, 0, 0],
+  x: [0, 0, 90],
+  z: [90, 0, 0],
+} as const
+
+type CapsuleAxis = keyof typeof AXIS_ROTATIONS
+
+function capsuleAxisFromRotation(rotation: [number, number, number]): CapsuleAxis {
+  const rx = Math.round(rotation[0] / D2R)
+  const rz = Math.round(rotation[2] / D2R)
+  if (Math.abs(rx) === 90) return 'z'
+  if (Math.abs(rz) === 90) return 'x'
+  return 'y'
+}
 
 function makeGeometry(cfg: PrimitiveColliderConfig): THREE.BufferGeometry {
   const [s0, s1, s2] = cfg.size
@@ -78,15 +93,17 @@ export function buildCollidersTunerFolder(
 
   const allControllers: ReturnType<GUI['add']>[] = []
   const updaters: Map<string, () => void> = new Map()
-  const states: Map<string, Record<string, number>> = new Map()
+  const states: Map<string, Record<string, number | string>> = new Map()
 
   configs.forEach((cfg) => {
     const folder = gui.addFolder(cfg.name)
 
-    const state: Record<string, number> = {
+    const state: Record<string, number | string> = {
       s0: cfg.size[0],
       s1: cfg.size[1] ?? 0,
       s2: cfg.size[2] ?? 0,
+      diameter: cfg.size[0] * 2,
+      totalLength: (cfg.size[1] ?? 0) * 2 + cfg.size[0] * 2,
       x: cfg.position[0],
       y: cfg.position[1],
       z: cfg.position[2],
@@ -96,24 +113,67 @@ export function buildCollidersTunerFolder(
       density: cfg.density ?? 1.0,
       friction: cfg.friction ?? 0.5,
       restitution: cfg.restitution ?? 0.0,
+      capsuleAxis: cfg.type === 'capsule' ? capsuleAxisFromRotation(cfg.rotation!) : 'y',
     }
     states.set(cfg.name, state)
 
     const updateMesh = () => {
-      cfg.size = [state.s0, state.s1 || undefined, state.s2 || undefined]
-      cfg.position = [state.x, state.y, state.z]
-      cfg.rotation = [state.rx * D2R, state.ry * D2R, state.rz * D2R]
-      cfg.density = state.density
-      cfg.friction = state.friction
-      cfg.restitution = state.restitution
+      cfg.size = [
+        Number(state.s0),
+        Number(state.s1) || undefined,
+        Number(state.s2) || undefined,
+      ]
+      cfg.position = [Number(state.x), Number(state.y), Number(state.z)]
+      cfg.rotation = [
+        Number(state.rx) * D2R,
+        Number(state.ry) * D2R,
+        Number(state.rz) * D2R,
+      ]
+      cfg.density = Number(state.density)
+      cfg.friction = Number(state.friction)
+      cfg.restitution = Number(state.restitution)
+      state.diameter = cfg.size[0] * 2
+      state.totalLength = (cfg.size[1] ?? 0) * 2 + cfg.size[0] * 2
 
       const mesh = findOrCreateDebugMesh(collidersGroup, cfg)
       mesh.geometry.dispose()
       mesh.geometry = makeGeometry(cfg)
-      mesh.position.set(state.x, state.y, state.z)
-      mesh.rotation.set(state.rx * D2R, state.ry * D2R, state.rz * D2R)
+      mesh.position.set(Number(state.x), Number(state.y), Number(state.z))
+      mesh.rotation.set(Number(state.rx) * D2R, Number(state.ry) * D2R, Number(state.rz) * D2R)
     }
     updaters.set(cfg.name, updateMesh)
+
+    const syncDerivedCapsuleSize = () => {
+      state.diameter = Number(state.s0) * 2
+      state.totalLength = Number(state.s1) * 2 + Number(state.s0) * 2
+      updateMesh()
+      allControllers.forEach((c) => c.updateDisplay())
+    }
+
+    const syncCapsuleFromDiameter = () => {
+      state.s0 = Math.max(0.001, Number(state.diameter) * 0.5)
+      state.totalLength = Math.max(Number(state.totalLength), Number(state.diameter))
+      state.s1 = Math.max(0, (Number(state.totalLength) - Number(state.diameter)) * 0.5)
+      updateMesh()
+      allControllers.forEach((c) => c.updateDisplay())
+    }
+
+    const syncCapsuleFromTotalLength = () => {
+      state.totalLength = Math.max(Number(state.totalLength), Number(state.diameter))
+      state.s1 = Math.max(0, (Number(state.totalLength) - Number(state.diameter)) * 0.5)
+      updateMesh()
+      allControllers.forEach((c) => c.updateDisplay())
+    }
+
+    const setCapsuleAxis = () => {
+      const axis = state.capsuleAxis as CapsuleAxis
+      const [rx, ry, rz] = AXIS_ROTATIONS[axis]
+      state.rx = rx
+      state.ry = ry
+      state.rz = rz
+      updateMesh()
+      allControllers.forEach((c) => c.updateDisplay())
+    }
 
     // Size controllers — labels depend on shape type
     switch (cfg.type) {
@@ -138,10 +198,19 @@ export function buildCollidersTunerFolder(
         break
       case 'capsule':
         allControllers.push(
-          folder.add(state, 's0', 0.001, 0.3, 0.001).name('radius').onChange(updateMesh),
+          folder.add(state, 's0', 0.001, 0.3, 0.001).name('radius').onChange(syncDerivedCapsuleSize),
         )
         allControllers.push(
-          folder.add(state, 's1', 0.001, 0.3, 0.001).name('half height').onChange(updateMesh),
+          folder.add(state, 's1', 0.001, 0.3, 0.001).name('half segment').onChange(syncDerivedCapsuleSize),
+        )
+        allControllers.push(
+          folder.add(state, 'diameter', 0.002, 0.6, 0.001).name('diameter').onChange(syncCapsuleFromDiameter),
+        )
+        allControllers.push(
+          folder.add(state, 'totalLength', 0.002, 0.8, 0.001).name('total length').onChange(syncCapsuleFromTotalLength),
+        )
+        allControllers.push(
+          folder.add(state, 'capsuleAxis', ['x', 'y', 'z']).name('long axis').onChange(setCapsuleAxis),
         )
         break
       case 'ball':
@@ -254,6 +323,8 @@ export function buildCollidersTunerFolder(
       state.s0 = cfg.size[0]
       state.s1 = cfg.size[1] ?? 0
       state.s2 = cfg.size[2] ?? 0
+      state.diameter = cfg.size[0] * 2
+      state.totalLength = (cfg.size[1] ?? 0) * 2 + cfg.size[0] * 2
       state.x = cfg.position[0]
       state.y = cfg.position[1]
       state.z = cfg.position[2]
@@ -263,6 +334,7 @@ export function buildCollidersTunerFolder(
       state.density = cfg.density ?? 1.0
       state.friction = cfg.friction ?? 0.5
       state.restitution = cfg.restitution ?? 0.0
+      state.capsuleAxis = cfg.type === 'capsule' ? capsuleAxisFromRotation(cfg.rotation) : 'y'
 
       updaters.get(cfg.name)!()
     })

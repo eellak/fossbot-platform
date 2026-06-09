@@ -6,15 +6,11 @@ import { attachDebugMenu, type DebugMenuHandle } from './debug'
 import { initializeWorld, getWorld, stepWorld } from './physics/world'
 import { createRobotBody, type RobotPhysicsState } from './physics/robotBody'
 import { syncMeshFromBody, syncObjectToBody } from './physics/mesh-sync'
-import { createVehicle, computeDrive, type VehicleHandle } from './physics/vehicle'
+import { createVehicle, type VehicleHandle } from './physics/vehicle'
 import { loadStage, DEFAULT_STAGE, type StageHandle, type StageName } from './stages'
 import { installKeyboard, type KeyboardHandle } from './util/keyboard'
 import { log } from './util/log'
-
-// when true, drop the rigid wheel cylinder colliders from the chassis
-// and let the vehicle controller's raycast wheels own wheel physics. Flip back
-// to false to disable the vehicle controller (e.g. for regression testing).
-const USE_VEHICLE_CONTROLLER = true
+import { getRememberedStage, rememberStage, shouldRememberLastStage } from './debug/mapPicker'
 
 export function App() {
   const containerRef = useRef<HTMLDivElement | null>(null)
@@ -34,9 +30,9 @@ export function App() {
     const applySpawnPose = (stage: StageHandle) => {
       if (!robotPhysics) return
       const body = robotPhysics.body
-      // Lift the body slightly above the floor so it settles on its wheels
-      // rather than spawning intersecting the ground plane.
-      const spawnY = stage.spawnPosition.y + 0.05
+      // Spawn close to the ray-wheel static ride height so the chassis does
+      // not drop/roll before the suspension has a stable contact.
+      const spawnY = stage.spawnPosition.y + 0.015
       body.setTranslation(
         { x: stage.spawnPosition.x, y: spawnY, z: stage.spawnPosition.z },
         true,
@@ -56,6 +52,7 @@ export function App() {
       currentStage.dispose()
       currentStage = await loadStage(next, handle.scene, getWorld())
       if (cancelled) return
+      rememberStage(next)
       currentStage.collidersGroup.visible = stageCollidersWereVisible
       applySpawnPose(currentStage)
     }
@@ -66,7 +63,8 @@ export function App() {
         await initializeWorld()
         log.physics('world initialized')
 
-        currentStage = await loadStage(DEFAULT_STAGE, handle.scene, getWorld())
+        const initialStage = shouldRememberLastStage() ? getRememberedStage() ?? DEFAULT_STAGE : DEFAULT_STAGE
+        currentStage = await loadStage(initialStage, handle.scene, getWorld())
 
         robot = await loadRobotV2()
         log.physics('robot loaded')
@@ -79,16 +77,14 @@ export function App() {
 
         const initialSpawn = new THREE.Vector3(
           currentStage.spawnPosition.x,
-          currentStage.spawnPosition.y + 0.05,
+          currentStage.spawnPosition.y + 0.015,
           currentStage.spawnPosition.z,
         )
         robotPhysics = await createRobotBody(robot, initialSpawn, {
-          skipDriveWheels: USE_VEHICLE_CONTROLLER,
+          skipDriveWheels: true,
         })
-        if (USE_VEHICLE_CONTROLLER) {
-          vehicle = createVehicle(getWorld(), robotPhysics.body)
-          keyboard = installKeyboard()
-        }
+        vehicle = createVehicle(getWorld(), robotPhysics.body, robot)
+        keyboard = installKeyboard()
         applySpawnPose(currentStage)
         log.physics('createRobotBody returned', !!robotPhysics)
         if (cancelled) return
@@ -111,20 +107,21 @@ export function App() {
           // so we don't accumulate dozens of physics steps in one frame.
           const clampedDt = Math.min(deltaTime, 0.05)
 
-          // Compute drive once per frame; engine force / brake are
-          // persistent state on the controller until changed.
+          // Compute drive once per frame; motor velocity / torque targets
+          // persist on the joint until changed.
           if (vehicle && keyboard) {
-            const drive = computeDrive(keyboard.pressed)
-            vehicle.setDrive(drive.left, drive.right, drive.leftBrake, drive.rightBrake)
+            const throttle = keyboard.pressed.has('w') ? 1 : keyboard.pressed.has('s') ? -1 : 0
+            const turn = keyboard.pressed.has('d') ? 0.35 : keyboard.pressed.has('a') ? -0.35 : 0
+            vehicle.setDrive(
+              THREE.MathUtils.clamp(throttle + turn, -1, 1),
+              THREE.MathUtils.clamp(throttle - turn, -1, 1),
+            )
           }
 
           accumulator += clampedDt
           try {
             while (accumulator >= dt) {
-              // Order matters per the Rapier API contract: updateVehicle()
-              // computes suspension/friction/engine/brake forces and writes
-              // the chassis velocity, then world.step() integrates it.
-              vehicle?.updateBeforeStep(dt)
+              if (vehicle) vehicle.step(dt)
               stepWorld(dt)
               accumulator -= dt
             }
@@ -154,7 +151,6 @@ export function App() {
 
               syncMeshFromBody(robotRoot, robotPhysics.body, robotPhysics.meshSync)
               syncObjectToBody(robotPhysics.collidersGroup, robotPhysics.body)
-              if (vehicle && robot) vehicle.updateVisualWheels(robot)
             }
           } catch (err) {
             console.error('[physics] Exception during physics step/sync:', err)

@@ -1,48 +1,104 @@
 [
   {
-    "type": "model",
-    "filename": "/js-simulator/models/static/Ramp.obj",
-    "position": [
-      -0.1,
-      -0.05,
-      1
-    ],
-    "name": "ramp_step1",
-    "castShadow": true,
-    "immovable": true,
-    "color": "red"
-  },
-  {
     "type": "floor",
-    "dimensions": [
-      0.8,
-      0.8
-    ],
-    "material": {
-      "color": "white"
-    },
+    "dimensions": [0.8, 0.8],
+    "material": { "color": "white" },
     "name": "floor",
     "texture": "/js-simulator/textures/white_rect.png",
-    "repeat": [
-      25,
-      25
-    ],
-    "offset": [
-      0,
-      0
-    ]
+    "repeat": [25, 25],
+    "offset": [0, 0]
+  },
+  {
+    "type": "text",
+    "name": "label_15deg_short",
+    "text": "15 deg / 1 m",
+    "position": [-5.4, 0.025, 2.55],
+    "scale": 1.8,
+    "onFloor": true,
+    "color": "black"
+  },
+  {
+    "type": "cube",
+    "name": "ramp_15deg_1m",
+    "dimensions": [0.6, 0.04, 1],
+    "position": [-5.4, 0.110, 1.512],
+    "orientation": [0.261799, 0, 0],
+    "material": { "color": "orange" },
+    "castShadow": true
+  },
+  {
+    "type": "text",
+    "name": "label_15deg_long",
+    "text": "15 deg / 4 m",
+    "position": [-1.8, 0.025, 2.55],
+    "scale": 1.8,
+    "onFloor": true,
+    "color": "black"
+  },
+  {
+    "type": "cube",
+    "name": "ramp_15deg_4m",
+    "dimensions": [0.6, 0.04, 4],
+    "position": [-1.8, 0.498, 0.068],
+    "orientation": [0.261799, 0, 0],
+    "material": { "color": "orange" },
+    "castShadow": true
+  },
+  {
+    "type": "text",
+    "name": "label_30deg_steep",
+    "text": "30 deg / 2 m",
+    "position": [1.8, 0.025, 2.55],
+    "scale": 1.8,
+    "onFloor": true,
+    "color": "black"
+  },
+  {
+    "type": "cube",
+    "name": "ramp_30deg_2m",
+    "dimensions": [0.6, 0.04, 2],
+    "position": [1.8, 0.483, 1.134],
+    "orientation": [0.523599, 0, 0],
+    "material": { "color": "red" },
+    "castShadow": true
+  },
+  {
+    "type": "text",
+    "name": "label_mixed",
+    "text": "15 deg + bump",
+    "position": [5.4, 0.025, 2.55],
+    "scale": 1.8,
+    "onFloor": true,
+    "color": "black"
+  },
+  {
+    "type": "cube",
+    "name": "mixed_ramp_15deg_1m",
+    "dimensions": [0.6, 0.04, 1],
+    "position": [5.4, 0.110, 1.512],
+    "orientation": [0.261799, 0, 0],
+    "material": { "color": "orange" },
+    "castShadow": true
+  },
+  {
+    "type": "cube",
+    "name": "mixed_deck_after_ramp",
+    "dimensions": [0.6, 0.04, 0.7],
+    "position": [5.4, 0.259, 0.162],
+    "material": { "color": "gray" },
+    "castShadow": true
+  },
+  {
+    "type": "cube",
+    "name": "mixed_small_bump",
+    "dimensions": [0.45, 0.025, 0.08],
+    "position": [5.4, 0.2915, 0.212],
+    "material": { "color": "blue" },
+    "castShadow": true
   },
   {
     "type": "fossbot",
-    "position": [
-      0,
-      0,
-      2
-    ],
-    "orientation": [
-      0,
-      0,
-      0
-    ]
+    "position": [-5.4, 0, 2.85],
+    "orientation": [0, 0, 0]
   }
 ]
