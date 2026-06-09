@@ -18,6 +18,11 @@ export interface SceneHandle {
   gizmoTarget: THREE.Object3D | null
   rafId: number
   resizeListener: () => void
+  /**
+   * Optional callback for physics updates. Called before rendering each frame.
+   * Receives deltaTime in seconds since last frame.
+   */
+  onRender?: (deltaTime: number) => void
 }
 
 export function initScene(container: HTMLElement): SceneHandle {
@@ -122,6 +127,8 @@ export function initScene(container: HTMLElement): SceneHandle {
   window.addEventListener('resize', resizeListener)
 
   const tmpQuat = new THREE.Quaternion()
+  let lastFrameTime = performance.now()
+
   const handle: SceneHandle = {
     container,
     renderer,
@@ -147,6 +154,16 @@ export function initScene(container: HTMLElement): SceneHandle {
 
   const tick = () => {
     handle.rafId = requestAnimationFrame(tick)
+    
+    const now = performance.now()
+    const deltaTime = (now - lastFrameTime) / 1000 // Convert to seconds
+    lastFrameTime = now
+
+    // Call physics/update callback if registered
+    if (handle.onRender) {
+      handle.onRender(deltaTime)
+    }
+
     controls.update()
 
     // Main pass
