@@ -15,8 +15,8 @@
       0,
       0
     ],
-    "mass": 0,
-    "immovable": true
+    "mass": 1,
+    "immovable": false
   },
   {
     "type": "model",
@@ -24,7 +24,7 @@
     "scale": 0.007,
     "position": [
       0,
-      -0.02,
+      0.1,
       -1.2
     ],
     "name": "cat",
@@ -52,7 +52,8 @@
       0,
       0
     ],
-    "mass": 0.5
+    "mass": 0,
+    "immovable": true
   },
   {
     "type": "model",
