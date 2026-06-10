@@ -56,7 +56,7 @@ const RIGHT_WHEEL_POS_M: [number, number, number] = [0.079, 0.039, -0.0407]
 const WHEEL_SCALE_MULT = 1.1
 
 const CASTER_RADIUS_M = 0.005
-const CASTER_TOP_CLEARANCE_M = 0.0005
+const CASTER_LOCAL_Y_M = 0.0305
 const CASTER_LOCAL_Z_M = 0.07
 
 // Default robot footprint width (meters). Bottom base's X extent is scaled to this.
@@ -261,7 +261,7 @@ export async function loadRobotV2(targetWidth = DEFAULT_TARGET_WIDTH_M): Promise
   caster.receiveShadow = true
   caster.position.set(
     bodyCenter.x,
-    bodyBox.min.y + CASTER_TOP_CLEARANCE_M - CASTER_RADIUS_M,
+    CASTER_LOCAL_Y_M,
     bodyCenter.z + CASTER_LOCAL_Z_M,
   )
   root.add(caster)

@@ -7,11 +7,13 @@ import { ROBOT_COLLIDERS, type PrimitiveColliderConfig } from "./colliders";
 import { log } from "../util/log";
 
 export const ROBOT_MASS_KG = 2.0;
+const ROBOT_INERTIA = { x: 0.014, y: 0.007, z: 0.009 };
 
 export interface RobotPhysicsState {
   body: RAPIER.RigidBody;
   meshSync: MeshSyncState;
   collidersGroup: THREE.Group;
+  collidersByName: Record<string, RAPIER.Collider>;
 }
 
 function createColliderDesc(cfg: PrimitiveColliderConfig): RAPIER.ColliderDesc | null {
@@ -114,6 +116,19 @@ export interface CreateRobotBodyOptions {
 
 const DRIVE_WHEEL_NAMES = new Set(['left_wheel', 'right_wheel']);
 
+export function setRobotMassProperties(body: RAPIER.RigidBody): void {
+  const colliderMass = body.mass();
+  const colliderCom = body.localCom();
+  body.setAdditionalMassProperties(
+    ROBOT_MASS_KG - colliderMass,
+    { x: 0, y: colliderCom.y, z: colliderCom.z },
+    ROBOT_INERTIA,
+    { x: 0, y: 0, z: 0, w: 1 },
+    true,
+  );
+  body.recomputeMassPropertiesFromColliders();
+}
+
 /**
  * Create the chassis rigid body with primitive colliders defined in
  * `src/physics/colliders.ts` and a debug wireframe group.
@@ -137,6 +152,7 @@ export async function createRobotBody(
 
   let colliderCount = 0;
   let visualCount = 0;
+  const collidersByName: Record<string, RAPIER.Collider> = {};
 
   for (const cfg of ROBOT_COLLIDERS) {
     if (skipDriveWheels && DRIVE_WHEEL_NAMES.has(cfg.name)) continue;
@@ -144,7 +160,7 @@ export async function createRobotBody(
     if (!desc) continue;
 
     try {
-      world.createCollider(desc, body);
+      collidersByName[cfg.name] = world.createCollider(desc, body);
       colliderCount++;
     } catch (err) {
       console.error(`[physics] Failed to create collider "${cfg.name}":`, err);
@@ -160,9 +176,7 @@ export async function createRobotBody(
 
   log.physics(`created ${colliderCount} primitive colliders, ${visualCount} debug meshes`);
 
-  // Enforce total mass to exactly ROBOT_MASS_KG
-  body.setAdditionalMass(ROBOT_MASS_KG - body.mass(), true);
-  body.recomputeMassPropertiesFromColliders();
+  setRobotMassProperties(body);
   log.physics(`robot body mass: ${body.mass().toFixed(3)} kg`);
 
   body.setLinearDamping(0.5);
@@ -180,6 +194,7 @@ export async function createRobotBody(
   return {
     body,
     collidersGroup,
+    collidersByName,
     meshSync: {}, // no offset — body origin and visual root origin are aligned
   };
 }
