@@ -12,10 +12,7 @@
     "noEmit": true,
     "jsx": "react-jsx",
     "allowJs": true,
-    "strict": false,
-    "paths": {
-      "@simulator/*": ["../front-end/src/components/js-simulator/*"]
-    }
+    "strict": false
   },
   "include": ["src"]
 }

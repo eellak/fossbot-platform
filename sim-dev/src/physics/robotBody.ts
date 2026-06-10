@@ -1,375 +1,200 @@
-import * as THREE from 'three'
-import RAPIER from '@dimforge/rapier3d-compat'
-import { getWorld } from './world'
+import * as RAPIER from "@dimforge/rapier3d-compat";
+import * as THREE from "three";
+import { MeshSyncState } from "./mesh-sync";
+import { getWorld } from "./world";
+import type { RobotV2 } from "../robot/v2";
+import { ROBOT_COLLIDERS, type PrimitiveColliderConfig } from "./colliders";
+import { log } from "../util/log";
 
-// Compound robot body:
-// - one compound convex-hull collider map for the chassis
-// - two wheel colliders attached to the same rigid body
-//
-// This keeps body and wheels as distinct physics shapes while remaining stable
-// and simple (no wheel joints/motors yet).
+export const ROBOT_MASS_KG = 2.0;
+const ROBOT_INERTIA = { x: 0.014, y: 0.007, z: 0.009 };
 
-const ROBOT_BODY_MASS_KG = 3.0
-const WHEEL_MASS_KG = 0.5
-const CASTER_MASS_KG = 0.3
-const CASTER_RADIUS_M = 0.005
-const CASTER_TOP_CLEARANCE_M = 0.0005
-// Caster ball position in body-LOCAL meters (rigid-body frame, Y-up).
-// X = 0 (centered), Y = down from body bbox center, Z = front(−)/back(+)
-// relative to the chassis. Absolute coords (not bbox factors) so the
-// position is invariant to anything that could change the bbox: body
-// rotation, attached debug overlays, sibling visual meshes, etc.
-const CASTER_LOCAL_Y_V1_M = -0.040
-const CASTER_LOCAL_Z_V1_M = -0.060
-const CASTER_LOCAL_Y_V2_FALLBACK_M = -0.060
-const CASTER_LOCAL_Z_V2_M = 0.07
-const LINEAR_DAMPING = 0.25
-const ANGULAR_DAMPING = 0.55
-const BODY_FRICTION = 0.03
-const WHEEL_FRICTION = 0.05
-const CASTER_FRICTION = 0.01
-const WHEEL_SPHERE_SCALE = 1.0
+export interface RobotPhysicsState {
+  body: RAPIER.RigidBody;
+  meshSync: MeshSyncState;
+  collidersGroup: THREE.Group;
+  collidersByName: Record<string, RAPIER.Collider>;
+}
 
-const _tmpBox = new THREE.Box3()
-const _tmpSize = new THREE.Vector3()
-const _tmpCenter = new THREE.Vector3()
-const _tmpQ = new THREE.Quaternion()
-const _tmpInvQ = new THREE.Quaternion()
-const _tmpVertex = new THREE.Vector3()
-const _tmpWheelCenter = new THREE.Vector3()
-const _tmpWheelLocalSize = new THREE.Vector3()
-const _tmpWheelWorldScale = new THREE.Vector3()
-const _tmpSyncOffset = new THREE.Vector3()
+function createColliderDesc(cfg: PrimitiveColliderConfig): RAPIER.ColliderDesc | null {
+  const [s0, s1, s2] = cfg.size;
+  let desc: RAPIER.ColliderDesc;
 
-export function createRobotBody(baseObject: THREE.Object3D, wheels: THREE.Object3D[]): RAPIER.RigidBody {
-  const world = getWorld()
-
-  const bodySource = resolveBodySource(baseObject)
-
-  // Compute body size/center invariant to:
-  //   1) baseObject's current rotation (after physics has been running, so a
-  //      recreate — e.g. toggling debug wireframes — doesn't pick up an
-  //      AABB inflated by yaw/tilt)
-  //   2) what's currently parented under baseObject (caster mesh, debug
-  //      overlays, etc.) — by measuring bodySource only, not baseObject
-  // We zero the rotation, sample the bbox, then restore.
-  const savedQ = baseObject.quaternion.clone()
-  baseObject.quaternion.identity()
-  baseObject.updateMatrixWorld(true)
-
-  _tmpBox.setFromObject(bodySource)
-  _tmpBox.getSize(_tmpSize)
-  _tmpBox.getCenter(_tmpCenter)
-  _tmpCenter.sub(baseObject.position) // → baseObject-local offset (rot-invariant)
-
-  baseObject.quaternion.copy(savedQ)
-  baseObject.updateMatrixWorld(true)
-
-  // Preserve the rotation-invariant local offset, then derive the world center
-  // from it. The local offset is what syncMeshFromBody should rotate each frame.
-  const meshOffsetLocal = {
-    x: _tmpCenter.x,
-    y: _tmpCenter.y,
-    z: _tmpCenter.z,
+  switch (cfg.type) {
+    case "cuboid":
+      desc = RAPIER.ColliderDesc.cuboid(s0, s1, s2 ?? s1);
+      break;
+    case "cylinder":
+      desc = RAPIER.ColliderDesc.cylinder(s1, s0);
+      break;
+    case "capsule":
+      desc = RAPIER.ColliderDesc.capsule(s1, s0);
+      break;
+    case "ball":
+      desc = RAPIER.ColliderDesc.ball(s0);
+      break;
+    default:
+      console.warn(`[physics] Unknown collider type: ${(cfg as any).type}`);
+      return null;
   }
 
-  // World spawn position = baseObject.position + R(savedQ) × local_offset
-  _tmpCenter.applyQuaternion(savedQ).add(baseObject.position)
-  _tmpQ.copy(savedQ)
+  desc.setTranslation(cfg.position[0], cfg.position[1], cfg.position[2]);
+
+  if (cfg.rotation) {
+    const q = new THREE.Quaternion().setFromEuler(
+      new THREE.Euler(cfg.rotation[0], cfg.rotation[1], cfg.rotation[2])
+    );
+    desc.setRotation({ x: q.x, y: q.y, z: q.z, w: q.w });
+  }
+
+  desc.setDensity(cfg.density ?? 1.0);
+  if (cfg.name == "caster") {
+    desc.setFriction(cfg.friction)
+  } else {
+    desc.setFriction(cfg.friction ?? 0.5);
+  }
+  desc.setRestitution(cfg.restitution ?? 0.0);
+
+  return desc;
+}
+
+function createDebugMesh(cfg: PrimitiveColliderConfig): THREE.Mesh | null {
+  const [s0, s1, s2] = cfg.size;
+  let geometry: THREE.BufferGeometry;
+
+  switch (cfg.type) {
+    case "cuboid": {
+      const w = s0 * 2;
+      const h = s1 * 2;
+      const d = (s2 ?? s1) * 2;
+      geometry = new THREE.BoxGeometry(w, h, d);
+      break;
+    }
+    case "cylinder": {
+      const r = s0;
+      const h = s1 * 2;
+      geometry = new THREE.CylinderGeometry(r, r, h, 16);
+      break;
+    }
+    case "capsule": {
+      const r = s0;
+      const length = s1 * 2; // cylindrical part length
+      geometry = new THREE.CapsuleGeometry(r, length, 4, 8);
+      break;
+    }
+    case "ball": {
+      geometry = new THREE.SphereGeometry(s0, 16, 12);
+      break;
+    }
+    default:
+      return null;
+  }
+
+  const material = new THREE.MeshBasicMaterial({
+    color: cfg.name === "caster" ? 0x00ff00 : 0xff00ff,
+    wireframe: true,
+  });
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.name = `collider_${cfg.name}`;
+  mesh.position.set(cfg.position[0], cfg.position[1], cfg.position[2]);
+
+  if (cfg.rotation) {
+    mesh.rotation.set(cfg.rotation[0], cfg.rotation[1], cfg.rotation[2]);
+  }
+
+  return mesh;
+}
+
+export interface CreateRobotBodyOptions {
+  /**
+   * When true, drop the `left_wheel` / `right_wheel` cylinder colliders so the
+   * vehicle controller can own wheel physics via raycasts. Phase 5 sets this
+   * to true; flipping it back is the way to disable the vehicle controller.
+   */
+  skipDriveWheels?: boolean;
+}
+
+const DRIVE_WHEEL_NAMES = new Set(['left_wheel', 'right_wheel']);
+
+export function setRobotMassProperties(body: RAPIER.RigidBody): void {
+  const colliderMass = body.mass();
+  const colliderCom = body.localCom();
+  body.setAdditionalMassProperties(
+    ROBOT_MASS_KG - colliderMass,
+    { x: 0, y: colliderCom.y, z: colliderCom.z },
+    ROBOT_INERTIA,
+    { x: 0, y: 0, z: 0, w: 1 },
+    true,
+  );
+  body.recomputeMassPropertiesFromColliders();
+}
+
+/**
+ * Create the chassis rigid body with primitive colliders defined in
+ * `src/physics/colliders.ts` and a debug wireframe group.
+ */
+export async function createRobotBody(
+  robot: RobotV2,
+  spawnPosition: THREE.Vector3 = new THREE.Vector3(0, 0.05, 0),
+  opts: CreateRobotBodyOptions = {}
+): Promise<RobotPhysicsState> {
+  const world = getWorld();
+  const skipDriveWheels = opts.skipDriveWheels ?? false;
 
   const bodyDesc = RAPIER.RigidBodyDesc.dynamic()
-    .setTranslation(_tmpCenter.x, _tmpCenter.y, _tmpCenter.z)
-    .setRotation({ x: savedQ.x, y: savedQ.y, z: savedQ.z, w: savedQ.w })
-    .setLinearDamping(LINEAR_DAMPING)
-    .setAngularDamping(ANGULAR_DAMPING)
+    .setTranslation(spawnPosition.x, spawnPosition.y, spawnPosition.z);
 
-  const body = world.createRigidBody(bodyDesc)
+  const body = world.createRigidBody(bodyDesc);
 
-  const bodyHulls = collectBodyHullVertices(bodySource, _tmpCenter, _tmpQ)
+  const collidersGroup = new THREE.Group();
+  collidersGroup.name = "v2_colliders";
+  collidersGroup.visible = false;
 
-  let hasBodyCollider = false
-  if (bodyHulls.length > 0) {
-    const massPerHull = ROBOT_BODY_MASS_KG / bodyHulls.length
-    for (const hullVertices of bodyHulls) {
-      const bodyHull = RAPIER.ColliderDesc.convexHull(hullVertices)
-      if (!bodyHull) continue
-      bodyHull
-        .setMass(massPerHull)
-        .setFriction(BODY_FRICTION)
-        .setRestitution(0)
-      world.createCollider(bodyHull, body)
-      hasBodyCollider = true
+  let colliderCount = 0;
+  let visualCount = 0;
+  const collidersByName: Record<string, RAPIER.Collider> = {};
+
+  for (const cfg of ROBOT_COLLIDERS) {
+    if (skipDriveWheels && DRIVE_WHEEL_NAMES.has(cfg.name)) continue;
+    const desc = createColliderDesc(cfg);
+    if (!desc) continue;
+
+    try {
+      collidersByName[cfg.name] = world.createCollider(desc, body);
+      colliderCount++;
+    } catch (err) {
+      console.error(`[physics] Failed to create collider "${cfg.name}":`, err);
+      continue;
+    }
+
+    const debugMesh = createDebugMesh(cfg);
+    if (debugMesh) {
+      collidersGroup.add(debugMesh);
+      visualCount++;
     }
   }
 
-  if (!hasBodyCollider) {
-    // Reuse the rotation-invariant _tmpSize captured above instead of
-    // re-sampling the world AABB (which would be inflated by current rotation).
-    const halfX = Math.max(_tmpSize.x / 2, 0.05)
-    const halfY = Math.max(_tmpSize.y / 2, 0.04)
-    const halfZ = Math.max(_tmpSize.z / 2, 0.05)
-    const bodyCollider = RAPIER.ColliderDesc.cuboid(halfX, halfY, halfZ)
-      .setMass(ROBOT_BODY_MASS_KG)
-      .setFriction(BODY_FRICTION)
-      .setRestitution(0)
-    world.createCollider(bodyCollider, body)
-  }
+  log.physics(`created ${colliderCount} primitive colliders, ${visualCount} debug meshes`);
 
-  const wheelShapes = buildWheelShapes(wheels, _tmpCenter, _tmpQ)
-  const wheelTrackWidth = wheelShapes.length >= 2
-    ? Math.max(Math.abs(wheelShapes[0].centerLocal.x - wheelShapes[1].centerLocal.x), 0.01)
-    : 0.17
+  setRobotMassProperties(body);
+  log.physics(`robot body mass: ${body.mass().toFixed(3)} kg`);
 
-  const bodyLocalMinY = getBodyLocalMinY(bodyHulls)
+  body.setLinearDamping(0.5);
+  body.setAngularDamping(0.5);
 
-  // Caster ball: passive roller. For v2, derive Y from wheel support plane so
-  // it is anchored to the body underside and therefore scales with radius.
-  const isV2 = !!baseObject.getObjectByName('v2_collision') || !!baseObject.getObjectByName('v2_body')
-  const casterY = resolveCasterLocalY(isV2, wheelShapes, bodyLocalMinY)
-  const casterZ = isV2 ? CASTER_LOCAL_Z_V2_M : CASTER_LOCAL_Z_V1_M
-  const casterLocal = new THREE.Vector3(0, casterY, casterZ)
-  const casterCollider = RAPIER.ColliderDesc.ball(CASTER_RADIUS_M)
-    .setTranslation(casterLocal.x, casterLocal.y, casterLocal.z)
-    .setMass(CASTER_MASS_KG)
-    .setFriction(CASTER_FRICTION)
-    .setRestitution(0)
-  world.createCollider(casterCollider, body)
-
-  const wheelProbeData: Array<{ x: number; y: number; z: number; length: number }> = []
-  for (const shape of wheelShapes) {
-    const wheelRadius = Math.max(shape.radius * WHEEL_SPHERE_SCALE, 0.003)
-    const wheelCollider = RAPIER.ColliderDesc.ball(wheelRadius)
-      .setTranslation(shape.centerLocal.x, shape.centerLocal.y, shape.centerLocal.z)
-      .setMass(WHEEL_MASS_KG)
-      .setFriction(WHEEL_FRICTION)
-      .setRestitution(0)
-    world.createCollider(wheelCollider, body)
-    shape.wheel.userData.physicsWheelRadius = wheelRadius
-    wheelProbeData.push({
-      x: shape.centerLocal.x,
-      y: shape.centerLocal.y,
-      z: shape.centerLocal.z,
-      length: Math.max(wheelRadius + 0.18, 0.2),
-    })
-  }
-
-  // Lock pitch/roll by default so behavior matches existing UI toggle semantics.
-  // Yaw stays free.
-  body.setEnabledRotations(false, true, false, true)
-  body.setEnabledTranslations(true, true, true, true)
-
-  ; (body as any).userData = { meshOffsetLocal, wheelTrackWidth, wheelProbeData }
-
-  const com = body.localCom()
-  const principalInertia = body.principalInertia()
-  const wheelYs = wheelShapes.map((s) => s.centerLocal.y.toFixed(4)).join(', ')
-  console.log('[robotBody] mass=%f kg  localCOM=(%f, %f, %f)  principalInertia=(%f, %f, %f)  wheelLocalY=[%s]  bodySize=(%f, %f, %f)  casterLocal=(%f, %f, %f)  isV2=%s  bodyCenterWorldY=%f',
-    body.mass(),
-    com.x, com.y, com.z,
-    principalInertia.x, principalInertia.y, principalInertia.z,
-    wheelYs,
-    _tmpSize.x, _tmpSize.y, _tmpSize.z,
-    casterLocal.x, casterLocal.y, casterLocal.z,
-    isV2,
-    _tmpCenter.y,
-  )
-
-  return body
-}
-
-function resolveCasterLocalY(isV2: boolean, wheelShapes: WheelShape[], bodyLocalMinY: number | null): number {
-  if (!isV2) return CASTER_LOCAL_Y_V1_M
-
-  // Primary relation for v2: caster is mounted under the body.
-  // If ball radius changes, center moves so the ball's TOP stays tied to the
-  // underside (instead of keeping the bottom fixed as before).
-  if (typeof bodyLocalMinY === 'number') {
-    return bodyLocalMinY + CASTER_TOP_CLEARANCE_M - CASTER_RADIUS_M
-  }
-
-  if (!wheelShapes.length) return CASTER_LOCAL_Y_V2_FALLBACK_M
-
-  const wheelGroundY = wheelShapes.reduce((sum, shape) => {
-    return sum + (shape.centerLocal.y - shape.radius)
-  }, 0) / wheelShapes.length
-
-  return wheelGroundY + CASTER_RADIUS_M
-}
-
-function getBodyLocalMinY(bodyHulls: Float32Array[]): number | null {
-  let minY = Number.POSITIVE_INFINITY
-  let hasAny = false
-
-  for (const vertices of bodyHulls) {
-    for (let i = 1; i < vertices.length; i += 3) {
-      if (vertices[i] < minY) minY = vertices[i]
-      hasAny = true
-    }
-  }
-
-  return hasAny ? minY : null
-}
-
-export function syncMeshFromBody(baseObject: THREE.Object3D, body: RAPIER.RigidBody): void {
-  const userData = (body as any).userData as {
-    meshOffsetLocal?: { x: number; y: number; z: number }
-  } | undefined
-  const pos = body.translation()
-  const rot = body.rotation()
-  baseObject.quaternion.set(rot.x, rot.y, rot.z, rot.w)
-
-  const offsetLocal = userData?.meshOffsetLocal
-  if (offsetLocal) {
-    _tmpSyncOffset.set(offsetLocal.x, offsetLocal.y, offsetLocal.z).applyQuaternion(baseObject.quaternion)
-    baseObject.position.set(pos.x - _tmpSyncOffset.x, pos.y - _tmpSyncOffset.y, pos.z - _tmpSyncOffset.z)
+  const sceneRoot = robot.root.parent;
+  if (sceneRoot) {
+    sceneRoot.add(collidersGroup);
   } else {
-    baseObject.position.set(pos.x, pos.y, pos.z)
-  }
-}
-
-function resolveBodySource(baseObject: THREE.Object3D): THREE.Object3D {
-  return baseObject.getObjectByName('v2_collision')
-    ?? baseObject.getObjectByName('v2_body')
-    ?? baseObject
-}
-
-function collectBodyHullVertices(
-  obj: THREE.Object3D,
-  bodyCenter: THREE.Vector3,
-  bodyQ: THREE.Quaternion,
-): Float32Array[] {
-  const hulls: Float32Array[] = []
-  _tmpInvQ.copy(bodyQ).invert()
-
-  obj.traverse((child) => {
-    if (!(child as THREE.Mesh).isMesh) return
-    if (isWheelSubtree(child)) return
-
-    const mesh = child as THREE.Mesh
-    const geom = mesh.geometry as THREE.BufferGeometry | undefined
-    if (!geom) return
-
-    const posAttr = geom.getAttribute('position') as THREE.BufferAttribute | undefined
-    if (!posAttr) return
-
-    const points: number[] = []
-
-    mesh.updateWorldMatrix(true, false)
-    const raw = posAttr.array as ArrayLike<number>
-    for (let i = 0; i < raw.length; i += 3) {
-      _tmpVertex.set(raw[i], raw[i + 1], raw[i + 2])
-      _tmpVertex.applyMatrix4(mesh.matrixWorld)
-      _tmpVertex.sub(bodyCenter)
-      _tmpVertex.applyQuaternion(_tmpInvQ)
-      points.push(_tmpVertex.x, _tmpVertex.y, _tmpVertex.z)
-    }
-
-    if (points.length >= 12) {
-      hulls.push(new Float32Array(points))
-    }
-  })
-
-  return hulls
-}
-
-function isWheelSubtree(obj: THREE.Object3D): boolean {
-  let p: THREE.Object3D | null = obj
-  while (p) {
-    if (p.name === 'wheel') return true
-    p = p.parent
-  }
-  return false
-}
-
-interface WheelShape {
-  wheel: THREE.Object3D
-  centerLocal: THREE.Vector3
-  radius: number
-}
-
-function buildWheelShapes(
-  wheels: THREE.Object3D[],
-  bodyCenter: THREE.Vector3,
-  bodyQ: THREE.Quaternion,
-): WheelShape[] {
-  const out: WheelShape[] = []
-  _tmpInvQ.copy(bodyQ).invert()
-
-  for (const wheel of wheels) {
-    if (!wheel.parent) continue
-
-    const { worldCenter, radius } = measureWheelFromGeometry(wheel)
-    const centerLocal = worldCenter.clone().sub(bodyCenter).applyQuaternion(_tmpInvQ)
-
-    out.push({ wheel, centerLocal, radius })
+    console.warn("[physics] robot.root has no parent, collidersGroup left unattached");
   }
 
-  // Mirror X only to reduce steering bias, but keep measured Y/Z/radius so the
-  // spheres stay wrapped around each specific wheel.
-  if (out.length >= 2) {
-    out.sort((a, b) => b.centerLocal.x - a.centerLocal.x)
-    const right = out[0]
-    const left = out[1]
+  robot.collidersGroup = collidersGroup;
 
-    const midX = (right.centerLocal.x + left.centerLocal.x) * 0.5
-    const halfTrack = Math.max(Math.abs(right.centerLocal.x - left.centerLocal.x) * 0.5, 0.01)
-
-    right.centerLocal.x = midX + halfTrack
-    left.centerLocal.x = midX - halfTrack
-  }
-
-  return out
-}
-
-function measureWheelFromGeometry(wheel: THREE.Object3D): {
-  worldCenter: THREE.Vector3
-  radius: number
-} {
-  wheel.updateWorldMatrix(true, true)
-
-  const invWheel = wheel.matrixWorld.clone().invert()
-  const localBounds = new THREE.Box3()
-  const childBounds = new THREE.Box3()
-  const localMatrix = new THREE.Matrix4()
-  let hasMesh = false
-
-  wheel.traverse((obj) => {
-    if (!(obj as THREE.Mesh).isMesh) return
-    const mesh = obj as THREE.Mesh
-    const geom = mesh.geometry as THREE.BufferGeometry | undefined
-    if (!geom) return
-
-    if (!geom.boundingBox) geom.computeBoundingBox()
-    if (!geom.boundingBox) return
-
-    localMatrix.multiplyMatrices(invWheel, mesh.matrixWorld)
-    childBounds.copy(geom.boundingBox).applyMatrix4(localMatrix)
-
-    if (!hasMesh) {
-      localBounds.copy(childBounds)
-      hasMesh = true
-    } else {
-      localBounds.union(childBounds)
-    }
-  })
-
-  if (!hasMesh) {
-    _tmpBox.setFromObject(wheel)
-    _tmpBox.getCenter(_tmpWheelCenter)
-    _tmpBox.getSize(_tmpSize)
-    const fallbackRadius = Math.max(Math.max(_tmpSize.x, _tmpSize.y, _tmpSize.z) * 0.25, 0.004)
-    return { worldCenter: _tmpWheelCenter.clone(), radius: fallbackRadius }
-  }
-
-  localBounds.getCenter(_tmpWheelCenter)
-  localBounds.getSize(_tmpWheelLocalSize)
-  wheel.getWorldScale(_tmpWheelWorldScale)
-
-  // Wheel spins around local X axis, so tire radius is in local Y/Z.
-  const radiusY = Math.abs(_tmpWheelLocalSize.y * _tmpWheelWorldScale.y) * 0.5
-  const radiusZ = Math.abs(_tmpWheelLocalSize.z * _tmpWheelWorldScale.z) * 0.5
-  const radius = Math.max(Math.max(radiusY, radiusZ), 0.004)
-
-  const worldCenter = wheel.localToWorld(_tmpWheelCenter.clone())
-  return { worldCenter, radius }
+  return {
+    body,
+    collidersGroup,
+    collidersByName,
+    meshSync: {}, // no offset — body origin and visual root origin are aligned
+  };
 }
