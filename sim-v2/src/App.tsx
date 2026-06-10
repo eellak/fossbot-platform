@@ -312,6 +312,7 @@ export function App() {
             while (accumulator >= dt) {
               if (vehicle) vehicle.step(dt)
               stepWorld(dt)
+              currentStage?.syncDynamicObjects()
               accumulator -= dt
             }
 
