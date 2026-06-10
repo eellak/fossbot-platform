@@ -1,14 +1,16 @@
 import { useEffect, useRef } from 'react'
 import { SimEngine } from './engine/SimEngine'
+import type { SimEngineConfig } from './engine/types'
 
-export function App() {
+
+export function App({ config }: { config?: Partial<SimEngineConfig> } = {}) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const engineRef = useRef<SimEngine | null>(null)
 
   useEffect(() => {
     if (!containerRef.current) return
 
-    const engine = new SimEngine(containerRef.current)
+    const engine = new SimEngine(containerRef.current, config)
     engineRef.current = engine
     engine.start()
 

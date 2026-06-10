@@ -8,9 +8,9 @@ export interface SceneHandle {
   scene: THREE.Scene
   camera: THREE.PerspectiveCamera
   controls: OrbitControls
-  gizmo: GizmoHandle
+  gizmo: GizmoHandle | null
   gizmoMode: 'camera' | 'robot'
-  gizmoModeLabel: HTMLDivElement
+  gizmoModeLabel: HTMLDivElement | null
   /**
    * If set, the gizmo tracks this object's world quaternion each frame.
    * If null, the gizmo falls back to camera-relative world axes (Phase 1).
@@ -19,7 +19,8 @@ export interface SceneHandle {
   resizeListener: () => void
 }
 
-export function initScene(container: HTMLElement): SceneHandle {
+export function initScene(container: HTMLElement, opts?: { gizmo?: boolean }): SceneHandle {
+  const useGizmo = opts?.gizmo ?? true
   const renderer = new THREE.WebGLRenderer({ antialias: true })
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
   renderer.setSize(container.clientWidth, container.clientHeight)
@@ -67,25 +68,31 @@ export function initScene(container: HTMLElement): SceneHandle {
   worldAxes.position.y = 0.002
   scene.add(worldAxes)
 
-  // Gizmo
-  const gizmo = createGizmo(renderer)
+  // Gizmo (optional — disabled in non-dev embeds)
+  let gizmo: GizmoHandle | null = null
+  let gizmoModeLabel: HTMLDivElement | null = null
+  if (useGizmo) {
+    gizmo = createGizmo(renderer)
 
-  const gizmoModeLabel = document.createElement('div')
-  gizmoModeLabel.textContent = 'Camera'
-  gizmoModeLabel.style.position = 'absolute'
-  gizmoModeLabel.style.right = `${GIZMO_MARGIN_PX}px`
-  gizmoModeLabel.style.top = `${GIZMO_MARGIN_PX + GIZMO_SIZE_PX + 2}px`
-  gizmoModeLabel.style.minWidth = `${GIZMO_SIZE_PX}px`
-  gizmoModeLabel.style.boxSizing = 'border-box'
-  gizmoModeLabel.style.padding = '4px 10px'
-  gizmoModeLabel.style.background = 'rgb(1, 0, 0)'
-  gizmoModeLabel.style.color = '#ffffff'
-  gizmoModeLabel.style.font = '600 12px sans-serif'
-  gizmoModeLabel.style.textAlign = 'center'
-  gizmoModeLabel.style.pointerEvents = 'auto'
-  gizmoModeLabel.style.cursor = 'pointer'
-  gizmoModeLabel.style.zIndex = '2'
-  container.appendChild(gizmoModeLabel)
+    gizmoModeLabel = document.createElement('div')
+    gizmoModeLabel.textContent = 'Camera'
+    gizmoModeLabel.style.position = 'absolute'
+    gizmoModeLabel.style.right = `${GIZMO_MARGIN_PX}px`
+    gizmoModeLabel.style.top = `${GIZMO_MARGIN_PX + GIZMO_SIZE_PX + 2}px`
+    gizmoModeLabel.style.minWidth = `${GIZMO_SIZE_PX}px`
+    gizmoModeLabel.style.boxSizing = 'border-box'
+    gizmoModeLabel.style.padding = '8px 12px'
+    gizmoModeLabel.style.background = 'rgba(0, 0, 0, 0.72)'
+    gizmoModeLabel.style.border = '1px solid rgba(255, 255, 255, 0.18)'
+    gizmoModeLabel.style.borderRadius = '6px'
+    gizmoModeLabel.style.color = '#ffffff'
+    gizmoModeLabel.style.font = '600 13px sans-serif'
+    gizmoModeLabel.style.textAlign = 'center'
+    gizmoModeLabel.style.pointerEvents = 'auto'
+    gizmoModeLabel.style.cursor = 'pointer'
+    gizmoModeLabel.style.zIndex = '2'
+    container.appendChild(gizmoModeLabel)
+  }
 
   const resizeListener = () => {
     const w = container.clientWidth
@@ -109,15 +116,17 @@ export function initScene(container: HTMLElement): SceneHandle {
     resizeListener,
   }
 
-  gizmoModeLabel.addEventListener('click', () => {
-    if (!handle.gizmoTarget) {
-      handle.gizmoMode = 'camera'
-      handle.gizmoModeLabel.textContent = 'Camera'
-      return
-    }
-    handle.gizmoMode = handle.gizmoMode === 'camera' ? 'robot' : 'camera'
-    handle.gizmoModeLabel.textContent = handle.gizmoMode === 'robot' ? 'Robot' : 'Camera'
-  })
+  if (gizmoModeLabel) {
+    gizmoModeLabel.addEventListener('click', () => {
+      if (!handle.gizmoTarget) {
+        handle.gizmoMode = 'camera'
+        handle.gizmoModeLabel!.textContent = 'Camera'
+        return
+      }
+      handle.gizmoMode = handle.gizmoMode === 'camera' ? 'robot' : 'camera'
+      handle.gizmoModeLabel!.textContent = handle.gizmoMode === 'robot' ? 'Robot' : 'Camera'
+    })
+  }
 
   return handle
 }
@@ -139,21 +148,23 @@ export function renderScene(handle: SceneHandle): void {
   renderer.render(scene, camera)
 
   // Gizmo overlay
-  if (gizmoMode === 'robot' && gizmoTarget) {
-    gizmoTarget.getWorldQuaternion(tmpQuat)
-    gizmo.syncFromQuaternion(tmpQuat)
-  } else {
-    gizmo.syncFromCamera(camera)
+  if (gizmo) {
+    if (gizmoMode === 'robot' && gizmoTarget) {
+      gizmoTarget.getWorldQuaternion(tmpQuat)
+      gizmo.syncFromQuaternion(tmpQuat)
+    } else {
+      gizmo.syncFromCamera(camera)
+    }
+    gizmo.render(container.clientWidth, container.clientHeight)
   }
-  gizmo.render(container.clientWidth, container.clientHeight)
 }
 
 export function disposeScene(h: SceneHandle) {
   window.removeEventListener('resize', h.resizeListener)
   h.controls.dispose()
-  h.gizmo.dispose()
+  h.gizmo?.dispose()
   h.renderer.dispose()
-  if (h.container.contains(h.gizmoModeLabel)) {
+  if (h.gizmoModeLabel && h.container.contains(h.gizmoModeLabel)) {
     h.container.removeChild(h.gizmoModeLabel)
   }
   if (h.renderer.domElement.parentElement === h.container) {

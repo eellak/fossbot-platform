@@ -24,6 +24,7 @@ export function createSplashScreen(container: HTMLElement, enabled: boolean): Sp
     splash.style.pointerEvents = 'auto'
     splash.innerHTML = `
       <div style="text-align:center; padding:24px 28px; border:1px solid rgba(255,255,255,0.14); border-radius:14px; background:rgba(0,0,0,0.26); box-shadow:0 18px 60px rgba(0,0,0,0.35);">
+        <img src="/images/superlogo.png" alt="Fossbot" style="width:300px; height:auto; margin-bottom:14px; display:block; margin-left:auto; margin-right:auto;" />
         <div style="font-size:22px; margin-bottom:8px;">Fossbot Simulator</div>
         <div style="color:#b8c6d3; font-weight:500;">Preparing physics world...</div>
       </div>
