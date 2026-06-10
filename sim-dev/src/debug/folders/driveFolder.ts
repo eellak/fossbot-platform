@@ -1,12 +1,15 @@
 import GUI from 'lil-gui'
-import type { RuntimeControls } from '../types'
+import type { SimControlInterface } from '../../engine/types'
 
-export function buildDriveFolder(parentGui: GUI, controls: RuntimeControls) {
+export function buildDriveFolder(parentGui: GUI, ctrl: SimControlInterface) {
   const folder = parentGui.addFolder('Drive')
-  const controller = folder.add(controls.drive, 'turnScale', 0, 1, 0.01).name('Turn scale')
+  const controller = folder.add(
+    { get turnScale() { return ctrl.getTurnScale() }, set turnScale(v: number) { ctrl.setTurnScale(v) } },
+    'turnScale', 0, 1, 0.01,
+  ).name('Turn scale')
   folder.add({
     resetDefaults: () => {
-      controls.drive.turnScale = 0.35
+      ctrl.setTurnScale(0.35)
       controller.updateDisplay()
     }
   }, 'resetDefaults').name('Reset to defaults')

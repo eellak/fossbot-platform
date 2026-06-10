@@ -10,12 +10,12 @@
 
 | # | Candidate | Status | Notes |
 |---|-----------|--------|-------|
-| 1 | Extract `SimEngine` from `App.tsx` | 🟧 in progress | God module → deepened module |
-| 2 | Remove world singleton, make it a creation parameter | 🟧 in progress | Enables multi-instance, testability |
+| 1 | Extract `SimEngine` from `App.tsx` | ✅ done | `App.tsx` → 23-line wrapper; engine owns full lifecycle |
+| 2 | Remove world singleton, make it a creation parameter | ✅ done | `WorldHandle` replaces `initializeWorld`/`getWorld` |
 | 3 | Split stage builders (visual vs collider) | ⬜ proposed | Shallow `Built` interface |
-| 4 | Clean control interface (replace `RuntimeControls` mutation) | ⬜ proposed | Leaky debug menu grab-bag |
+| 4 | Clean control interface (replace `RuntimeControls` mutation) | 🟧 in progress | `SimControlInterface` replaces grab-bag; folders migrated |
 | 5 | Separate vehicle physics from visual sync | ⬜ proposed | Physics → render coupling |
-| 6 | Configurable asset paths | 🟧 partial | Stage glob fixed; robot `assetBaseUrl` param exists in SimEngineConfig |
+| 6 | Configurable asset paths | ✅ done | Stage glob fixed; `assetBaseUrl` param in `SimEngineConfig` |
 
 ---
 

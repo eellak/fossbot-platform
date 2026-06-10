@@ -1,29 +1,24 @@
 import GUI from 'lil-gui'
-import { STAGE_NAMES, type StageName } from '../../stages'
+import { type StageName } from '../../stages'
 import { rememberStage, setRememberLastStage, shouldRememberLastStage } from '../utils/localStorage'
+import type { SimControlInterface } from '../../engine/types'
 import type { StageFolderHandle } from '../types'
-
-export interface StageFolderOptions {
-  initial: StageName
-  onChange: (next: StageName) => void
-  resetRobotToSpawn: () => void
-}
 
 export function buildStageFolder(
   parentGui: GUI,
-  opts: StageFolderOptions,
+  ctrl: SimControlInterface,
 ): StageFolderHandle {
   const folder = parentGui.addFolder('Stage')
   const state = {
-    stage: opts.initial,
+    stage: ctrl.getCurrentStage() ?? '',
     rememberLastStage: shouldRememberLastStage(),
   }
   const controller = folder
-    .add(state, 'stage', STAGE_NAMES)
+    .add(state, 'stage', ctrl.getStageNames())
     .name('Active stage')
     .onChange((value: StageName) => {
       rememberStage(value)
-      opts.onChange(value)
+      ctrl.swapStage(value)
     })
 
   folder
@@ -33,7 +28,7 @@ export function buildStageFolder(
       setRememberLastStage(value, state.stage)
     })
 
-  folder.add({ resetRobotToSpawn: opts.resetRobotToSpawn }, 'resetRobotToSpawn').name('Reset to spawn')
+  folder.add({ resetRobotToSpawn: ctrl.resetRobotToSpawn }, 'resetRobotToSpawn').name('Reset to spawn')
 
   return {
     setStage(name) {

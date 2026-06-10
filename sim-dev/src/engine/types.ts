@@ -1,7 +1,6 @@
 import type * as RAPIER from '@dimforge/rapier3d-compat'
-import type { RobotPhysicsState } from '../physics/robotBody'
-import type { VehicleHandle } from '../physics/vehicle'
-import type { StageHandle, StageName } from '../stages'
+import type { VehicleSettings, VehicleTelemetry } from '../physics/vehicle'
+import type { StageName } from '../stages'
 
 /** Configuration passed to SimEngine at construction. */
 export interface SimEngineConfig {
@@ -17,56 +16,54 @@ export interface SimEngineConfig {
   turnScale?: number
 }
 
-/** Mutable runtime state — shared between engine loop and debug menu. */
-export interface RuntimeControls {
-  world: {
-    paused: boolean
-    timeScale: number
-    stepOnce: boolean
-    showColliders: boolean
-    splashEnabled: boolean
-    splashExtraTime: number
-  }
-  drive: {
-    turnScale: number
-  }
-  telemetry: {
-    show: boolean
-    updateInterval: number
-  }
-}
-
-/** External control surface exposed by the engine. */
-export interface EngineControls {
+/**
+ * Deliberate control surface between the debug menu and the engine.
+ * Every control operation is a method — no shared mutable state.
+ * Direct-access properties are marked "debug-only" and will be removed
+ * when candidates #3 and #5 are done.
+ */
+export interface SimControlInterface {
   // ── World ──
-  setPaused(paused: boolean): void
+  setPaused(v: boolean): void
   isPaused(): boolean
   stepOnce(): void
-  setTimeScale(scale: number): void
-  setShowColliders(show: boolean): void
+  setTimeScale(v: number): void
+  getTimeScale(): number
+  setShowColliders(v: boolean): void
   isShowingColliders(): boolean
+  setGravityY(v: number): void
+  getGravityY(): number
+  setSplashEnabled(v: boolean): void
+  isSplashEnabled(): boolean
+  setSplashExtraTime(v: number): void
+  getSplashExtraTime(): number
 
   // ── Drive ──
-  setTurnScale(scale: number): void
+  setTurnScale(v: number): void
   getTurnScale(): number
 
   // ── Telemetry ──
-  setTelemetryVisible(visible: boolean): void
+  setTelemetryVisible(v: boolean): void
   isTelemetryVisible(): boolean
-  setTelemetryUpdateInterval(interval: number): void
+  setTelemetryUpdateInterval(v: number): void
+  getTelemetryUpdateInterval(): number
 
   // ── Stage ──
   getCurrentStage(): StageName | null
+  getStageNames(): string[]
+  /** Triggers async stage swap. */
+  swapStage(next: StageName): void
 
   // ── Robot ──
   resetRobotToSpawn(): void
 
-  // ── Direct access (for debug menu; will be replaced in candidate #4) ──
-  /** Mutable controls object — debug menu reads/writes this directly. */
-  runtime: RuntimeControls
-  robotPhysics: RobotPhysicsState | null
-  vehicle: VehicleHandle | null
-  world: RAPIER.World | null
+  // ── Debug-only access (remove after #3 and #5) ──
+  /** Rapier body for the robot folder (pose sliders, damping, mass). */
+  robotBody: RAPIER.RigidBody | null
+  /** Vehicle settings — wheels folder mutates these live. */
+  vehicleSettings: VehicleSettings | null
+  /** Current vehicle telemetry snapshot. */
+  vehicleTelemetry: VehicleTelemetry | null
 }
 
 /** Re-exported for debug menu compatibility. */

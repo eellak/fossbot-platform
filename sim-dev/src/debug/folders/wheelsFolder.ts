@@ -1,9 +1,16 @@
 import GUI from 'lil-gui'
-import { createDefaultVehicleSettings, type VehicleHandle } from '../../physics/vehicle'
+import { createDefaultVehicleSettings } from '../../physics/vehicle'
+import type { SimControlInterface } from '../../engine/types'
 
-export function buildWheelsFolder(parentGui: GUI, vehicle: VehicleHandle) {
+export function buildWheelsFolder(parentGui: GUI, ctrl: SimControlInterface) {
   const folder = parentGui.addFolder('Wheels')
-  const s = vehicle.settings
+  const s = ctrl.vehicleSettings
+  if (!s) {
+    folder.add({ _info: 'No vehicle available' }, '_info').name('(no vehicle)')
+    folder.close()
+    return
+  }
+
   const controllers: ReturnType<GUI['add']>[] = []
 
   controllers.push(folder.add(s, 'wheelRadius', 0.01, 0.08, 0.001).name('Wheel radius'))

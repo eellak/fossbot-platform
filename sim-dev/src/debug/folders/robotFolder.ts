@@ -1,18 +1,25 @@
 import GUI from 'lil-gui'
 import * as THREE from 'three'
 import { setRobotMassProperties } from '../../physics/robotBody'
-import type { DebugMenuOptions } from '../types'
+import type { SimControlInterface } from '../../engine/types'
 import { copyRobotState, logRobotState, zeroVelocities } from '../utils/robotState'
 
-export function buildRobotFolder(parentGui: GUI, opts: DebugMenuOptions) {
+export function buildRobotFolder(parentGui: GUI, ctrl: SimControlInterface) {
   const folder = parentGui.addFolder('Robot')
-  const body = opts.robotPhysics.body
+  const body = ctrl.robotBody
+  if (!body) {
+    folder.add({ _info: 'No robot body available' }, '_info').name('(no body)')
+    folder.close()
+    return
+  }
+
   const pos = body.translation()
   const rot = body.rotation()
   const yaw = new THREE.Euler().setFromQuaternion(
     new THREE.Quaternion(rot.x, rot.y, rot.z, rot.w),
     'YXZ',
   ).y
+
   const state = {
     mass: body.mass(),
     linearDamping: body.linearDamping(),
@@ -21,11 +28,11 @@ export function buildRobotFolder(parentGui: GUI, opts: DebugMenuOptions) {
     y: pos.y,
     z: pos.z,
     yaw,
-    reset: opts.resetRobotToSpawn,
+    reset: ctrl.resetRobotToSpawn,
     resetDefaults: () => { },
     zeroVelocities: () => zeroVelocities(body),
-    logState: () => logRobotState(opts),
-    copyStateJson: () => copyRobotState(opts),
+    logState: () => logRobotState(ctrl),
+    copyStateJson: () => copyRobotState(ctrl),
   }
 
   const applyPose = () => {
@@ -36,21 +43,22 @@ export function buildRobotFolder(parentGui: GUI, opts: DebugMenuOptions) {
 
   const controllers: ReturnType<GUI['add']>[] = []
   state.resetDefaults = () => {
-    const stage = opts.getCurrentStage()
     setRobotMassProperties(body)
     body.setLinearDamping(0.5)
     body.setAngularDamping(0.5)
     state.mass = body.mass()
     state.linearDamping = body.linearDamping()
     state.angularDamping = body.angularDamping()
-    if (stage) {
-      state.x = stage.spawnPosition.x
-      state.y = stage.spawnPosition.y + 0.015
-      state.z = stage.spawnPosition.z
-      state.yaw = stage.spawnOrientation.y
-      applyPose()
-      zeroVelocities(body)
-    }
+    ctrl.resetRobotToSpawn()
+    const p = body.translation()
+    state.x = p.x
+    state.y = p.y
+    state.z = p.z
+    const r = body.rotation()
+    state.yaw = new THREE.Euler().setFromQuaternion(
+      new THREE.Quaternion(r.x, r.y, r.z, r.w), 'YXZ',
+    ).y
+    zeroVelocities(body)
     controllers.forEach((c) => c.updateDisplay())
   }
 
