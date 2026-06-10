@@ -4,8 +4,9 @@ import { loadRobotV2, type RobotV2 } from '../robot/v2'
 import { attachDebugMenu, type DebugMenuHandle } from '../debug'
 import { createWorld, type WorldHandle } from '../physics/world'
 import { createRobotBody, type RobotPhysicsState } from '../physics/robotBody'
+import { ROBOT_COLLIDERS } from '../physics/colliders'
 import { syncMeshFromBody, syncObjectToBody } from '../physics/mesh-sync'
-import { createVehicle, type VehicleHandle, type VehicleSettings, type VehicleTelemetry } from '../physics/vehicle'
+import { createVehicle, syncVehicleVisual, type VehicleHandle, type VehicleSettings, type VehicleTelemetry } from '../physics/vehicle'
 import { loadStage, STAGE_NAMES, DEFAULT_STAGE, type StageHandle, type StageName } from '../stages'
 import { installKeyboard, type KeyboardHandle } from '../util/keyboard'
 import { log } from '../util/log'
@@ -98,6 +99,10 @@ export class SimEngine {
   private readonly tmpLookAt = new THREE.Vector3()
   private readonly tmpQuat = new THREE.Quaternion()
   private readonly tmpEuler = new THREE.Euler()
+
+  // ── Wheel visual sync (cached from robot at creation time) ──
+  private wheelBaseLeft = new THREE.Vector3()
+  private wheelBaseRight = new THREE.Vector3()
 
   // ── RAF ──
   private rafId = 0
@@ -260,7 +265,20 @@ export class SimEngine {
         skipDriveWheels: true,
       })
       this.splash.setStatus('Preparing wheel physics...')
-      this.vehicle = createVehicle(world, this.robotPhysics.body, this.robot)
+      // Compute wheel physics positions from collider configs.
+      const leftWheelCfg = ROBOT_COLLIDERS.find((c) => c.name === 'left_wheel')
+      const rightWheelCfg = ROBOT_COLLIDERS.find((c) => c.name === 'right_wheel')
+      const wheelPositions: [THREE.Vector3, THREE.Vector3] = [
+        leftWheelCfg
+          ? new THREE.Vector3(...leftWheelCfg.position)
+          : this.robot.leftWheel.position.clone(),
+        rightWheelCfg
+          ? new THREE.Vector3(...rightWheelCfg.position)
+          : this.robot.rightWheel.position.clone(),
+      ]
+      this.wheelBaseLeft = this.robot.leftWheel.position.clone()
+      this.wheelBaseRight = this.robot.rightWheel.position.clone()
+      this.vehicle = createVehicle(world, this.robotPhysics.body, wheelPositions, this.robot.wheelRadius)
       this.keyboard = installKeyboard()
       this.applySpawnPose(this.currentStage)
       log.physics('createRobotBody returned', !!this.robotPhysics)
@@ -352,6 +370,17 @@ export class SimEngine {
         this.worldHandle.step()
         this.currentStage?.syncDynamicObjects()
         this.accumulator -= dt
+      }
+
+      // Apply vehicle visual state to wheel meshes (pure rendering).
+      if (this.robotPhysics && this.robot && this.robotRoot) {
+        syncVehicleVisual(
+          this.robot.leftWheel,
+          this.robot.rightWheel,
+          this.vehicle.visualState,
+          this.wheelBaseLeft,
+          this.wheelBaseRight,
+        )
       }
 
       if (this.robotPhysics && this.robotRoot) {
