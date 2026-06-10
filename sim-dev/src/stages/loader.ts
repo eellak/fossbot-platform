@@ -1,9 +1,11 @@
 import * as RAPIER from '@dimforge/rapier3d-compat'
 import * as THREE from 'three'
 import { STAGES, type StageName } from './index'
-import { buildFloor, buildCube, buildCylinder, buildModel, buildText } from './builders'
+import { buildFloorVisual, buildCubeVisual, buildCylinderVisual, buildModelVisual, buildTextVisual } from './visuals'
+import type { VisualBuilt } from './visuals'
+import { buildFloorCollider, buildCubeCollider, buildCylinderCollider, buildModelCollider } from './colliders'
+import type { ColliderBuilt } from './colliders'
 import { log } from '../util/log'
-import type { Built } from './builders'
 import { syncObjectToBody } from '../physics/mesh-sync'
 
 interface StageDynamicObject {
@@ -16,7 +18,6 @@ export interface StageHandle {
   name: StageName
   spawnPosition: THREE.Vector3
   spawnOrientation: THREE.Euler
-  /** Group containing debug wireframes for every stage collider. Hidden by default. */
   collidersGroup: THREE.Group
   dynamicObjects: StageDynamicObject[]
   syncDynamicObjects: () => void
@@ -26,65 +27,39 @@ export interface StageHandle {
 const DEFAULT_SPAWN = new THREE.Vector3(0, 0, 0)
 const DEFAULT_ORIENT = new THREE.Euler(0, 0, 0)
 
-function builtColliders(built: Built): RAPIER.ColliderDesc[] {
-  return [
-    ...(built.collider ? [built.collider] : []),
-    ...(built.colliders ?? []),
-  ]
-}
-
-function builtDebugMeshes(built: Built): Array<THREE.Mesh | THREE.LineSegments> {
-  return [
-    ...(built.debugMesh ? [built.debugMesh] : []),
-    ...(built.debugMeshes ?? []),
-  ]
-}
-
 function setBodyRotationFromEuler(bodyDesc: RAPIER.RigidBodyDesc, orientation?: [number, number, number]): RAPIER.RigidBodyDesc {
   if (!orientation) return bodyDesc
   const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(orientation[0], orientation[1], orientation[2]))
   return bodyDesc.setRotation({ x: q.x, y: q.y, z: q.z, w: q.w })
 }
 
-function attachBuiltCollider(
-  built: Built,
-  world: RAPIER.World,
-  body: RAPIER.RigidBody,
-  collidersGroup: THREE.Group,
-): void {
-  for (const collider of builtColliders(built)) {
-    world.createCollider(collider, body)
-  }
-
-  for (const debugMesh of builtDebugMeshes(built)) {
-    collidersGroup.add(debugMesh)
-  }
-}
-
-function attachBuiltToStage(
-  built: Built,
+function attachColliders(
+  visual: VisualBuilt,
+  collider: ColliderBuilt,
   world: RAPIER.World,
   stageBody: RAPIER.RigidBody,
   collidersGroup: THREE.Group,
   dynamicObjects: StageDynamicObject[],
 ): void {
-  if (!built.dynamicBody) {
-    attachBuiltCollider(built, world, stageBody, collidersGroup)
+  if (!visual.dynamicBody) {
+    // Static: attach to shared stage body.
+    for (const c of collider.colliders) world.createCollider(c, stageBody)
+    for (const d of collider.debugMeshes) collidersGroup.add(d)
     return
   }
 
-  const colliders = builtColliders(built)
-  if (colliders.length === 0) return
+  if (collider.colliders.length === 0) return
 
-  const [x, y, z] = built.dynamicBody.position
+  // Dynamic: create a separate rigid body.
+  const [x, y, z] = visual.dynamicBody.position
   let bodyDesc = RAPIER.RigidBodyDesc.dynamic().setTranslation(x, y, z)
-  bodyDesc = setBodyRotationFromEuler(bodyDesc, built.dynamicBody.orientation)
+  bodyDesc = setBodyRotationFromEuler(bodyDesc, visual.dynamicBody.orientation)
   const body = world.createRigidBody(bodyDesc)
 
-  const massPerCollider = built.dynamicBody.mass / colliders.length
-  for (const collider of colliders) {
-    collider.setMass(massPerCollider)
-    world.createCollider(collider, body)
+  const massPerCollider = visual.dynamicBody.mass / collider.colliders.length
+  for (const c of collider.colliders) {
+    c.setMass(massPerCollider)
+    world.createCollider(c, body)
   }
 
   body.recomputeMassPropertiesFromColliders()
@@ -92,13 +67,11 @@ function attachBuiltToStage(
   body.setAngularDamping(0.2)
 
   const debugGroup = new THREE.Group()
-  debugGroup.name = `collider_${built.object.name || 'dynamic_stage_object'}`
-  for (const debugMesh of builtDebugMeshes(built)) {
-    debugGroup.add(debugMesh)
-  }
+  debugGroup.name = `collider_${visual.object.name || 'dynamic_stage_object'}`
+  for (const d of collider.debugMeshes) debugGroup.add(d)
   collidersGroup.add(debugGroup)
 
-  dynamicObjects.push({ body, object: built.object, collidersGroup: debugGroup })
+  dynamicObjects.push({ body, object: visual.object, collidersGroup: debugGroup })
 }
 
 export async function loadStage(
@@ -116,7 +89,6 @@ export async function loadStage(
   const modelLoads: Promise<void>[] = []
   const dynamicObjects: StageDynamicObject[] = []
 
-  // Collect debug wireframes for every stage collider here.
   const stgCollidersGrp = new THREE.Group()
   stgCollidersGrp.name = 'stage_colliders'
   stgCollidersGrp.visible = false
@@ -129,24 +101,27 @@ export async function loadStage(
     )
     switch (type) {
       case 'floor': {
-        const built = buildFloor(entry as any)
-        scene.add(built.object)
-        objects.push(built.object)
-        attachBuiltToStage(built, world, stageBody, stgCollidersGrp, dynamicObjects)
+        const vis = buildFloorVisual(entry as any)
+        const col = buildFloorCollider(entry as any, (entry as any).dimensions)
+        scene.add(vis.object)
+        objects.push(vis.object)
+        attachColliders(vis, col, world, stageBody, stgCollidersGrp, dynamicObjects)
         break
       }
       case 'cube': {
-        const built = buildCube(entry as any)
-        scene.add(built.object)
-        objects.push(built.object)
-        attachBuiltToStage(built, world, stageBody, stgCollidersGrp, dynamicObjects)
+        const vis = buildCubeVisual(entry as any)
+        const col = buildCubeCollider(entry as any)
+        scene.add(vis.object)
+        objects.push(vis.object)
+        attachColliders(vis, col, world, stageBody, stgCollidersGrp, dynamicObjects)
         break
       }
       case 'cylinder': {
-        const built = buildCylinder(entry as any)
-        scene.add(built.object)
-        objects.push(built.object)
-        attachBuiltToStage(built, world, stageBody, stgCollidersGrp, dynamicObjects)
+        const vis = buildCylinderVisual(entry as any)
+        const col = buildCylinderCollider(entry as any)
+        scene.add(vis.object)
+        objects.push(vis.object)
+        attachColliders(vis, col, world, stageBody, stgCollidersGrp, dynamicObjects)
         break
       }
       case 'fossbot': {
@@ -157,11 +132,12 @@ export async function loadStage(
         break
       }
       case 'model': {
-        const p = buildModel(entry as any)
-          .then((built) => {
-            scene.add(built.object)
-            objects.push(built.object)
-            attachBuiltToStage(built, world, stageBody, stgCollidersGrp, dynamicObjects)
+        const p = buildModelVisual(entry as any)
+          .then(async (vis) => {
+            const col = await buildModelCollider(entry as any, vis.object)
+            scene.add(vis.object)
+            objects.push(vis.object)
+            attachColliders(vis, col, world, stageBody, stgCollidersGrp, dynamicObjects)
           })
           .catch((err) => {
             console.warn(`[stage] model load failed: ${(entry as any).filename}`, err)
@@ -170,9 +146,9 @@ export async function loadStage(
         break
       }
       case 'text': {
-        const built = buildText(entry as any)
-        scene.add(built.object)
-        objects.push(built.object)
+        const vis = buildTextVisual(entry as any)
+        scene.add(vis.object)
+        objects.push(vis.object)
         break
       }
       default:
@@ -208,7 +184,6 @@ export async function loadStage(
           }
         })
       }
-      // Dispose stage collider wireframes.
       scene.remove(stgCollidersGrp)
       stgCollidersGrp.traverse((child) => {
         if ((child as any).isMesh || (child as any).isLineSegments) {
@@ -219,7 +194,6 @@ export async function loadStage(
           else mat?.dispose()
         }
       })
-      // Removing the body cascades to its colliders.
       for (const dynamicObject of dynamicObjects) {
         world.removeRigidBody(dynamicObject.body)
       }
