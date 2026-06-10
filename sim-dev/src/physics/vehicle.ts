@@ -1,8 +1,6 @@
 import * as RAPIER from '@dimforge/rapier3d-compat'
 import * as THREE from 'three'
-import type { RobotV2 } from '../robot/v2'
 import { ROBOT_COLLIDERS } from './colliders'
-import { log } from '../util/log'
 
 // ── Tunable parameters ───────────────────────────────────────────────────────
 export interface VehicleSettings {
@@ -40,14 +38,20 @@ export function createDefaultVehicleSettings(wheelRadius: number): VehicleSettin
 const GRAVITY = 9.81
 
 // ── Interface ────────────────────────────────────────────────────────────────
+export interface WheelVisualState {
+  /** Cumulative wheel rotation angle (radians). Apply to mesh.rotation.x. */
+  spin: number
+  /** Suspension compression uplift (meters). Add to mesh.position.y above base. */
+  suspensionY: number
+}
+
 export interface VehicleHandle {
-  setDrive: (
-    left: number,   // -1..1
-    right: number,  // -1..1
-  ) => void
+  setDrive: (left: number, right: number) => void
   step: (dt: number) => void
   getTelemetry: () => VehicleTelemetry
   settings: VehicleSettings
+  /** Per-wheel visual state updated by step(). Apply with syncVehicleVisual(). */
+  visualState: [WheelVisualState, WheelVisualState]
   dispose: () => void
 }
 
@@ -66,7 +70,7 @@ export interface WheelTelemetry {
   lateralForce: number
 }
 
-// ── Temp vectors (avoid allocations) ─────────────────────────────────────────
+// ── Temp vectors (avoid per-frame allocations) ───────────────────────────────
 const _forward = new THREE.Vector3()
 const _right = new THREE.Vector3()
 const _normal = new THREE.Vector3()
@@ -96,14 +100,25 @@ function createWheelTelemetry(settings: VehicleSettings): WheelTelemetry {
   }
 }
 
+/**
+ * Create the vehicle controller (physics only — no rendering).
+ *
+ * @param wheelLocalPositions  Two drive-wheel positions in chassis-local space.
+ * @param wheelRadius          Drive-wheel radius (meters).
+ */
 export function createVehicle(
   world: RAPIER.World,
   chassis: RAPIER.RigidBody,
-  robot: RobotV2,
+  wheelLocalPositions: [THREE.Vector3, THREE.Vector3],
+  wheelRadius: number,
 ): VehicleHandle {
-  const settings = createDefaultVehicleSettings(robot.wheelRadius)
+  const settings = createDefaultVehicleSettings(wheelRadius)
   let leftInput = 0
   let rightInput = 0
+  const visualState: [WheelVisualState, WheelVisualState] = [
+    { spin: 0, suspensionY: 0 },
+    { spin: 0, suspensionY: 0 },
+  ]
   const wheelSpin = [0, 0]
   const wheelHadContact = [false, false]
   const telemetry: VehicleTelemetry = {
@@ -111,22 +126,8 @@ export function createVehicle(
     right: createWheelTelemetry(settings),
   }
   const wheelTelemetry = [telemetry.left, telemetry.right]
-  const visualWheels = [robot.leftWheel, robot.rightWheel]
-  const visualWheelBasePositions = [
-    robot.leftWheel.position.clone(),
-    robot.rightWheel.position.clone(),
-  ]
 
-  const leftWheelCollider = ROBOT_COLLIDERS.find((cfg) => cfg.name === 'left_wheel')
-  const rightWheelCollider = ROBOT_COLLIDERS.find((cfg) => cfg.name === 'right_wheel')
-  const wheels = [
-    leftWheelCollider
-      ? new THREE.Vector3(...leftWheelCollider.position)
-      : robot.leftWheel.position.clone(),
-    rightWheelCollider
-      ? new THREE.Vector3(...rightWheelCollider.position)
-      : robot.rightWheel.position.clone(),
-  ]
+  const wheels = [wheelLocalPositions[0].clone(), wheelLocalPositions[1].clone()]
 
   function colliderBelongsToChassis(collider: RAPIER.Collider): boolean {
     return collider.parent()?.handle === chassis.handle
@@ -206,13 +207,10 @@ export function createVehicle(
       _normal.set(hit.normal.x, hit.normal.y, hit.normal.z).normalize()
       if (_normal.dot(_rayDir) >= -0.1) return
 
-      // Velocity at the tire contact patch: chassis linear velocity plus
-      // angular velocity around the chassis COM.
+      // Velocity at the tire contact patch.
       _r.copy(_contact).sub(_chassisWorld)
       _vPoint.copy(_vel).add(_tmp.copy(_ang).cross(_r))
 
-      // Ray suspension provides drive-wheel support. The visual wheel can move
-      // upward under compression, but never droops below its tuned base pose.
       const suspensionLength = Math.max(0, toi - settings.wheelRadius)
       const compression = settings.suspensionRestLength - suspensionLength
       const spring = compression * settings.suspensionStiffness
@@ -235,7 +233,6 @@ export function createVehicle(
       // --- tire basis: chassis forward/right flattened onto the contact plane ---
       _forward.set(0, 0, -1).applyQuaternion(quat)
       _forward.projectOnPlane(_normal).normalize()
-
       _right.crossVectors(_forward, _normal).normalize()
 
       const vLong = _vPoint.dot(_forward)
@@ -248,10 +245,11 @@ export function createVehicle(
       wheelData.normalY = _normal.y
       wheelData.longitudinalVelocity = vLong
       wheelData.lateralVelocity = vLat
+
+      // Physics-only: track spin and suspension for visual sync.
       wheelSpin[i] += (vLong / settings.wheelRadius) * dt
-      visualWheels[i].rotation.x = wheelSpin[i]
-      visualWheels[i].position.copy(visualWheelBasePositions[i])
-      visualWheels[i].position.y += Math.max(0, settings.suspensionRestLength - suspensionLength)
+      visualState[i].spin = wheelSpin[i]
+      visualState[i].suspensionY = Math.max(0, settings.suspensionRestLength - suspensionLength)
 
       const maxLoadedTireForce = Math.min(
         settings.maxTireForce,
@@ -259,22 +257,6 @@ export function createVehicle(
       )
 
       // Slope-hold via direct gravity projection onto the contact plane.
-      // No velocity-based sign: the anti-gravity force is a function of
-      // geometry, not motion, so it works correctly at rest, across-slope,
-      // or at any yaw.
-      //
-      // Applied at the chassis CoM (NOT the wheel contact point) so the two
-      // wheels' identical world-frame slope-hold forces don't induce a
-      // spurious torque about the CoM through their offset wheel contacts.
-      // That offset-induced yaw torque was what caused cross-slope chassis
-      // to slowly self-rotate toward slope-aligned, drifting visually.
-      // Side effect: slope-hold bypasses the per-wheel maxLoadedTireForce
-      // clamp — accept that, since the goal is stable hold, and the
-      // physical "tire would slip" case is rare on our 25° ceiling.
-      //
-      // _downSlope = world-frame "downhill" unit vector in the contact
-      //   plane: project (0,-1,0) onto the plane perpendicular to the
-      //   contact normal. (-Y) − (−Y · n)·n = (-Y) + n.y·n.
       const slopeSin = Math.sqrt(Math.max(0, 1 - _normal.y * _normal.y))
       _downSlope.set(0, -1, 0).addScaledVector(_normal, _normal.y)
       if (_downSlope.lengthSq() > 1e-8) _downSlope.normalize()
@@ -282,14 +264,14 @@ export function createVehicle(
       _holdVec.copy(_downSlope).multiplyScalar(-holdMag)
       chassis.addForce({ x: _holdVec.x, y: _holdVec.y, z: _holdVec.z }, true)
 
-      // --- longitudinal tire force: motor plus rolling brake to cancel slip ---
+      // --- longitudinal tire force ---
       const fLong = THREE.MathUtils.clamp(
         input * settings.motorForce - vLong * settings.brakeStrength,
         -maxLoadedTireForce,
         maxLoadedTireForce,
       )
 
-      // --- lateral tire force: grip cancels sideways velocity on the contact plane ---
+      // --- lateral tire force ---
       const fLat = THREE.MathUtils.clamp(
         -vLat * settings.gripStrength,
         -maxLoadedTireForce,
@@ -299,11 +281,7 @@ export function createVehicle(
       wheelData.longitudinalForce = fLong
       wheelData.lateralForce = fLat
 
-      _force
-        .copy(_forward)
-        .multiplyScalar(fLong)
-        .add(_tmp.copy(_right).multiplyScalar(fLat))
-
+      _force.copy(_forward).multiplyScalar(fLong).add(_tmp.copy(_right).multiplyScalar(fLat))
       chassis.addForceAtPoint(
         { x: _force.x, y: _force.y, z: _force.z },
         { x: _contact.x, y: _contact.y, z: _contact.z },
@@ -311,12 +289,13 @@ export function createVehicle(
       )
     })
 
+    // Free-spin when in air (no contact): spin the wheels visually.
     wheels.forEach((_, i) => {
       const input = i === 0 ? leftInput : rightInput
       if (wheelHadContact[i] || Math.abs(input) <= 0.01) return
       wheelSpin[i] += input * settings.freeSpinSpeed * dt
-      visualWheels[i].rotation.x = wheelSpin[i]
-      visualWheels[i].position.copy(visualWheelBasePositions[i])
+      visualState[i].spin = wheelSpin[i]
+      visualState[i].suspensionY = 0
     })
   }
 
@@ -324,9 +303,30 @@ export function createVehicle(
     setDrive,
     step,
     settings,
+    visualState,
     getTelemetry() {
       return telemetry
     },
-    dispose() { },
+    dispose() {},
   }
+}
+
+/**
+ * Apply per-wheel visual state to the robot's Three.js drive-wheel meshes.
+ * Called after vehicle.step() each frame. Pure rendering — no physics.
+ */
+export function syncVehicleVisual(
+  leftWheel: THREE.Object3D,
+  rightWheel: THREE.Object3D,
+  visualState: [WheelVisualState, WheelVisualState],
+  leftBasePosition: THREE.Vector3,
+  rightBasePosition: THREE.Vector3,
+): void {
+  leftWheel.rotation.x = visualState[0].spin
+  leftWheel.position.copy(leftBasePosition)
+  leftWheel.position.y += visualState[0].suspensionY
+
+  rightWheel.rotation.x = visualState[1].spin
+  rightWheel.position.copy(rightBasePosition)
+  rightWheel.position.y += visualState[1].suspensionY
 }
