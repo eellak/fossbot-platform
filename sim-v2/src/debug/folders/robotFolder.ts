@@ -1,6 +1,6 @@
 import GUI from 'lil-gui'
 import * as THREE from 'three'
-import { ROBOT_MASS_KG } from '../../physics/robotBody'
+import { setRobotMassProperties } from '../../physics/robotBody'
 import type { DebugMenuOptions } from '../types'
 import { copyRobotState, logRobotState, zeroVelocities } from '../utils/robotState'
 
@@ -37,7 +37,7 @@ export function buildRobotFolder(parentGui: GUI, opts: DebugMenuOptions) {
   const controllers: ReturnType<GUI['add']>[] = []
   state.resetDefaults = () => {
     const stage = opts.getCurrentStage()
-    body.setAdditionalMass(ROBOT_MASS_KG - body.mass(), true)
+    setRobotMassProperties(body)
     body.setLinearDamping(0.5)
     body.setAngularDamping(0.5)
     state.mass = body.mass()

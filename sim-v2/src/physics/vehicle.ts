@@ -2,6 +2,7 @@ import * as RAPIER from '@dimforge/rapier3d-compat'
 import * as THREE from 'three'
 import type { RobotV2 } from '../robot/v2'
 import { ROBOT_COLLIDERS } from './colliders'
+import { log } from '../util/log'
 
 // ── Tunable parameters ───────────────────────────────────────────────────────
 export interface VehicleSettings {
@@ -127,6 +128,10 @@ export function createVehicle(
       : robot.rightWheel.position.clone(),
   ]
 
+  function colliderBelongsToChassis(collider: RAPIER.Collider): boolean {
+    return collider.parent()?.handle === chassis.handle
+  }
+
   function setDrive(left: number, right: number) {
     leftInput = left
     rightInput = right
@@ -190,6 +195,7 @@ export function createVehicle(
         undefined,
         undefined,
         chassis,
+        (collider) => !colliderBelongsToChassis(collider),
       )
 
       if (!hit || hit.timeOfImpact >= settings.suspensionRestLength + settings.wheelRadius) return
@@ -205,7 +211,8 @@ export function createVehicle(
       _r.copy(_contact).sub(_chassisWorld)
       _vPoint.copy(_vel).add(_tmp.copy(_ang).cross(_r))
 
-      // --- suspension: spring compression plus damping along the contact normal ---
+      // Ray suspension provides drive-wheel support. The visual wheel can move
+      // upward under compression, but never droops below its tuned base pose.
       const suspensionLength = Math.max(0, toi - settings.wheelRadius)
       const compression = settings.suspensionRestLength - suspensionLength
       const spring = compression * settings.suspensionStiffness
@@ -244,7 +251,7 @@ export function createVehicle(
       wheelSpin[i] += (vLong / settings.wheelRadius) * dt
       visualWheels[i].rotation.x = wheelSpin[i]
       visualWheels[i].position.copy(visualWheelBasePositions[i])
-      visualWheels[i].position.y += settings.suspensionRestLength - suspensionLength
+      visualWheels[i].position.y += Math.max(0, settings.suspensionRestLength - suspensionLength)
 
       const maxLoadedTireForce = Math.min(
         settings.maxTireForce,
