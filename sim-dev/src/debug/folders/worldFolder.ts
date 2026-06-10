@@ -1,9 +1,8 @@
 import GUI from 'lil-gui'
-import type { RobotV2 } from '../../robot/v2'
 import type { SimControlInterface } from '../../engine/types'
 import { setSplashEnabled, setSplashExtraTime } from '../utils/localStorage'
 
-export function buildWorldFolder(parentGui: GUI, robot: RobotV2, ctrl: SimControlInterface) {
+export function buildWorldFolder(parentGui: GUI, ctrl: SimControlInterface) {
   const folder = parentGui.addFolder('World')
   const state = {
     get paused() { return ctrl.isPaused() },
@@ -21,17 +20,11 @@ export function buildWorldFolder(parentGui: GUI, robot: RobotV2, ctrl: SimContro
     stepOnce() { ctrl.stepOnce() },
   }
 
-  const setColliderVisibility = (visible: boolean) => {
-    ctrl.setShowColliders(visible)
-    if (robot.collidersGroup) robot.collidersGroup.visible = visible
-    // Stage colliders visibility is set by the engine in swapStage
-  }
-
   folder.add(state, 'paused').name('Paused')
   folder.add(state, 'stepOnce').name('Step once')
   folder.add(state, 'timeScale', 0, 2, 0.05).name('Time scale')
   folder.add(state, 'gravityY', -30, 5, 0.1).name('Gravity Y')
-  folder.add(state, 'showColliders').name('Show colliders').onChange(setColliderVisibility)
+  folder.add(state, 'showColliders').name('Show colliders').onChange((v: boolean) => ctrl.setShowColliders(v))
   folder.add(state, 'splashEnabled').name('Startup splash').onChange((v: boolean) => {
     setSplashEnabled(v)
   })

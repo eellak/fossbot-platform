@@ -212,7 +212,11 @@ export class SimEngine {
       stepOnce: () => { this.stepOnce = true },
       setTimeScale: (v: number) => { this.timeScale = v },
       getTimeScale: () => this.timeScale,
-      setShowColliders: (v: boolean) => { this.showColliders = v },
+      setShowColliders: (v: boolean) => {
+        this.showColliders = v
+        if (this.robot?.collidersGroup) this.robot.collidersGroup.visible = v
+        if (this.currentStage) this.currentStage.collidersGroup.visible = v
+      },
       isShowingColliders: () => this.showColliders,
       setGravityY: (v: number) => {
         this.gravityY = v
@@ -274,11 +278,7 @@ export class SimEngine {
       this.sceneHandle!.gizmoTarget = this.robot.root
       this.robotRoot = this.robot.root
 
-      const initialSpawn = new THREE.Vector3(
-        this.currentStage.spawnPosition.x,
-        this.currentStage.spawnPosition.y + 0.015,
-        this.currentStage.spawnPosition.z,
-      )
+      const initialSpawn = this.currentStage.spawnPosition.clone()
       this.robotPhysics = await createRobotBody(world, this.robot, initialSpawn, {
         skipDriveWheels: true,
       })
@@ -574,15 +574,13 @@ export class SimEngine {
     if (!this.currentStage || this.cancelled || !this.sceneHandle || !this.worldHandle) return
     log.world('swap stage', this.currentStage.name, '→', next)
 
-    const stageCollidersWereVisible = this.currentStage.collidersGroup?.visible ?? false
     this.positionStore?.setStage(next)
     this.positionPresets?.refresh()
     this.currentStage.dispose()
     this.currentStage = await loadStage(next, this.sceneHandle.scene, this.worldHandle.world)
     if (this.cancelled) return
     if (this.config.devMode) rememberStage(next)
-    this.currentStage.collidersGroup.visible = stageCollidersWereVisible
-    if (this.showColliders) this.currentStage.collidersGroup.visible = true
+    this.currentStage.collidersGroup.visible = this.showColliders
     this.applySpawnPose(this.currentStage)
   }
 
@@ -591,9 +589,8 @@ export class SimEngine {
   private applySpawnPose(stage: StageHandle): void {
     if (!this.robotPhysics) return
     const body = this.robotPhysics.body
-    const spawnY = stage.spawnPosition.y + 0.015
     body.setTranslation(
-      { x: stage.spawnPosition.x, y: spawnY, z: stage.spawnPosition.z },
+      { x: stage.spawnPosition.x, y: stage.spawnPosition.y, z: stage.spawnPosition.z },
       true,
     )
     const q = new THREE.Quaternion().setFromEuler(stage.spawnOrientation)
