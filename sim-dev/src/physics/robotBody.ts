@@ -1,7 +1,6 @@
 import * as RAPIER from "@dimforge/rapier3d-compat";
 import * as THREE from "three";
 import { MeshSyncState } from "./mesh-sync";
-import { getWorld } from "./world";
 import type { RobotV2 } from "../robot/v2";
 import { ROBOT_COLLIDERS, type PrimitiveColliderConfig } from "./colliders";
 import { log } from "../util/log";
@@ -134,11 +133,11 @@ export function setRobotMassProperties(body: RAPIER.RigidBody): void {
  * `src/physics/colliders.ts` and a debug wireframe group.
  */
 export async function createRobotBody(
+  world: RAPIER.World,
   robot: RobotV2,
   spawnPosition: THREE.Vector3 = new THREE.Vector3(0, 0.05, 0),
   opts: CreateRobotBodyOptions = {}
 ): Promise<RobotPhysicsState> {
-  const world = getWorld();
   const skipDriveWheels = opts.skipDriveWheels ?? false;
 
   const bodyDesc = RAPIER.RigidBodyDesc.dynamic()

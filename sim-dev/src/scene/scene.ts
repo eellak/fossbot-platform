@@ -16,13 +16,7 @@ export interface SceneHandle {
    * If null, the gizmo falls back to camera-relative world axes (Phase 1).
    */
   gizmoTarget: THREE.Object3D | null
-  rafId: number
   resizeListener: () => void
-  /**
-   * Optional callback for physics updates. Called before rendering each frame.
-   * Receives deltaTime in seconds since last frame.
-   */
-  onRender?: (deltaTime: number) => void
 }
 
 export function initScene(container: HTMLElement): SceneHandle {
@@ -69,8 +63,6 @@ export function initScene(container: HTMLElement): SceneHandle {
   scene.add(dir)
 
   // World axes at origin: X red, Y green, Z blue. 0.3m so it's visible but not noisy.
-  // Floor / ground are owned by the active stage (Phase 4) — no default plane
-  // here, otherwise it z-fights with stage floors.
   const worldAxes = new THREE.AxesHelper(0.3)
   worldAxes.position.y = 0.002
   scene.add(worldAxes)
@@ -90,18 +82,10 @@ export function initScene(container: HTMLElement): SceneHandle {
   gizmoModeLabel.style.color = '#ffffff'
   gizmoModeLabel.style.font = '600 12px sans-serif'
   gizmoModeLabel.style.textAlign = 'center'
-  gizmoModeLabel.style.pointerEvents = 'none'
+  gizmoModeLabel.style.pointerEvents = 'auto'
   gizmoModeLabel.style.cursor = 'pointer'
   gizmoModeLabel.style.zIndex = '2'
   container.appendChild(gizmoModeLabel)
-
-  const updateGizmoModeLabel = (mode: 'camera' | 'robot') => {
-    gizmoModeLabel.textContent = mode === 'robot' ? 'Robot' : 'Camera'
-  }
-  const setGizmoMode = (mode: 'camera' | 'robot') => {
-    handle.gizmoMode = mode
-    updateGizmoModeLabel(mode)
-  }
 
   const resizeListener = () => {
     const w = container.clientWidth
@@ -111,9 +95,6 @@ export function initScene(container: HTMLElement): SceneHandle {
     camera.updateProjectionMatrix()
   }
   window.addEventListener('resize', resizeListener)
-
-  const tmpQuat = new THREE.Quaternion()
-  let lastFrameTime = performance.now()
 
   const handle: SceneHandle = {
     container,
@@ -125,58 +106,49 @@ export function initScene(container: HTMLElement): SceneHandle {
     gizmoModeLabel,
     gizmoMode: 'camera',
     gizmoTarget: null,
-    rafId: 0,
     resizeListener,
   }
 
-  gizmoModeLabel.style.pointerEvents = 'auto'
   gizmoModeLabel.addEventListener('click', () => {
     if (!handle.gizmoTarget) {
-      setGizmoMode('camera')
+      handle.gizmoMode = 'camera'
+      handle.gizmoModeLabel.textContent = 'Camera'
       return
     }
-    setGizmoMode(handle.gizmoMode === 'camera' ? 'robot' : 'camera')
+    handle.gizmoMode = handle.gizmoMode === 'camera' ? 'robot' : 'camera'
+    handle.gizmoModeLabel.textContent = handle.gizmoMode === 'robot' ? 'Robot' : 'Camera'
   })
-
-  const tick = () => {
-    handle.rafId = requestAnimationFrame(tick)
-    
-    const now = performance.now()
-    const deltaTime = (now - lastFrameTime) / 1000 // Convert to seconds
-    lastFrameTime = now
-
-    // Call physics/update callback if registered
-    if (handle.onRender) {
-      handle.onRender(deltaTime)
-    }
-
-    controls.update()
-
-    // Main pass
-    renderer.setViewport(0, 0, container.clientWidth, container.clientHeight)
-    renderer.setScissorTest(false)
-    renderer.clear()
-    renderer.render(scene, camera)
-
-    // Gizmo overlay (top-right). If a robot has been registered, mirror its
-    // chassis orientation; otherwise show world axes from the camera POV.
-    if (handle.gizmoMode === 'robot' && handle.gizmoTarget) {
-      updateGizmoModeLabel('robot')
-      handle.gizmoTarget.getWorldQuaternion(tmpQuat)
-      gizmo.syncFromQuaternion(tmpQuat)
-    } else {
-      updateGizmoModeLabel('camera')
-      gizmo.syncFromCamera(camera)
-    }
-    gizmo.render(container.clientWidth, container.clientHeight)
-  }
-  tick()
 
   return handle
 }
 
+/**
+ * Render one frame: update controls, render main scene, then gizmo overlay.
+ * Called by SimEngine's RAF loop — not owned by scene.ts.
+ */
+export function renderScene(handle: SceneHandle): void {
+  handle.controls.update()
+
+  const { renderer, camera, scene, container, gizmo, gizmoMode, gizmoTarget } = handle
+  const tmpQuat = new THREE.Quaternion()
+
+  // Main pass
+  renderer.setViewport(0, 0, container.clientWidth, container.clientHeight)
+  renderer.setScissorTest(false)
+  renderer.clear()
+  renderer.render(scene, camera)
+
+  // Gizmo overlay
+  if (gizmoMode === 'robot' && gizmoTarget) {
+    gizmoTarget.getWorldQuaternion(tmpQuat)
+    gizmo.syncFromQuaternion(tmpQuat)
+  } else {
+    gizmo.syncFromCamera(camera)
+  }
+  gizmo.render(container.clientWidth, container.clientHeight)
+}
+
 export function disposeScene(h: SceneHandle) {
-  cancelAnimationFrame(h.rafId)
   window.removeEventListener('resize', h.resizeListener)
   h.controls.dispose()
   h.gizmo.dispose()
