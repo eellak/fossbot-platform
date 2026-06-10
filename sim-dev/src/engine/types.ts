@@ -14,6 +14,9 @@ export interface SimEngineConfig {
   telemetryDefault?: boolean
   /** Initial turn scale for A/D driving (default: `0.35`). */
   turnScale?: number
+  /** Enable dev tooling (lil-gui, telemetry, camera/movement/position controls, gizmo).
+   * Default: `true`. Set `false` when embedding as a lean simulation canvas. */
+  devMode?: boolean
 }
 
 /**

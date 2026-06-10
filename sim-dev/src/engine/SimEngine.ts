@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { initScene, renderScene, disposeScene, type SceneHandle } from '../scene/scene'
 import { loadRobotV2, type RobotV2 } from '../robot/v2'
-import { attachDebugMenu, type DebugMenuHandle } from '../debug'
+import type { DebugMenuHandle } from '../debug'
 import { createWorld, type WorldHandle } from '../physics/world'
 import { createRobotBody, type RobotPhysicsState } from '../physics/robotBody'
 import { ROBOT_COLLIDERS } from '../physics/colliders'
@@ -19,12 +19,12 @@ import {
   setTelemetryOverlayVisible,
   shouldRememberLastStage,
 } from '../debug/utils/localStorage'
-import { createTelemetryOverlay } from '../ui/telemetryOverlay'
+import type { TelemetryOverlayHandle } from '../ui/telemetryOverlay'
 import { createSplashScreen } from '../ui/splashScreen'
-import { createCameraControls } from '../ui/cameraControls'
-import { createMovementPresets } from '../ui/movementPresets'
-import { createPositionPresets } from '../ui/positionPresets'
-import { PositionStore } from '../ui/positionStore'
+import type { CameraControlsHandle } from '../ui/cameraControls'
+import type { MovementPresetsHandle } from '../ui/movementPresets'
+import type { PositionPresetsHandle } from '../ui/positionPresets'
+import type { PositionStore } from '../ui/positionStore'
 import type { CameraMode } from '../ui/cameraTypes'
 import type {
   SimEngineConfig,
@@ -38,6 +38,7 @@ function resolveConfig(cfg: Partial<SimEngineConfig> | undefined): Required<SimE
     splashExtraTime: cfg?.splashExtraTime ?? getSplashExtraTimeDefault(),
     telemetryDefault: cfg?.telemetryDefault ?? getTelemetryOverlayDefault(),
     turnScale: cfg?.turnScale ?? 0.35,
+    devMode: cfg?.devMode ?? true,
   }
 }
 
@@ -61,12 +62,12 @@ export class SimEngine {
   private debugMenu: DebugMenuHandle | null = null
 
   // ── UI overlays ──
-  private telemetryOverlay!: ReturnType<typeof createTelemetryOverlay>
+  private telemetryOverlay: TelemetryOverlayHandle | null = null
   private splash!: ReturnType<typeof createSplashScreen>
-  private cameraControls!: ReturnType<typeof createCameraControls>
-  private movementPresets!: ReturnType<typeof createMovementPresets>
-  private positionPresets!: ReturnType<typeof createPositionPresets>
-  private positionStore!: PositionStore
+  private cameraControls: CameraControlsHandle | null = null
+  private movementPresets: MovementPresetsHandle | null = null
+  private positionPresets: PositionPresetsHandle | null = null
+  private positionStore: PositionStore | null = null
 
   // ── State ──
   private cancelled = false
@@ -127,7 +128,7 @@ export class SimEngine {
   async start(): Promise<void> {
     this.lastFrameTime = performance.now()
 
-    this.sceneHandle = initScene(this.container)
+    this.sceneHandle = initScene(this.container, { gizmo: this.config.devMode })
     this.savedOrbitCamera.position.copy(this.sceneHandle.camera.position)
     this.savedOrbitCamera.quaternion.copy(this.sceneHandle.camera.quaternion)
     this.savedOrbitCamera.up.copy(this.sceneHandle.camera.up)
@@ -144,25 +145,42 @@ export class SimEngine {
     this.splashEnabledCfg = this.config.splashEnabled
     this.splashExtraTimeCfg = this.config.splashExtraTime
 
-    this.telemetryOverlay = createTelemetryOverlay(this.container, this.config.telemetryDefault)
     this.splash = createSplashScreen(this.container, this.config.splashEnabled)
-    this.positionStore = new PositionStore()
 
-    this.cameraControls = createCameraControls(this.container, () => this.cycleCameraMode())
+    if (this.config.devMode) {
+      const [
+        { createTelemetryOverlay },
+        { PositionStore: PS },
+        { createCameraControls },
+        { createMovementPresets },
+        { createPositionPresets },
+      ] = await Promise.all([
+        import('../ui/telemetryOverlay'),
+        import('../ui/positionStore'),
+        import('../ui/cameraControls'),
+        import('../ui/movementPresets'),
+        import('../ui/positionPresets'),
+      ])
 
-    this.movementPresets = createMovementPresets(this.container, {
-      forward: () => this.triggerPresetDrive(0.9, 0.9, 0.8),
-      backward: () => this.triggerPresetDrive(-0.9, -0.9, 0.8),
-      rotateLeft: () => this.triggerPresetTurn(Math.PI / 2),
-      rotateRight: () => this.triggerPresetTurn(-Math.PI / 2),
-    })
+      this.telemetryOverlay = createTelemetryOverlay(this.container, this.config.telemetryDefault)
+      this.positionStore = new PS()
 
-    this.positionPresets = createPositionPresets(this.container, {
-      save: (name: string) => this.savePositionPreset(name),
-      load: (name: string) => this.loadPositionPreset(name),
-      deletePos: (name: string) => this.positionStore.remove(name),
-      getSavedNames: () => this.positionStore.list(),
-    })
+      this.cameraControls = createCameraControls(this.container, () => this.cycleCameraMode())
+
+      this.movementPresets = createMovementPresets(this.container, {
+        forward: () => this.triggerPresetDrive(0.9, 0.9, 0.8),
+        backward: () => this.triggerPresetDrive(-0.9, -0.9, 0.8),
+        rotateLeft: () => this.triggerPresetTurn(Math.PI / 2),
+        rotateRight: () => this.triggerPresetTurn(-Math.PI / 2),
+      })
+
+      this.positionPresets = createPositionPresets(this.container, {
+        save: (name: string) => this.savePositionPreset(name),
+        load: (name: string) => this.loadPositionPreset(name),
+        deletePos: (name: string) => this.positionStore!.remove(name),
+        getSavedNames: () => this.positionStore!.list(),
+      })
+    }
 
     this.initializePhysics().catch((err) => {
       console.error('[SimEngine] Init failed:', err)
@@ -177,11 +195,11 @@ export class SimEngine {
     this.vehicle?.dispose()
     this.debugMenu?.dispose()
     this.currentStage?.dispose()
-    this.telemetryOverlay.dispose()
+    this.telemetryOverlay?.dispose()
     this.splash.dispose()
-    this.movementPresets.dispose()
-    this.positionPresets.dispose()
-    this.cameraControls.dispose()
+    this.movementPresets?.dispose()
+    this.positionPresets?.dispose()
+    this.cameraControls?.dispose()
     if (this.sceneHandle) disposeScene(this.sceneHandle)
     this.worldHandle?.dispose()
   }
@@ -209,7 +227,7 @@ export class SimEngine {
       getTurnScale: () => this.turnScale,
       setTelemetryVisible: (v: boolean) => {
         this.telemetryVisible = v
-        this.telemetryOverlay.setVisible(v)
+        this.telemetryOverlay?.setVisible(v)
         setTelemetryOverlayVisible(v)
       },
       isTelemetryVisible: () => this.telemetryVisible,
@@ -237,11 +255,11 @@ export class SimEngine {
       const world = this.worldHandle.world
       log.physics('world initialized')
 
-      const initialStage = shouldRememberLastStage()
+      const initialStage = (this.config.devMode && shouldRememberLastStage())
         ? getRememberedStage() ?? DEFAULT_STAGE
         : DEFAULT_STAGE
-      this.positionStore.setStage(initialStage)
-      this.positionPresets.refresh()
+      this.positionStore?.setStage(initialStage)
+      this.positionPresets?.refresh()
 
       this.splash.setStatus(`Loading stage ${initialStage}...`)
       this.currentStage = await loadStage(initialStage, this.sceneHandle!.scene, world)
@@ -284,7 +302,10 @@ export class SimEngine {
       log.physics('createRobotBody returned', !!this.robotPhysics)
       if (this.cancelled) return
 
-      this.debugMenu = attachDebugMenu(this.robot, this.controls)
+      if (this.config.devMode) {
+        const { attachDebugMenu } = await import('../debug')
+        this.debugMenu = attachDebugMenu(this.robot, this.controls)
+      }
       this.splash.hide(this.splashExtraTimeCfg)
 
       // Start RAF loop
@@ -482,7 +503,7 @@ export class SimEngine {
 
     this.cameraMode = next
     h.controls.enabled = next === 'orbit'
-    this.cameraControls.setModeLabel(next)
+    this.cameraControls?.setModeLabel(next)
 
     if (next === 'orbit') {
       h.camera.position.copy(this.savedOrbitCamera.position)
@@ -554,12 +575,12 @@ export class SimEngine {
     log.world('swap stage', this.currentStage.name, '→', next)
 
     const stageCollidersWereVisible = this.currentStage.collidersGroup?.visible ?? false
-    this.positionStore.setStage(next)
-    this.positionPresets.refresh()
+    this.positionStore?.setStage(next)
+    this.positionPresets?.refresh()
     this.currentStage.dispose()
     this.currentStage = await loadStage(next, this.sceneHandle.scene, this.worldHandle.world)
     if (this.cancelled) return
-    rememberStage(next)
+    if (this.config.devMode) rememberStage(next)
     this.currentStage.collidersGroup.visible = stageCollidersWereVisible
     if (this.showColliders) this.currentStage.collidersGroup.visible = true
     this.applySpawnPose(this.currentStage)
