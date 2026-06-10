@@ -3,6 +3,10 @@ import type { RobotPhysicsState } from '../physics/robotBody'
 import type { VehicleHandle } from '../physics/vehicle'
 import type { StageHandle, StageName } from '../stages'
 
+/**
+ * @deprecated — kept for backward compat. Prefer `SimControlInterface`.
+ * Will be removed after candidates #3 and #5.
+ */
 export interface RuntimeControls {
   world: {
     paused: boolean

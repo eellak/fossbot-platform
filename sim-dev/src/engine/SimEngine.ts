@@ -5,8 +5,8 @@ import { attachDebugMenu, type DebugMenuHandle } from '../debug'
 import { createWorld, type WorldHandle } from '../physics/world'
 import { createRobotBody, type RobotPhysicsState } from '../physics/robotBody'
 import { syncMeshFromBody, syncObjectToBody } from '../physics/mesh-sync'
-import { createVehicle, type VehicleHandle } from '../physics/vehicle'
-import { loadStage, DEFAULT_STAGE, type StageHandle, type StageName } from '../stages'
+import { createVehicle, type VehicleHandle, type VehicleSettings, type VehicleTelemetry } from '../physics/vehicle'
+import { loadStage, STAGE_NAMES, DEFAULT_STAGE, type StageHandle, type StageName } from '../stages'
 import { installKeyboard, type KeyboardHandle } from '../util/keyboard'
 import { log } from '../util/log'
 import {
@@ -27,8 +27,7 @@ import { PositionStore } from '../ui/positionStore'
 import type { CameraMode } from '../ui/cameraTypes'
 import type {
   SimEngineConfig,
-  RuntimeControls,
-  EngineControls,
+  SimControlInterface,
 } from './types'
 
 function resolveConfig(cfg: Partial<SimEngineConfig> | undefined): Required<SimEngineConfig> {
@@ -70,8 +69,19 @@ export class SimEngine {
 
   // ── State ──
   private cancelled = false
-  private rtControls!: RuntimeControls
   private cameraMode: CameraMode = 'orbit'
+
+  // Backing state for SimControlInterface methods.
+  private paused = false
+  private timeScale = 1
+  private stepOnce = false
+  private showColliders = false
+  private gravityY = -9.81
+  private turnScale = 0
+  private telemetryVisible = false
+  private telemetryUpdateInterval = 0.2
+  private splashEnabledCfg = false
+  private splashExtraTimeCfg = 0
   private accumulator = 0
   private telemetryElapsed = 0
   private presetLeftInput = 0
@@ -118,23 +128,16 @@ export class SimEngine {
     this.savedOrbitCamera.up.copy(this.sceneHandle.camera.up)
     this.savedOrbitCamera.target.copy(this.sceneHandle.controls.target)
 
-    this.rtControls = {
-      world: {
-        paused: false,
-        timeScale: 1,
-        stepOnce: false,
-        showColliders: false,
-        splashEnabled: this.config.splashEnabled,
-        splashExtraTime: this.config.splashExtraTime,
-      },
-      drive: {
-        turnScale: this.config.turnScale,
-      },
-      telemetry: {
-        show: this.config.telemetryDefault,
-        updateInterval: 0.2,
-      },
-    }
+    this.paused = false
+    this.timeScale = 1
+    this.stepOnce = false
+    this.showColliders = false
+    this.gravityY = -9.81
+    this.turnScale = this.config.turnScale
+    this.telemetryVisible = this.config.telemetryDefault
+    this.telemetryUpdateInterval = 0.2
+    this.splashEnabledCfg = this.config.splashEnabled
+    this.splashExtraTimeCfg = this.config.splashExtraTime
 
     this.telemetryOverlay = createTelemetryOverlay(this.container, this.config.telemetryDefault)
     this.splash = createSplashScreen(this.container, this.config.splashEnabled)
@@ -178,33 +181,44 @@ export class SimEngine {
     this.worldHandle?.dispose()
   }
 
-  /** External control surface. */
-  get controls(): EngineControls {
-    const c = this.rtControls
+  /** External control surface — method-based, no shared mutable state. */
+  get controls(): SimControlInterface {
     return {
-      setPaused: (v: boolean) => { c.world.paused = v },
-      isPaused: () => c.world.paused,
-      stepOnce: () => { c.world.stepOnce = true },
-      setTimeScale: (v: number) => { c.world.timeScale = v },
-      setShowColliders: (v: boolean) => { c.world.showColliders = v },
-      isShowingColliders: () => c.world.showColliders,
-      setTurnScale: (v: number) => { c.drive.turnScale = v },
-      getTurnScale: () => c.drive.turnScale,
+      setPaused: (v: boolean) => { this.paused = v },
+      isPaused: () => this.paused,
+      stepOnce: () => { this.stepOnce = true },
+      setTimeScale: (v: number) => { this.timeScale = v },
+      getTimeScale: () => this.timeScale,
+      setShowColliders: (v: boolean) => { this.showColliders = v },
+      isShowingColliders: () => this.showColliders,
+      setGravityY: (v: number) => {
+        this.gravityY = v
+        if (this.worldHandle) this.worldHandle.world.gravity.y = v
+      },
+      getGravityY: () => this.gravityY,
+      setSplashEnabled: (v: boolean) => { this.splashEnabledCfg = v },
+      isSplashEnabled: () => this.splashEnabledCfg,
+      setSplashExtraTime: (v: number) => { this.splashExtraTimeCfg = v },
+      getSplashExtraTime: () => this.splashExtraTimeCfg,
+      setTurnScale: (v: number) => { this.turnScale = v },
+      getTurnScale: () => this.turnScale,
       setTelemetryVisible: (v: boolean) => {
-        c.telemetry.show = v
+        this.telemetryVisible = v
         this.telemetryOverlay.setVisible(v)
         setTelemetryOverlayVisible(v)
       },
-      isTelemetryVisible: () => c.telemetry.show,
-      setTelemetryUpdateInterval: (v: number) => { c.telemetry.updateInterval = v },
+      isTelemetryVisible: () => this.telemetryVisible,
+      setTelemetryUpdateInterval: (v: number) => { this.telemetryUpdateInterval = v },
+      getTelemetryUpdateInterval: () => this.telemetryUpdateInterval,
       getCurrentStage: () => this.currentStage?.name ?? null,
+      getStageNames: () => STAGE_NAMES,
+      swapStage: (next: StageName) => { this.swapStage(next) },
       resetRobotToSpawn: () => {
         if (this.currentStage) this.applySpawnPose(this.currentStage)
       },
-      runtime: c,
-      robotPhysics: this.robotPhysics,
-      vehicle: this.vehicle,
-      world: this.worldHandle?.world ?? null,
+      robotBody: this.robotPhysics?.body ?? null,
+      vehicleSettings: this.vehicle?.settings ?? null,
+      vehicleTelemetry: this.vehicle?.getTelemetry() ?? null,
     }
   }
 
@@ -252,24 +266,8 @@ export class SimEngine {
       log.physics('createRobotBody returned', !!this.robotPhysics)
       if (this.cancelled) return
 
-      this.debugMenu = attachDebugMenu(this.robot, {
-        initialStage: this.currentStage.name,
-        onStageChange: (next) => { this.swapStage(next) },
-        world,
-        robotPhysics: this.robotPhysics,
-        vehicle: this.vehicle,
-        controls: this.rtControls,
-        getCurrentStage: () => this.currentStage,
-        resetRobotToSpawn: () => {
-          if (this.currentStage) this.applySpawnPose(this.currentStage)
-        },
-        setTelemetryVisible: (visible: boolean) => {
-          this.rtControls.telemetry.show = visible
-          this.telemetryOverlay.setVisible(visible)
-          setTelemetryOverlayVisible(visible)
-        },
-      })
-      this.splash.hide(this.rtControls.world.splashExtraTime)
+      this.debugMenu = attachDebugMenu(this.robot, this.controls)
+      this.splash.hide(this.splashExtraTimeCfg)
 
       // Start RAF loop
       this.tick()
@@ -299,8 +297,6 @@ export class SimEngine {
 
   private stepFrame(deltaTime: number): void {
     if (!this.sceneHandle || !this.worldHandle || !this.vehicle || !this.keyboard) return
-
-    const c = this.rtControls
 
     // ── Input / drive ──
     let leftInput: number
@@ -332,8 +328,8 @@ export class SimEngine {
       const throttle = this.keyboard.pressed.has('w') ? 1
         : this.keyboard.pressed.has('s') ? -1
           : 0
-      const turn = this.keyboard.pressed.has('d') ? c.drive.turnScale
-        : this.keyboard.pressed.has('a') ? -c.drive.turnScale
+      const turn = this.keyboard.pressed.has('d') ? this.turnScale
+        : this.keyboard.pressed.has('a') ? -this.turnScale
           : 0
       leftInput = THREE.MathUtils.clamp(throttle + turn, -1, 1)
       rightInput = THREE.MathUtils.clamp(throttle - turn, -1, 1)
@@ -342,11 +338,11 @@ export class SimEngine {
     this.vehicle.setDrive(leftInput, rightInput)
 
     // ── Physics step ──
-    const shouldStepOnce = c.world.stepOnce
-    if (shouldStepOnce) c.world.stepOnce = false
+    const shouldStepOnce = this.stepOnce
+    if (shouldStepOnce) this.stepOnce = false
 
-    if (!c.world.paused || shouldStepOnce) {
-      this.accumulator += shouldStepOnce ? 1 / 60 : deltaTime * c.world.timeScale
+    if (!this.paused || shouldStepOnce) {
+      this.accumulator += shouldStepOnce ? 1 / 60 : deltaTime * this.timeScale
     }
 
     const dt = 1 / 60
@@ -387,7 +383,7 @@ export class SimEngine {
 
         // ── Telemetry ──
         this.telemetryElapsed += deltaTime
-        if (c.telemetry.show && this.telemetryElapsed >= c.telemetry.updateInterval) {
+        if (this.telemetryVisible && this.telemetryElapsed >= this.telemetryUpdateInterval) {
           this.telemetryElapsed = 0
           const linvel = this.robotPhysics.body.linvel()
           this.tmpEuler.setFromQuaternion(
@@ -536,7 +532,7 @@ export class SimEngine {
     if (this.cancelled) return
     rememberStage(next)
     this.currentStage.collidersGroup.visible = stageCollidersWereVisible
-    if (this.rtControls.world.showColliders) this.currentStage.collidersGroup.visible = true
+    if (this.showColliders) this.currentStage.collidersGroup.visible = true
     this.applySpawnPose(this.currentStage)
   }
 
