@@ -1,36 +1,52 @@
-import RAPIER from '@dimforge/rapier3d-compat'
+import * as RAPIER from "@dimforge/rapier3d-compat";
+import { log } from "../util/log";
 
-// Singleton Rapier world for the sim-dev physics prototype.
-// Throwaway — when the real integration lands, this goes away.
-//
-// initPhysics() must be awaited before any other call. It handles WASM boot
-// (idempotent) and creates a fresh world.
+const WORLD_GRAVITY = -9.81
 
-let _initialized = false
-let _world: RAPIER.World | null = null
+let worldInstance: RAPIER.World | null = null;
+let initialized = false;
 
-export async function initPhysics(): Promise<void> {
-  if (!_initialized) {
-    await RAPIER.init()
-    _initialized = true
+export async function initializeWorld(): Promise<RAPIER.World> {
+  if (initialized) {
+    return worldInstance!;
   }
-  _world = new RAPIER.World({ x: 0, y: -9.82, z: 0 })
+
+  // Initialize Rapier WASM
+  await RAPIER.init();
+
+  // Create world with gravity (0, -9.81, 0)
+  const world = new RAPIER.World(new RAPIER.Vector3(0, WORLD_GRAVITY, 0));
+
+  // Set fixed timestep (1/60 = 16.67ms) for stable physics
+  world.timestep = 1 / 60;
+
+  // Create static ground at y=0
+  const groundDesc = RAPIER.RigidBodyDesc.fixed()
+    .setTranslation(0, 0, 0);
+  const groundBody = world.createRigidBody(groundDesc);
+
+  // Ground collider: large cuboid to catch everything
+  const groundShape = RAPIER.ColliderDesc.cuboid(50, 0.01, 50); // 100m x 0.02m x 100m
+  world.createCollider(groundShape, groundBody);
+
+  log.world('initialized', { timestep: world.timestep, gravity: world.gravity });
+
+  worldInstance = world;
+  initialized = true;
+
+  return world;
 }
 
 export function getWorld(): RAPIER.World {
-  if (!_world) throw new Error('[physics] not initialized — call initPhysics() first')
-  return _world
+  if (!worldInstance) {
+    throw new Error("Physics world not initialized. Call initializeWorld() first.");
+  }
+  return worldInstance;
 }
 
-// Recreate a clean world, preserving current gravity.
-export function resetWorld(): void {
-  if (!_initialized) return
-  const g = _world ? _world.gravity : { x: 0, y: -9.82, z: 0 }
-  _world = new RAPIER.World({ x: g.x, y: g.y, z: g.z })
-}
+let lastStepTime = performance.now();
 
-export function stepWorld(dtSeconds: number): void {
-  if (!_world) return
-  _world.timestep = Math.min(Math.max(dtSeconds, 0), 1 / 30)
-  _world.step()
+export function stepWorld(deltaTime: number): void {
+  const world = getWorld();
+  world.step();
 }

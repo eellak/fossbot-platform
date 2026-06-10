@@ -35,10 +35,10 @@ const SUPPORTED_EXTENSIONS = new Set(['.obj', '.stl']);
 
 function usage() {
   console.error('Usage: npm run coacd -- <input_model_path> [output_model_path] [--quality <low|med|high>] [--dir] [--recursive] [--out-dir <path>] [--skip-existing]');
-  console.error('Example: npm run coacd -- ../front-end/public/js-simulator/models/static/eiffel.obj');
-  console.error('Example: npm run coacd -- ../front-end/public/js-simulator/models/static/eiffel.obj --quality high');
-  console.error('Example: npm run coacd -- ../front-end/public/js-simulator/models/robots/v2 --dir --quality med');
-  console.error('Example: npm run coacd -- ../front-end/public/js-simulator/models --dir --recursive --out-dir ../front-end/public/js-simulator/models_coacd');
+  console.error('Example: npm run coacd -- public/js-simulator/models/static/eiffel.obj');
+  console.error('Example: npm run coacd -- public/js-simulator/models/static/eiffel.obj --quality high');
+  console.error('Example: npm run coacd -- public/js-simulator/models/robots/v2 --dir --quality med');
+  console.error('Example: npm run coacd -- public/js-simulator/models --dir --recursive --out-dir public/js-simulator/models_coacd');
   console.error('Default: runs `uv run --with coacd --with trimesh coacd`');
   console.error('Quality presets are based on CoACD README tuning guidance: lower threshold + higher search/resolution = better quality but slower runtime.');
   console.error('Environment: set COACD_BINARY to override the command run by uv');
@@ -202,7 +202,7 @@ function isSupportedModelFile(filePath) {
   if (!SUPPORTED_EXTENSIONS.has(ext)) return false;
 
   const parsedPath = path.parse(filePath);
-  return !parsedPath.name.endsWith('_coacd');
+  return !parsedPath.name.endsWith('_coacd') && !parsedPath.name.endsWith('-coacd');
 }
 
 function collectModelFiles(dirPath, recursive) {
