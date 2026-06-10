@@ -1,29 +1,34 @@
 import * as RAPIER from '@dimforge/rapier3d-compat'
 import * as THREE from 'three'
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js'
+import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js'
 import { parseColor } from './parseColor'
 
 /**
  * Phase 4 minimum-slice builders. Each builder returns a Three Object3D
- * plus an optional Rapier ColliderDesc. The loader attaches the desc to a
- * shared static stage body, so dispose() only has to remove that one body
- * to clean up every collider at once.
+ * plus optional Rapier ColliderDesc(s). The loader attaches static descs to a
+ * shared fixed stage body and gives `mass > 0` objects their own dynamic body.
  *
  * Limitations of the minimum slice:
- *   - All stage objects are static, even if the JSON sets `mass > 0`.
- *     Dynamic stage objects come in a follow-up.
  *   - Floor textures are loaded if a `texture` URL is set; failure to
  *     resolve falls back to the material color.
- *   - `model` entries: visuals always load; collider is built only if
- *     `immovable: true`. Models without `immovable` (e.g. animals,
- *     diamond) have no physics.
+ *   - `model` entries: visuals always load; collider generation defaults to
+ *     sibling CoACD assets when present, then falls back to static trimesh for
+ *     `immovable: true`.
  */
 
 export interface Built {
   object: THREE.Object3D
   collider?: RAPIER.ColliderDesc
+  colliders?: RAPIER.ColliderDesc[]
+  dynamicBody?: {
+    mass: number
+    position: [number, number, number]
+    orientation?: [number, number, number]
+  }
   /** Wireframe mesh matching the collider shape & transform, for debug overlay. */
   debugMesh?: THREE.Mesh | THREE.LineSegments
+  debugMeshes?: Array<THREE.Mesh | THREE.LineSegments>
 }
 
 interface FloorEntry {
@@ -44,6 +49,8 @@ interface CubeEntry {
   orientation?: [number, number, number]
   name?: string
   castShadow?: boolean
+  immovable?: boolean
+  mass?: number
 }
 
 interface CylinderEntry {
@@ -53,6 +60,8 @@ interface CylinderEntry {
   position: [number, number, number]
   name?: string
   castShadow?: boolean
+  immovable?: boolean
+  mass?: number
 }
 
 interface ModelEntry {
@@ -66,6 +75,16 @@ interface ModelEntry {
   castShadow?: boolean
   immovable?: boolean
   mass?: number
+  collision?:
+    | 'auto'
+    | 'none'
+    | 'trimesh'
+    | 'convexHull'
+    | 'compoundConvex'
+    | {
+        mode?: 'auto' | 'none' | 'trimesh' | 'convexHull' | 'compoundConvex'
+        source?: string
+      }
 }
 
 interface TextEntry {
@@ -79,6 +98,19 @@ interface TextEntry {
 }
 
 const textureLoader = new THREE.TextureLoader()
+
+function isDynamicEntry(entry: { mass?: number; immovable?: boolean }): boolean {
+  return (entry.mass ?? 0) > 0 && !entry.immovable
+}
+
+function dynamicBodyFor(entry: { mass?: number; position: [number, number, number]; orientation?: [number, number, number]; immovable?: boolean }): Built['dynamicBody'] | undefined {
+  if (!isDynamicEntry(entry)) return undefined
+  return {
+    mass: entry.mass ?? 1,
+    position: entry.position,
+    orientation: entry.orientation,
+  }
+}
 
 export function buildFloor(entry: FloorEntry): Built {
   // Keep V1-compatible stage scale: floor dimensions are authored as a tile
@@ -136,6 +168,7 @@ export function buildFloor(entry: FloorEntry): Built {
 
 export function buildCube(entry: CubeEntry): Built {
   const [w, h, d] = entry.dimensions
+  const dynamicBody = dynamicBodyFor(entry)
   const geom = new THREE.BoxGeometry(w, h, d)
   const mat = new THREE.MeshStandardMaterial({ color: parseColor(entry.material?.color) })
   const mesh = new THREE.Mesh(geom, mat)
@@ -147,8 +180,10 @@ export function buildCube(entry: CubeEntry): Built {
   if (entry.castShadow) mesh.castShadow = true
 
   const collider = RAPIER.ColliderDesc.cuboid(w / 2, h / 2, d / 2)
-    .setTranslation(entry.position[0], entry.position[1], entry.position[2])
-  if (entry.orientation) {
+  if (!dynamicBody) {
+    collider.setTranslation(entry.position[0], entry.position[1], entry.position[2])
+  }
+  if (entry.orientation && !dynamicBody) {
     const q = new THREE.Quaternion().setFromEuler(
       new THREE.Euler(entry.orientation[0], entry.orientation[1], entry.orientation[2]),
     )
@@ -160,16 +195,19 @@ export function buildCube(entry: CubeEntry): Built {
   const debugMat = new THREE.MeshBasicMaterial({ color: 0xff8800, wireframe: true })
   const debugMesh = new THREE.Mesh(debugGeom, debugMat)
   debugMesh.name = `collider_${entry.name ?? 'cube'}`
-  debugMesh.position.fromArray(entry.position)
-  if (entry.orientation) {
+  if (!dynamicBody) {
+    debugMesh.position.fromArray(entry.position)
+  }
+  if (entry.orientation && !dynamicBody) {
     debugMesh.rotation.set(entry.orientation[0], entry.orientation[1], entry.orientation[2])
   }
 
-  return { object: mesh, collider, debugMesh }
+  return { object: mesh, collider, debugMesh, dynamicBody }
 }
 
 export function buildCylinder(entry: CylinderEntry): Built {
   const [rTop, rBottom, height, segments] = entry.dimensions
+  const dynamicBody = dynamicBodyFor(entry)
   const geom = new THREE.CylinderGeometry(rTop, rBottom, height, segments ?? 16)
   const mat = new THREE.MeshStandardMaterial({ color: parseColor(entry.material?.color) })
   const mesh = new THREE.Mesh(geom, mat)
@@ -181,20 +219,26 @@ export function buildCylinder(entry: CylinderEntry): Built {
   // so taking the average is a no-op in practice; flag if they ever diverge.
   const r = (rTop + rBottom) / 2
   const collider = RAPIER.ColliderDesc.cylinder(height / 2, r)
-    .setTranslation(entry.position[0], entry.position[1], entry.position[2])
+  if (!dynamicBody) {
+    collider.setTranslation(entry.position[0], entry.position[1], entry.position[2])
+  }
 
   // Debug wireframe
   const debugGeom = new THREE.CylinderGeometry(r, r, height, 16)
   const debugMat = new THREE.MeshBasicMaterial({ color: 0xff8800, wireframe: true })
   const debugMesh = new THREE.Mesh(debugGeom, debugMat)
   debugMesh.name = `collider_${entry.name ?? 'cylinder'}`
-  debugMesh.position.fromArray(entry.position)
+  if (!dynamicBody) {
+    debugMesh.position.fromArray(entry.position)
+  }
 
-  return { object: mesh, collider, debugMesh }
+  return { object: mesh, collider, debugMesh, dynamicBody }
 }
 
 const objLoader = new OBJLoader()
+const stlLoader = new STLLoader()
 const objCache = new Map<string, Promise<THREE.Group>>()
+const stlCache = new Map<string, Promise<THREE.BufferGeometry>>()
 
 function loadOBJ(url: string): Promise<THREE.Group> {
   let pending = objCache.get(url)
@@ -213,8 +257,209 @@ function loadOBJ(url: string): Promise<THREE.Group> {
   return pending.then((group) => group.clone(true))
 }
 
+function loadSTL(url: string): Promise<THREE.BufferGeometry> {
+  let pending = stlCache.get(url)
+  if (!pending) {
+    pending = new Promise<THREE.BufferGeometry>((resolve, reject) => {
+      stlLoader.load(
+        url,
+        (geometry) => resolve(geometry),
+        undefined,
+        (err) => reject(err),
+      )
+    })
+    stlCache.set(url, pending)
+  }
+  return pending.then((geometry) => geometry.clone())
+}
+
+function coacdPathFor(filename: string): string {
+  const dot = filename.lastIndexOf('.')
+  if (dot < 0) return `${filename}_coacd`
+  return `${filename.slice(0, dot)}_coacd${filename.slice(dot)}`
+}
+
+function legacyCoacdPathFor(filename: string): string {
+  const dot = filename.lastIndexOf('.')
+  if (dot < 0) return `${filename}-coacd`
+  return `${filename.slice(0, dot)}-coacd${filename.slice(dot)}`
+}
+
+function modelCollisionMode(entry: ModelEntry): 'auto' | 'none' | 'trimesh' | 'convexHull' | 'compoundConvex' {
+  if (typeof entry.collision === 'string') return entry.collision
+  return entry.collision?.mode ?? 'auto'
+}
+
+function modelCollisionSource(entry: ModelEntry): string | undefined {
+  return typeof entry.collision === 'object' ? entry.collision.source : undefined
+}
+
+function meshesFromObject(root: THREE.Object3D): THREE.Mesh[] {
+  const meshes: THREE.Mesh[] = []
+  root.traverse((child) => {
+    const mesh = child as THREE.Mesh
+    if (mesh.isMesh && mesh.geometry?.attributes?.position) meshes.push(mesh)
+  })
+  return meshes
+}
+
+function makeTrimeshCollider(root: THREE.Object3D): Built['collider'] | undefined {
+  root.updateMatrixWorld(true)
+  const meshes = meshesFromObject(root)
+  if (meshes.length === 0) return undefined
+
+  const vertices: number[] = []
+  const indices: number[] = []
+  const vertex = new THREE.Vector3()
+
+  for (const mesh of meshes) {
+    const geom = mesh.geometry
+    const positions = geom.attributes.position
+    const baseVertex = vertices.length / 3
+
+    for (let i = 0; i < positions.count; i++) {
+      vertex.fromBufferAttribute(positions, i).applyMatrix4(mesh.matrixWorld)
+      vertices.push(vertex.x, vertex.y, vertex.z)
+    }
+
+    if (geom.index) {
+      const source = geom.index.array as ArrayLike<number>
+      for (let i = 0; i < source.length; i++) indices.push(baseVertex + source[i])
+    } else {
+      for (let i = 0; i < positions.count; i++) indices.push(baseVertex + i)
+    }
+  }
+
+  return RAPIER.ColliderDesc.trimesh(new Float32Array(vertices), new Uint32Array(indices))
+}
+
+function makeConvexHullCollider(root: THREE.Object3D): Built['collider'] | undefined {
+  root.updateMatrixWorld(true)
+  const vertices: number[] = []
+  const vertex = new THREE.Vector3()
+
+  for (const mesh of meshesFromObject(root)) {
+    const positions = mesh.geometry.attributes.position
+    for (let i = 0; i < positions.count; i++) {
+      vertex.fromBufferAttribute(positions, i).applyMatrix4(mesh.matrixWorld)
+      vertices.push(vertex.x, vertex.y, vertex.z)
+    }
+  }
+
+  if (vertices.length === 0) return undefined
+  return RAPIER.ColliderDesc.convexHull(new Float32Array(vertices)) ?? undefined
+}
+
+function debugEdgesFromObject(root: THREE.Object3D, name: string): THREE.LineSegments | undefined {
+  root.updateMatrixWorld(true)
+  const meshes = meshesFromObject(root)
+  if (meshes.length === 0) return undefined
+
+  const merged = new THREE.BufferGeometry()
+  const vertices: number[] = []
+  const indices: number[] = []
+  const vertex = new THREE.Vector3()
+
+  for (const mesh of meshes) {
+    const positions = mesh.geometry.attributes.position
+    const baseVertex = vertices.length / 3
+
+    for (let i = 0; i < positions.count; i++) {
+      vertex.fromBufferAttribute(positions, i).applyMatrix4(mesh.matrixWorld)
+      vertices.push(vertex.x, vertex.y, vertex.z)
+    }
+
+    if (mesh.geometry.index) {
+      const source = mesh.geometry.index.array as ArrayLike<number>
+      for (let i = 0; i < source.length; i++) indices.push(baseVertex + source[i])
+    } else {
+      for (let i = 0; i < positions.count; i++) indices.push(baseVertex + i)
+    }
+  }
+
+  merged.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3))
+  merged.setIndex(indices)
+
+  const edgeGeom = new THREE.EdgesGeometry(merged)
+  merged.dispose()
+  const edgeMat = new THREE.LineBasicMaterial({ color: 0xff8800 })
+  const debugMesh = new THREE.LineSegments(edgeGeom, edgeMat)
+  debugMesh.name = name
+  return debugMesh
+}
+
+async function loadCollisionModel(url: string): Promise<THREE.Object3D> {
+  const ext = url.slice(url.lastIndexOf('.') + 1).toLowerCase()
+  if (ext === 'stl') {
+    const geometry = await loadSTL(url)
+    const mesh = new THREE.Mesh(geometry)
+    const group = new THREE.Group()
+    group.add(mesh)
+    return group
+  }
+  return loadOBJ(url)
+}
+
+async function tryLoadCollisionModel(url: string): Promise<THREE.Object3D | null> {
+  try {
+    return await loadCollisionModel(url)
+  } catch {
+    return null
+  }
+}
+
+async function loadCompoundConvex(entry: ModelEntry, visualRoot: THREE.Object3D, dynamic: boolean): Promise<Pick<Built, 'colliders' | 'debugMeshes'> | null> {
+  const explicitSource = modelCollisionSource(entry)
+  const candidatePaths = explicitSource
+    ? [explicitSource]
+    : [coacdPathFor(entry.filename), legacyCoacdPathFor(entry.filename)]
+
+  let collisionRoot: THREE.Object3D | null = null
+  let collisionPath: string | undefined
+
+  for (const candidatePath of candidatePaths) {
+    collisionRoot = await tryLoadCollisionModel(candidatePath)
+    if (collisionRoot) {
+      collisionPath = candidatePath
+      break
+    }
+  }
+
+  if (!collisionRoot) return null
+
+  collisionRoot.position.copy(dynamic ? new THREE.Vector3() : visualRoot.position)
+  collisionRoot.quaternion.copy(dynamic ? new THREE.Quaternion() : visualRoot.quaternion)
+  collisionRoot.scale.copy(visualRoot.scale)
+  collisionRoot.updateMatrixWorld(true)
+
+  const colliders: RAPIER.ColliderDesc[] = []
+  const debugMeshes: Array<THREE.Mesh | THREE.LineSegments> = []
+
+  for (const mesh of meshesFromObject(collisionRoot)) {
+    const partRoot = new THREE.Group()
+    const partMesh = new THREE.Mesh(mesh.geometry.clone())
+    partMesh.geometry.applyMatrix4(mesh.matrixWorld)
+    partRoot.add(partMesh)
+    partRoot.updateMatrixWorld(true)
+    partMesh.updateMatrixWorld(true)
+
+    const collider = makeConvexHullCollider(partRoot)
+    if (collider) colliders.push(collider)
+
+    const debugMesh = debugEdgesFromObject(partRoot, `collider_${entry.name ?? 'model'}_coacd_${debugMeshes.length}`)
+    if (debugMesh) debugMeshes.push(debugMesh)
+
+    partMesh.geometry.dispose()
+  }
+
+  if (colliders.length === 0) return null
+  console.info(`[stage] loaded ${colliders.length} compound convex collider(s) from ${collisionPath}`)
+  return { colliders, debugMeshes }
+}
+
 export async function buildModel(entry: ModelEntry): Promise<Built> {
   const root = await loadOBJ(entry.filename)
+  const dynamicBody = dynamicBodyFor(entry)
   if (entry.scale != null) root.scale.setScalar(entry.scale)
   root.position.fromArray(entry.position)
   if (entry.orientation) {
@@ -238,47 +483,38 @@ export async function buildModel(entry: ModelEntry): Promise<Built> {
     })
   }
 
-  let collider: RAPIER.ColliderDesc | undefined
-  if (entry.immovable) {
-    // Bake the model's full world transform into trimesh vertices and attach
-    // the collider with identity transform — simpler than tracking per-leaf
-    // local transforms, and stage objects are static so the bake is permanent.
-    root.updateMatrixWorld(true)
-    const meshes: THREE.Mesh[] = []
-    root.traverse((c) => {
-      const m = c as THREE.Mesh
-      if (m.isMesh) meshes.push(m)
-    })
-    let debugMesh: THREE.LineSegments | undefined
-    if (meshes.length > 0) {
-      const m = meshes[0]
-      const geom = m.geometry.clone()
-      geom.applyMatrix4(m.matrixWorld)
-      const positions = geom.attributes.position.array as Float32Array
-      const indices = geom.index
-        ? new Uint32Array(geom.index.array as ArrayLike<number>)
-        : new Uint32Array(positions.length / 3)
-      if (!geom.index) {
-        for (let i = 0; i < indices.length; i++) indices[i] = i
-      }
-      collider = RAPIER.ColliderDesc.trimesh(positions, indices)
+  const mode = modelCollisionMode(entry)
+  if (mode === 'none') {
+    return { object: root, dynamicBody }
+  }
 
-      // Debug wireframe from the same baked geometry
-      const edgeGeom = new THREE.EdgesGeometry(geom)
-      const edgeMat = new THREE.LineBasicMaterial({ color: 0xff8800 })
-      debugMesh = new THREE.LineSegments(edgeGeom, edgeMat)
-      debugMesh.name = `collider_${entry.name ?? 'model'}`
-
-      if (meshes.length > 1) {
-        console.warn(
-          `[stage] model ${entry.name ?? entry.filename} has ${meshes.length} sub-meshes; only the first contributes to the collider`,
-        )
-      }
+  if (mode === 'compoundConvex' || mode === 'auto') {
+    const compound = await loadCompoundConvex(entry, root, !!dynamicBody)
+    if (compound) return { object: root, ...compound, dynamicBody }
+    if (mode === 'compoundConvex') {
+      console.warn(`[stage] compound convex collider not found for ${entry.name ?? entry.filename}`)
     }
+  }
+
+  if (mode === 'convexHull') {
+    const colliderRoot = dynamicBody ? root.clone(true) : root
+    if (dynamicBody) {
+      colliderRoot.position.set(0, 0, 0)
+      colliderRoot.quaternion.identity()
+      colliderRoot.scale.copy(root.scale)
+    }
+    const collider = makeConvexHullCollider(colliderRoot)
+    const debugMesh = debugEdgesFromObject(colliderRoot, `collider_${entry.name ?? 'model'}_convex`)
+    return { object: root, collider, debugMesh, dynamicBody }
+  }
+
+  if (entry.immovable || mode === 'trimesh') {
+    const collider = makeTrimeshCollider(root)
+    const debugMesh = debugEdgesFromObject(root, `collider_${entry.name ?? 'model'}`)
     return { object: root, collider, debugMesh }
   }
 
-  return { object: root, collider }
+  return { object: root, dynamicBody }
 }
 
 export function buildText(entry: TextEntry): Built {
