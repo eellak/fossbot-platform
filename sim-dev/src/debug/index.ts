@@ -27,7 +27,7 @@ export function attachDebugMenu(
 
   const stage = buildStageFolder(gui as any, controls)
 
-  buildWorldFolder(gui as any, robot, controls)
+  buildWorldFolder(gui as any, controls)
   buildRobotFolder(gui as any, controls)
   buildWheelsFolder(gui as any, controls)
   buildDriveFolder(gui as any, controls)
