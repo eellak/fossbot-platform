@@ -16,6 +16,7 @@ export interface SceneHandle {
    * If null, the gizmo falls back to camera-relative world axes (Phase 1).
    */
   gizmoTarget: THREE.Object3D | null
+  worldAxes: THREE.AxesHelper
   resizeListener: () => void
 }
 
@@ -66,6 +67,7 @@ export function initScene(container: HTMLElement, opts?: { gizmo?: boolean }): S
   // World axes at origin: X red, Y green, Z blue. 0.3m so it's visible but not noisy.
   const worldAxes = new THREE.AxesHelper(0.3)
   worldAxes.position.y = 0.002
+  worldAxes.visible = false
   scene.add(worldAxes)
 
   // Gizmo (optional — disabled in non-dev embeds)
@@ -113,6 +115,7 @@ export function initScene(container: HTMLElement, opts?: { gizmo?: boolean }): S
     gizmoModeLabel,
     gizmoMode: 'camera',
     gizmoTarget: null,
+    worldAxes,
     resizeListener,
   }
 

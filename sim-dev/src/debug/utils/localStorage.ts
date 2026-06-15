@@ -48,3 +48,34 @@ export function getSplashExtraTimeDefault(): number {
 export function setSplashExtraTime(value: number) {
   localStorage.setItem(SPLASH_EXTRA_TIME_KEY, String(Math.max(0, value)))
 }
+
+const SENSORS_VIZ_KEY = 'sim-v2.sensors.viz'
+const SENSORS_RAYS_KEY = 'sim-v2.sensors.rays'
+const SENSORS_HITS_KEY = 'sim-v2.sensors.hits'
+const SENSORS_LABELS_KEY = 'sim-v2.sensors.labels'
+
+// Overlay defaults off; sub-toggles default on (only matter when overlay is on).
+export function getSensorsVizDefault(): boolean {
+  return localStorage.getItem(SENSORS_VIZ_KEY) === 'true'
+}
+export function setSensorsViz(v: boolean) {
+  localStorage.setItem(SENSORS_VIZ_KEY, String(v))
+}
+export function getSensorsRaysDefault(): boolean {
+  return localStorage.getItem(SENSORS_RAYS_KEY) !== 'false'
+}
+export function setSensorsRays(v: boolean) {
+  localStorage.setItem(SENSORS_RAYS_KEY, String(v))
+}
+export function getSensorsHitsDefault(): boolean {
+  return localStorage.getItem(SENSORS_HITS_KEY) !== 'false'
+}
+export function setSensorsHits(v: boolean) {
+  localStorage.setItem(SENSORS_HITS_KEY, String(v))
+}
+export function getSensorsLabelsDefault(): boolean {
+  return localStorage.getItem(SENSORS_LABELS_KEY) !== 'false'
+}
+export function setSensorsLabels(v: boolean) {
+  localStorage.setItem(SENSORS_LABELS_KEY, String(v))
+}
