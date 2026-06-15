@@ -1,3 +1,5 @@
+import { makeDraggable } from './dragUtils'
+
 export interface MovementPresetHandlers {
   forward: () => void
   backward: () => void
@@ -6,6 +8,7 @@ export interface MovementPresetHandlers {
 }
 
 export interface MovementPresetsHandle {
+  resetPosition: () => void
   dispose: () => void
 }
 
@@ -27,7 +30,11 @@ export function createMovementPresets(
   panel.style.borderRadius = '6px'
   panel.style.background = 'rgba(0, 0, 0, 0.72)'
   panel.style.width = '176px'
+  panel.style.cursor = 'grab'
+  panel.style.userSelect = 'none'
   container.appendChild(panel)
+
+  const dragHandle = makeDraggable({ el: panel, storageKey: 'fossbot-movement-presets-pos' })
 
   const title = document.createElement('div')
   title.textContent = 'Movement Presets'
@@ -63,10 +70,12 @@ export function createMovementPresets(
   ]
 
   return {
+    resetPosition: () => dragHandle.resetPosition(),
     dispose() {
       for (const { button, onClick } of buttons) {
         button.removeEventListener('click', onClick)
       }
+      dragHandle.dispose()
       panel.remove()
     },
   }

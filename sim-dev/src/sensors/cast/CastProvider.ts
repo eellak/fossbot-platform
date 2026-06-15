@@ -47,7 +47,7 @@ export class CastProvider implements SensorProvider {
     this.filter = opts.filter
   }
 
-  update(snapshot: SensorReadings): void {
+  update(snapshot: SensorReadings, _dt: number): void {
     const t = this.chassisBody.translation()
     const r = this.chassisBody.rotation()
     this._bodyPos.set(t.x, t.y, t.z)

@@ -30,6 +30,7 @@ export interface StageFolderHandle {
 }
 
 export interface DebugMenuHandle {
+  resetPosition: () => void
   dispose: () => void
   stage: StageFolderHandle
 }

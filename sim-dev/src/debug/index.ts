@@ -9,10 +9,15 @@ import { buildTelemetryFolder } from './folders/telemetryFolder'
 import { buildStageFolder } from './folders/stageFolder'
 import { buildVisualTunerFolder, type VisualTunerHandle } from './folders/visualTunerFolder'
 import { buildCollidersTunerFolder, type CollidersTunerHandle } from './folders/collidersTunerFolder'
-import { buildSensorsFolder, type SensorsFolderHandle } from './folders/sensorsFolder'
+import {
+  buildSensorsFolder,
+  type SensorsFolderExtras,
+  type SensorsFolderHandle,
+} from './folders/sensorsFolder'
 import type { SensorLayoutEntry } from '../sensors/types'
 import type { SensorDebugVizHandle } from '../sensors/debugViz'
 import type { DebugMenuHandle, StageFolderHandle } from './types'
+import { makeDraggable } from '../ui/dragUtils'
 
 export type { DebugMenuHandle, StageFolderHandle } from './types'
 export type { SimControlInterface } from '../engine/types'
@@ -20,6 +25,7 @@ export type { SimControlInterface } from '../engine/types'
 export interface DebugMenuSensorsOption {
   layout: readonly SensorLayoutEntry[]
   viz: SensorDebugVizHandle
+  extras?: SensorsFolderExtras
 }
 
 export function attachDebugMenu(
@@ -34,6 +40,13 @@ export function attachDebugMenu(
   root.style.left = '8px'
   root.style.zIndex = '10'
 
+  // Make the debug panel draggable via its title bar only
+  const dragHandle = makeDraggable({
+    el: root,
+    storageKey: 'fossbot-debug-menu-pos',
+    handle: gui.$title,
+  })
+
   const stage = buildStageFolder(gui as any, controls)
 
   buildWorldFolder(gui as any, controls)
@@ -45,11 +58,12 @@ export function attachDebugMenu(
   const visualTunerHandle: VisualTunerHandle = buildVisualTunerFolder(gui as any, robot)
   const collidersTunerHandle: CollidersTunerHandle = buildCollidersTunerFolder(gui as any, robot)
   const sensorsHandle: SensorsFolderHandle | null = sensors
-    ? buildSensorsFolder(gui as any, sensors.layout, sensors.viz)
+    ? buildSensorsFolder(gui as any, sensors.layout, sensors.viz, sensors.extras)
     : null
 
   return {
     stage,
+    resetPosition: () => dragHandle.resetPosition(),
     dispose() {
       try {
         sensorsHandle?.dispose()
@@ -59,6 +73,9 @@ export function attachDebugMenu(
       } catch (e) { }
       try {
         visualTunerHandle.dispose()
+      } catch (e) { }
+      try {
+        dragHandle.dispose()
       } catch (e) { }
       try {
         gui.destroy()
