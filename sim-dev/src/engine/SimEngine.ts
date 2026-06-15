@@ -30,6 +30,9 @@ import type {
   SimEngineConfig,
   SimControlInterface,
 } from './types'
+import { SensorSystem } from '../sensors/SensorSystem'
+import { SENSOR_LAYOUT } from '../sensors/layout'
+import { createSensorDebugViz, type SensorDebugVizHandle } from '../sensors/debugViz'
 
 function resolveConfig(cfg: Partial<SimEngineConfig> | undefined): Required<SimEngineConfig> {
   return {
@@ -57,6 +60,8 @@ export class SimEngine {
   private robotRoot: THREE.Object3D | null = null
   private robotPhysics: RobotPhysicsState | null = null
   private vehicle: VehicleHandle | null = null
+  private sensorSystem: SensorSystem | null = null
+  private sensorDebugViz: SensorDebugVizHandle | null = null
   private currentStage: StageHandle | null = null
   private keyboard: KeyboardHandle | null = null
   private debugMenu: DebugMenuHandle | null = null
@@ -78,6 +83,7 @@ export class SimEngine {
   private timeScale = 1
   private stepOnce = false
   private showColliders = false
+  private worldAxesVisible = false
   private gravityY = -9.81
   private turnScale = 0
   private telemetryVisible = false
@@ -192,6 +198,8 @@ export class SimEngine {
     this.cancelled = true
     cancelAnimationFrame(this.rafId)
     this.keyboard?.dispose()
+    this.sensorDebugViz?.dispose()
+    this.sensorSystem?.dispose()
     this.vehicle?.dispose()
     this.debugMenu?.dispose()
     this.currentStage?.dispose()
@@ -227,6 +235,11 @@ export class SimEngine {
       isSplashEnabled: () => this.splashEnabledCfg,
       setSplashExtraTime: (v: number) => { this.splashExtraTimeCfg = v },
       getSplashExtraTime: () => this.splashExtraTimeCfg,
+      setWorldAxesVisible: (v: boolean) => {
+        this.worldAxesVisible = v
+        if (this.sceneHandle) this.sceneHandle.worldAxes.visible = v
+      },
+      isWorldAxesVisible: () => this.worldAxesVisible,
       setTurnScale: (v: number) => { this.turnScale = v },
       getTurnScale: () => this.turnScale,
       setTelemetryVisible: (v: boolean) => {
@@ -297,6 +310,19 @@ export class SimEngine {
       this.wheelBaseLeft = this.robot.leftWheel.position.clone()
       this.wheelBaseRight = this.robot.rightWheel.position.clone()
       this.vehicle = createVehicle(world, this.robotPhysics.body, wheelPositions, this.robot.wheelRadius)
+      this.sensorSystem = new SensorSystem({
+        world,
+        chassisBody: this.robotPhysics.body,
+        selfColliders: Object.values(this.robotPhysics.collidersByName),
+        layout: SENSOR_LAYOUT,
+      })
+      if (this.config.devMode && this.robotRoot) {
+        this.sensorDebugViz = createSensorDebugViz({
+          parent: this.robotRoot,
+          layout: SENSOR_LAYOUT,
+          getReadings: () => this.sensorSystem!.getReadings(),
+        })
+      }
       this.keyboard = installKeyboard()
       this.applySpawnPose(this.currentStage)
       log.physics('createRobotBody returned', !!this.robotPhysics)
@@ -304,7 +330,13 @@ export class SimEngine {
 
       if (this.config.devMode) {
         const { attachDebugMenu } = await import('../debug')
-        this.debugMenu = attachDebugMenu(this.robot, this.controls)
+        this.debugMenu = attachDebugMenu(
+          this.robot,
+          this.controls,
+          this.sensorDebugViz
+            ? { layout: SENSOR_LAYOUT, viz: this.sensorDebugViz }
+            : undefined,
+        )
       }
       this.splash.hide(this.splashExtraTimeCfg)
 
@@ -390,8 +422,11 @@ export class SimEngine {
         this.vehicle.step(dt)
         this.worldHandle.step()
         this.currentStage?.syncDynamicObjects()
+        this.sensorSystem?.update()
         this.accumulator -= dt
       }
+
+      this.sensorDebugViz?.update()
 
       // Apply vehicle visual state to wheel meshes (pure rendering).
       if (this.robotPhysics && this.robot && this.robotRoot) {

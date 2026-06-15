@@ -40,6 +40,8 @@ export interface SimControlInterface {
   isSplashEnabled(): boolean
   setSplashExtraTime(v: number): void
   getSplashExtraTime(): number
+  setWorldAxesVisible(v: boolean): void
+  isWorldAxesVisible(): boolean
 
   // ── Drive ──
   setTurnScale(v: number): void

@@ -9,14 +9,23 @@ import { buildTelemetryFolder } from './folders/telemetryFolder'
 import { buildStageFolder } from './folders/stageFolder'
 import { buildVisualTunerFolder, type VisualTunerHandle } from './folders/visualTunerFolder'
 import { buildCollidersTunerFolder, type CollidersTunerHandle } from './folders/collidersTunerFolder'
+import { buildSensorsFolder, type SensorsFolderHandle } from './folders/sensorsFolder'
+import type { SensorLayoutEntry } from '../sensors/types'
+import type { SensorDebugVizHandle } from '../sensors/debugViz'
 import type { DebugMenuHandle, StageFolderHandle } from './types'
 
 export type { DebugMenuHandle, StageFolderHandle } from './types'
 export type { SimControlInterface } from '../engine/types'
 
+export interface DebugMenuSensorsOption {
+  layout: readonly SensorLayoutEntry[]
+  viz: SensorDebugVizHandle
+}
+
 export function attachDebugMenu(
   robot: RobotV2,
   controls: SimControlInterface,
+  sensors?: DebugMenuSensorsOption,
 ): DebugMenuHandle {
   const gui = new GUI({ title: 'Debug', width: 340 })
   const root = gui.domElement
@@ -35,10 +44,16 @@ export function attachDebugMenu(
 
   const visualTunerHandle: VisualTunerHandle = buildVisualTunerFolder(gui as any, robot)
   const collidersTunerHandle: CollidersTunerHandle = buildCollidersTunerFolder(gui as any, robot)
+  const sensorsHandle: SensorsFolderHandle | null = sensors
+    ? buildSensorsFolder(gui as any, sensors.layout, sensors.viz)
+    : null
 
   return {
     stage,
     dispose() {
+      try {
+        sensorsHandle?.dispose()
+      } catch (e) { }
       try {
         collidersTunerHandle.dispose()
       } catch (e) { }

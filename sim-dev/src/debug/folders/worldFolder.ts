@@ -13,6 +13,8 @@ export function buildWorldFolder(parentGui: GUI, ctrl: SimControlInterface) {
     set gravityY(v: number) { ctrl.setGravityY(v) },
     get showColliders() { return ctrl.isShowingColliders() },
     set showColliders(v: boolean) { ctrl.setShowColliders(v) },
+    get worldAxes() { return ctrl.isWorldAxesVisible() },
+    set worldAxes(v: boolean) { ctrl.setWorldAxesVisible(v) },
     get splashEnabled() { return ctrl.isSplashEnabled() },
     set splashEnabled(v: boolean) { ctrl.setSplashEnabled(v) },
     get splashExtraTime() { return ctrl.getSplashExtraTime() },
@@ -25,6 +27,7 @@ export function buildWorldFolder(parentGui: GUI, ctrl: SimControlInterface) {
   folder.add(state, 'timeScale', 0, 2, 0.05).name('Time scale')
   folder.add(state, 'gravityY', -30, 5, 0.1).name('Gravity Y')
   folder.add(state, 'showColliders').name('Show colliders').onChange((v: boolean) => ctrl.setShowColliders(v))
+  folder.add(state, 'worldAxes').name('Show world axes').onChange((v: boolean) => ctrl.setWorldAxesVisible(v))
   folder.add(state, 'splashEnabled').name('Startup splash').onChange((v: boolean) => {
     setSplashEnabled(v)
   })

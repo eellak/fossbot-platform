@@ -1,0 +1,333 @@
+// Sensor debug overlay — rays, hit markers, labels for cast sensors.
+// Parented to the robot root so all geometry lives in chassis-local frame
+// and follows the chassis automatically. See SENSOR_MODELS.md §6.
+//
+// Read-only from the sensor snapshot — produces zero meshes when disabled.
+
+import * as THREE from 'three'
+import type { SensorLayoutEntry, SensorReading, SensorReadings } from './types'
+
+const RAY_COLOR_NO_HIT = 0x4488ff
+const RAY_COLOR_HIT = 0xff5555
+const HIT_COLOR = 0xff3333
+
+interface PerSensor {
+  entry: SensorLayoutEntry
+  group: THREE.Group
+  rayGeos: THREE.BufferGeometry[]
+  rayLines: THREE.Line[]
+  rayMat: THREE.LineBasicMaterial
+  hitMarker: THREE.Mesh
+  hitMat: THREE.MeshBasicMaterial
+  hitGeo: THREE.SphereGeometry
+  label: THREE.Sprite
+  labelMat: THREE.SpriteMaterial
+  labelTex: THREE.CanvasTexture
+  labelCanvas: HTMLCanvasElement
+  labelCtx: CanvasRenderingContext2D
+  lastText: string
+  dirs: THREE.Vector3[]
+  hitActive: boolean
+  lineVisible: boolean
+  fanVisible: boolean
+}
+
+export interface SensorDebugVizOptions {
+  parent: THREE.Object3D
+  layout: readonly SensorLayoutEntry[]
+  getReadings: () => SensorReadings
+}
+
+export interface SensorDebugVizHandle {
+  setEnabled(v: boolean): void
+  setSensorLineVisible(id: string, v: boolean): void
+  setSensorFanVisible(id: string, v: boolean): void
+  setRaysVisible(v: boolean): void
+  setHitsVisible(v: boolean): void
+  setLabelsVisible(v: boolean): void
+  /** Call after a layout entry's localPos / localDir is mutated. */
+  refreshLayout(): void
+  /** Per-frame: reads snapshot, repositions geometry, updates labels. */
+  update(): void
+  dispose(): void
+}
+
+export function createSensorDebugViz(opts: SensorDebugVizOptions): SensorDebugVizHandle {
+  const root = new THREE.Group()
+  root.name = 'sensor_debug_viz'
+  root.visible = false
+  opts.parent.add(root)
+
+  let raysVisible = true
+  let hitsVisible = true
+  let labelsVisible = true
+
+  const sensors: PerSensor[] = []
+  const _end = new THREE.Vector3()
+  const _labelOffset = new THREE.Vector3(0, 0.015, 0)
+  const _refUp = new THREE.Vector3(0, 1, 0)
+  const _refX = new THREE.Vector3(1, 0, 0)
+  const _q = new THREE.Quaternion()
+
+  function entryMaxRange(entry: SensorLayoutEntry): number {
+    return entry.maxRange
+  }
+
+  function buildDirs(entry: SensorLayoutEntry): THREE.Vector3[] {
+    const centerDir = new THREE.Vector3(
+      entry.localDir[0],
+      entry.localDir[1],
+      entry.localDir[2],
+    )
+    if (centerDir.lengthSq() > 1e-8) centerDir.normalize()
+
+    const dirs: THREE.Vector3[] = [centerDir]
+
+    if (entry.kind === 'ultrasonic' && entry.rayCount > 1) {
+      const half = (entry.halfAngleDeg * Math.PI) / 180
+      const refAxis = Math.abs(centerDir.y) < 0.9 ? _refUp : _refX
+      const right = new THREE.Vector3().copy(refAxis).cross(centerDir).normalize()
+      const up = new THREE.Vector3().copy(centerDir).cross(right).normalize()
+      const tilts: Array<[THREE.Vector3, number]> = [
+        [right, half],
+        [right, -half],
+        [up, half],
+        [up, -half],
+      ]
+      const extra = Math.max(0, Math.min(entry.rayCount - 1, tilts.length))
+      for (let i = 0; i < extra; i++) {
+        const [axis, angle] = tilts[i]
+        _q.setFromAxisAngle(axis, angle)
+        dirs.push(new THREE.Vector3().copy(centerDir).applyQuaternion(_q))
+      }
+    }
+
+    return dirs
+  }
+
+  function rebuildDirs(s: PerSensor) {
+    const fresh = buildDirs(s.entry)
+    s.dirs.length = fresh.length
+    for (let i = 0; i < fresh.length; i++) {
+      if (s.dirs[i]) {
+        s.dirs[i].copy(fresh[i])
+      } else {
+        s.dirs[i] = fresh[i]
+      }
+    }
+  }
+
+  function buildSensor(entry: SensorLayoutEntry): PerSensor {
+    const group = new THREE.Group()
+    group.name = `sensor_${entry.id}`
+    group.position.set(entry.localPos[0], entry.localPos[1], entry.localPos[2])
+    root.add(group)
+
+    const rayMat = new THREE.LineBasicMaterial({
+      color: RAY_COLOR_NO_HIT,
+      depthTest: false,
+      transparent: true,
+    })
+
+    const dirs = buildDirs(entry)
+    const rayGeos: THREE.BufferGeometry[] = []
+    const rayLines: THREE.Line[] = []
+
+    for (const _dir of dirs) {
+      const geo = new THREE.BufferGeometry()
+      geo.setAttribute(
+        'position',
+        new THREE.BufferAttribute(new Float32Array([0, 0, 0, 0, 0, 0]), 3),
+      )
+      const line = new THREE.Line(geo, rayMat)
+      line.frustumCulled = false
+      line.renderOrder = 998
+      group.add(line)
+      rayGeos.push(geo)
+      rayLines.push(line)
+    }
+
+    const hitGeo = new THREE.SphereGeometry(0.005, 8, 6)
+    const hitMat = new THREE.MeshBasicMaterial({
+      color: HIT_COLOR,
+      depthTest: false,
+      transparent: true,
+    })
+    const hitMarker = new THREE.Mesh(hitGeo, hitMat)
+    hitMarker.visible = false
+    hitMarker.renderOrder = 999
+    group.add(hitMarker)
+
+    const labelCanvas = document.createElement('canvas')
+    labelCanvas.width = 128
+    labelCanvas.height = 32
+    const labelCtx = labelCanvas.getContext('2d')!
+    const labelTex = new THREE.CanvasTexture(labelCanvas)
+    labelTex.minFilter = THREE.LinearFilter
+    const labelMat = new THREE.SpriteMaterial({
+      map: labelTex,
+      depthTest: false,
+      transparent: true,
+    })
+    const label = new THREE.Sprite(labelMat)
+    label.scale.set(0.04, 0.01, 1)
+    label.renderOrder = 1000
+    group.add(label)
+
+    return {
+      entry,
+      group,
+      rayGeos,
+      rayLines,
+      rayMat,
+      hitMarker,
+      hitMat,
+      hitGeo,
+      label,
+      labelMat,
+      labelTex,
+      labelCanvas,
+      labelCtx,
+      lastText: '',
+      dirs,
+      hitActive: false,
+      lineVisible: true,
+      fanVisible: true,
+    }
+  }
+
+  for (const entry of opts.layout) sensors.push(buildSensor(entry))
+
+  function refreshLayout() {
+    for (const s of sensors) {
+      s.group.position.set(s.entry.localPos[0], s.entry.localPos[1], s.entry.localPos[2])
+      rebuildDirs(s)
+    }
+  }
+
+  function syncVisibility(s: PerSensor) {
+    s.rayLines[0].visible = raysVisible && s.lineVisible
+    for (let i = 1; i < s.rayLines.length; i++) {
+      s.rayLines[i].visible = raysVisible && s.fanVisible
+    }
+    s.hitMarker.visible = hitsVisible && s.lineVisible && s.hitActive
+    s.label.visible = labelsVisible && s.lineVisible
+  }
+
+  function setLabelText(s: PerSensor, text: string) {
+    if (text === s.lastText) return
+    s.lastText = text
+    const ctx = s.labelCtx
+    const w = s.labelCanvas.width
+    const h = s.labelCanvas.height
+    ctx.clearRect(0, 0, w, h)
+    ctx.fillStyle = 'rgba(0,0,0,0.65)'
+    ctx.fillRect(0, 0, w, h)
+    ctx.font = 'bold 18px sans-serif'
+    ctx.fillStyle = '#fff'
+    ctx.textBaseline = 'middle'
+    ctx.textAlign = 'center'
+    ctx.fillText(text, w / 2, h / 2)
+    s.labelTex.needsUpdate = true
+  }
+
+  function readingInfo(
+    r: SensorReading | undefined,
+    maxRange: number,
+  ): { text: string; hit: boolean; distance: number } {
+    if (!r) return { text: '—', hit: false, distance: maxRange }
+    switch (r.kind) {
+      case 'ultrasonic':
+        return {
+          text: r.outOfRange ? '∞' : `${(r.distanceM * 100).toFixed(0)} cm`,
+          hit: !r.outOfRange,
+          distance: r.distanceM,
+        }
+      case 'ir-proximity':
+      case 'ir-floor':
+        return {
+          text: r.triggered ? '1' : `${(r.distanceM * 100).toFixed(0)}cm`,
+          hit: r.triggered === 1,
+          distance: r.distanceM,
+        }
+    }
+  }
+
+  function update() {
+    if (!root.visible) return
+    const readings = opts.getReadings()
+    for (const s of sensors) {
+      const maxRange = entryMaxRange(s.entry)
+      const r = readings.bySensorId.get(s.entry.id)
+      const info = readingInfo(r, maxRange)
+      const drawDist = info.hit ? info.distance : maxRange
+
+      // Draw every ray in the fan at the reported distance.
+      for (let i = 0; i < s.rayLines.length; i++) {
+        _end.copy(s.dirs[i]).multiplyScalar(drawDist)
+        const posAttr = s.rayGeos[i].getAttribute('position') as THREE.BufferAttribute
+        posAttr.setXYZ(0, 0, 0, 0)
+        posAttr.setXYZ(1, _end.x, _end.y, _end.z)
+        posAttr.needsUpdate = true
+      }
+      s.rayMat.color.setHex(info.hit ? RAY_COLOR_HIT : RAY_COLOR_NO_HIT)
+
+      // Hit marker and label ride the centre ray.
+      _end.copy(s.dirs[0]).multiplyScalar(drawDist)
+      s.hitMarker.position.copy(_end)
+      s.hitActive = info.hit
+
+      s.label.position.copy(_end).add(_labelOffset)
+      setLabelText(s, info.text)
+
+      syncVisibility(s)
+    }
+  }
+
+  return {
+    setEnabled(v) {
+      root.visible = v
+    },
+    setSensorLineVisible(id, v) {
+      const s = sensors.find((x) => x.entry.id === id)
+      if (s) {
+        s.lineVisible = v
+        syncVisibility(s)
+      }
+    },
+    setSensorFanVisible(id, v) {
+      const s = sensors.find((x) => x.entry.id === id)
+      if (s) {
+        s.fanVisible = v
+        syncVisibility(s)
+      }
+    },
+    setRaysVisible(v) {
+      raysVisible = v
+      for (const s of sensors) syncVisibility(s)
+    },
+    setHitsVisible(v) {
+      hitsVisible = v
+      for (const s of sensors) syncVisibility(s)
+    },
+    setLabelsVisible(v) {
+      labelsVisible = v
+      for (const s of sensors) syncVisibility(s)
+    },
+    refreshLayout,
+    update,
+    dispose() {
+      for (const s of sensors) {
+        for (const geo of s.rayGeos) geo.dispose()
+        s.rayMat.dispose()
+        s.hitGeo.dispose()
+        s.hitMat.dispose()
+        s.labelTex.dispose()
+        s.labelMat.dispose()
+        s.group.removeFromParent()
+      }
+      sensors.length = 0
+      root.removeFromParent()
+    },
+  }
+}
