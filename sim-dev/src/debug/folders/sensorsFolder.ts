@@ -12,18 +12,24 @@ import {
   getSensorsBodyHudDefault,
   getSensorsHitsDefault,
   getSensorsLabelsDefault,
+  getSensorsLdrProbesDefault,
   getSensorsRaysDefault,
   getSensorsVizDefault,
   setSensorsBodyHud,
   setSensorsHits,
   setSensorsLabels,
+  setSensorsLdrProbes,
   setSensorsRays,
   setSensorsViz,
 } from '../utils/localStorage'
 
 export interface SensorsFolderExtras {
   setBodyHudVisible: (v: boolean) => void
+  setLdrProbesVisible: (v: boolean) => void
   resetOdometer: () => void
+  /** Read+write stage ambient floor (0..1). Read returns current; write applies. */
+  getStageAmbientFloor: () => number
+  setStageAmbientFloor: (v: number) => void
 }
 
 export interface SensorsFolderHandle {
@@ -99,6 +105,22 @@ export function buildSensorsFolder(
         setSensorsBodyHud(v)
       })
     gui.add({ reset: () => extras.resetOdometer() }, 'reset').name('reset odometer')
+
+    const ldrProbes = { visible: getSensorsLdrProbesDefault() }
+    extras.setLdrProbesVisible(ldrProbes.visible)
+    gui
+      .add(ldrProbes, 'visible')
+      .name('LDR light probes')
+      .onChange((v: boolean) => {
+        extras.setLdrProbesVisible(v)
+        setSensorsLdrProbes(v)
+      })
+
+    const stageAmb = { value: extras.getStageAmbientFloor() }
+    gui
+      .add(stageAmb, 'value', 0, 1, 0.01)
+      .name('stage ambient floor')
+      .onChange((v: number) => extras.setStageAmbientFloor(v))
   }
 
   const poseFolder = gui.addFolder('Per-sensor pose')

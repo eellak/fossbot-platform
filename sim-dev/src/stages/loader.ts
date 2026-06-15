@@ -20,6 +20,8 @@ export interface StageHandle {
   spawnOrientation: THREE.Euler
   collidersGroup: THREE.Group
   dynamicObjects: StageDynamicObject[]
+  /** Stage-level LDR baseline (0..1). Mutable so a debug knob can adjust live. */
+  ambientFloor: number
   syncDynamicObjects: () => void
   dispose: () => void
 }
@@ -165,6 +167,7 @@ export async function loadStage(
     spawnOrientation,
     collidersGroup: stgCollidersGrp,
     dynamicObjects,
+    ambientFloor: 0.05,
     syncDynamicObjects() {
       for (const dynamicObject of dynamicObjects) {
         syncObjectToBody(dynamicObject.object, dynamicObject.body)

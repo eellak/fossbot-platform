@@ -34,6 +34,7 @@ import { SensorSystem } from '../sensors/SensorSystem'
 import { SENSOR_LAYOUT } from '../sensors/layout'
 import { createSensorDebugViz, type SensorDebugVizHandle } from '../sensors/debugViz'
 import { createBodyStateHud, type BodyStateHudHandle } from '../sensors/bodyStateHud'
+import { createLdrProbeViz, type LdrProbeVizHandle } from '../sensors/ldrProbeViz'
 
 function resolveConfig(cfg: Partial<SimEngineConfig> | undefined): Required<SimEngineConfig> {
   return {
@@ -64,6 +65,7 @@ export class SimEngine {
   private sensorSystem: SensorSystem | null = null
   private sensorDebugViz: SensorDebugVizHandle | null = null
   private bodyStateHud: BodyStateHudHandle | null = null
+  private ldrProbeViz: LdrProbeVizHandle | null = null
   private currentStage: StageHandle | null = null
   private keyboard: KeyboardHandle | null = null
   private debugMenu: DebugMenuHandle | null = null
@@ -232,6 +234,7 @@ export class SimEngine {
     this.cancelled = true
     cancelAnimationFrame(this.rafId)
     this.keyboard?.dispose()
+    this.ldrProbeViz?.dispose()
     this.bodyStateHud?.dispose()
     this.sensorDebugViz?.dispose()
     this.sensorSystem?.dispose()
@@ -355,6 +358,8 @@ export class SimEngine {
         wheelVisualState: this.vehicle.visualState,
         wheelRadius: this.robot.wheelRadius,
         getGravity: () => this.worldHandle!.world.gravity,
+        scene: this.sceneHandle!.scene,
+        getStageAmbientFloor: () => this.currentStage?.ambientFloor ?? 0,
       })
       if (this.config.devMode && this.robotRoot) {
         this.sensorDebugViz = createSensorDebugViz({
@@ -365,6 +370,10 @@ export class SimEngine {
         this.bodyStateHud = createBodyStateHud({
           container: this.container,
           getReadings: () => this.sensorSystem!.getReadings(),
+        })
+        this.ldrProbeViz = createLdrProbeViz({
+          scene: this.sceneHandle!.scene,
+          getLdrProvider: () => this.sensorSystem?.getLdrProvider() ?? null,
         })
       }
       this.keyboard = installKeyboard()
@@ -383,7 +392,12 @@ export class SimEngine {
                 viz: this.sensorDebugViz,
                 extras: {
                   setBodyHudVisible: (v) => this.bodyStateHud?.setVisible(v),
+                  setLdrProbesVisible: (v) => this.ldrProbeViz?.setVisible(v),
                   resetOdometer: () => this.sensorSystem?.resetOdometer(),
+                  getStageAmbientFloor: () => this.currentStage?.ambientFloor ?? 0,
+                  setStageAmbientFloor: (v) => {
+                    if (this.currentStage) this.currentStage.ambientFloor = v
+                  },
                 },
               }
             : undefined,
@@ -479,6 +493,7 @@ export class SimEngine {
 
       this.sensorDebugViz?.update()
       this.bodyStateHud?.update()
+      this.ldrProbeViz?.update()
 
       // Apply vehicle visual state to wheel meshes (pure rendering).
       if (this.robotPhysics && this.robot && this.robotRoot) {

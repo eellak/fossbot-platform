@@ -69,8 +69,11 @@ export function createSensorDebugViz(opts: SensorDebugVizOptions): SensorDebugVi
   const _refX = new THREE.Vector3(1, 0, 0)
   const _q = new THREE.Quaternion()
 
+  // LDR has no range — render a short upward indicator line.
+  const LDR_VIZ_LEN = 0.04
+
   function entryMaxRange(entry: SensorLayoutEntry): number {
-    return entry.maxRange
+    return entry.kind === 'ldr' ? LDR_VIZ_LEN : entry.maxRange
   }
 
   function buildDirs(entry: SensorLayoutEntry): THREE.Vector3[] {
@@ -250,6 +253,15 @@ export function createSensorDebugViz(opts: SensorDebugVizOptions): SensorDebugVi
           hit: r.triggered === 1,
           distance: r.distanceM,
         }
+      case 'ldr':
+        return {
+          text: `${r.analog0to1023}`,
+          hit: false,
+          distance: maxRange,
+        }
+      default:
+        // Body-state readings shouldn't reach this overlay (no layout entry).
+        return { text: '—', hit: false, distance: maxRange }
     }
   }
 
