@@ -91,4 +91,13 @@ export const SENSOR_LAYOUT: readonly SensorLayoutEntry[] = [
     maxRange: 0.03,
     led: { defaultColor: LED_OFF },
   },
+
+  // --- LDR photoresistor, top center, facing up ---
+  {
+    id: 'ldr-top',
+    kind: 'ldr',
+    localPos: [0.03, DECK_Y + 0.048, -0.08],
+    localDir: [0.19, 0, -1],
+    ambientFloor: 0.05,
+  },
 ]

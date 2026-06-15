@@ -87,3 +87,11 @@ export function getSensorsBodyHudDefault(): boolean {
 export function setSensorsBodyHud(v: boolean) {
   localStorage.setItem(SENSORS_BODY_HUD_KEY, String(v))
 }
+
+const SENSORS_LDR_PROBES_KEY = 'sim-v2.sensors.ldrProbes'
+export function getSensorsLdrProbesDefault(): boolean {
+  return localStorage.getItem(SENSORS_LDR_PROBES_KEY) === 'true'
+}
+export function setSensorsLdrProbes(v: boolean) {
+  localStorage.setItem(SENSORS_LDR_PROBES_KEY, String(v))
+}

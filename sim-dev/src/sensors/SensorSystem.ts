@@ -3,11 +3,13 @@
 // See SENSOR_MODELS.md §1, §4, §5.
 
 import * as RAPIER from '@dimforge/rapier3d-compat'
+import * as THREE from 'three'
 import {
   ACCELEROMETER_ID,
   GYROSCOPE_ID,
   ODOMETER_LEFT_ID,
   ODOMETER_RIGHT_ID,
+  type LdrLayoutEntry,
   type SensorLayoutEntry,
   type SensorProvider,
   type SensorReading,
@@ -16,6 +18,7 @@ import {
 import { CastProvider, type CastLayoutEntry } from './cast/CastProvider'
 import type { ColliderFilter } from './cast/multiRay'
 import { BodyStateProvider } from './bodyState/BodyStateProvider'
+import { LdrProvider } from './ldr/LdrProvider'
 import type { WheelVisualState } from '../physics/vehicle'
 
 export interface SensorSystemOptions {
@@ -29,11 +32,17 @@ export interface SensorSystemOptions {
   wheelRadius: number
   /** Current world gravity — accelerometer uses this to report proper accel. */
   getGravity: () => { x: number; y: number; z: number }
+  /** THREE scene — LDR provider enumerates lights from here. */
+  scene: THREE.Scene
+  /** Stage-level ambient light baseline (0..1). LDR final floor =
+   *  max(entry.ambientFloor, stageAmbientFloor). */
+  getStageAmbientFloor: () => number
 }
 
 export class SensorSystem {
   private readonly providers: SensorProvider[]
   private readonly bodyState: BodyStateProvider
+  private readonly ldr: LdrProvider | null
   private readonly readings: SensorReadings = { bySensorId: new Map() }
   private readonly selfHandles: Set<number>
   private disposed = false
@@ -45,10 +54,11 @@ export class SensorSystem {
 
     // Pre-populate snapshot with default entries so consumers always see a
     // stable shape.
-    for (const e of opts.layout) this.readings.bySensorId.set(e.id, defaultCastReading(e))
+    for (const e of opts.layout) this.readings.bySensorId.set(e.id, defaultLayoutReading(e))
     for (const [id, r] of defaultBodyStateReadings()) this.readings.bySensorId.set(id, r)
 
     const castLayout = opts.layout.filter(isCastEntry)
+    const ldrLayout = opts.layout.filter(isLdrEntry)
 
     this.bodyState = new BodyStateProvider({
       chassisBody: opts.chassisBody,
@@ -57,6 +67,17 @@ export class SensorSystem {
       getGravity: opts.getGravity,
     })
 
+    this.ldr = ldrLayout.length
+      ? new LdrProvider({
+          world: opts.world,
+          chassisBody: opts.chassisBody,
+          scene: opts.scene,
+          layout: ldrLayout,
+          filter,
+          getStageAmbientFloor: opts.getStageAmbientFloor,
+        })
+      : null
+
     this.providers = [
       new CastProvider({
         world: opts.world,
@@ -64,8 +85,14 @@ export class SensorSystem {
         layout: castLayout,
         filter,
       }),
+      ...(this.ldr ? [this.ldr] : []),
       this.bodyState,
     ]
+  }
+
+  /** LDR provider — exposed for the debug overlay's probe rays. */
+  getLdrProvider(): LdrProvider | null {
+    return this.ldr
   }
 
   /** Run one tick. Call once per physics step from SimEngine. */
@@ -102,7 +129,11 @@ function isCastEntry(e: SensorLayoutEntry): e is CastLayoutEntry {
   return e.kind === 'ir-proximity' || e.kind === 'ir-floor' || e.kind === 'ultrasonic'
 }
 
-function defaultCastReading(entry: SensorLayoutEntry): SensorReading {
+function isLdrEntry(e: SensorLayoutEntry): e is LdrLayoutEntry {
+  return e.kind === 'ldr'
+}
+
+function defaultLayoutReading(entry: SensorLayoutEntry): SensorReading {
   switch (entry.kind) {
     case 'ultrasonic':
       return { kind: 'ultrasonic', distanceM: entry.maxRange, outOfRange: true }
@@ -110,6 +141,12 @@ function defaultCastReading(entry: SensorLayoutEntry): SensorReading {
       return { kind: 'ir-proximity', triggered: 0, distanceM: entry.maxRange }
     case 'ir-floor':
       return { kind: 'ir-floor', triggered: 0, distanceM: entry.maxRange }
+    case 'ldr':
+      return {
+        kind: 'ldr',
+        raw0to1: entry.ambientFloor,
+        analog0to1023: Math.round(entry.ambientFloor * 1023),
+      }
   }
 }
 
