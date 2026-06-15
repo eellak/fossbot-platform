@@ -1,3 +1,5 @@
+import { makeDraggable } from './dragUtils'
+
 export interface SavedPosition {
   name: string
   position: { x: number; y: number; z: number }
@@ -5,6 +7,7 @@ export interface SavedPosition {
 }
 
 export interface PositionPresetsHandle {
+  resetPosition: () => void
   dispose: () => void
   clearAll: () => void
   refresh: () => void
@@ -30,6 +33,8 @@ const STYLE = {
     borderRadius: '6px',
     padding: '8px',
     width: `${PANEL_WIDTH}px`,
+    cursor: 'grab',
+    userSelect: 'none',
   },
   title: {
     color: '#ffffff',
@@ -106,6 +111,8 @@ export function createPositionPresets(
   panel.title = 'Position Presets'
   Object.assign(panel.style, STYLE.panel)
   container.appendChild(panel)
+
+  const dragHandle = makeDraggable({ el: panel, storageKey: 'fossbot-position-presets-pos' })
 
   // Title
   const title = document.createElement('div')
@@ -188,7 +195,9 @@ export function createPositionPresets(
   renderList()
 
   return {
+    resetPosition: () => dragHandle.resetPosition(),
     dispose() {
+      dragHandle.dispose()
       panel.remove()
     },
     clearAll() {

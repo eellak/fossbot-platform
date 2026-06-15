@@ -9,15 +9,22 @@ import type { SensorLayoutEntry } from '../../sensors/types'
 import type { SensorDebugVizHandle } from '../../sensors/debugViz'
 import type { UltrasonicLayoutEntry } from '../../sensors/types'
 import {
+  getSensorsBodyHudDefault,
   getSensorsHitsDefault,
   getSensorsLabelsDefault,
   getSensorsRaysDefault,
   getSensorsVizDefault,
+  setSensorsBodyHud,
   setSensorsHits,
   setSensorsLabels,
   setSensorsRays,
   setSensorsViz,
 } from '../utils/localStorage'
+
+export interface SensorsFolderExtras {
+  setBodyHudVisible: (v: boolean) => void
+  resetOdometer: () => void
+}
 
 export interface SensorsFolderHandle {
   dispose(): void
@@ -36,6 +43,7 @@ export function buildSensorsFolder(
   parentGui: GUI,
   layout: readonly SensorLayoutEntry[],
   viz: SensorDebugVizHandle,
+  extras?: SensorsFolderExtras,
 ): SensorsFolderHandle {
   const gui = parentGui.addFolder('Sensors')
 
@@ -79,6 +87,19 @@ export function buildSensorsFolder(
       viz.setLabelsVisible(v)
       setSensorsLabels(v)
     })
+
+  if (extras) {
+    const bodyHud = { visible: getSensorsBodyHudDefault() }
+    extras.setBodyHudVisible(bodyHud.visible)
+    gui
+      .add(bodyHud, 'visible')
+      .name('body-state HUD')
+      .onChange((v: boolean) => {
+        extras.setBodyHudVisible(v)
+        setSensorsBodyHud(v)
+      })
+    gui.add({ reset: () => extras.resetOdometer() }, 'reset').name('reset odometer')
+  }
 
   const poseFolder = gui.addFolder('Per-sensor pose')
   poseFolder.close()

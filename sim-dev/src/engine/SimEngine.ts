@@ -33,6 +33,7 @@ import type {
 import { SensorSystem } from '../sensors/SensorSystem'
 import { SENSOR_LAYOUT } from '../sensors/layout'
 import { createSensorDebugViz, type SensorDebugVizHandle } from '../sensors/debugViz'
+import { createBodyStateHud, type BodyStateHudHandle } from '../sensors/bodyStateHud'
 
 function resolveConfig(cfg: Partial<SimEngineConfig> | undefined): Required<SimEngineConfig> {
   return {
@@ -62,6 +63,7 @@ export class SimEngine {
   private vehicle: VehicleHandle | null = null
   private sensorSystem: SensorSystem | null = null
   private sensorDebugViz: SensorDebugVizHandle | null = null
+  private bodyStateHud: BodyStateHudHandle | null = null
   private currentStage: StageHandle | null = null
   private keyboard: KeyboardHandle | null = null
   private debugMenu: DebugMenuHandle | null = null
@@ -73,6 +75,7 @@ export class SimEngine {
   private movementPresets: MovementPresetsHandle | null = null
   private positionPresets: PositionPresetsHandle | null = null
   private positionStore: PositionStore | null = null
+  private resetBtn: HTMLButtonElement | null = null
 
   // ── State ──
   private cancelled = false
@@ -168,6 +171,10 @@ export class SimEngine {
         import('../ui/positionPresets'),
       ])
 
+      // Guard against stopped engine resuming after the await (React
+      // StrictMode unmount → remount in dev triggers this race).
+      if (this.cancelled) return
+
       this.telemetryOverlay = createTelemetryOverlay(this.container, this.config.telemetryDefault)
       this.positionStore = new PS()
 
@@ -186,6 +193,33 @@ export class SimEngine {
         deletePos: (name: string) => this.positionStore!.remove(name),
         getSavedNames: () => this.positionStore!.list(),
       })
+
+      // ── Reset debug layout button ──
+      const resetBtn = document.createElement('button')
+      resetBtn.type = 'button'
+      resetBtn.textContent = 'Reset debug window layout'
+      resetBtn.style.position = 'absolute'
+      resetBtn.style.bottom = '8px'
+      resetBtn.style.right = '8px'
+      resetBtn.style.zIndex = '20'
+      resetBtn.style.padding = '6px 10px'
+      resetBtn.style.border = '1px solid rgba(255, 255, 255, 0.18)'
+      resetBtn.style.borderRadius = '4px'
+      resetBtn.style.background = 'rgba(0, 0, 0, 0.6)'
+      resetBtn.style.color = '#c0c0c0'
+      resetBtn.style.font = '500 11px sans-serif'
+      resetBtn.style.cursor = 'pointer'
+      this.container.appendChild(resetBtn)
+
+      this.resetBtn = resetBtn
+      resetBtn.addEventListener('click', () => {
+        this.bodyStateHud?.resetPosition()
+        this.cameraControls?.resetPosition()
+        this.movementPresets?.resetPosition()
+        this.positionPresets?.resetPosition()
+        this.telemetryOverlay?.resetPosition()
+        this.debugMenu?.resetPosition()
+      })
     }
 
     this.initializePhysics().catch((err) => {
@@ -198,6 +232,7 @@ export class SimEngine {
     this.cancelled = true
     cancelAnimationFrame(this.rafId)
     this.keyboard?.dispose()
+    this.bodyStateHud?.dispose()
     this.sensorDebugViz?.dispose()
     this.sensorSystem?.dispose()
     this.vehicle?.dispose()
@@ -208,6 +243,8 @@ export class SimEngine {
     this.movementPresets?.dispose()
     this.positionPresets?.dispose()
     this.cameraControls?.dispose()
+    this.resetBtn?.remove()
+    this.resetBtn = null
     if (this.sceneHandle) disposeScene(this.sceneHandle)
     this.worldHandle?.dispose()
   }
@@ -315,11 +352,18 @@ export class SimEngine {
         chassisBody: this.robotPhysics.body,
         selfColliders: Object.values(this.robotPhysics.collidersByName),
         layout: SENSOR_LAYOUT,
+        wheelVisualState: this.vehicle.visualState,
+        wheelRadius: this.robot.wheelRadius,
+        getGravity: () => this.worldHandle!.world.gravity,
       })
       if (this.config.devMode && this.robotRoot) {
         this.sensorDebugViz = createSensorDebugViz({
           parent: this.robotRoot,
           layout: SENSOR_LAYOUT,
+          getReadings: () => this.sensorSystem!.getReadings(),
+        })
+        this.bodyStateHud = createBodyStateHud({
+          container: this.container,
           getReadings: () => this.sensorSystem!.getReadings(),
         })
       }
@@ -334,7 +378,14 @@ export class SimEngine {
           this.robot,
           this.controls,
           this.sensorDebugViz
-            ? { layout: SENSOR_LAYOUT, viz: this.sensorDebugViz }
+            ? {
+                layout: SENSOR_LAYOUT,
+                viz: this.sensorDebugViz,
+                extras: {
+                  setBodyHudVisible: (v) => this.bodyStateHud?.setVisible(v),
+                  resetOdometer: () => this.sensorSystem?.resetOdometer(),
+                },
+              }
             : undefined,
         )
       }
@@ -422,11 +473,12 @@ export class SimEngine {
         this.vehicle.step(dt)
         this.worldHandle.step()
         this.currentStage?.syncDynamicObjects()
-        this.sensorSystem?.update()
+        this.sensorSystem?.update(dt)
         this.accumulator -= dt
       }
 
       this.sensorDebugViz?.update()
+      this.bodyStateHud?.update()
 
       // Apply vehicle visual state to wheel meshes (pure rendering).
       if (this.robotPhysics && this.robot && this.robotRoot) {

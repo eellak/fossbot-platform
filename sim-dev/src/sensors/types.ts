@@ -47,15 +47,33 @@ export type SensorReading =
   | { kind: 'ultrasonic'; distanceM: number; outOfRange: boolean }
   | { kind: 'ir-proximity'; triggered: 0 | 1; distanceM: number }
   | { kind: 'ir-floor'; triggered: 0 | 1; distanceM: number }
+  | {
+      kind: 'odometer'
+      side: 'left' | 'right'
+      ticks: number
+      revs: number
+      distanceM: number
+    }
+  // Body frame, m/s², includes gravity (reads +g on the up axis at rest).
+  | { kind: 'accel'; x: number; y: number; z: number }
+  // Body frame, deg/s.
+  | { kind: 'gyro'; x: number; y: number; z: number }
 
 export interface SensorReadings {
   bySensorId: Map<string, SensorReading>
 }
 
+// Stable IDs for body-state sensors. Not in the layout table — they have
+// no pose. See SENSOR_MODELS.md §3.
+export const ODOMETER_LEFT_ID = 'odometer-left'
+export const ODOMETER_RIGHT_ID = 'odometer-right'
+export const ACCELEROMETER_ID = 'accelerometer'
+export const GYROSCOPE_ID = 'gyroscope'
+
 // Provider interface — each provider owns a sub-set of the layout (or none,
 // for body-state) and writes to the shared snapshot on update().
 // See SENSOR_MODELS.md §1.
 export interface SensorProvider {
-  update(snapshot: SensorReadings): void
+  update(snapshot: SensorReadings, dt: number): void
   dispose(): void
 }

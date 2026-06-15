@@ -79,3 +79,11 @@ export function getSensorsLabelsDefault(): boolean {
 export function setSensorsLabels(v: boolean) {
   localStorage.setItem(SENSORS_LABELS_KEY, String(v))
 }
+
+const SENSORS_BODY_HUD_KEY = 'sim-v2.sensors.bodyHud'
+export function getSensorsBodyHudDefault(): boolean {
+  return localStorage.getItem(SENSORS_BODY_HUD_KEY) === 'true'
+}
+export function setSensorsBodyHud(v: boolean) {
+  localStorage.setItem(SENSORS_BODY_HUD_KEY, String(v))
+}

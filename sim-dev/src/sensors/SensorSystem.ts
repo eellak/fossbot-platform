@@ -3,14 +3,20 @@
 // See SENSOR_MODELS.md §1, §4, §5.
 
 import * as RAPIER from '@dimforge/rapier3d-compat'
-import type {
-  SensorLayoutEntry,
-  SensorProvider,
-  SensorReading,
-  SensorReadings,
+import {
+  ACCELEROMETER_ID,
+  GYROSCOPE_ID,
+  ODOMETER_LEFT_ID,
+  ODOMETER_RIGHT_ID,
+  type SensorLayoutEntry,
+  type SensorProvider,
+  type SensorReading,
+  type SensorReadings,
 } from './types'
 import { CastProvider, type CastLayoutEntry } from './cast/CastProvider'
 import type { ColliderFilter } from './cast/multiRay'
+import { BodyStateProvider } from './bodyState/BodyStateProvider'
+import type { WheelVisualState } from '../physics/vehicle'
 
 export interface SensorSystemOptions {
   world: RAPIER.World
@@ -18,10 +24,16 @@ export interface SensorSystemOptions {
   /** Colliders belonging to the robot — excluded from every cast. */
   selfColliders: Iterable<RAPIER.Collider>
   layout: readonly SensorLayoutEntry[]
+  /** Drive-wheel visual state (cumulative spin used by the odometer). */
+  wheelVisualState: readonly [WheelVisualState, WheelVisualState]
+  wheelRadius: number
+  /** Current world gravity — accelerometer uses this to report proper accel. */
+  getGravity: () => { x: number; y: number; z: number }
 }
 
 export class SensorSystem {
   private readonly providers: SensorProvider[]
+  private readonly bodyState: BodyStateProvider
   private readonly readings: SensorReadings = { bySensorId: new Map() }
   private readonly selfHandles: Set<number>
   private disposed = false
@@ -31,11 +43,19 @@ export class SensorSystem {
     for (const c of opts.selfColliders) this.selfHandles.add(c.handle)
     const filter: ColliderFilter = (collider) => !this.selfHandles.has(collider.handle)
 
-    // Pre-populate snapshot with default "no hit" entries so consumers always
-    // see a stable shape.
-    for (const e of opts.layout) this.readings.bySensorId.set(e.id, defaultReading(e))
+    // Pre-populate snapshot with default entries so consumers always see a
+    // stable shape.
+    for (const e of opts.layout) this.readings.bySensorId.set(e.id, defaultCastReading(e))
+    for (const [id, r] of defaultBodyStateReadings()) this.readings.bySensorId.set(id, r)
 
     const castLayout = opts.layout.filter(isCastEntry)
+
+    this.bodyState = new BodyStateProvider({
+      chassisBody: opts.chassisBody,
+      wheelVisualState: opts.wheelVisualState,
+      wheelRadius: opts.wheelRadius,
+      getGravity: opts.getGravity,
+    })
 
     this.providers = [
       new CastProvider({
@@ -44,13 +64,19 @@ export class SensorSystem {
         layout: castLayout,
         filter,
       }),
+      this.bodyState,
     ]
   }
 
   /** Run one tick. Call once per physics step from SimEngine. */
-  update(): void {
+  update(dt: number): void {
     if (this.disposed) return
-    for (const p of this.providers) p.update(this.readings)
+    for (const p of this.providers) p.update(this.readings, dt)
+  }
+
+  /** Reset both wheel odometers to zero. Mirrors `robot.resetSteps()`. */
+  resetOdometer(): void {
+    this.bodyState.reset()
   }
 
   /** Read-only snapshot from the most recent update(). */
@@ -76,7 +102,7 @@ function isCastEntry(e: SensorLayoutEntry): e is CastLayoutEntry {
   return e.kind === 'ir-proximity' || e.kind === 'ir-floor' || e.kind === 'ultrasonic'
 }
 
-function defaultReading(entry: SensorLayoutEntry): SensorReading {
+function defaultCastReading(entry: SensorLayoutEntry): SensorReading {
   switch (entry.kind) {
     case 'ultrasonic':
       return { kind: 'ultrasonic', distanceM: entry.maxRange, outOfRange: true }
@@ -85,4 +111,13 @@ function defaultReading(entry: SensorLayoutEntry): SensorReading {
     case 'ir-floor':
       return { kind: 'ir-floor', triggered: 0, distanceM: entry.maxRange }
   }
+}
+
+function defaultBodyStateReadings(): Array<[string, SensorReading]> {
+  return [
+    [ODOMETER_LEFT_ID, { kind: 'odometer', side: 'left', ticks: 0, revs: 0, distanceM: 0 }],
+    [ODOMETER_RIGHT_ID, { kind: 'odometer', side: 'right', ticks: 0, revs: 0, distanceM: 0 }],
+    [ACCELEROMETER_ID, { kind: 'accel', x: 0, y: 0, z: 0 }],
+    [GYROSCOPE_ID, { kind: 'gyro', x: 0, y: 0, z: 0 }],
+  ]
 }

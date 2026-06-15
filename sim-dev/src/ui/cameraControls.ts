@@ -1,7 +1,9 @@
 import type { CameraMode } from './cameraTypes'
+import { makeDraggable } from './dragUtils'
 
 export interface CameraControlsHandle {
   setModeLabel: (mode: CameraMode) => void
+  resetPosition: () => void
   dispose: () => void
 }
 
@@ -19,8 +21,11 @@ export function createCameraControls(container: HTMLElement, onCycle: () => void
   button.style.background = 'rgba(0, 0, 0, 0.72)'
   button.style.color = '#ffffff'
   button.style.font = '600 13px sans-serif'
-  button.style.cursor = 'pointer'
+  button.style.cursor = 'grab'
+  button.style.userSelect = 'none'
   container.appendChild(button)
+
+  const dragHandle = makeDraggable({ el: button, storageKey: 'fossbot-camera-controls-pos' })
 
   const onKeyDown = (event: KeyboardEvent) => {
     const target = event.target as HTMLElement | null
@@ -37,9 +42,11 @@ export function createCameraControls(container: HTMLElement, onCycle: () => void
     setModeLabel(mode) {
       button.textContent = `View: ${mode === 'orbit' ? 'Orbit' : mode === 'follow' ? 'Follow' : 'Top'}`
     },
+    resetPosition: () => dragHandle.resetPosition(),
     dispose() {
       button.removeEventListener('click', onCycle)
       window.removeEventListener('keydown', onKeyDown)
+      dragHandle.dispose()
       button.remove()
     },
   }
