@@ -12,6 +12,8 @@ import type {
   IrFloorLayoutEntry,
   UltrasonicLayoutEntry,
 } from '../types'
+import type { LineSegment } from '../../stages'
+import { isOverLine } from '../line/probe'
 
 // Predicate: return true to include the collider in the query, false to ignore.
 export type ColliderFilter = (collider: RAPIER.Collider) => boolean
@@ -67,11 +69,17 @@ function castIrFloor(
   worldPos: THREE.Vector3,
   worldDir: THREE.Vector3,
   filter: ColliderFilter,
+  lineSegments: readonly LineSegment[],
 ): SensorReading {
-  // Line-mesh tagging is step 5; for now report distance only, triggered = 0.
   const toi = castOne(world, worldPos, worldDir, entry.maxRange, filter)
   const distanceM = Number.isFinite(toi) ? toi : entry.maxRange
-  return { kind: 'ir-floor', triggered: 0, distanceM }
+  let triggered: 0 | 1 = 0
+  if (Number.isFinite(toi) && lineSegments.length > 0) {
+    const hx = worldPos.x + worldDir.x * toi
+    const hz = worldPos.z + worldDir.z * toi
+    if (isOverLine(lineSegments, hx, hz)) triggered = 1
+  }
+  return { kind: 'ir-floor', triggered, distanceM }
 }
 
 function castUltrasonic(
@@ -115,12 +123,13 @@ export function castEntry(
   worldPos: THREE.Vector3,
   worldDir: THREE.Vector3,
   filter: ColliderFilter,
+  lineSegments: readonly LineSegment[],
 ): SensorReading {
   switch (entry.kind) {
     case 'ir-proximity':
       return castIrProximity(world, entry, worldPos, worldDir, filter)
     case 'ir-floor':
-      return castIrFloor(world, entry, worldPos, worldDir, filter)
+      return castIrFloor(world, entry, worldPos, worldDir, filter, lineSegments)
     case 'ultrasonic':
       return castUltrasonic(world, entry, worldPos, worldDir, filter)
   }

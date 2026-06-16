@@ -9,27 +9,45 @@ import type { SensorLayoutEntry } from '../../sensors/types'
 import type { SensorDebugVizHandle } from '../../sensors/debugViz'
 import type { UltrasonicLayoutEntry } from '../../sensors/types'
 import {
-  getSensorsBodyHudDefault,
   getSensorsHitsDefault,
+  getSensorsHudDefault,
   getSensorsLabelsDefault,
   getSensorsLdrProbesDefault,
+  getSensorsMicOverrideDefault,
+  getSensorsMicRadiusDefault,
   getSensorsRaysDefault,
   getSensorsVizDefault,
-  setSensorsBodyHud,
   setSensorsHits,
+  setSensorsHud,
   setSensorsLabels,
   setSensorsLdrProbes,
+  setSensorsMicOverride,
+  setSensorsMicRadius,
   setSensorsRays,
   setSensorsViz,
 } from '../utils/localStorage'
 
 export interface SensorsFolderExtras {
-  setBodyHudVisible: (v: boolean) => void
+  /** Unified sensors HUD (covers all sensor kinds + body state). */
+  setSensorsHudVisible: (v: boolean) => void
+  /** LDR probe rays. Also controlled by the "show overlay" toggle. */
   setLdrProbesVisible: (v: boolean) => void
+  /** Mic sphere / source lines. Also controlled by the "show overlay" toggle. */
+  setMicRadiusVisible: (v: boolean) => void
   resetOdometer: () => void
   /** Read+write stage ambient floor (0..1). Read returns current; write applies. */
   getStageAmbientFloor: () => number
   setStageAmbientFloor: (v: number) => void
+  /** Mic override (0..1023). 0 = no override. */
+  setMicOverride?: (v: number) => void
+  /** Mic max distance in metres. */
+  setMicMaxDistance?: (v: number) => void
+  getMicMaxDistance?: () => number
+  /** Mic localPos x/y/z (in chassis frame). */
+  setMicLocalPosX?: (v: number) => void
+  setMicLocalPosY?: (v: number) => void
+  setMicLocalPosZ?: (v: number) => void
+  getMicLocalPos?: () => [number, number, number]
 }
 
 export interface SensorsFolderHandle {
@@ -65,15 +83,7 @@ export function buildSensorsFolder(
   viz.setHitsVisible(state.hits)
   viz.setLabelsVisible(state.labels)
 
-  gui
-    .add(state, 'enabled')
-    .name('show overlay')
-    .onChange((v: boolean) => {
-      viz.setEnabled(v)
-      setSensorsViz(v)
-    })
-  gui
-    .add(state, 'rays')
+  gui.add(state, 'rays')
     .name('rays')
     .onChange((v: boolean) => {
       viz.setRaysVisible(v)
@@ -95,25 +105,65 @@ export function buildSensorsFolder(
     })
 
   if (extras) {
-    const bodyHud = { visible: getSensorsBodyHudDefault() }
-    extras.setBodyHudVisible(bodyHud.visible)
+    const sensorsHud = { visible: getSensorsHudDefault() }
+    extras.setSensorsHudVisible(sensorsHud.visible)
     gui
-      .add(bodyHud, 'visible')
-      .name('body-state HUD')
+      .add(sensorsHud, 'visible')
+      .name('sensors HUD')
       .onChange((v: boolean) => {
-        extras.setBodyHudVisible(v)
-        setSensorsBodyHud(v)
+        extras.setSensorsHudVisible(v)
+        setSensorsHud(v)
       })
     gui.add({ reset: () => extras.resetOdometer() }, 'reset').name('reset odometer')
 
+    // LDR probes + mic radius are master-gated by "show overlay".
+    // Their sub-toggles exist only to override the master temporarily.
     const ldrProbes = { visible: getSensorsLdrProbesDefault() }
-    extras.setLdrProbesVisible(ldrProbes.visible)
-    gui
+    const ldrCtrl = gui
       .add(ldrProbes, 'visible')
       .name('LDR light probes')
       .onChange((v: boolean) => {
-        extras.setLdrProbesVisible(v)
+        extras.setLdrProbesVisible(state.enabled && v)
         setSensorsLdrProbes(v)
+      })
+
+    const micRadius = { visible: getSensorsMicRadiusDefault() }
+    const micRadiusCtrl = gui
+      .add(micRadius, 'visible')
+      .name('mic radius')
+      .onChange((v: boolean) => {
+        extras.setMicRadiusVisible(state.enabled && v)
+        setSensorsMicRadius(v)
+      })
+
+    // Initialize sub-toggles from persisted state and master visibility.
+    extras.setLdrProbesVisible(state.enabled && ldrProbes.visible)
+    extras.setMicRadiusVisible(state.enabled && micRadius.visible)
+    if (!state.enabled) {
+      ldrCtrl.disable()
+      micRadiusCtrl.disable()
+    }
+
+    // Sync sub-toggles + underlying helpers when master changes.
+    gui
+      .add(state, 'enabled')
+      .name('show overlay')
+      .onChange((v: boolean) => {
+        viz.setEnabled(v)
+        setSensorsViz(v)
+        if (v) {
+          ldrCtrl.enable()
+          micRadiusCtrl.enable()
+          extras.setLdrProbesVisible(ldrProbes.visible)
+          extras.setMicRadiusVisible(micRadius.visible)
+        } else {
+          extras.setLdrProbesVisible(false)
+          extras.setMicRadiusVisible(false)
+          ldrCtrl.disable()
+          micRadiusCtrl.disable()
+        }
+        ldrCtrl.updateDisplay()
+        micRadiusCtrl.updateDisplay()
       })
 
     const stageAmb = { value: extras.getStageAmbientFloor() }
@@ -121,6 +171,39 @@ export function buildSensorsFolder(
       .add(stageAmb, 'value', 0, 1, 0.01)
       .name('stage ambient floor')
       .onChange((v: number) => extras.setStageAmbientFloor(v))
+
+    if (extras.setMicOverride || extras.setMicMaxDistance || extras.setMicLocalPosX) {
+      const micFolder = gui.addFolder('Microphone')
+      if (extras.setMicOverride) {
+        const initial = getSensorsMicOverrideDefault()
+        const micOverride = { value: initial }
+        extras.setMicOverride(initial)
+        micFolder
+          .add(micOverride, 'value', 0, 1023, 1)
+          .name('override (0 = off)')
+          .onChange((v: number) => {
+            extras.setMicOverride!(v)
+            setSensorsMicOverride(v)
+          })
+      }
+      if (extras.setMicMaxDistance && extras.getMicMaxDistance) {
+        const micMaxDist = { value: extras.getMicMaxDistance() }
+        micFolder
+          .add(micMaxDist, 'value', 0.1, 50, 0.1)
+          .name('max distance (m)')
+          .onChange((v: number) => {
+            extras.setMicMaxDistance!(v)
+          })
+      }
+      if (extras.setMicLocalPosX && extras.setMicLocalPosY && extras.setMicLocalPosZ && extras.getMicLocalPos) {
+        const init = extras.getMicLocalPos()
+        const micPose = { px: init[0], py: init[1], pz: init[2] }
+        micFolder.add(micPose, 'px', -0.2, 0.2, 0.001).name('pos x').onChange((v: number) => extras.setMicLocalPosX!(v))
+        micFolder.add(micPose, 'py', -0.1, 0.2, 0.001).name('pos y').onChange((v: number) => extras.setMicLocalPosY!(v))
+        micFolder.add(micPose, 'pz', -0.2, 0.2, 0.001).name('pos z').onChange((v: number) => extras.setMicLocalPosZ!(v))
+      }
+      micFolder.close()
+    }
   }
 
   const poseFolder = gui.addFolder('Per-sensor pose')
@@ -130,6 +213,8 @@ export function buildSensorsFolder(
   const states: Map<string, PoseState> = new Map()
 
   for (const entry of layout) {
+    // Mic has no localDir / maxRange — its controls live in the Mic folder below.
+    if (entry.kind === 'microphone') continue
     const f = poseFolder.addFolder(entry.id)
     const s: PoseState = {
       px: entry.localPos[0],
@@ -178,6 +263,8 @@ export function buildSensorsFolder(
   const dump = () => {
     let out = 'export const SENSOR_LAYOUT: readonly SensorLayoutEntry[] = [\n'
     for (const entry of layout) {
+      if (entry.kind === 'microphone') continue
+      if (entry.kind === 'ldr') continue
       out += `  {\n`
       out += `    id: '${entry.id}',\n`
       out += `    kind: '${entry.kind}',\n`
@@ -207,7 +294,9 @@ export function buildSensorsFolder(
 
   const reset = () => {
     for (const entry of layout) {
-      const s = states.get(entry.id)!
+      if (entry.kind === 'microphone') continue
+      const s = states.get(entry.id)
+      if (!s) continue
       s.px = entry.localPos[0]
       s.py = entry.localPos[1]
       s.pz = entry.localPos[2]

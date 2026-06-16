@@ -195,6 +195,9 @@ export class LdrProvider implements SensorProvider {
       if (!(obj as THREE.Light).isLight) return
       const light = obj as THREE.Light
       if (light.intensity <= 0) return
+      // Skip lights tagged as internal (e.g. the top RGB LED's companion
+      // PointLight) so the LDR doesn't sense its own robot.
+      if (light.userData?.excludeFromLdr) return
       if (light instanceof THREE.AmbientLight) {
         out.push({ kind: 'ambient', intensity: light.intensity })
       } else if (light instanceof THREE.DirectionalLight) {

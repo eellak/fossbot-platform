@@ -5,10 +5,12 @@ export interface MovementPresetHandlers {
   backward: () => void
   rotateLeft: () => void
   rotateRight: () => void
+  toggleLineFollow: () => boolean
 }
 
 export interface MovementPresetsHandle {
   resetPosition: () => void
+  setLineFollowState: (active: boolean) => void
   dispose: () => void
 }
 
@@ -69,12 +71,34 @@ export function createMovementPresets(
     makeButton('Rotate Right', handlers.rotateRight),
   ]
 
+  const lineBtn = document.createElement('button')
+  lineBtn.type = 'button'
+  lineBtn.style.gridColumn = '1 / -1'
+  lineBtn.style.padding = '6px 8px'
+  lineBtn.style.border = '1px solid rgba(255, 255, 255, 0.18)'
+  lineBtn.style.borderRadius = '4px'
+  lineBtn.style.color = '#ffffff'
+  lineBtn.style.font = '600 12px sans-serif'
+  lineBtn.style.cursor = 'pointer'
+  panel.appendChild(lineBtn)
+
+  const paintLineBtn = (active: boolean) => {
+    lineBtn.textContent = `Line Follower: ${active ? 'ON' : 'OFF'}`
+    lineBtn.style.background = active ? 'rgba(80, 200, 120, 0.35)' : 'rgba(255, 255, 255, 0.08)'
+  }
+  paintLineBtn(false)
+
+  const onLineClick = () => paintLineBtn(handlers.toggleLineFollow())
+  lineBtn.addEventListener('click', onLineClick)
+
   return {
     resetPosition: () => dragHandle.resetPosition(),
+    setLineFollowState: (active: boolean) => paintLineBtn(active),
     dispose() {
       for (const { button, onClick } of buttons) {
         button.removeEventListener('click', onClick)
       }
+      lineBtn.removeEventListener('click', onLineClick)
       dragHandle.dispose()
       panel.remove()
     },

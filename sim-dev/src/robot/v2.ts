@@ -75,6 +75,9 @@ export interface RobotV2 {
   /** Fender meshes, parented under pivot's inner assembly (CAD pre-flip frame). */
   leftFender: THREE.Mesh
   rightFender: THREE.Mesh
+  /** Eye meshes — left_eye is repurposed as the top status RGB LED. */
+  leftEye: THREE.Mesh
+  rightEye: THREE.Mesh
   /** Caster sphere mesh, parented under root. */
   caster: THREE.Mesh
   /** Drive-wheel center positions, in root-local coordinates. */
@@ -285,6 +288,8 @@ export async function loadRobotV2(targetWidth = DEFAULT_TARGET_WIDTH_M): Promise
     rightWheel: rightWheel.group,
     leftFender: byName.left_fender!,
     rightFender: byName.right_fender!,
+    leftEye: byName.left_eye!,
+    rightEye: byName.right_eye!,
     caster,
     leftWheelCenter: leftFenderCenter.clone(),
     rightWheelCenter: rightFenderCenter.clone(),

@@ -7,7 +7,7 @@ export type RGB = readonly [number, number, number]
 
 export type CastModel = 'multi-ray' | 'shape-cast'
 
-export type SensorKind = 'ir-proximity' | 'ir-floor' | 'ultrasonic' | 'ldr'
+export type SensorKind = 'ir-proximity' | 'ir-floor' | 'ultrasonic' | 'ldr' | 'microphone'
 
 export interface IrProximityLayoutEntry {
   id: string
@@ -46,17 +46,27 @@ export interface LdrLayoutEntry {
   ambientFloor: number // 0..1, sensor-level baseline (overridden by stage if higher)
 }
 
+export interface MicrophoneLayoutEntry {
+  id: string
+  kind: 'microphone'
+  localPos: Vec3
+  /** ADC threshold (0..1023). detected = analog0to1023 >= tripThreshold. */
+  tripThreshold: number
+}
+
 export type SensorLayoutEntry =
   | IrProximityLayoutEntry
   | IrFloorLayoutEntry
   | UltrasonicLayoutEntry
   | LdrLayoutEntry
+  | MicrophoneLayoutEntry
 
 export type SensorReading =
   | { kind: 'ultrasonic'; distanceM: number; outOfRange: boolean }
   | { kind: 'ir-proximity'; triggered: 0 | 1; distanceM: number }
   | { kind: 'ir-floor'; triggered: 0 | 1; distanceM: number }
   | { kind: 'ldr'; raw0to1: number; analog0to1023: number }
+  | { kind: 'microphone'; raw0to1: number; analog0to1023: number; detected: 0 | 1 }
   | {
       kind: 'odometer'
       side: 'left' | 'right'

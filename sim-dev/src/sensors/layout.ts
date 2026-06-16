@@ -100,4 +100,12 @@ export const SENSOR_LAYOUT: readonly SensorLayoutEntry[] = [
     localDir: [0.19, 0, -1],
     ambientFloor: 0.05,
   },
+
+  // --- Microphone, deck-top center, omnidirectional ---
+  {
+    id: 'microphone',
+    kind: 'microphone',
+    localPos: [0.045, DECK_Y + 0.05, -0.08],
+    tripThreshold: 512,
+  },
 ]

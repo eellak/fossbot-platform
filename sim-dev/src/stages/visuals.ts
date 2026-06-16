@@ -64,6 +64,78 @@ interface ModelEntry {
   immovable?: boolean
 }
 
+interface LineEntry {
+  type: 'line'
+  points: [number, number][]
+  width?: number
+  color?: string | number
+  y?: number
+  name?: string
+}
+
+export interface LineSegment {
+  ax: number
+  az: number
+  bx: number
+  bz: number
+  width: number
+}
+
+export function lineSegmentsFromEntry(entry: LineEntry): LineSegment[] {
+  const width = entry.width ?? 0.01
+  const out: LineSegment[] = []
+  for (let i = 0; i < entry.points.length - 1; i++) {
+    const [ax, az] = entry.points[i]
+    const [bx, bz] = entry.points[i + 1]
+    out.push({ ax, az, bx, bz, width })
+  }
+  return out
+}
+
+export function buildLineVisual(entry: LineEntry): VisualBuilt {
+  const width = entry.width ?? 0.01
+  const y = entry.y ?? 0.001
+  const color = parseColor(entry.color ?? 'black')
+  const mat = new THREE.MeshBasicMaterial({
+    color,
+    depthWrite: false,
+    polygonOffset: true,
+    polygonOffsetFactor: -1,
+    polygonOffsetUnits: -1,
+  })
+
+  const group = new THREE.Group()
+  group.name = entry.name ?? 'line'
+
+  for (let i = 0; i < entry.points.length - 1; i++) {
+    const [ax, az] = entry.points[i]
+    const [bx, bz] = entry.points[i + 1]
+    const dx = bx - ax
+    const dz = bz - az
+    const len = Math.hypot(dx, dz)
+    if (len === 0) continue
+    const geom = new THREE.PlaneGeometry(len, width)
+    geom.rotateX(-Math.PI / 2)
+    const mesh = new THREE.Mesh(geom, mat)
+    mesh.position.set((ax + bx) / 2, y, (az + bz) / 2)
+    mesh.rotation.y = -Math.atan2(dz, dx)
+    mesh.renderOrder = 5
+    group.add(mesh)
+  }
+
+  // Round caps at each vertex (and endpoints) to fill joint gaps.
+  const capGeom = new THREE.CircleGeometry(width * 0.5, 12)
+  capGeom.rotateX(-Math.PI / 2)
+  for (const [px, pz] of entry.points) {
+    const cap = new THREE.Mesh(capGeom, mat)
+    cap.position.set(px, y, pz)
+    cap.renderOrder = 5
+    group.add(cap)
+  }
+
+  return { object: group }
+}
+
 interface TextEntry {
   type: 'text'
   text: string
