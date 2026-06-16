@@ -22,10 +22,15 @@ export interface StageHandle {
   dynamicObjects: StageDynamicObject[]
   /** Flat polyline segments on the floor (for line-following sensors). */
   lineSegments: LineSegment[]
+  objectCount: number
+  colliderCount: number
+  lineSegmentCount: number
+  dynamicCount: number
   /** Stage-level LDR baseline (0..1). Mutable so a debug knob can adjust live. */
   ambientFloor: number
   syncDynamicObjects: () => void
   dispose: () => void
+  disposed: boolean
 }
 
 const DEFAULT_SPAWN = new THREE.Vector3(0, 0, 0)
@@ -171,6 +176,12 @@ export async function loadStage(
   await Promise.all(modelLoads)
   log.world(`loaded stage ${name}: ${objects.length} objects, ${stgCollidersGrp.children.length} collider wireframes`)
 
+  let disposed = false
+  const objectCount = objects.length
+  const colliderCount = stgCollidersGrp.children.length
+  const lineSegmentCount = lineSegments.length
+  const dynamicCount = dynamicObjects.length
+
   return {
     name,
     spawnPosition,
@@ -178,14 +189,22 @@ export async function loadStage(
     collidersGroup: stgCollidersGrp,
     dynamicObjects,
     lineSegments,
+    objectCount,
+    colliderCount,
+    lineSegmentCount,
+    dynamicCount,
     ambientFloor: 0.05,
+    get disposed() { return disposed },
     syncDynamicObjects() {
+      if (disposed) return
       for (const dynamicObject of dynamicObjects) {
         syncObjectToBody(dynamicObject.object, dynamicObject.body)
         syncObjectToBody(dynamicObject.collidersGroup, dynamicObject.body)
       }
     },
     dispose() {
+      if (disposed) return
+      disposed = true
       for (const obj of objects) {
         scene.remove(obj)
         obj.traverse((child) => {

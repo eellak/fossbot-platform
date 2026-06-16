@@ -23,6 +23,7 @@ export interface MicVizOptions {
 
 export interface MicVizHandle {
   setVisible(v: boolean): void
+  isVisible(): boolean
   update(): void
   dispose(): void
 }
@@ -32,6 +33,8 @@ export function createMicViz(opts: MicVizOptions): MicVizHandle {
   root.name = 'mic_viz'
   root.visible = false
   opts.scene.add(root)
+
+  let visible = false
 
   const sphereGeo = new THREE.SphereGeometry(1, 24, 16)
   const sphereMat = new THREE.MeshBasicMaterial({
@@ -116,7 +119,11 @@ export function createMicViz(opts: MicVizOptions): MicVizHandle {
 
   return {
     setVisible(v) {
+      visible = v
       root.visible = v
+    },
+    isVisible() {
+      return visible
     },
     update,
     dispose() {
