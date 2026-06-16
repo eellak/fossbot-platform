@@ -44,8 +44,11 @@ export interface SensorDebugVizHandle {
   setSensorLineVisible(id: string, v: boolean): void
   setSensorFanVisible(id: string, v: boolean): void
   setRaysVisible(v: boolean): void
+  getRaysVisible(): boolean
   setHitsVisible(v: boolean): void
+  getHitsVisible(): boolean
   setLabelsVisible(v: boolean): void
+  getLabelsVisible(): boolean
   /** Call after a layout entry's localPos / localDir is mutated. */
   refreshLayout(): void
   /** Per-frame: reads snapshot, repositions geometry, updates labels. */
@@ -305,7 +308,7 @@ export function createSensorDebugViz(opts: SensorDebugVizOptions): SensorDebugVi
     }
   }
 
-  let _enabled = true
+  let _enabled = false
 
   return {
     setEnabled(v) {
@@ -333,13 +336,22 @@ export function createSensorDebugViz(opts: SensorDebugVizOptions): SensorDebugVi
       raysVisible = v
       for (const s of sensors) syncVisibility(s)
     },
+    getRaysVisible() {
+      return raysVisible
+    },
     setHitsVisible(v) {
       hitsVisible = v
       for (const s of sensors) syncVisibility(s)
     },
+    getHitsVisible() {
+      return hitsVisible
+    },
     setLabelsVisible(v) {
       labelsVisible = v
       for (const s of sensors) syncVisibility(s)
+    },
+    getLabelsVisible() {
+      return labelsVisible
     },
     refreshLayout,
     update,

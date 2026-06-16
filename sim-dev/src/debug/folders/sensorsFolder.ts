@@ -136,7 +136,7 @@ export function buildSensorsFolder(
         setSensorsMicRadius(v)
       })
 
-    // Initialize sub-toggles from persisted state and master visibility.
+    // Initialize helpers from persisted sub-toggle state when the master is on.
     extras.setLdrProbesVisible(state.enabled && ldrProbes.visible)
     extras.setMicRadiusVisible(state.enabled && micRadius.visible)
     if (!state.enabled) {
@@ -161,6 +161,8 @@ export function buildSensorsFolder(
           extras.setMicRadiusVisible(false)
           ldrCtrl.disable()
           micRadiusCtrl.disable()
+          extras.setLdrProbesVisible(false)
+          extras.setMicRadiusVisible(false)
         }
         ldrCtrl.updateDisplay()
         micRadiusCtrl.updateDisplay()

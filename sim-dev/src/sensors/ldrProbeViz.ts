@@ -21,6 +21,7 @@ export interface LdrProbeVizOptions {
 
 export interface LdrProbeVizHandle {
   setVisible(v: boolean): void
+  isVisible(): boolean
   update(): void
   dispose(): void
 }
@@ -30,6 +31,8 @@ export function createLdrProbeViz(opts: LdrProbeVizOptions): LdrProbeVizHandle {
   root.name = 'ldr_probe_viz'
   root.visible = false
   opts.scene.add(root)
+
+  let visible = false
 
   // Per-sensor pool of pre-allocated lines, grown lazily on first frame.
   const pools: Map<string, ProbeLine[]> = new Map()
@@ -88,7 +91,11 @@ export function createLdrProbeViz(opts: LdrProbeVizOptions): LdrProbeVizHandle {
 
   return {
     setVisible(v) {
+      visible = v
       root.visible = v
+    },
+    isVisible() {
+      return visible
     },
     update,
     dispose() {

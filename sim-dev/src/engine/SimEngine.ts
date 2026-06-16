@@ -40,6 +40,9 @@ import { createLdrProbeViz, type LdrProbeVizHandle } from '../sensors/ldrProbeVi
 import { createMicViz, type MicVizHandle } from '../sensors/mic/micViz'
 import { createTopRgb, type TopRgbHandle } from '../actuators/topRgb'
 import { createBuzzer, type BuzzerHandle } from '../actuators/buzzer'
+import type { BenchmarkPanelHandle } from '../bench/BenchmarkPanel'
+import type { StageCounts } from '../bench/types'
+import type { BenchmarkRunnerHandle } from '../bench/runner'
 
 function resolveConfig(cfg: Partial<SimEngineConfig> | undefined): Required<SimEngineConfig> {
   return {
@@ -85,6 +88,8 @@ export class SimEngine {
   private movementPresets: MovementPresetsHandle | null = null
   private positionPresets: PositionPresetsHandle | null = null
   private positionStore: PositionStore | null = null
+  private benchmarkPanel: BenchmarkPanelHandle | null = null
+  private benchmarkRunner: BenchmarkRunnerHandle | null = null
   private resetBtn: HTMLButtonElement | null = null
 
   // ── State ──
@@ -112,7 +117,9 @@ export class SimEngine {
   private lineFollowActive = false
   private lineFollowerConfig: LineFollowerConfig = { ...DEFAULT_LINE_FOLLOWER_CONFIG }
   private lineFollower: LineFollower = createLineFollower(this.lineFollowerConfig)
+  private benchDrive: { left: number; right: number } | null = null
   private physicsCrashed = false
+  private swappingStage = false
   private highYLogged = false
   private fellThroughLogged = false
 
@@ -130,6 +137,8 @@ export class SimEngine {
   // ── RAF ──
   private rafId = 0
   private lastFrameTime = 0
+  private frameListeners = new Set<(frameMs: number) => void>()
+  private readonly TARGET_FRAME_MS = 1000 / 60
 
   // ── Saved orbit camera state ──
   private savedOrbitCamera = {
@@ -242,6 +251,7 @@ export class SimEngine {
         this.cameraControls?.resetPosition()
         this.movementPresets?.resetPosition()
         this.positionPresets?.resetPosition()
+        this.benchmarkPanel?.resetPosition()
         this.telemetryOverlay?.resetPosition()
         this.debugMenu?.resetPosition()
       })
@@ -271,9 +281,14 @@ export class SimEngine {
     this.splash.dispose()
     this.movementPresets?.dispose()
     this.positionPresets?.dispose()
+    this.benchmarkPanel?.dispose()
+    this.benchmarkPanel = null
+    this.benchmarkRunner = null
     this.cameraControls?.dispose()
     this.resetBtn?.remove()
     this.resetBtn = null
+    this.frameListeners.clear()
+    this.benchDrive = null
     if (this.sceneHandle) disposeScene(this.sceneHandle)
     this.worldHandle?.dispose()
   }
@@ -326,6 +341,52 @@ export class SimEngine {
       vehicleSettings: this.vehicle?.settings ?? null,
       vehicleTelemetry: this.vehicle?.getTelemetry() ?? null,
       lineFollowerConfig: this.lineFollowerConfig,
+    }
+  }
+
+  // ── Benchmark helpers ──
+
+  private addFrameListener(cb: (frameMs: number) => void): () => void {
+    this.frameListeners.add(cb)
+    return () => {
+      this.frameListeners.delete(cb)
+    }
+  }
+
+  private setBenchmarkDrive(left: number, right: number): void {
+    this.cancelLineFollow()
+    this.presetRemainingSec = 0
+    this.presetLeftInput = 0
+    this.presetRightInput = 0
+    this.presetTurnTargetYaw = null
+    this.benchDrive = { left, right }
+    if (this.robotPhysics?.body.isSleeping()) this.robotPhysics.body.wakeUp()
+  }
+
+  private setBenchmarkLineFollower(): void {
+    this.benchDrive = null
+    this.presetRemainingSec = 0
+    this.presetLeftInput = 0
+    this.presetRightInput = 0
+    this.presetTurnTargetYaw = null
+    this.lineFollowActive = true
+    this.lineFollower.reset()
+    this.movementPresets?.setLineFollowState(true)
+    if (this.robotPhysics?.body.isSleeping()) this.robotPhysics.body.wakeUp()
+  }
+
+  private clearBenchmarkDrive(): void {
+    this.benchDrive = null
+    this.cancelLineFollow()
+  }
+
+  private getBenchmarkStageCounts(): StageCounts | null {
+    if (!this.currentStage) return null
+    return {
+      objectCount: this.currentStage.objectCount,
+      colliderCount: this.currentStage.colliderCount,
+      lineSegmentCount: this.currentStage.lineSegmentCount,
+      dynamicCount: this.currentStage.dynamicCount,
     }
   }
 
@@ -478,6 +539,48 @@ export class SimEngine {
             : undefined,
         )
       }
+
+      // Dev-only benchmarking tools.
+      
+      if (this.config.devMode) {
+        const [{ createBenchmarkRunner }, { createBenchmarkPanel }, { createBenchmarkOverlayController }, { createBenchmarkHost }] = await Promise.all([
+          import('../bench/runner'),
+          import('../bench/BenchmarkPanel'),
+          import('../bench/overlay'),
+          import('../bench/host'),
+        ])
+        if (this.cancelled) return
+        const benchmarkOverlay = createBenchmarkOverlayController({
+          sensorDebugViz: this.sensorDebugViz,
+          ldrProbeViz: this.ldrProbeViz,
+          micViz: this.micViz,
+        })
+        const benchmarkHost = createBenchmarkHost({
+          onFrame: (cb) => this.addFrameListener(cb),
+          swapStage: (next) => this.swapStage(next),
+          resetRobot: () => {
+            if (this.currentStage) this.applySpawnPose(this.currentStage)
+          },
+          setDriveOverride: (left, right) => this.setBenchmarkDrive(left, right),
+          setLineFollowerOverride: () => this.setBenchmarkLineFollower(),
+          clearDriveOverride: () => this.clearBenchmarkDrive(),
+          getStageCounts: () => this.getBenchmarkStageCounts(),
+          setCameraMode: (mode) => this.setCameraMode(mode),
+          getCameraMode: () => this.cameraMode,
+          setPaused: (v) => { this.paused = v },
+          isPaused: () => this.paused,
+          setTimeScale: (v) => { this.timeScale = v },
+          getTimeScale: () => this.timeScale,
+          snapshotOverlayState: () => benchmarkOverlay.snapshot(),
+          applyOverlayMode: (mode) => benchmarkOverlay.applyMode(mode),
+          restoreOverlayState: (state) => benchmarkOverlay.restore(state),
+        })
+        this.benchmarkRunner = createBenchmarkRunner(benchmarkHost)
+        this.benchmarkPanel = createBenchmarkPanel(this.container, {
+          run: (mode, preset, onStatus) => this.benchmarkRunner!.run(mode, preset, onStatus),
+          runBoth: (preset, onStatus) => this.benchmarkRunner!.runBoth(preset, onStatus),
+        })
+      }
       this.splash.hide(this.splashExtraTimeCfg)
 
       // Start RAF loop
@@ -494,7 +597,9 @@ export class SimEngine {
     if (this.cancelled) return
 
     const now = performance.now()
-    const deltaTime = Math.min((now - this.lastFrameTime) / 1000, 0.05)
+    const frameMs = now - this.lastFrameTime
+    if (frameMs < this.TARGET_FRAME_MS) return
+    const deltaTime = Math.min(frameMs / 1000, 0.05)
     this.lastFrameTime = now
 
     if (!this.physicsCrashed) {
@@ -502,18 +607,26 @@ export class SimEngine {
     }
 
     renderScene(this.sceneHandle!)
+
+    if (this.frameListeners.size > 0) {
+      for (const listener of this.frameListeners) listener(frameMs)
+    }
   }
 
   // ── Private: per-frame logic ──
 
   private stepFrame(deltaTime: number): void {
+    if (this.swappingStage) return
     if (!this.sceneHandle || !this.worldHandle || !this.vehicle || !this.keyboard) return
 
     // ── Input / drive ──
     let leftInput: number
     let rightInput: number
 
-    if (this.lineFollowActive && this.sensorSystem) {
+    if (this.benchDrive) {
+      leftInput = this.benchDrive.left
+      rightInput = this.benchDrive.right
+    } else if (this.lineFollowActive && this.sensorSystem) {
       const lr = this.sensorSystem.get('ir-floor-left')
       const cr = this.sensorSystem.get('ir-floor-center')
       const rr = this.sensorSystem.get('ir-floor-right')
@@ -780,17 +893,41 @@ export class SimEngine {
 
   private async swapStage(next: StageName): Promise<void> {
     if (!this.currentStage || this.cancelled || !this.sceneHandle || !this.worldHandle) return
-    log.world('swap stage', this.currentStage.name, '→', next)
+    const previousStage = this.currentStage
+    log.world('swap stage', previousStage.name, '→', next)
 
-    this.cancelLineFollow()
-    this.positionStore?.setStage(next)
-    this.positionPresets?.refresh()
-    this.currentStage.dispose()
-    this.currentStage = await loadStage(next, this.sceneHandle.scene, this.worldHandle.world)
-    if (this.cancelled) return
-    if (this.config.devMode) rememberStage(next)
-    this.currentStage.collidersGroup.visible = this.showColliders
-    this.applySpawnPose(this.currentStage)
+    this.swappingStage = true
+    this.accumulator = 0
+    this.benchDrive = null
+    this.presetRemainingSec = 0
+    this.presetLeftInput = 0
+    this.presetRightInput = 0
+    this.presetTurnTargetYaw = null
+    if (this.lineFollowActive) {
+      this.lineFollowActive = false
+      this.lineFollower.reset()
+      this.movementPresets?.setLineFollowState(false)
+    }
+
+    try {
+      this.positionStore?.setStage(next)
+      this.positionPresets?.refresh()
+      this.currentStage = null
+      previousStage.dispose()
+      const loadedStage = await loadStage(next, this.sceneHandle.scene, this.worldHandle.world)
+      if (this.cancelled) {
+        loadedStage.dispose()
+        return
+      }
+      this.currentStage = loadedStage
+      if (this.config.devMode) rememberStage(next)
+      loadedStage.collidersGroup.visible = this.showColliders
+      this.applySpawnPose(loadedStage)
+      this.physicsCrashed = false
+    } finally {
+      this.accumulator = 0
+      this.swappingStage = false
+    }
   }
 
   // ── Private: spawn pose ──
