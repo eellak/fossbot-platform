@@ -12,7 +12,7 @@ const RAY_COLOR_HIT = 0xff5555
 const HIT_COLOR = 0xff3333
 
 interface PerSensor {
-  entry: SensorLayoutEntry
+  entry: Exclude<SensorLayoutEntry, { kind: 'microphone' }>
   group: THREE.Group
   rayGeos: THREE.BufferGeometry[]
   rayLines: THREE.Line[]
@@ -40,6 +40,7 @@ export interface SensorDebugVizOptions {
 
 export interface SensorDebugVizHandle {
   setEnabled(v: boolean): void
+  isEnabled(): boolean
   setSensorLineVisible(id: string, v: boolean): void
   setSensorFanVisible(id: string, v: boolean): void
   setRaysVisible(v: boolean): void
@@ -72,11 +73,14 @@ export function createSensorDebugViz(opts: SensorDebugVizOptions): SensorDebugVi
   // LDR has no range — render a short upward indicator line.
   const LDR_VIZ_LEN = 0.04
 
-  function entryMaxRange(entry: SensorLayoutEntry): number {
+  // Only invoked for entries that have a maxRange (mic is filtered out at
+  // buildSensor() call sites). LDR has no range so we substitute a short
+  // upward indicator.
+  function entryMaxRange(entry: Exclude<SensorLayoutEntry, { kind: 'microphone' }>): number {
     return entry.kind === 'ldr' ? LDR_VIZ_LEN : entry.maxRange
   }
 
-  function buildDirs(entry: SensorLayoutEntry): THREE.Vector3[] {
+  function buildDirs(entry: Exclude<SensorLayoutEntry, { kind: 'microphone' }>): THREE.Vector3[] {
     const centerDir = new THREE.Vector3(
       entry.localDir[0],
       entry.localDir[1],
@@ -120,7 +124,7 @@ export function createSensorDebugViz(opts: SensorDebugVizOptions): SensorDebugVi
     }
   }
 
-  function buildSensor(entry: SensorLayoutEntry): PerSensor {
+  function buildSensor(entry: Exclude<SensorLayoutEntry, { kind: 'microphone' }>): PerSensor {
     const group = new THREE.Group()
     group.name = `sensor_${entry.id}`
     group.position.set(entry.localPos[0], entry.localPos[1], entry.localPos[2])
@@ -199,7 +203,12 @@ export function createSensorDebugViz(opts: SensorDebugVizOptions): SensorDebugVi
     }
   }
 
-  for (const entry of opts.layout) sensors.push(buildSensor(entry))
+  // Microphone is omnidirectional and has no ray-style readout — its
+  // overlay lives in micViz.ts. Skip it here.
+  for (const entry of opts.layout) {
+    if (entry.kind === 'microphone') continue
+    sensors.push(buildSensor(entry))
+  }
 
   function refreshLayout() {
     for (const s of sensors) {
@@ -296,9 +305,15 @@ export function createSensorDebugViz(opts: SensorDebugVizOptions): SensorDebugVi
     }
   }
 
+  let _enabled = true
+
   return {
     setEnabled(v) {
+      _enabled = v
       root.visible = v
+    },
+    isEnabled() {
+      return _enabled
     },
     setSensorLineVisible(id, v) {
       const s = sensors.find((x) => x.entry.id === id)

@@ -80,18 +80,36 @@ export function setSensorsLabels(v: boolean) {
   localStorage.setItem(SENSORS_LABELS_KEY, String(v))
 }
 
-const SENSORS_BODY_HUD_KEY = 'sim-v2.sensors.bodyHud'
-export function getSensorsBodyHudDefault(): boolean {
-  return localStorage.getItem(SENSORS_BODY_HUD_KEY) === 'true'
-}
-export function setSensorsBodyHud(v: boolean) {
-  localStorage.setItem(SENSORS_BODY_HUD_KEY, String(v))
-}
-
 const SENSORS_LDR_PROBES_KEY = 'sim-v2.sensors.ldrProbes'
 export function getSensorsLdrProbesDefault(): boolean {
   return localStorage.getItem(SENSORS_LDR_PROBES_KEY) === 'true'
 }
 export function setSensorsLdrProbes(v: boolean) {
   localStorage.setItem(SENSORS_LDR_PROBES_KEY, String(v))
+}
+
+const SENSORS_HUD_KEY = 'sim-v2.sensors.hud'
+export function getSensorsHudDefault(): boolean {
+  return localStorage.getItem(SENSORS_HUD_KEY) === 'true'
+}
+export function setSensorsHud(v: boolean) {
+  localStorage.setItem(SENSORS_HUD_KEY, String(v))
+}
+
+const SENSORS_MIC_RADIUS_KEY = 'sim-v2.sensors.micRadius'
+export function getSensorsMicRadiusDefault(): boolean {
+  return localStorage.getItem(SENSORS_MIC_RADIUS_KEY) === 'true'
+}
+export function setSensorsMicRadius(v: boolean) {
+  localStorage.setItem(SENSORS_MIC_RADIUS_KEY, String(v))
+}
+
+const SENSORS_MIC_OVERRIDE_KEY = 'sim-v2.sensors.micOverride'
+/** 0 = no override. */
+export function getSensorsMicOverrideDefault(): number {
+  const v = Number(localStorage.getItem(SENSORS_MIC_OVERRIDE_KEY) ?? 0)
+  return Number.isFinite(v) ? Math.max(0, Math.min(1023, v)) : 0
+}
+export function setSensorsMicOverride(v: number) {
+  localStorage.setItem(SENSORS_MIC_OVERRIDE_KEY, String(Math.max(0, Math.min(1023, v))))
 }

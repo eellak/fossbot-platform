@@ -26,6 +26,7 @@ export {
   buildCubeVisual as buildCube,
   buildCylinderVisual as buildCylinder,
   buildModelVisual as buildModel,
+  buildLineVisual as buildLine,
   buildTextVisual as buildText,
 } from './visuals'
 export type { VisualBuilt } from './visuals'

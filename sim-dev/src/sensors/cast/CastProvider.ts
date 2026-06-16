@@ -13,6 +13,7 @@ import type {
   UltrasonicLayoutEntry,
 } from '../types'
 import { castEntry, type ColliderFilter } from './multiRay'
+import type { LineSegment } from '../../stages'
 
 export type CastLayoutEntry =
   | IrProximityLayoutEntry
@@ -24,6 +25,7 @@ export interface CastProviderOptions {
   chassisBody: RAPIER.RigidBody
   layout: readonly CastLayoutEntry[]
   filter: ColliderFilter
+  getLineSegments: () => readonly LineSegment[]
 }
 
 export class CastProvider implements SensorProvider {
@@ -31,6 +33,7 @@ export class CastProvider implements SensorProvider {
   private readonly chassisBody: RAPIER.RigidBody
   private readonly layout: readonly CastLayoutEntry[]
   private readonly filter: ColliderFilter
+  private readonly getLineSegments: () => readonly LineSegment[]
 
   // Reused temporaries.
   private readonly _bodyPos = new THREE.Vector3()
@@ -45,6 +48,7 @@ export class CastProvider implements SensorProvider {
     this.chassisBody = opts.chassisBody
     this.layout = opts.layout
     this.filter = opts.filter
+    this.getLineSegments = opts.getLineSegments
   }
 
   update(snapshot: SensorReadings, _dt: number): void {
@@ -52,6 +56,8 @@ export class CastProvider implements SensorProvider {
     const r = this.chassisBody.rotation()
     this._bodyPos.set(t.x, t.y, t.z)
     this._bodyQuat.set(r.x, r.y, r.z, r.w)
+
+    const lineSegments = this.getLineSegments()
 
     for (const entry of this.layout) {
       this._localPos.set(entry.localPos[0], entry.localPos[1], entry.localPos[2])
@@ -61,7 +67,7 @@ export class CastProvider implements SensorProvider {
       this._worldPos.copy(this._localPos).applyQuaternion(this._bodyQuat).add(this._bodyPos)
       this._worldDir.copy(this._localDir).applyQuaternion(this._bodyQuat).normalize()
 
-      const reading = castEntry(this.world, entry, this._worldPos, this._worldDir, this.filter)
+      const reading = castEntry(this.world, entry, this._worldPos, this._worldDir, this.filter, lineSegments)
       snapshot.bySensorId.set(entry.id, reading)
     }
   }

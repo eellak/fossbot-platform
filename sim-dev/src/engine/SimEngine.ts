@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import type * as RAPIER from '@dimforge/rapier3d-compat'
 import { initScene, renderScene, disposeScene, type SceneHandle } from '../scene/scene'
 import { loadRobotV2, type RobotV2 } from '../robot/v2'
 import type { DebugMenuHandle } from '../debug'
@@ -24,6 +25,7 @@ import { createSplashScreen } from '../ui/splashScreen'
 import type { CameraControlsHandle } from '../ui/cameraControls'
 import type { MovementPresetsHandle } from '../ui/movementPresets'
 import type { PositionPresetsHandle } from '../ui/positionPresets'
+import { createLineFollower, DEFAULT_LINE_FOLLOWER_CONFIG, type LineFollower, type LineFollowerConfig } from '../control/lineFollower'
 import type { PositionStore } from '../ui/positionStore'
 import type { CameraMode } from '../ui/cameraTypes'
 import type {
@@ -33,8 +35,11 @@ import type {
 import { SensorSystem } from '../sensors/SensorSystem'
 import { SENSOR_LAYOUT } from '../sensors/layout'
 import { createSensorDebugViz, type SensorDebugVizHandle } from '../sensors/debugViz'
-import { createBodyStateHud, type BodyStateHudHandle } from '../sensors/bodyStateHud'
+import { createSensorsHud, type SensorsHudHandle } from '../sensors/sensorsHud'
 import { createLdrProbeViz, type LdrProbeVizHandle } from '../sensors/ldrProbeViz'
+import { createMicViz, type MicVizHandle } from '../sensors/mic/micViz'
+import { createTopRgb, type TopRgbHandle } from '../actuators/topRgb'
+import { createBuzzer, type BuzzerHandle } from '../actuators/buzzer'
 
 function resolveConfig(cfg: Partial<SimEngineConfig> | undefined): Required<SimEngineConfig> {
   return {
@@ -64,8 +69,11 @@ export class SimEngine {
   private vehicle: VehicleHandle | null = null
   private sensorSystem: SensorSystem | null = null
   private sensorDebugViz: SensorDebugVizHandle | null = null
-  private bodyStateHud: BodyStateHudHandle | null = null
+  private sensorsHud: SensorsHudHandle | null = null
   private ldrProbeViz: LdrProbeVizHandle | null = null
+  private micViz: MicVizHandle | null = null
+  private topRgb: TopRgbHandle | null = null
+  private buzzer: BuzzerHandle | null = null
   private currentStage: StageHandle | null = null
   private keyboard: KeyboardHandle | null = null
   private debugMenu: DebugMenuHandle | null = null
@@ -101,6 +109,9 @@ export class SimEngine {
   private presetRightInput = 0
   private presetRemainingSec = 0
   private presetTurnTargetYaw: number | null = null
+  private lineFollowActive = false
+  private lineFollowerConfig: LineFollowerConfig = { ...DEFAULT_LINE_FOLLOWER_CONFIG }
+  private lineFollower: LineFollower = createLineFollower(this.lineFollowerConfig)
   private physicsCrashed = false
   private highYLogged = false
   private fellThroughLogged = false
@@ -187,6 +198,18 @@ export class SimEngine {
         backward: () => this.triggerPresetDrive(-0.9, -0.9, 0.8),
         rotateLeft: () => this.triggerPresetTurn(Math.PI / 2),
         rotateRight: () => this.triggerPresetTurn(-Math.PI / 2),
+        toggleLineFollow: () => {
+          this.lineFollowActive = !this.lineFollowActive
+          this.lineFollower.reset()
+          if (this.lineFollowActive) {
+            // Cancel any pending preset drive/turn so they don't resume on disengage.
+            this.presetRemainingSec = 0
+            this.presetLeftInput = 0
+            this.presetRightInput = 0
+            this.presetTurnTargetYaw = null
+          }
+          return this.lineFollowActive
+        },
       })
 
       this.positionPresets = createPositionPresets(this.container, {
@@ -215,7 +238,7 @@ export class SimEngine {
 
       this.resetBtn = resetBtn
       resetBtn.addEventListener('click', () => {
-        this.bodyStateHud?.resetPosition()
+        this.sensorsHud?.resetPosition()
         this.cameraControls?.resetPosition()
         this.movementPresets?.resetPosition()
         this.positionPresets?.resetPosition()
@@ -234,8 +257,11 @@ export class SimEngine {
     this.cancelled = true
     cancelAnimationFrame(this.rafId)
     this.keyboard?.dispose()
+    this.topRgb?.dispose()
+    this.buzzer?.dispose()
     this.ldrProbeViz?.dispose()
-    this.bodyStateHud?.dispose()
+    this.micViz?.dispose()
+    this.sensorsHud?.dispose()
     this.sensorDebugViz?.dispose()
     this.sensorSystem?.dispose()
     this.vehicle?.dispose()
@@ -299,6 +325,7 @@ export class SimEngine {
       robotBody: this.robotPhysics?.body ?? null,
       vehicleSettings: this.vehicle?.settings ?? null,
       vehicleTelemetry: this.vehicle?.getTelemetry() ?? null,
+      lineFollowerConfig: this.lineFollowerConfig,
     }
   }
 
@@ -350,16 +377,22 @@ export class SimEngine {
       this.wheelBaseLeft = this.robot.leftWheel.position.clone()
       this.wheelBaseRight = this.robot.rightWheel.position.clone()
       this.vehicle = createVehicle(world, this.robotPhysics.body, wheelPositions, this.robot.wheelRadius)
+      const chassisColliders = ['main_body_1', 'main_body_2', 'main_body_3']
+        .map((n) => this.robotPhysics!.collidersByName[n])
+        .filter((c): c is RAPIER.Collider => !!c)
       this.sensorSystem = new SensorSystem({
         world,
         chassisBody: this.robotPhysics.body,
         selfColliders: Object.values(this.robotPhysics.collidersByName),
+        micEventColliders: chassisColliders,
+        eventQueue: this.worldHandle!.eventQueue,
         layout: SENSOR_LAYOUT,
         wheelVisualState: this.vehicle.visualState,
         wheelRadius: this.robot.wheelRadius,
         getGravity: () => this.worldHandle!.world.gravity,
         scene: this.sceneHandle!.scene,
         getStageAmbientFloor: () => this.currentStage?.ambientFloor ?? 0,
+        getStageLineSegments: () => this.currentStage?.lineSegments ?? [],
       })
       if (this.config.devMode && this.robotRoot) {
         this.sensorDebugViz = createSensorDebugViz({
@@ -367,13 +400,35 @@ export class SimEngine {
           layout: SENSOR_LAYOUT,
           getReadings: () => this.sensorSystem!.getReadings(),
         })
-        this.bodyStateHud = createBodyStateHud({
+        this.sensorsHud = createSensorsHud({
           container: this.container,
+          layout: SENSOR_LAYOUT,
           getReadings: () => this.sensorSystem!.getReadings(),
+          getMicProvider: () => this.sensorSystem?.getMicProvider() ?? null,
         })
         this.ldrProbeViz = createLdrProbeViz({
           scene: this.sceneHandle!.scene,
           getLdrProvider: () => this.sensorSystem?.getLdrProvider() ?? null,
+        })
+        this.micViz = createMicViz({
+          scene: this.sceneHandle!.scene,
+          getMicProvider: () => this.sensorSystem?.getMicProvider() ?? null,
+        })
+      }
+
+      // Actuators are output-only until the public simulator API/state machine
+      // drives them. They are still exposed in dev controls for validation.
+      if (this.robot) {
+        this.topRgb = createTopRgb({
+          target: this.robot.leftEye,
+          initialStatus: 'running',
+          enableCompanionLight: false,
+          lightParent: this.robot.root,
+        })
+        this.buzzer = createBuzzer({
+          camera: this.sceneHandle!.camera,
+          chassis: this.robot.root,
+          gestureTarget: this.container,
         })
       }
       this.keyboard = installKeyboard()
@@ -391,15 +446,35 @@ export class SimEngine {
                 layout: SENSOR_LAYOUT,
                 viz: this.sensorDebugViz,
                 extras: {
-                  setBodyHudVisible: (v) => this.bodyStateHud?.setVisible(v),
+                  setSensorsHudVisible: (v) => this.sensorsHud?.setVisible(v),
                   setLdrProbesVisible: (v) => this.ldrProbeViz?.setVisible(v),
+                  setMicRadiusVisible: (v) => this.micViz?.setVisible(v),
                   resetOdometer: () => this.sensorSystem?.resetOdometer(),
                   getStageAmbientFloor: () => this.currentStage?.ambientFloor ?? 0,
                   setStageAmbientFloor: (v) => {
                     if (this.currentStage) this.currentStage.ambientFloor = v
                   },
+                  setMicOverride: (v) =>
+                    this.sensorSystem?.getMicProvider()?.setOverride(v),
+                  setMicMaxDistance: (v) =>
+                    this.sensorSystem?.getMicProvider()?.setMaxDistance(v),
+                  getMicMaxDistance: () =>
+                    this.sensorSystem?.getMicProvider()?.getMaxDistance() ?? 10,
+                  setMicLocalPosX: (v) =>
+                    this.sensorSystem?.getMicProvider()?.setLocalPosX(v),
+                  setMicLocalPosY: (v) =>
+                    this.sensorSystem?.getMicProvider()?.setLocalPosY(v),
+                  setMicLocalPosZ: (v) =>
+                    this.sensorSystem?.getMicProvider()?.setLocalPosZ(v),
+                  getMicLocalPos: () => {
+                    const layout = SENSOR_LAYOUT.find((e) => e.kind === 'microphone')
+                    return layout ? ([...layout.localPos] as [number, number, number]) : [0, 0, 0]
+                  },
                 },
               }
+            : undefined,
+          this.topRgb || this.buzzer
+            ? { topRgb: this.topRgb ?? undefined, buzzer: this.buzzer ?? undefined }
             : undefined,
         )
       }
@@ -438,7 +513,27 @@ export class SimEngine {
     let leftInput: number
     let rightInput: number
 
-    if (this.presetTurnTargetYaw != null && this.robotPhysics) {
+    if (this.lineFollowActive && this.sensorSystem) {
+      const lr = this.sensorSystem.get('ir-floor-left')
+      const cr = this.sensorSystem.get('ir-floor-center')
+      const rr = this.sensorSystem.get('ir-floor-right')
+      // Pass sim time (not wall time) so grace honours pause + timeScale.
+      const simDt = this.paused ? 0 : deltaTime * this.timeScale
+      const cmd = this.lineFollower.step({
+        left: lr?.kind === 'ir-floor' && lr.triggered === 1,
+        center: cr?.kind === 'ir-floor' && cr.triggered === 1,
+        right: rr?.kind === 'ir-floor' && rr.triggered === 1,
+      }, simDt)
+      if (cmd) {
+        leftInput = cmd.left
+        rightInput = cmd.right
+      } else {
+        this.lineFollowActive = false
+        this.movementPresets?.setLineFollowState(false)
+        leftInput = 0
+        rightInput = 0
+      }
+    } else if (this.presetTurnTargetYaw != null && this.robotPhysics) {
       const yawError = this.shortestAngleTo(
         this.getBodyYaw(this.robotPhysics.body),
         this.presetTurnTargetYaw,
@@ -492,8 +587,9 @@ export class SimEngine {
       }
 
       this.sensorDebugViz?.update()
-      this.bodyStateHud?.update()
+      this.sensorsHud?.update()
       this.ldrProbeViz?.update()
+      this.micViz?.update()
 
       // Apply vehicle visual state to wheel meshes (pure rendering).
       if (this.robotPhysics && this.robot && this.robotRoot) {
@@ -628,6 +724,7 @@ export class SimEngine {
   // ── Private: preset drive ──
 
   private triggerPresetDrive(left: number, right: number, durationSec: number): void {
+    this.cancelLineFollow()
     this.presetLeftInput = left
     this.presetRightInput = right
     this.presetRemainingSec = durationSec
@@ -637,6 +734,7 @@ export class SimEngine {
 
   private triggerPresetTurn(angle: number): void {
     if (!this.robotPhysics) return
+    this.cancelLineFollow()
     this.presetRemainingSec = 0
     this.presetLeftInput = 0
     this.presetRightInput = 0
@@ -644,6 +742,13 @@ export class SimEngine {
       this.getBodyYaw(this.robotPhysics.body) + angle,
     )
     if (this.robotPhysics.body.isSleeping()) this.robotPhysics.body.wakeUp()
+  }
+
+  private cancelLineFollow(): void {
+    if (!this.lineFollowActive) return
+    this.lineFollowActive = false
+    this.lineFollower.reset()
+    this.movementPresets?.setLineFollowState(false)
   }
 
   // ── Private: position presets ──
@@ -668,6 +773,7 @@ export class SimEngine {
     this.robotPhysics.body.setLinvel({ x: 0, y: 0, z: 0 }, true)
     this.robotPhysics.body.setAngvel({ x: 0, y: 0, z: 0 }, true)
     this.robotPhysics.body.wakeUp()
+    this.lineFollower.reset()
   }
 
   // ── Private: stage swap ──
@@ -676,6 +782,7 @@ export class SimEngine {
     if (!this.currentStage || this.cancelled || !this.sceneHandle || !this.worldHandle) return
     log.world('swap stage', this.currentStage.name, '→', next)
 
+    this.cancelLineFollow()
     this.positionStore?.setStage(next)
     this.positionPresets?.refresh()
     this.currentStage.dispose()

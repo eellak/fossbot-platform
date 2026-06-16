@@ -5,6 +5,7 @@ import { buildWorldFolder } from './folders/worldFolder'
 import { buildRobotFolder } from './folders/robotFolder'
 import { buildWheelsFolder } from './folders/wheelsFolder'
 import { buildDriveFolder } from './folders/driveFolder'
+import { buildControlFolder } from './folders/control'
 import { buildTelemetryFolder } from './folders/telemetryFolder'
 import { buildStageFolder } from './folders/stageFolder'
 import { buildVisualTunerFolder, type VisualTunerHandle } from './folders/visualTunerFolder'
@@ -14,8 +15,11 @@ import {
   type SensorsFolderExtras,
   type SensorsFolderHandle,
 } from './folders/sensorsFolder'
+import { buildActuatorsFolder, type ActuatorsFolderHandle } from './folders/actuatorsFolder'
 import type { SensorLayoutEntry } from '../sensors/types'
 import type { SensorDebugVizHandle } from '../sensors/debugViz'
+import type { TopRgbHandle } from '../actuators/topRgb'
+import type { BuzzerHandle } from '../actuators/buzzer'
 import type { DebugMenuHandle, StageFolderHandle } from './types'
 import { makeDraggable } from '../ui/dragUtils'
 
@@ -28,10 +32,16 @@ export interface DebugMenuSensorsOption {
   extras?: SensorsFolderExtras
 }
 
+export interface DebugMenuActuatorsOption {
+  topRgb?: TopRgbHandle
+  buzzer?: BuzzerHandle
+}
+
 export function attachDebugMenu(
   robot: RobotV2,
   controls: SimControlInterface,
   sensors?: DebugMenuSensorsOption,
+  actuators?: DebugMenuActuatorsOption,
 ): DebugMenuHandle {
   const gui = new GUI({ title: 'Debug', width: 340 })
   const root = gui.domElement
@@ -53,6 +63,7 @@ export function attachDebugMenu(
   buildRobotFolder(gui as any, controls)
   buildWheelsFolder(gui as any, controls)
   buildDriveFolder(gui as any, controls)
+  buildControlFolder(gui as any, controls)
   buildTelemetryFolder(gui as any, controls)
 
   const visualTunerHandle: VisualTunerHandle = buildVisualTunerFolder(gui as any, robot)
@@ -60,11 +71,17 @@ export function attachDebugMenu(
   const sensorsHandle: SensorsFolderHandle | null = sensors
     ? buildSensorsFolder(gui as any, sensors.layout, sensors.viz, sensors.extras)
     : null
+  const actuatorsHandle: ActuatorsFolderHandle | null = actuators
+    ? buildActuatorsFolder(gui as any, actuators.topRgb, actuators.buzzer)
+    : null
 
   return {
     stage,
     resetPosition: () => dragHandle.resetPosition(),
     dispose() {
+      try {
+        actuatorsHandle?.dispose()
+      } catch (e) { }
       try {
         sensorsHandle?.dispose()
       } catch (e) { }

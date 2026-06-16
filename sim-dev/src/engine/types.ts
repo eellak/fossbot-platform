@@ -1,6 +1,7 @@
 import type * as RAPIER from '@dimforge/rapier3d-compat'
 import type { VehicleSettings, VehicleTelemetry } from '../physics/vehicle'
 import type { StageName } from '../stages'
+import type { LineFollowerConfig } from '../control/lineFollower'
 
 /** Configuration passed to SimEngine at construction. */
 export interface SimEngineConfig {
@@ -69,6 +70,8 @@ export interface SimControlInterface {
   vehicleSettings: VehicleSettings | null
   /** Current vehicle telemetry snapshot. */
   vehicleTelemetry: VehicleTelemetry | null
+  /** Live config for the line-following controller. Mutate fields directly. */
+  lineFollowerConfig: LineFollowerConfig
 }
 
 /** Re-exported for debug menu compatibility. */

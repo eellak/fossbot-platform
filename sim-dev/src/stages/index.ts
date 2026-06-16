@@ -24,3 +24,4 @@ export const STAGE_NAMES: StageName[] = Object.keys(STAGES).sort()
 export const DEFAULT_STAGE: StageName = 'stage_white_rect'
 
 export { loadStage, type StageHandle } from './loader'
+export type { LineSegment } from './visuals'

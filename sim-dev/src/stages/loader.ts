@@ -1,8 +1,8 @@
 import * as RAPIER from '@dimforge/rapier3d-compat'
 import * as THREE from 'three'
 import { STAGES, type StageName } from './index'
-import { buildFloorVisual, buildCubeVisual, buildCylinderVisual, buildModelVisual, buildTextVisual } from './visuals'
-import type { VisualBuilt } from './visuals'
+import { buildFloorVisual, buildCubeVisual, buildCylinderVisual, buildModelVisual, buildTextVisual, buildLineVisual, lineSegmentsFromEntry } from './visuals'
+import type { VisualBuilt, LineSegment } from './visuals'
 import { buildFloorCollider, buildCubeCollider, buildCylinderCollider, buildModelCollider } from './colliders'
 import type { ColliderBuilt } from './colliders'
 import { log } from '../util/log'
@@ -20,6 +20,8 @@ export interface StageHandle {
   spawnOrientation: THREE.Euler
   collidersGroup: THREE.Group
   dynamicObjects: StageDynamicObject[]
+  /** Flat polyline segments on the floor (for line-following sensors). */
+  lineSegments: LineSegment[]
   /** Stage-level LDR baseline (0..1). Mutable so a debug knob can adjust live. */
   ambientFloor: number
   syncDynamicObjects: () => void
@@ -90,6 +92,7 @@ export async function loadStage(
   const spawnOrientation = DEFAULT_ORIENT.clone()
   const modelLoads: Promise<void>[] = []
   const dynamicObjects: StageDynamicObject[] = []
+  const lineSegments: LineSegment[] = []
 
   const stgCollidersGrp = new THREE.Group()
   stgCollidersGrp.name = 'stage_colliders'
@@ -147,6 +150,13 @@ export async function loadStage(
         modelLoads.push(p)
         break
       }
+      case 'line': {
+        const vis = buildLineVisual(entry as any)
+        scene.add(vis.object)
+        objects.push(vis.object)
+        lineSegments.push(...lineSegmentsFromEntry(entry as any))
+        break
+      }
       case 'text': {
         const vis = buildTextVisual(entry as any)
         scene.add(vis.object)
@@ -167,6 +177,7 @@ export async function loadStage(
     spawnOrientation,
     collidersGroup: stgCollidersGrp,
     dynamicObjects,
+    lineSegments,
     ambientFloor: 0.05,
     syncDynamicObjects() {
       for (const dynamicObject of dynamicObjects) {
