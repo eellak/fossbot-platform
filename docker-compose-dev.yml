@@ -1,5 +1,22 @@
 version: '3.8'
 services:
+  frontend:
+    build:
+      context: .
+      dockerfile: front-end/Dockerfile.dev
+    container_name: fsbt-front-local
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./front-end:/usr/src/app/front-end
+      - /usr/src/app/front-end/node_modules
+    env_file:
+      - front-end/.env
+    stdin_open: true
+    tty: true
+    depends_on:
+      - backend
+
   backend:
     image: fsbt-back
     container_name: fsbt-back
