@@ -352,4 +352,9 @@ export function drawLine(status: boolean): void {
   else if (getSimulatorVersion() !== 'v2') legacyDrawLine(status);
 }
 
+export function line_following(status = true): void {
+  const handle = getActiveV2Handle();
+  if (handle) handle.lineFollowing(status);
+}
+
 export { WebGLApp };
