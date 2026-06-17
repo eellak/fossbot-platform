@@ -1,5 +1,5 @@
 # Use an official Node.js runtime as a base image
-FROM node:14-alpine as build-stage
+FROM node:20-alpine AS build-stage
 
 # Set the working directory in the container
 WORKDIR /usr/src/app/front-end
@@ -21,7 +21,7 @@ RUN env-cmd -f .env.production npm run build
 
 
 # Stage 2: Serve the app using a lightweight server
-FROM nginx:stable-alpine as production-stage
+FROM nginx:stable-alpine AS production-stage
 
 # Copy the built assets from the build stage to the nginx server directory
 COPY --from=build-stage /usr/src/app/front-end/build /usr/share/nginx/html

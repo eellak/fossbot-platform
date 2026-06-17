@@ -21,7 +21,7 @@ import { UserRole } from 'src/authentication/AuthInterfaces';
 const UserMenu = () => {
   const { t } = useTranslation();
   const auth = useAuth();
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState(auth.user);
   const [anchorEl2, setAnchorEl2] = useState(null);
 
   const handleClick2 = (event: any) => {
@@ -32,7 +32,17 @@ const UserMenu = () => {
   };
 
   useEffect(() => {
+    if (auth.user) {
+      setUser(auth.user);
+    }
+  }, [auth.user]);
+
+  useEffect(() => {
     const fetchUserData = async () => {
+      if (auth.authStatus !== 'authenticated' || !auth.token) {
+        return;
+      }
+
       try {
         const userData = await auth.getUserDataAction();
         setUser(userData);
@@ -42,7 +52,7 @@ const UserMenu = () => {
     };
 
     fetchUserData();
-  }, []);
+  }, [auth.authStatus, auth.token]);
 
   return (
     <Box>

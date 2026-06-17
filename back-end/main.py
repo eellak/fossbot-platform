@@ -1,17 +1,44 @@
-from models.models import UserRole, ProjectsCreate, LoginRequest, RegisterRequest, UpdateActiavtedRequest, UpdateUserRequest, UpdateUserPasswordRequest, UserResponse, SessionTokenRequest, UpdateUserRoleRequest, UpdateBetaTesterRequest, EmailVerificationRequest
-from database.database import create_db_tables, User, Projects, Curriculum, Lesson, getSessionLocal
-from utils.utils_jwt import create_access_token, verify_access_token
-from fastapi import FastAPI, Depends, HTTPException, status
-from utils.utils_hash import get_hashed, verify_hashed 
+import json
+import logging
+import os
+import re
+import time
+import urllib.request
+from typing import List
+
+import uvicorn
+from database.database import (
+    Curriculum,
+    Lesson,
+    Projects,
+    User,
+    create_db_tables,
+    getSessionLocal,
+    migrate_schema,
+)
+from fastapi import Body, Depends, FastAPI, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
-from fastapi import Query
-from fastapi import Body
-from typing import List
-import logging
-import uvicorn
-import os
+from models.models import (
+    EmailVerificationRequest,
+    FirebaseTokenRequest,
+    LoginRequest,
+    ProjectsCreate,
+    RegisterRequest,
+    SessionTokenRequest,
+    UpdateAccessRevokedRequest,
+    UpdateActiavtedRequest,
+    UpdateBetaTesterRequest,
+    UpdateUserPasswordRequest,
+    UpdateUserRequest,
+    UpdateUserRoleRequest,
+    UserResponse,
+    UserRole,
+)
+from sqlalchemy.exc import IntegrityError
+from utils.utils_hash import get_hashed, verify_hashed
+from utils.utils_jwt import create_access_token, verify_access_token
 
 logger = logging.getLogger("uvicorn")
 SessionLocal = getSessionLocal()
@@ -37,6 +64,53 @@ app.add_middleware(
 
 # Security
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+
+
+REVOKED_ACCESS_MESSAGE = "Your access to the platform has been revoked."
+FIREBASE_CERTS_URL = 'https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com'
+_firebase_certs_cache = {'certs': {}, 'expires_at': 0}
+
+
+def get_firebase_project_id():
+    project_id = os.getenv('FIREBASE_PROJECT_ID')
+    if not project_id:
+        raise RuntimeError('FIREBASE_PROJECT_ID is required for Firebase token verification')
+    return project_id
+
+
+def get_firebase_public_certs():
+    now = time.time()
+    if _firebase_certs_cache['certs'] and _firebase_certs_cache['expires_at'] > now:
+        return _firebase_certs_cache['certs']
+
+    with urllib.request.urlopen(FIREBASE_CERTS_URL, timeout=5) as response:
+        certs = json.loads(response.read().decode('utf-8'))
+        cache_control = response.headers.get('Cache-Control', '')
+
+    max_age_match = re.search(r'max-age=(\d+)', cache_control)
+    max_age = int(max_age_match.group(1)) if max_age_match else 3600
+    _firebase_certs_cache['certs'] = certs
+    _firebase_certs_cache['expires_at'] = now + max_age
+    return certs
+
+
+def verify_firebase_id_token(id_token: str):
+    project_id = get_firebase_project_id()
+    headers = jwt.get_unverified_header(id_token)
+    key_id = headers.get('kid')
+    cert = get_firebase_public_certs().get(key_id)
+    if not cert:
+        raise JWTError('Firebase token has an unknown key ID')
+
+    decoded_token = jwt.decode(
+        id_token,
+        cert,
+        algorithms=['RS256'],
+        audience=project_id,
+        issuer=f'https://securetoken.google.com/{project_id}',
+    )
+    decoded_token['uid'] = decoded_token.get('uid') or decoded_token.get('user_id') or decoded_token.get('sub')
+    return decoded_token
 
 def get_db():
     db = SessionLocal()
@@ -74,16 +148,194 @@ def create_admin_user():
 
 @app.on_event("startup")
 def on_startup():
+    migrate_schema()
     create_admin_user()
 
 
 def get_user(db, username: str):
     return db.query(User).filter(User.username == username).first()
 
+def provider_allows_local_login(provider: str) -> bool:
+    providers = {p.strip().lower() for p in (provider or '').split(',')}
+    return 'local' in providers
+
+
 def authenticate_user(db, username: str, password: str):
     user = get_user(db, username)
-    if not user or not verify_hashed(password, user.hashed_password):
+    if not user:
         return False
+    if user.access_revoked:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=REVOKED_ACCESS_MESSAGE,
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    if not provider_allows_local_login(user.provider):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Please sign in with your social login provider.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    if not verify_hashed(password, user.hashed_password):
+        return False
+    return user
+
+
+def build_firebase_username(db, display_name: str, email: str, firebase_uid: str, current_user=None):
+    base_username = re.sub(r'[^a-zA-Z0-9_-]+', '-', display_name.strip().lower()).strip('-')
+    if not base_username or base_username == 'user':
+        base_username = re.sub(r'[^a-zA-Z0-9_-]+', '-', email.split('@')[0].lower()).strip('-')
+    if not base_username or base_username == 'user':
+        base_username = f"firebase-{firebase_uid[:8]}"
+
+    username = base_username
+    existing_user = get_user(db, username)
+    if existing_user and (not current_user or existing_user.id != current_user.id):
+        username = f"{base_username}-{firebase_uid[:8]}"
+
+    return username
+
+
+FIREBASE_PROVIDER_MAP = {
+    'google.com': 'google',
+    'github.com': 'github',
+    'password': 'local',
+}
+
+def extract_firebase_provider(decoded_token: dict) -> str:
+    """Extract the normalized provider name from a Firebase ID token's claims."""
+    raw = (decoded_token.get('firebase') or {}).get('sign_in_provider', '')
+    return FIREBASE_PROVIDER_MAP.get(raw, raw)
+
+
+def provider_list(provider: str) -> set[str]:
+    """Return normalized providers from a comma-separated provider string."""
+    return {p.strip().lower() for p in (provider or '').split(',') if p.strip()}
+
+
+def provider_matches(existing: str, provider: str) -> bool:
+    """Check whether an account already belongs to the given provider."""
+    providers = provider_list(existing)
+    return provider.lower() in providers or (provider == 'local' and 'password' in providers)
+
+
+def merge_provider(existing: str, provider: str) -> str:
+    """Add a provider to the user's provider list without dropping existing providers."""
+    providers = provider_list(existing)
+    providers.add(provider.lower())
+    return ','.join(sorted(providers))
+
+
+def merge_firebase_provider(existing: str, provider: str) -> str:
+    """Add a Firebase provider and remove local/password once the account is Firebase-linked."""
+    providers = provider_list(existing)
+    providers.discard('local')
+    providers.discard('password')
+    providers.add(provider.lower())
+    return ','.join(sorted(providers))
+
+
+def provider_is_local_only(provider: str) -> bool:
+    """Return whether the provider value represents a local/password-only account."""
+    providers = provider_list(provider or 'local') or {'local'}
+    return providers.issubset({'local', 'password'})
+
+
+def can_link_local_to_firebase_provider(user: User, provider: str, email_verified: bool) -> bool:
+    """Allow trusted social providers to claim an existing local account by email."""
+    return (
+        email_verified
+        and provider in {'google', 'github'}
+        and not user.firebase_uid
+        and provider_is_local_only(user.provider)
+    )
+
+
+def link_local_user_to_firebase_provider(db, user: User, firebase_uid: str, provider: str, photo_url):
+    user.firebase_uid = firebase_uid
+    user.provider = merge_firebase_provider(user.provider, provider)
+    user.hashed_password = get_hashed(os.urandom(32).hex())
+    if photo_url:
+        user.image_url = photo_url
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+def update_firebase_user_metadata(db, user: User, display_name: str, email: str, firebase_uid: str, provider: str, photo_url):
+    user.username = build_firebase_username(db, display_name, email, firebase_uid, user)
+    name_parts = display_name.split(' ', 1)
+    user.firstname = name_parts[0] or user.firstname or 'Firebase'
+    user.lastname = name_parts[1] if len(name_parts) > 1 else user.lastname or ''
+    user.provider = merge_firebase_provider(user.provider, provider)
+    if photo_url:
+        user.image_url = photo_url
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+def get_or_create_firebase_user(db, decoded_token, firebase_request: FirebaseTokenRequest):
+    email = (decoded_token.get('email') or '').strip().lower()
+    firebase_uid = decoded_token.get('uid')
+    provider = extract_firebase_provider(decoded_token)
+    email_verified = decoded_token.get('email_verified') is True
+
+    if not email:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Firebase account has no email")
+
+    display_name = firebase_request.display_name or decoded_token.get('name') or email.split('@')[0]
+    photo_url = firebase_request.photo_url or decoded_token.get('picture')
+    name_parts = display_name.split(' ', 1)
+    firstname = name_parts[0] or 'Firebase'
+    lastname = name_parts[1] if len(name_parts) > 1 else ''
+
+    if not firebase_uid:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Firebase account has no UID")
+
+    user = db.query(User).filter(User.firebase_uid == firebase_uid).first()
+    if user:
+        if user.access_revoked:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=REVOKED_ACCESS_MESSAGE)
+        return update_firebase_user_metadata(db, user, display_name, email, firebase_uid, provider, photo_url)
+
+    user = db.query(User).filter(User.email == email).first()
+    if user:
+        if user.access_revoked:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=REVOKED_ACCESS_MESSAGE)
+
+        if user.firebase_uid == firebase_uid:
+            return update_firebase_user_metadata(db, user, display_name, email, firebase_uid, provider, photo_url)
+
+        if user.firebase_uid and user.firebase_uid != firebase_uid:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="This email already belongs to another Firebase account. Sign in with the existing provider and link this provider first.",
+            )
+
+        if can_link_local_to_firebase_provider(user, provider, email_verified):
+            return link_local_user_to_firebase_provider(db, user, firebase_uid, provider, photo_url)
+
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="An account with this email already exists.")
+
+    username = build_firebase_username(db, display_name, email, firebase_uid)
+
+    user = User(
+        username=username,
+        hashed_password=get_hashed(os.urandom(32).hex()),
+        firstname=firstname,
+        lastname=lastname,
+        email=email,
+        role=UserRole.USER,
+        beta_tester=False,
+        activated=True,
+        image_url=photo_url,
+        firebase_uid=firebase_uid,
+        provider=provider,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
     return user
 
 async def get_current_user(token: str = Depends(oauth2_scheme), db: SessionLocal = Depends(get_db)):
@@ -102,6 +354,8 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: SessionLocal
     user = get_user(db, username=username)
     if user is None:
         raise credentials_exception
+    if user.access_revoked:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=REVOKED_ACCESS_MESSAGE)
     return user
 
 
@@ -121,6 +375,29 @@ async def login_for_access_token( login_request: LoginRequest,  db: SessionLocal
     return {"user":user.username, "access_token": access_token, "token_type": "bearer"}
 
 
+@app.post("/firebase-token")
+async def login_with_firebase_token(firebase_request: FirebaseTokenRequest, db: SessionLocal = Depends(get_db)):
+    try:
+        decoded_token = verify_firebase_id_token(firebase_request.id_token)
+    except RuntimeError as error:
+        logger.error(f"Firebase auth is not configured: {error}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Firebase auth is not configured",
+        ) from error
+    except Exception as error:
+        logger.exception("Firebase token verification failed")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid Firebase token",
+            headers={"WWW-Authenticate": "Bearer"},
+        ) from error
+
+    user = get_or_create_firebase_user(db, decoded_token, firebase_request)
+    access_token = create_access_token(data={"sub": user.username})
+    return {"user": user.username, "access_token": access_token, "token_type": "bearer"}
+
+
 @app.get("/users/me")
 async def read_users_me(token: str = Depends(oauth2_scheme), db: SessionLocal = Depends(get_db)):
     credentials_exception = HTTPException(
@@ -138,6 +415,8 @@ async def read_users_me(token: str = Depends(oauth2_scheme), db: SessionLocal = 
     user = get_user(db, username=username)
     if user is None:
         raise credentials_exception
+    if user.access_revoked:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=REVOKED_ACCESS_MESSAGE)
     return user
 
 @app.put("/users/me")
@@ -223,6 +502,27 @@ async def update_user_role(user_id: int, user_role_update: UpdateUserRoleRequest
         raise HTTPException(status_code=404, detail="User not found in database")
 
     db_user.role = user_role_update.role
+    if db_user.role == UserRole.ADMIN:
+        db_user.access_revoked = False
+
+    db.commit()
+    db.refresh(db_user)
+
+    return db_user
+
+@app.put("/users/{user_id}/access_revoked")
+async def update_access_revoked_status(user_id: int, access_revoked_update: UpdateAccessRevokedRequest, current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Not authorized for this action: UPDATE ACCESS REVOKED STATUS")
+
+    db_user = db.query(User).filter(User.id == user_id).first()
+    if db_user is None:
+        raise HTTPException(status_code=404, detail="User not found in database")
+
+    if db_user.role == UserRole.ADMIN and access_revoked_update.access_revoked:
+        raise HTTPException(status_code=400, detail="Admins cannot have access revoked")
+
+    db_user.access_revoked = access_revoked_update.access_revoked
 
     db.commit()
     db.refresh(db_user)
@@ -237,19 +537,30 @@ async def register_user(register_request: RegisterRequest, db: SessionLocal = De
     if db_user:
         raise HTTPException(status_code=400, detail="Username already registered")
 
+    email = register_request.email.strip().lower()
+    email_user = db.query(User).filter(User.email == email).first()
+    if email_user:
+        raise HTTPException(status_code=400, detail="An account with this email already exists.")
+
     # Create new user instance
     hashed_password = get_hashed(register_request.password)
     new_user = User(username=register_request.username,
                     hashed_password=hashed_password,
                     firstname=register_request.firstname,
                     lastname=register_request.lastname,
-                    email=register_request.email
+                    email=email
                     )
 
     # Add new user to the database
-    db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
+    try:
+        db.add(new_user)
+        db.commit()
+        db.refresh(new_user)
+    except IntegrityError as error:
+        db.rollback()
+        if 'users_email_key' in str(error.orig):
+            raise HTTPException(status_code=400, detail="An account with this email already exists.") from error
+        raise
 
     return {"username": new_user.username,"email":new_user.email, "id": new_user.id}#, "errorMessage": message}
     
@@ -261,14 +572,34 @@ async def read_users(current_user: User = Depends(get_current_user), db: Session
     users = db.query(User).all()
     return users
 
+def is_local_user(db_user: User) -> bool:
+    return not db_user.firebase_uid and provider_is_local_only(db_user.provider)
+
+
 @app.delete("/users/{user_id}")
-async def delete_user(user_id: int, current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):
+async def delete_user(
+    user_id: int,
+    current_user: User = Depends(get_current_user),
+    db: SessionLocal = Depends(get_db),
+):
+    """Delete a local-only DB user (admin only).
+
+    Firebase Auth users are not deleted by the backend. Social-login users
+    must be managed in Firebase and are rejected here to avoid orphaning the
+    external identity.
+    """
     if current_user.role != UserRole.ADMIN:
         raise HTTPException(status_code=403, detail="Not authorized for this action: DELETE USER")
     
     db_user = db.query(User).filter(User.id == user_id).first()
     if db_user is None:
         raise HTTPException(status_code=404, detail="User not found in database")
+
+    if not is_local_user(db_user):
+        raise HTTPException(
+            status_code=400,
+            detail="Only local accounts can be deleted from the admin panel.",
+        )
 
     db.delete(db_user)
     db.commit()

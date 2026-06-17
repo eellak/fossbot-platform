@@ -23,6 +23,8 @@ services:
     container_name: fsbt-front
     restart: always
     build: ./front-end
+    env_file:
+      - .env
     ports:
       - "80:80"
       - "443:443"
@@ -33,7 +35,7 @@ services:
     depends_on:
       - backend
   db:
-    image: postgres:latest
+    image: postgres:16.3
     container_name: fsbt-db
     restart: always
     env_file:
@@ -42,7 +44,7 @@ services:
       - db-data:/var/lib/postgresql/data
 
   matomo:
-     image: matomo:latest
+     image: matomo:5.0.3
      container_name: matomo
      restart: always
      env_file:
@@ -54,7 +56,7 @@ services:
        - matomo_data:/var/www/html
 
   mariadb:
-    image: mariadb:latest
+    image: mariadb:11.4.2
     restart: always
     env_file:
        - .env

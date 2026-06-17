@@ -1,29 +1,16 @@
-FROM node:18-alpine
-
-WORKDIR /usr/src/app
-
-COPY sim ./sim
-COPY front-end/package*.json ./front-end/
+FROM node:20-alpine
 
 WORKDIR /usr/src/app/front-end
 
+COPY package*.json ./
+
 RUN npm install
 
-RUN cat <<'EOF' >/usr/local/bin/front-end-dev-start
-#!/bin/sh
-set -eu
-
-cd /usr/src/app/sim
-npm run sync:frontend
-
-cd /usr/src/app/front-end
-exec npm start
-EOF
-RUN chmod +x /usr/local/bin/front-end-dev-start
+COPY . .
 
 ENV CHOKIDAR_USEPOLLING=true
 ENV WATCHPACK_POLLING=true
 
 EXPOSE 3000
 
-CMD ["front-end-dev-start"]
+CMD ["npm", "start"]
