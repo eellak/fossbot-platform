@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls'
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { createGizmo, GIZMO_MARGIN_PX, GIZMO_SIZE_PX, type GizmoHandle } from './gizmo'
 
 export interface SceneHandle {
@@ -8,6 +8,8 @@ export interface SceneHandle {
   scene: THREE.Scene
   camera: THREE.PerspectiveCamera
   controls: OrbitControls
+  ambientLight: THREE.AmbientLight
+  directionalLight: THREE.DirectionalLight
   gizmo: GizmoHandle | null
   gizmoMode: 'camera' | 'robot'
   gizmoModeLabel: HTMLDivElement | null
@@ -18,13 +20,27 @@ export interface SceneHandle {
   gizmoTarget: THREE.Object3D | null
   worldAxes: THREE.AxesHelper
   resizeListener: () => void
+  resizeObserver: ResizeObserver | null
+}
+
+const LEGACY_CANVAS_FALLBACK_SIZE = 1
+const LEGACY_AMBIENT_INTENSITY = 0.5
+const LEGACY_DIRECTIONAL_INTENSITY = 2
+
+function getContainerSize(container: HTMLElement): { width: number; height: number } {
+  return {
+    width: Math.max(LEGACY_CANVAS_FALLBACK_SIZE, container.clientWidth),
+    height: Math.max(LEGACY_CANVAS_FALLBACK_SIZE, container.clientHeight),
+  }
 }
 
 export function initScene(container: HTMLElement, opts?: { gizmo?: boolean }): SceneHandle {
   const useGizmo = opts?.gizmo ?? true
+  const initialSize = getContainerSize(container)
   const renderer = new THREE.WebGLRenderer({ antialias: true })
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
-  renderer.setSize(container.clientWidth, container.clientHeight)
+  renderer.outputColorSpace = THREE.SRGBColorSpace
+  renderer.setSize(initialSize.width, initialSize.height)
   renderer.setClearColor(0x1a1a1a, 1)
   renderer.shadowMap.enabled = true
   renderer.shadowMap.type = THREE.PCFSoftShadowMap
@@ -37,7 +53,7 @@ export function initScene(container: HTMLElement, opts?: { gizmo?: boolean }): S
 
   const camera = new THREE.PerspectiveCamera(
     50,
-    container.clientWidth / container.clientHeight,
+    initialSize.width / initialSize.height,
     0.01,
     100,
   )
@@ -49,10 +65,10 @@ export function initScene(container: HTMLElement, opts?: { gizmo?: boolean }): S
   controls.dampingFactor = 0.08
   controls.target.set(0, 0.1, 0)
 
-  const ambient = new THREE.AmbientLight(0xffffff, 0.45)
+  const ambient = new THREE.AmbientLight(0xffffff, LEGACY_AMBIENT_INTENSITY)
   scene.add(ambient)
 
-  const dir = new THREE.DirectionalLight(0xffffff, 0.9)
+  const dir = new THREE.DirectionalLight(0xffffff, LEGACY_DIRECTIONAL_INTENSITY)
   dir.position.set(3, 5, 2)
   dir.castShadow = true
   dir.shadow.mapSize.set(1024, 1024)
@@ -97,13 +113,16 @@ export function initScene(container: HTMLElement, opts?: { gizmo?: boolean }): S
   }
 
   const resizeListener = () => {
-    const w = container.clientWidth
-    const h = container.clientHeight
+    const { width: w, height: h } = getContainerSize(container)
     renderer.setSize(w, h)
     camera.aspect = w / h
     camera.updateProjectionMatrix()
   }
   window.addEventListener('resize', resizeListener)
+  const resizeObserver = typeof ResizeObserver !== 'undefined'
+    ? new ResizeObserver(resizeListener)
+    : null
+  resizeObserver?.observe(container)
 
   const handle: SceneHandle = {
     container,
@@ -111,12 +130,15 @@ export function initScene(container: HTMLElement, opts?: { gizmo?: boolean }): S
     scene,
     camera,
     controls,
+    ambientLight: ambient,
+    directionalLight: dir,
     gizmo,
     gizmoModeLabel,
     gizmoMode: 'camera',
     gizmoTarget: null,
     worldAxes,
     resizeListener,
+    resizeObserver,
   }
 
   if (gizmoModeLabel) {
@@ -164,6 +186,7 @@ export function renderScene(handle: SceneHandle): void {
 
 export function disposeScene(h: SceneHandle) {
   window.removeEventListener('resize', h.resizeListener)
+  h.resizeObserver?.disconnect()
   h.controls.dispose()
   h.gizmo?.dispose()
   h.renderer.dispose()

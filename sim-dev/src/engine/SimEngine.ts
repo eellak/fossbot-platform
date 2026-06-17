@@ -33,6 +33,7 @@ import type {
   SimControlInterface,
 } from './types'
 import { SensorSystem } from '../sensors/SensorSystem'
+import { ACCELEROMETER_ID, GYROSCOPE_ID } from '../sensors/types'
 import { SENSOR_LAYOUT } from '../sensors/layout'
 import { createSensorDebugViz, type SensorDebugVizHandle } from '../sensors/debugViz'
 import { createSensorsHud, type SensorsHudHandle } from '../sensors/sensorsHud'
@@ -45,14 +46,27 @@ import type { StageCounts } from '../bench/types'
 import type { BenchmarkRunnerHandle } from '../bench/runner'
 
 function resolveConfig(cfg: Partial<SimEngineConfig> | undefined): Required<SimEngineConfig> {
+  const publicAssetBaseUrl = cfg?.publicAssetBaseUrl ?? '/js-simulator'
   return {
-    assetBaseUrl: cfg?.assetBaseUrl ?? '/js-simulator/models/robots/v2',
+    publicAssetBaseUrl,
+    assetBaseUrl: cfg?.assetBaseUrl ?? `${publicAssetBaseUrl.replace(/\/$/, '')}/models/robots/v2`,
+    splashLogoUrl: cfg?.splashLogoUrl ?? '/images/superlogo.png',
     splashEnabled: cfg?.splashEnabled ?? getSplashEnabledDefault(),
     splashExtraTime: cfg?.splashExtraTime ?? getSplashExtraTimeDefault(),
     telemetryDefault: cfg?.telemetryDefault ?? getTelemetryOverlayDefault(),
     turnScale: cfg?.turnScale ?? 0.35,
     devMode: cfg?.devMode ?? true,
   }
+}
+
+const RGB_COLOR: Record<string, [number, number, number]> = {
+  red: [255, 0, 0],
+  green: [0, 255, 0],
+  blue: [0, 0, 255],
+  yellow: [255, 255, 0],
+  violet: [238, 130, 238],
+  white: [255, 255, 255],
+  off: [0, 0, 0],
 }
 
 /**
@@ -122,6 +136,9 @@ export class SimEngine {
   private swappingStage = false
   private highYLogged = false
   private fellThroughLogged = false
+  private pendingMotionTimer: number | null = null
+  private pendingMotionResolve: (() => void) | null = null
+  private drawLineWarned = false
 
   // ── Temp vectors (reused, never allocated per frame) ──
   private readonly tmpFollowTarget = new THREE.Vector3()
@@ -176,7 +193,9 @@ export class SimEngine {
     this.splashEnabledCfg = this.config.splashEnabled
     this.splashExtraTimeCfg = this.config.splashExtraTime
 
-    this.splash = createSplashScreen(this.container, this.config.splashEnabled)
+    this.splash = createSplashScreen(this.container, this.config.splashEnabled, {
+      logoUrl: this.config.splashLogoUrl,
+    })
 
     if (this.config.devMode) {
       const [
@@ -257,14 +276,13 @@ export class SimEngine {
       })
     }
 
-    this.initializePhysics().catch((err) => {
-      console.error('[SimEngine] Init failed:', err)
-    })
+    await this.initializePhysics()
   }
 
   /** Cancel the render loop and dispose all resources. */
   stop(): void {
     this.cancelled = true
+    this.resolvePendingMotion()
     cancelAnimationFrame(this.rafId)
     this.keyboard?.dispose()
     this.topRgb?.dispose()
@@ -344,6 +362,167 @@ export class SimEngine {
     }
   }
 
+  // ── Public platform/student controls ──
+
+  /**
+   * Approximate v1-compatible step movement.
+   * TODO(frontend-integration): make this contract-correct before v2 becomes
+   * the default simulator. It should resolve after the requested distance is
+   * reached, not after a timed drive preset.
+   */
+  moveStep(distance: number): Promise<void> {
+    const direction = distance < 0 ? 1 : -1
+    const durationSec = Math.max(0.1, Math.abs(distance) / 0.5)
+    this.triggerPresetDrive(direction * 0.9, direction * 0.9, durationSec)
+    return this.beginApproxMotion(durationSec)
+  }
+
+  /**
+   * Approximate v1-compatible step rotation.
+   * TODO(frontend-integration): make this contract-correct before v2 becomes
+   * the default simulator. It should resolve after the requested angle is
+   * reached, not after a timeout around the current physics preset.
+   */
+  rotateStep(angle: number): Promise<void> {
+    this.triggerPresetTurn(angle)
+    const durationSec = Math.max(0.25, (Math.abs(angle) / (Math.PI / 2)) * 0.9)
+    return this.beginApproxMotion(durationSec)
+  }
+
+  stopMotion(): void {
+    this.benchDrive = null
+    this.presetRemainingSec = 0
+    this.presetLeftInput = 0
+    this.presetRightInput = 0
+    this.presetTurnTargetYaw = null
+    this.cancelLineFollow()
+    this.vehicle?.setDrive(0, 0)
+    if (this.robotPhysics) {
+      this.robotPhysics.body.setLinvel({ x: 0, y: 0, z: 0 }, true)
+      this.robotPhysics.body.setAngvel({ x: 0, y: 0, z: 0 }, true)
+    }
+    this.resolvePendingMotion()
+  }
+
+  reset(): void {
+    this.stopMotion()
+    if (this.currentStage) this.applySpawnPose(this.currentStage)
+    this.sensorSystem?.resetOdometer()
+  }
+
+  setLightIntensity(intensity: number): void {
+    if (!this.sceneHandle) return
+    const scaledIntensity = THREE.MathUtils.clamp(intensity / 100, 0, 1)
+    this.sceneHandle.directionalLight.intensity = scaledIntensity
+    this.sceneHandle.ambientLight.intensity = scaledIntensity
+  }
+
+  changeCamera(): void {
+    this.cycleCameraMode()
+  }
+
+  async setStage(stageOrUrl: string): Promise<void> {
+    const stage = this.normalizeStageName(stageOrUrl)
+    if (!stage) {
+      console.warn(`[SimEngine] Unknown stage: ${stageOrUrl}`)
+      return
+    }
+    this.stopMotion()
+    await this.swapStage(stage)
+  }
+
+  getStageNames(): string[] {
+    return [...STAGE_NAMES]
+  }
+
+  getDistance(): number {
+    const reading = this.sensorSystem?.get('ultrasonic-front')
+    if (!reading || reading.kind !== 'ultrasonic') return 3
+    return reading.outOfRange ? 3 : Math.min(3, reading.distanceM)
+  }
+
+  getAcceleration(axis: 'x' | 'y' | 'z' | string): number {
+    const reading = this.sensorSystem?.get(ACCELEROMETER_ID)
+    return reading?.kind === 'accel' ? reading[axis as 'x' | 'y' | 'z'] ?? 0 : 0
+  }
+
+  getGyroscope(axis: 'x' | 'y' | 'z' | string): number {
+    const reading = this.sensorSystem?.get(GYROSCOPE_ID)
+    return reading?.kind === 'gyro' ? reading[axis as 'x' | 'y' | 'z'] ?? 0 : 0
+  }
+
+  getFloorSensor(sensorId: number): boolean {
+    const ids = ['ir-floor-left', 'ir-floor-center', 'ir-floor-right']
+    const reading = this.sensorSystem?.get(ids[sensorId] ?? ids[0])
+    return reading?.kind === 'ir-floor' ? reading.triggered === 1 : false
+  }
+
+  getLightSensor(): number {
+    const reading = this.sensorSystem?.get('ldr-top')
+    return reading?.kind === 'ldr' ? reading.analog0to1023 : 0
+  }
+
+  rgbSetColor(color: string): void {
+    const rgb = RGB_COLOR[color] ?? RGB_COLOR.off
+    this.topRgb?.setColor(rgb[0], rgb[1], rgb[2])
+  }
+
+  justMove(direction: 'forward' | 'backward' | string): void {
+    this.resolvePendingMotion()
+    const input = direction === 'backward' ? -0.75 : 0.75
+    this.setBenchmarkDrive(input, input)
+  }
+
+  justRotate(direction: 'left' | 'right' | string): void {
+    this.resolvePendingMotion()
+    const input = direction === 'right' ? 0.55 : -0.55
+    this.setBenchmarkDrive(input, -input)
+  }
+
+  drawLine(status: boolean): void {
+    if (status && !this.drawLineWarned) {
+      console.warn('[SimEngine] drawLine is not implemented in v2 yet')
+      this.drawLineWarned = true
+    }
+  }
+
+  private beginApproxMotion(durationSec: number): Promise<void> {
+    this.resolvePendingMotion()
+    return new Promise((resolve) => {
+      this.pendingMotionResolve = resolve
+      this.pendingMotionTimer = window.setTimeout(() => {
+        this.pendingMotionTimer = null
+        this.pendingMotionResolve = null
+        resolve()
+      }, Math.max(0, durationSec) * 1000)
+    })
+  }
+
+  private resolvePendingMotion(): void {
+    if (this.pendingMotionTimer != null) {
+      window.clearTimeout(this.pendingMotionTimer)
+      this.pendingMotionTimer = null
+    }
+    const resolve = this.pendingMotionResolve
+    this.pendingMotionResolve = null
+    resolve?.()
+  }
+
+  private normalizeStageName(stageOrUrl: string): StageName | null {
+    const file = stageOrUrl.split('/').pop() ?? stageOrUrl
+    const stage = file.replace(/\.json$/, '')
+    return STAGE_NAMES.includes(stage) ? stage : null
+  }
+
+  private resolvePublicAssetUrl = (url: string): string => {
+    if (!url) return url
+    if (/^(https?:|data:|blob:)/.test(url)) return url
+    const base = this.config.publicAssetBaseUrl.replace(/\/$/, '')
+    if (url.startsWith('/js-simulator/')) return `${base}${url.slice('/js-simulator'.length)}`
+    if (url.startsWith('js-simulator/')) return `${base}/${url.slice('js-simulator/'.length)}`
+    return url
+  }
+
   // ── Benchmark helpers ──
 
   private addFrameListener(cb: (frameMs: number) => void): () => void {
@@ -407,10 +586,12 @@ export class SimEngine {
       this.positionPresets?.refresh()
 
       this.splash.setStatus(`Loading stage ${initialStage}...`)
-      this.currentStage = await loadStage(initialStage, this.sceneHandle!.scene, world)
+      this.currentStage = await loadStage(initialStage, this.sceneHandle!.scene, world, {
+        resolveAssetUrl: this.resolvePublicAssetUrl,
+      })
 
       this.splash.setStatus('Loading robot model...')
-      this.robot = await loadRobotV2()
+      this.robot = await loadRobotV2(undefined, this.config.assetBaseUrl)
       log.physics('robot loaded')
       if (this.cancelled) return
 
@@ -655,6 +836,7 @@ export class SimEngine {
         this.presetTurnTargetYaw = null
         leftInput = 0
         rightInput = 0
+        this.resolvePendingMotion()
       } else {
         const turnInput = THREE.MathUtils.clamp(yawError * 1.6, -0.75, 0.75)
         leftInput = -turnInput
@@ -667,6 +849,7 @@ export class SimEngine {
       if (this.presetRemainingSec === 0) {
         this.presetLeftInput = 0
         this.presetRightInput = 0
+        this.resolvePendingMotion()
       }
     } else {
       const throttle = this.keyboard.pressed.has('w') ? 1
@@ -914,7 +1097,9 @@ export class SimEngine {
       this.positionPresets?.refresh()
       this.currentStage = null
       previousStage.dispose()
-      const loadedStage = await loadStage(next, this.sceneHandle.scene, this.worldHandle.world)
+      const loadedStage = await loadStage(next, this.sceneHandle.scene, this.worldHandle.world, {
+        resolveAssetUrl: this.resolvePublicAssetUrl,
+      })
       if (this.cancelled) {
         loadedStage.dispose()
         return
