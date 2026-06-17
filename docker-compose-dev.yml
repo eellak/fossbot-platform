@@ -9,6 +9,7 @@ services:
       - "3000:3000"
     volumes:
       - ./front-end:/usr/src/app/front-end
+      - ./sim:/usr/src/app/sim
       - /usr/src/app/front-end/node_modules
     stdin_open: true
     tty: true

@@ -89,10 +89,14 @@ export interface TopRgbHandle {
 }
 
 // Default "on" intensity for the companion SpotLight.
-const LIGHT_ON_INTENSITY = 0.5
-// SpotLight falloff distance (meters) — small bubble around the dome.
-const LIGHT_DISTANCE = 0.25
+// V1 used a real SpotLight with a broad cone; keep v2 visible enough to light
+// nearby scene geometry instead of only tinting the LED material.
+const LIGHT_ON_INTENSITY = 4
+const LIGHT_DISTANCE = 3
+const LIGHT_ANGLE = Math.PI / 3
 const LIGHT_DECAY = 2
+const LIGHT_LOCAL_POSITION: [number, number, number] = [-0.0380, 0.1000, -0.0700]
+const LIGHT_TARGET_POSITION: [number, number, number] = [0, 0, -1]
 
 export function createTopRgb(opts: TopRgbOptions): TopRgbHandle {
   const target = opts.target
@@ -114,9 +118,8 @@ export function createTopRgb(opts: TopRgbOptions): TopRgbHandle {
   // Companion SpotLight. Parented to lightParent (typically the robot root)
   // so its local-space position reads in real meters — the target's parent
   // chain carries a mm→m uniform scale that would otherwise crush slider
-  // motion to ~µm. Initial position is the target's world pos converted into
-  // lightParent's local frame. Tagged excludeFromLdr so the LDR provider
-  // doesn't sense its own LED.
+  // motion to ~µm. Initial position is a tuned lightParent-local pose.
+  // Tagged excludeFromLdr so the LDR provider doesn't sense its own LED.
   const enableLight = opts.enableCompanionLight ?? true
 
   // Companion SpotLight — created only when enableCompanionLight is true.
@@ -126,27 +129,16 @@ export function createTopRgb(opts: TopRgbOptions): TopRgbHandle {
 
   if (enableLight) {
     const lightParent = opts.lightParent ?? target
-    spotLight = new THREE.SpotLight(0xffffff, 0, LIGHT_DISTANCE, Math.PI / 6, 0.5, LIGHT_DECAY)
+    spotLight = new THREE.SpotLight(0xffffff, 0, LIGHT_DISTANCE, LIGHT_ANGLE, 0.5, LIGHT_DECAY)
     spotLight.name = 'top_status_rgb_light'
     spotLight.userData.excludeFromLdr = true
 
     spotLightTarget = new THREE.Object3D()
-    spotLightTarget.position.set(0, 0, 1)
+    spotLightTarget.position.set(...LIGHT_TARGET_POSITION)
     spotLight.add(spotLightTarget)
     spotLight.target = spotLightTarget
 
-    // Compute initial light position. updateWorldMatrix(true, false) refreshes
-    // the parent chain up to the scene root, so getWorldPosition is reliable
-    // even on first frame before the renderer's auto-update runs.
-    const _world = new THREE.Vector3()
-    function seedAtTarget() {
-      target.updateWorldMatrix(true, false)
-      lightParent.updateWorldMatrix(true, false)
-      target.getWorldPosition(_world)
-      lightParent.worldToLocal(_world)
-      spotLight!.position.copy(_world)
-    }
-    seedAtTarget()
+    spotLight.position.set(...LIGHT_LOCAL_POSITION)
     lightParent.add(spotLight)
 
     // Debug helper — wireframe sphere parented to the SpotLight itself, so
@@ -246,7 +238,7 @@ export function createTopRgb(opts: TopRgbOptions): TopRgbHandle {
     getLightTargetPosition() {
       return spotLightTarget
         ? [spotLightTarget.position.x, spotLightTarget.position.y, spotLightTarget.position.z]
-        : [0, 0, 1]
+        : LIGHT_TARGET_POSITION
     },
     setLightTargetPosition(x, y, z) {
       if (spotLightTarget) spotLightTarget.position.set(x, y, z)
