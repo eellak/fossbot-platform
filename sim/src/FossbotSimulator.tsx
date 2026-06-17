@@ -20,6 +20,7 @@ export interface FossbotSimulatorHandle {
   justMove(direction: 'forward' | 'backward' | string): void
   justRotate(direction: 'left' | 'right' | string): void
   drawLine(status: boolean): void
+  lineFollowing(status: boolean): void
 }
 
 export interface FossbotSimulatorProps {
@@ -53,6 +54,7 @@ export const FossbotSimulator = forwardRef<FossbotSimulatorHandle, FossbotSimula
       justMove: (direction) => engineRef.current?.justMove(direction),
       justRotate: (direction) => engineRef.current?.justRotate(direction),
       drawLine: (status) => engineRef.current?.drawLine(status),
+      lineFollowing: (status) => engineRef.current?.lineFollowing(status),
     }), [])
 
     useEffect(() => {

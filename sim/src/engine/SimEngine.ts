@@ -69,6 +69,14 @@ const RGB_COLOR: Record<string, [number, number, number]> = {
   off: [0, 0, 0],
 }
 
+const API_DRIVE_INPUT = 0.75
+const API_TURN_MIN_INPUT = 0.22
+const API_TURN_MAX_INPUT = 0.75
+const API_DRIVE_TOLERANCE_M = 0.005
+const API_TURN_TOLERANCE_RAD = 0.02
+const TRACE_MIN_DISTANCE_M = 0.005
+const TRACE_Y = 0.004
+
 /**
  * SimEngine owns the full simulation lifecycle: scene, world, robot, stage,
  * vehicle, game loop, and cleanup. App.tsx is a thin React wrapper around it.
@@ -136,9 +144,28 @@ export class SimEngine {
   private swappingStage = false
   private highYLogged = false
   private fellThroughLogged = false
-  private pendingMotionTimer: number | null = null
   private pendingMotionResolve: (() => void) | null = null
-  private drawLineWarned = false
+  private apiDriveMotion: {
+    startX: number
+    startZ: number
+    targetDistanceM: number
+    input: number
+    elapsedSec: number
+    maxSec: number
+  } | null = null
+  private apiTurnMotion: {
+    targetAngle: number
+    rotatedAngle: number
+    previousYaw: number
+    elapsedSec: number
+    maxSec: number
+  } | null = null
+  private traceEnabled = false
+  private traceGeometry: THREE.BufferGeometry | null = null
+  private traceMaterial: THREE.LineBasicMaterial | null = null
+  private traceLine: THREE.Line | null = null
+  private tracePoints: THREE.Vector3[] = []
+  private lastTracePosition: THREE.Vector3 | null = null
 
   // ── Temp vectors (reused, never allocated per frame) ──
   private readonly tmpFollowTarget = new THREE.Vector3()
@@ -146,6 +173,7 @@ export class SimEngine {
   private readonly tmpLookAt = new THREE.Vector3()
   private readonly tmpQuat = new THREE.Quaternion()
   private readonly tmpEuler = new THREE.Euler()
+  private readonly tmpTracePosition = new THREE.Vector3()
 
   // ── Wheel visual sync (cached from robot at creation time) ──
   private wheelBaseLeft = new THREE.Vector3()
@@ -303,6 +331,7 @@ export class SimEngine {
     this.benchmarkPanel = null
     this.benchmarkRunner = null
     this.cameraControls?.dispose()
+    this.disposeTraceLine()
     this.resetBtn?.remove()
     this.resetBtn = null
     this.frameListeners.clear()
@@ -364,29 +393,44 @@ export class SimEngine {
 
   // ── Public platform/student controls ──
 
-  /**
-   * Approximate v1-compatible step movement.
-   * TODO(frontend-integration): make this contract-correct before v2 becomes
-   * the default simulator. It should resolve after the requested distance is
-   * reached, not after a timed drive preset.
-   */
+  /** V1-compatible step movement: resolve after the body travels `distance`. */
   moveStep(distance: number): Promise<void> {
-    const direction = distance < 0 ? 1 : -1
-    const durationSec = Math.max(0.1, Math.abs(distance) / 0.5)
-    this.triggerPresetDrive(direction * 0.9, direction * 0.9, durationSec)
-    return this.beginApproxMotion(durationSec)
+    if (!this.robotPhysics || !Number.isFinite(distance) || distance === 0) {
+      return Promise.resolve()
+    }
+
+    this.stopMotion()
+    const pos = this.robotPhysics.body.translation()
+    const targetDistanceM = Math.abs(distance)
+    const input = distance < 0 ? API_DRIVE_INPUT : -API_DRIVE_INPUT
+    this.apiDriveMotion = {
+      startX: pos.x,
+      startZ: pos.z,
+      targetDistanceM,
+      input,
+      elapsedSec: 0,
+      maxSec: Math.max(1, targetDistanceM / 0.15 + 1),
+    }
+    if (this.robotPhysics.body.isSleeping()) this.robotPhysics.body.wakeUp()
+    return this.beginPendingMotion()
   }
 
-  /**
-   * Approximate v1-compatible step rotation.
-   * TODO(frontend-integration): make this contract-correct before v2 becomes
-   * the default simulator. It should resolve after the requested angle is
-   * reached, not after a timeout around the current physics preset.
-   */
+  /** V1-compatible step rotation: resolve after the body reaches `angle`. */
   rotateStep(angle: number): Promise<void> {
-    this.triggerPresetTurn(angle)
-    const durationSec = Math.max(0.25, (Math.abs(angle) / (Math.PI / 2)) * 0.9)
-    return this.beginApproxMotion(durationSec)
+    if (!this.robotPhysics || !Number.isFinite(angle) || angle === 0) {
+      return Promise.resolve()
+    }
+
+    this.stopMotion()
+    this.apiTurnMotion = {
+      targetAngle: angle,
+      rotatedAngle: 0,
+      previousYaw: this.getBodyYaw(this.robotPhysics.body),
+      elapsedSec: 0,
+      maxSec: Math.max(1, (Math.abs(angle) / (Math.PI / 2)) * 2 + 1),
+    }
+    if (this.robotPhysics.body.isSleeping()) this.robotPhysics.body.wakeUp()
+    return this.beginPendingMotion()
   }
 
   stopMotion(): void {
@@ -395,6 +439,8 @@ export class SimEngine {
     this.presetLeftInput = 0
     this.presetRightInput = 0
     this.presetTurnTargetYaw = null
+    this.apiDriveMotion = null
+    this.apiTurnMotion = null
     this.cancelLineFollow()
     this.vehicle?.setDrive(0, 0)
     if (this.robotPhysics) {
@@ -406,6 +452,7 @@ export class SimEngine {
 
   reset(): void {
     this.stopMotion()
+    this.drawLine(false)
     if (this.currentStage) this.applySpawnPose(this.currentStage)
     this.sensorSystem?.resetOdometer()
   }
@@ -428,6 +475,7 @@ export class SimEngine {
       return
     }
     this.stopMotion()
+    this.drawLine(false)
     await this.swapStage(stage)
   }
 
@@ -469,43 +517,114 @@ export class SimEngine {
 
   justMove(direction: 'forward' | 'backward' | string): void {
     this.resolvePendingMotion()
-    const input = direction === 'backward' ? -0.75 : 0.75
+    if (direction !== 'forward' && direction !== 'backward') {
+      this.stopMotion()
+      return
+    }
+    const input = direction === 'backward' ? -API_DRIVE_INPUT : API_DRIVE_INPUT
     this.setBenchmarkDrive(input, input)
   }
 
   justRotate(direction: 'left' | 'right' | string): void {
     this.resolvePendingMotion()
+    if (direction !== 'left' && direction !== 'right') {
+      this.stopMotion()
+      return
+    }
     const input = direction === 'right' ? 0.55 : -0.55
     this.setBenchmarkDrive(input, -input)
   }
 
   drawLine(status: boolean): void {
-    if (status && !this.drawLineWarned) {
-      console.warn('[SimEngine] drawLine is not implemented in v2 yet')
-      this.drawLineWarned = true
+    if (status) {
+      const wasEnabled = this.traceEnabled
+      this.traceEnabled = true
+      this.ensureTraceLine()
+      if (!wasEnabled) this.updateTraceLine(true)
+      return
     }
+
+    this.traceEnabled = false
+    this.clearTracePoints()
   }
 
-  private beginApproxMotion(durationSec: number): Promise<void> {
+  lineFollowing(status: boolean): void {
+    if (status) {
+      this.startLineFollowing()
+      return
+    }
+    this.cancelLineFollow()
+    this.vehicle?.setDrive(0, 0)
+    this.haltBodyMotion()
+  }
+
+  private beginPendingMotion(): Promise<void> {
     this.resolvePendingMotion()
     return new Promise((resolve) => {
       this.pendingMotionResolve = resolve
-      this.pendingMotionTimer = window.setTimeout(() => {
-        this.pendingMotionTimer = null
-        this.pendingMotionResolve = null
-        resolve()
-      }, Math.max(0, durationSec) * 1000)
     })
   }
 
   private resolvePendingMotion(): void {
-    if (this.pendingMotionTimer != null) {
-      window.clearTimeout(this.pendingMotionTimer)
-      this.pendingMotionTimer = null
-    }
     const resolve = this.pendingMotionResolve
     this.pendingMotionResolve = null
     resolve?.()
+  }
+
+  private haltBodyMotion(): void {
+    if (!this.robotPhysics) return
+    this.robotPhysics.body.setLinvel({ x: 0, y: 0, z: 0 }, true)
+    this.robotPhysics.body.setAngvel({ x: 0, y: 0, z: 0 }, true)
+  }
+
+  private ensureTraceLine(): void {
+    if (this.traceLine || !this.sceneHandle) return
+    this.traceGeometry = new THREE.BufferGeometry().setFromPoints(this.tracePoints)
+    this.traceMaterial = new THREE.LineBasicMaterial({ color: 0xff0000 })
+    this.traceMaterial.polygonOffset = true
+    this.traceMaterial.polygonOffsetFactor = -1
+    this.traceMaterial.polygonOffsetUnits = -1
+    this.traceLine = new THREE.Line(this.traceGeometry, this.traceMaterial)
+    this.traceLine.name = 'fossbot_trace_line'
+    this.traceLine.renderOrder = 10
+    this.traceLine.frustumCulled = false
+    this.sceneHandle.scene.add(this.traceLine)
+  }
+
+  private clearTracePoints(): void {
+    this.tracePoints.length = 0
+    this.lastTracePosition = null
+    this.traceGeometry?.setFromPoints(this.tracePoints)
+  }
+
+  private disposeTraceLine(): void {
+    this.traceEnabled = false
+    this.clearTracePoints()
+    if (this.traceLine) {
+      this.traceLine.removeFromParent()
+      this.traceLine = null
+    }
+    this.traceGeometry?.dispose()
+    this.traceGeometry = null
+    this.traceMaterial?.dispose()
+    this.traceMaterial = null
+  }
+
+  private updateTraceLine(force = false): void {
+    if (!this.traceEnabled || !this.robotPhysics) return
+    this.ensureTraceLine()
+    if (!this.traceGeometry) return
+
+    const pos = this.robotPhysics.body.translation()
+    this.tmpTracePosition.set(pos.x, TRACE_Y, pos.z)
+    if (!force && this.lastTracePosition && this.tmpTracePosition.distanceToSquared(this.lastTracePosition) < TRACE_MIN_DISTANCE_M * TRACE_MIN_DISTANCE_M) {
+      return
+    }
+
+    const next = this.tmpTracePosition.clone()
+    this.tracePoints.push(next)
+    this.traceGeometry.setFromPoints(this.tracePoints)
+    this.lastTracePosition = next
   }
 
   private normalizeStageName(stageOrUrl: string): StageName | null {
@@ -538,20 +657,14 @@ export class SimEngine {
     this.presetLeftInput = 0
     this.presetRightInput = 0
     this.presetTurnTargetYaw = null
+    this.apiDriveMotion = null
+    this.apiTurnMotion = null
     this.benchDrive = { left, right }
     if (this.robotPhysics?.body.isSleeping()) this.robotPhysics.body.wakeUp()
   }
 
   private setBenchmarkLineFollower(): void {
-    this.benchDrive = null
-    this.presetRemainingSec = 0
-    this.presetLeftInput = 0
-    this.presetRightInput = 0
-    this.presetTurnTargetYaw = null
-    this.lineFollowActive = true
-    this.lineFollower.reset()
-    this.movementPresets?.setLineFollowState(true)
-    if (this.robotPhysics?.body.isSleeping()) this.robotPhysics.body.wakeUp()
+    this.startLineFollowing()
   }
 
   private clearBenchmarkDrive(): void {
@@ -663,8 +776,10 @@ export class SimEngine {
       if (this.robot) {
         this.topRgb = createTopRgb({
           target: this.robot.leftEye,
-          initialStatus: 'running',
-          enableCompanionLight: false,
+          initialStatus: 'idle',
+          enableCompanionLight: true,
+          // Parent the companion SpotLight to the unscaled robot root so
+          // pose sliders operate in real meters.
           lightParent: this.robot.root,
         })
         this.buzzer = createBuzzer({
@@ -673,7 +788,7 @@ export class SimEngine {
           gestureTarget: this.container,
         })
       }
-      this.keyboard = installKeyboard()
+      this.keyboard = this.config.devMode ? installKeyboard() : null
       this.applySpawnPose(this.currentStage)
       log.physics('createRobotBody returned', !!this.robotPhysics)
       if (this.cancelled) return
@@ -798,7 +913,7 @@ export class SimEngine {
 
   private stepFrame(deltaTime: number): void {
     if (this.swappingStage) return
-    if (!this.sceneHandle || !this.worldHandle || !this.vehicle || !this.keyboard) return
+    if (!this.sceneHandle || !this.worldHandle || !this.vehicle) return
 
     // ── Input / drive ──
     let leftInput: number
@@ -807,6 +922,40 @@ export class SimEngine {
     if (this.benchDrive) {
       leftInput = this.benchDrive.left
       rightInput = this.benchDrive.right
+    } else if (this.apiTurnMotion && this.robotPhysics) {
+      const simDt = this.paused ? 0 : deltaTime * this.timeScale
+      this.apiTurnMotion.elapsedSec += simDt
+      const yaw = this.getBodyYaw(this.robotPhysics.body)
+      this.apiTurnMotion.rotatedAngle += this.shortestAngleTo(this.apiTurnMotion.previousYaw, yaw)
+      this.apiTurnMotion.previousYaw = yaw
+      const remainingAngle = this.apiTurnMotion.targetAngle - this.apiTurnMotion.rotatedAngle
+      if (Math.abs(remainingAngle) <= API_TURN_TOLERANCE_RAD || this.apiTurnMotion.elapsedSec >= this.apiTurnMotion.maxSec) {
+        this.apiTurnMotion = null
+        leftInput = 0
+        rightInput = 0
+        this.haltBodyMotion()
+        this.resolvePendingMotion()
+      } else {
+        const scaled = THREE.MathUtils.clamp(remainingAngle * 1.8, -API_TURN_MAX_INPUT, API_TURN_MAX_INPUT)
+        const turnInput = Math.sign(remainingAngle) * Math.max(API_TURN_MIN_INPUT, Math.abs(scaled))
+        leftInput = -turnInput
+        rightInput = turnInput
+      }
+    } else if (this.apiDriveMotion && this.robotPhysics) {
+      const simDt = this.paused ? 0 : deltaTime * this.timeScale
+      this.apiDriveMotion.elapsedSec += simDt
+      const pos = this.robotPhysics.body.translation()
+      const moved = Math.hypot(pos.x - this.apiDriveMotion.startX, pos.z - this.apiDriveMotion.startZ)
+      if (moved + API_DRIVE_TOLERANCE_M >= this.apiDriveMotion.targetDistanceM || this.apiDriveMotion.elapsedSec >= this.apiDriveMotion.maxSec) {
+        this.apiDriveMotion = null
+        leftInput = 0
+        rightInput = 0
+        this.haltBodyMotion()
+        this.resolvePendingMotion()
+      } else {
+        leftInput = this.apiDriveMotion.input
+        rightInput = this.apiDriveMotion.input
+      }
     } else if (this.lineFollowActive && this.sensorSystem) {
       const lr = this.sensorSystem.get('ir-floor-left')
       const cr = this.sensorSystem.get('ir-floor-center')
@@ -852,11 +1001,12 @@ export class SimEngine {
         this.resolvePendingMotion()
       }
     } else {
-      const throttle = this.keyboard.pressed.has('w') ? 1
-        : this.keyboard.pressed.has('s') ? -1
+      const keyboard = this.config.devMode ? this.keyboard : null
+      const throttle = keyboard?.pressed.has('w') ? 1
+        : keyboard?.pressed.has('s') ? -1
           : 0
-      const turn = this.keyboard.pressed.has('d') ? this.turnScale
-        : this.keyboard.pressed.has('a') ? -this.turnScale
+      const turn = keyboard?.pressed.has('d') ? this.turnScale
+        : keyboard?.pressed.has('a') ? -this.turnScale
           : 0
       leftInput = THREE.MathUtils.clamp(throttle + turn, -1, 1)
       rightInput = THREE.MathUtils.clamp(throttle - turn, -1, 1)
@@ -924,6 +1074,7 @@ export class SimEngine {
         syncMeshFromBody(this.robotRoot, this.robotPhysics.body, this.robotPhysics.meshSync)
         syncObjectToBody(this.robotPhysics.collidersGroup, this.robotPhysics.body)
         this.updateCameraMode(this.robotPhysics.body)
+        this.updateTraceLine()
 
         // ── Telemetry ──
         this.telemetryElapsed += deltaTime
@@ -1021,6 +1172,8 @@ export class SimEngine {
 
   private triggerPresetDrive(left: number, right: number, durationSec: number): void {
     this.cancelLineFollow()
+    this.apiDriveMotion = null
+    this.apiTurnMotion = null
     this.presetLeftInput = left
     this.presetRightInput = right
     this.presetRemainingSec = durationSec
@@ -1031,6 +1184,8 @@ export class SimEngine {
   private triggerPresetTurn(angle: number): void {
     if (!this.robotPhysics) return
     this.cancelLineFollow()
+    this.apiDriveMotion = null
+    this.apiTurnMotion = null
     this.presetRemainingSec = 0
     this.presetLeftInput = 0
     this.presetRightInput = 0
@@ -1038,6 +1193,21 @@ export class SimEngine {
       this.getBodyYaw(this.robotPhysics.body) + angle,
     )
     if (this.robotPhysics.body.isSleeping()) this.robotPhysics.body.wakeUp()
+  }
+
+  private startLineFollowing(): void {
+    this.resolvePendingMotion()
+    this.benchDrive = null
+    this.apiDriveMotion = null
+    this.apiTurnMotion = null
+    this.presetRemainingSec = 0
+    this.presetLeftInput = 0
+    this.presetRightInput = 0
+    this.presetTurnTargetYaw = null
+    this.lineFollowActive = true
+    this.lineFollower.reset()
+    this.movementPresets?.setLineFollowState(true)
+    if (this.robotPhysics?.body.isSleeping()) this.robotPhysics.body.wakeUp()
   }
 
   private cancelLineFollow(): void {
@@ -1070,6 +1240,8 @@ export class SimEngine {
     this.robotPhysics.body.setAngvel({ x: 0, y: 0, z: 0 }, true)
     this.robotPhysics.body.wakeUp()
     this.lineFollower.reset()
+    this.apiDriveMotion = null
+    this.apiTurnMotion = null
   }
 
   // ── Private: stage swap ──
@@ -1086,6 +1258,8 @@ export class SimEngine {
     this.presetLeftInput = 0
     this.presetRightInput = 0
     this.presetTurnTargetYaw = null
+    this.apiDriveMotion = null
+    this.apiTurnMotion = null
     if (this.lineFollowActive) {
       this.lineFollowActive = false
       this.lineFollower.reset()

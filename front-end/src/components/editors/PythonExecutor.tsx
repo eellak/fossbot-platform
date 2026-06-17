@@ -1,6 +1,7 @@
 import { Button } from '@mui/material';
 import React, { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
+import { line_following } from 'src/simulator-adapter/Simulator';
 
 type PythonExecutorProps = {
   pythonScript: string;
@@ -92,6 +93,9 @@ const PythonExecutor = ({
       } else if (data.command === 'drawLine') {
         await drawLine(data.status);
         worker.postMessage(JSON.stringify({ command: 'drawLine_done' }));
+      } else if (data.command === 'lineFollowing') {
+        await line_following(data.status);
+        worker.postMessage(JSON.stringify({ command: 'line_following_done' }));
       }
 
       if (data.command === 'clear_results') {
@@ -133,10 +137,11 @@ const PythonExecutor = ({
   }, [pythonScript, sessionId, t, pyodideWorker]);
 
   const stopPythonScript = useCallback(() => {
+    stopMotion();
     pyodideWorker?.terminate();
     const newWorker = createWorker();
     setPyodideWorker(newWorker);
-  }, [pyodideWorker]);
+  }, [pyodideWorker, stopMotion]);
 
   useEffect(() => {
     onRunScript(runPythonScript);
