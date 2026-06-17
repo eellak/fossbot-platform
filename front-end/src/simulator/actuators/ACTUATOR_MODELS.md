@@ -19,7 +19,7 @@ The single RGB LED visible on the top of the chassis is the only LED on
 the robot. It is **write-only** — students cannot read it. Its color is
 driven internally by the simulator based on `RobotStatus`.
 
-- Lives in `sim-dev/src/actuators/topRgb.ts`.
+- Lives in `sim/src/actuators/topRgb.ts`.
 - Rendered as an emissive disc on top of the chassis, registered with a
   shared Babylon `GlowLayer` for cheap bloom.
 - Default state: off (black).
@@ -56,7 +56,7 @@ with the mic's sound-source registry while playing so the mic can
 ## 3. Module layout
 
 ```
-sim-dev/src/
+sim/src/
   actuators/
     ACTUATOR_MODELS.md       this file
     topRgb.ts                top status LED, status→color mapping

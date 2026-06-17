@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const repoRoot = resolve(here, '../..')
-const simRoot = resolve(repoRoot, 'sim-dev')
+const simRoot = resolve(repoRoot, 'sim')
 const frontendRoot = resolve(repoRoot, 'front-end')
 
 const sourceSrc = resolve(simRoot, 'src')

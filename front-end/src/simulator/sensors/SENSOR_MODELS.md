@@ -323,7 +323,7 @@ Actuators are write-only devices and don't belong in the sensor suite.
 ## 11. Module layout
 
 ```
-sim-dev/src/
+sim/src/
   sensors/
     SENSOR_MODELS.md         this file
     types.ts                 SensorReading, SensorReadings, CastModel

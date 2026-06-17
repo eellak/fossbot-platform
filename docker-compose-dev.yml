@@ -2,8 +2,8 @@
 services:
   frontend:
     build:
-      context: ./front-end
-      dockerfile: Dockerfile.dev
+      context: .
+      dockerfile: front-end/Dockerfile.dev
     container_name: fsbt-front-local
     ports:
       - "3000:3000"

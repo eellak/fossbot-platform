@@ -2,10 +2,10 @@ import * as THREE from 'three'
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js'
 import { makeWheel, type WheelMesh } from './wheel'
 
-// Constants and layout numbers below are taken from the sim-dev v2 loader
-// (sim-dev/src/robot/robotV2.ts) — values were dialed in manually there and
+// Constants and layout numbers below are taken from the sim v2 loader
+// (sim/src/robot/robotV2.ts) — values were dialed in manually there and
 // proven correct. We reproduce them here so the new tree owns its own loader
-// without importing from sim-dev or js-simulator.
+// without importing from sim or js-simulator.
 
 const DEFAULT_BASE_URL = '/js-simulator/models/robots/v2'
 

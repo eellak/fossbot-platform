@@ -237,7 +237,7 @@ export function formatBenchmarkMarkdown(results: BenchmarkResults): string {
   const lines: string[] = []
   const { meta, config } = results
 
-  lines.push(`## sim-dev benchmark (${meta.timestamp})`)
+  lines.push(`## sim benchmark (${meta.timestamp})`)
   lines.push('')
   lines.push(`- preset: ${results.preset.title}${results.preset.description ? ` — ${results.preset.description}` : ''}`)
   lines.push(`- stages: ${config.stages.map((s) => STAGE_LABELS[s] ?? s).join(', ')}`)
