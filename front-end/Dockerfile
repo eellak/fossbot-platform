@@ -1,37 +1,17 @@
-# Use an official Node.js runtime as a base image
-FROM node:20-alpine AS build-stage
+# Warning: This dockerfile will not include the external `sim` dependency from the root
+# of the project. As of writing this, the "correct" way to run containerized development
+# is to run `docker compose -f docker-compose.dev.yml up` from the root.
+FROM node:18-alpine
 
-# Set the working directory in the container
 WORKDIR /usr/src/app/front-end
 
-# Copy package.json and package-lock.json to the working directory
 COPY package*.json ./
 
-# Install dependencies
 RUN npm install
 
-# Copy the rest of the application code to the working directory
-COPY . .
+ENV CHOKIDAR_USEPOLLING=true
+ENV WATCHPACK_POLLING=true
 
-# Install env-cmd globally
-RUN npm install -g env-cmd
+EXPOSE 3000
 
-# Build the React app
-RUN env-cmd -f .env.production npm run build
-
-
-# Stage 2: Serve the app using a lightweight server
-FROM nginx:stable-alpine AS production-stage
-
-# Copy the built assets from the build stage to the nginx server directory
-COPY --from=build-stage /usr/src/app/front-end/build /usr/share/nginx/html
-
-# Copy custom Nginx config
-COPY nginx.conf /etc/nginx/conf.d/default.conf
-
-
-# Expose the port nginx is reaching on
-EXPOSE 80
-
-# Define the command to run your application
-CMD ["nginx", "-g", "daemon off;"]
+CMD ["npm", "start"]
