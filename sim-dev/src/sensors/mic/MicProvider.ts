@@ -247,21 +247,18 @@ export class MicProvider implements SensorProvider {
 
   setLocalPosX(v: number): void {
     if (this.layout.length > 0) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       ;(this.layout[0].localPos as unknown as number[])[0] = v
     }
   }
 
   setLocalPosY(v: number): void {
     if (this.layout.length > 0) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       ;(this.layout[0].localPos as unknown as number[])[1] = v
     }
   }
 
   setLocalPosZ(v: number): void {
     if (this.layout.length > 0) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       ;(this.layout[0].localPos as unknown as number[])[2] = v
     }
   }

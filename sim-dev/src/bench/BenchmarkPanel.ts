@@ -40,8 +40,8 @@ export function createBenchmarkPanel(
   const panel = document.createElement('div')
   panel.title = 'Benchmark'
   panel.style.position = 'absolute'
-  panel.style.top = '360px'
-  panel.style.left = '356px'
+  panel.style.top = '8px'
+  panel.style.left = '464px'
   panel.style.zIndex = '11'
   panel.style.display = 'grid'
   panel.style.gap = '6px'

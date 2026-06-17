@@ -25,7 +25,7 @@ const PANEL_WIDTH = 320
 const STYLE = {
   panel: {
     position: 'absolute' as const,
-    top: '182px',
+    top: '211px',
     left: '356px',
     zIndex: '11',
     background: 'rgba(0, 0, 0, 0.72)',

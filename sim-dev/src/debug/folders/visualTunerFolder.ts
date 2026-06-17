@@ -31,6 +31,7 @@ interface TunerState {
 }
 
 export interface VisualTunerHandle {
+  mainFolder: ReturnType<GUI['addFolder']>
   dispose: () => void
   /** If embedded, this is the Actions folder where caller can attach toggles */
   actionsFolder?: ReturnType<GUI['addFolder']>
