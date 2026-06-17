@@ -5,8 +5,12 @@ import type { LineFollowerConfig } from '../control/lineFollower'
 
 /** Configuration passed to SimEngine at construction. */
 export interface SimEngineConfig {
-  /** Base URL for robot model assets (default: `/js-simulator/models/robots/v2`). */
+  /** Base URL for simulator public assets (default: `/js-simulator`). */
+  publicAssetBaseUrl?: string
+  /** Base URL for robot model assets (default: `${publicAssetBaseUrl}/models/robots/v2`). */
   assetBaseUrl?: string
+  /** Splash logo URL (default: `/images/superlogo.png`). */
+  splashLogoUrl?: string
   /** Show splash screen on startup (default: read from localStorage, fallback `true`). */
   splashEnabled?: boolean
   /** Extra ms to keep splash visible after init (default: from localStorage, fallback `2000`). */
