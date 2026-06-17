@@ -29,7 +29,7 @@ import {
   just_rotate,
   get_light_sensor,
   drawLine,
-} from 'src/components/js-simulator/Simulator';
+} from 'src/simulator-adapter/Simulator';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useLocation } from 'react-router-dom';
 import { v4 as uuidv4 } from 'uuid';
