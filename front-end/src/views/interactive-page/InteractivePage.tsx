@@ -10,7 +10,7 @@ import {
   stopMotion,
   drawLine,
   rgb_set_color,
-} from 'src/components/js-simulator/Simulator';
+} from 'src/simulator-adapter/Simulator';
 import PageContainer from '../../components/container/PageContainer';
 import VideoBox from 'src/components/handtrack/VideoBox';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';

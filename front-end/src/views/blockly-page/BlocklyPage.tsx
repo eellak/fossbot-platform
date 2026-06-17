@@ -21,7 +21,7 @@ import {
   just_rotate,
   get_light_sensor,
   drawLine,
-} from 'src/components/js-simulator/Simulator';
+} from 'src/simulator-adapter/Simulator';
 import Buttons from 'src/components/editors/RightColButtons';
 import PageContainer from '../../components/container/PageContainer';
 import BlocklyEditorComponent from '../../components/editors/BlocklyEditor';

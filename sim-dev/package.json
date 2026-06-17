@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "sync:frontend": "node scripts/sync-frontend.mjs",
     "coacd": "node scripts/coacd.mjs",
     "build:compund-convex-coacd": "node scripts/coacd.mjs public/js-simulator/models --dir --recursive --skip-existing --quality med && vite build",
     "preview": "vite preview"

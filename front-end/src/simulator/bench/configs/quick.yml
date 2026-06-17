@@ -1,0 +1,13 @@
+title: Quick
+description: Short smoke-test timings
+stages:
+  - stage_white_paper
+  - stage_animals
+  - stage_eiffel
+  - stage_white_rect
+  - stage_maze
+warmupMs: 250
+idleMs: 1000
+moveMs: 1000
+cameraMode: orbit
+movement: 0.75
