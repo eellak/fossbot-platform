@@ -1,7 +1,7 @@
 import * as RAPIER from '@dimforge/rapier3d-compat'
 import * as THREE from 'three'
-import { STAGES, type StageName } from './index'
-import { buildFloorVisual, buildCubeVisual, buildCylinderVisual, buildModelVisual, buildTextVisual, buildLineVisual, lineSegmentsFromEntry } from './visuals'
+import { STAGES, type RawStageEntry, type StageName } from './index'
+import { buildFloorVisual, buildBaseVisual, buildCubeVisual, buildCylinderVisual, buildModelVisual, buildTextVisual, buildLineVisual, lineSegmentsFromEntry } from './visuals'
 import type { VisualBuilt, LineSegment } from './visuals'
 import { buildFloorCollider, buildCubeCollider, buildCylinderCollider, buildModelCollider } from './colliders'
 import type { ColliderBuilt } from './colliders'
@@ -33,8 +33,26 @@ export interface StageHandle {
   disposed: boolean
 }
 
+export interface LoadStageOptions {
+  resolveAssetUrl?: (url: string) => string
+}
+
 const DEFAULT_SPAWN = new THREE.Vector3(0, 0, 0)
 const DEFAULT_ORIENT = new THREE.Euler(0, 0, 0)
+
+function resolveStageEntryAssets(entry: RawStageEntry, resolveAssetUrl: (url: string) => string): RawStageEntry {
+  const next: RawStageEntry = { ...entry }
+  if (typeof next.filename === 'string') next.filename = resolveAssetUrl(next.filename)
+  if (typeof next.texture === 'string') next.texture = resolveAssetUrl(next.texture)
+  const collision = next.collision
+  if (collision && typeof collision === 'object' && !Array.isArray(collision)) {
+    const collisionObj = collision as Record<string, unknown>
+    if (typeof collisionObj.source === 'string') {
+      next.collision = { ...collisionObj, source: resolveAssetUrl(collisionObj.source) }
+    }
+  }
+  return next
+}
 
 function setBodyRotationFromEuler(bodyDesc: RAPIER.RigidBodyDesc, orientation?: [number, number, number]): RAPIER.RigidBodyDesc {
   if (!orientation) return bodyDesc
@@ -87,6 +105,7 @@ export async function loadStage(
   name: StageName,
   scene: THREE.Scene,
   world: RAPIER.World,
+  opts: LoadStageOptions = {},
 ): Promise<StageHandle> {
   const entries = STAGES[name]
   if (!entries) throw new Error(`Stage not found: ${name}`)
@@ -104,7 +123,10 @@ export async function loadStage(
   stgCollidersGrp.visible = false
   scene.add(stgCollidersGrp)
 
-  for (const entry of entries) {
+  const resolveAssetUrl = opts.resolveAssetUrl ?? ((url: string) => url)
+
+  for (const rawEntry of entries) {
+    const entry = resolveStageEntryAssets(rawEntry, resolveAssetUrl)
     const type = entry.type as string
     log.world(
       `dimensions: ${JSON.stringify((entry as any).dimensions)}, position: ${JSON.stringify((entry as any).position)}, orientation: ${JSON.stringify((entry as any).orientation)}`
@@ -116,6 +138,12 @@ export async function loadStage(
         scene.add(vis.object)
         objects.push(vis.object)
         attachColliders(vis, col, world, stageBody, stgCollidersGrp, dynamicObjects)
+        break
+      }
+      case 'base': {
+        const vis = buildBaseVisual(entry as any)
+        scene.add(vis.object)
+        objects.push(vis.object)
         break
       }
       case 'cube': {

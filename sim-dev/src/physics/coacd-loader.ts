@@ -15,12 +15,19 @@ const COACD_FILES = [
   "pen_holder_coacd.stl",
 ];
 
-const COACD_BASE_URL = "/js-simulator/models/robots/v2/";
+const DEFAULT_COACD_BASE_URL = "/js-simulator/models/robots/v2/";
 
 let coacdGeometries: Map<string, THREE.BufferGeometry> | null = null;
 let coacdLoadingPromise: Promise<Map<string, THREE.BufferGeometry>> | null = null;
+let coacdBaseUrl = DEFAULT_COACD_BASE_URL;
 
-async function loadCoacdGeometries(): Promise<Map<string, THREE.BufferGeometry>> {
+async function loadCoacdGeometries(baseUrl = DEFAULT_COACD_BASE_URL): Promise<Map<string, THREE.BufferGeometry>> {
+  const normalizedBaseUrl = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
+  if (coacdBaseUrl !== normalizedBaseUrl) {
+    coacdGeometries = null;
+    coacdLoadingPromise = null;
+    coacdBaseUrl = normalizedBaseUrl;
+  }
   if (coacdGeometries) {
     return coacdGeometries;
   }
@@ -36,7 +43,7 @@ async function loadCoacdGeometries(): Promise<Map<string, THREE.BufferGeometry>>
     const loadPromises = COACD_FILES.map((filename) => {
       return new Promise<[string, THREE.BufferGeometry]>((resolve, reject) => {
         loader.load(
-          COACD_BASE_URL + filename,
+          coacdBaseUrl + filename,
           (geometry) => {
             // Scale from mm to m (0.001). Keep the original local origin so
             // collider vertices align with the visual part transforms.
@@ -73,8 +80,8 @@ async function loadCoacdGeometries(): Promise<Map<string, THREE.BufferGeometry>>
  * The caller is responsible for converting them to ColliderDesc with any
  * additional visual scale applied (e.g., pivot scale from the visual model).
  */
-export async function getCoacdGeometries(): Promise<Map<string, THREE.BufferGeometry>> {
-  return loadCoacdGeometries();
+export async function getCoacdGeometries(baseUrl = DEFAULT_COACD_BASE_URL): Promise<Map<string, THREE.BufferGeometry>> {
+  return loadCoacdGeometries(baseUrl);
 }
 
 export default getCoacdGeometries;

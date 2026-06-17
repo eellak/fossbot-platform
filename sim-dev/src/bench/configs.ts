@@ -1,11 +1,70 @@
 import { parse } from 'yaml'
 import type { BenchmarkConfig, BenchmarkPreset, BenchmarkStageOverride } from './types'
 
-const rawModules = import.meta.glob('./configs/*.{yml,yaml}', {
-  eager: true,
-  query: '?raw',
-  import: 'default',
-}) as Record<string, string>
+// Avoiding Vite's dynamic import for support with create-react-app...
+// Although this is not ideal, it allows for the benchmark to work. I.e., if you want to
+// change the YAML presets, make sure you also edit them here as well. Backwards logic!
+const rawModules: Record<string, string> = {
+  './configs/default.yml': `title: Default
+description: Current benchmark settings
+stages:
+  - stage_white_rect
+  - stage_eiffel
+  - stage_animals
+  - stage_white_paper
+  - stage_maze
+warmupMs: 500
+idleMs: 2000
+moveMs: 2000
+movement: 0.75
+cameraMode: orbit
+stageOverrides:
+  - index: 0
+    idleMs: 2000
+    moveMs: 30000
+    cameraMode: orbit
+    driveMode: fixed
+    movement: 1
+  - index: 1
+    idleMs: 2000
+    moveMs: 30000
+    cameraMode: orbit
+    driveMode: fixed
+    movement: 0.75
+  - index: 2
+    idleMs: 2000
+    moveMs: 30000
+    cameraMode: top
+    driveMode: fixed
+    movement: 0.75
+  - index: 3
+    idleMs: 500
+    moveMs: 30000
+    cameraMode: follow
+    driveMode: lineFollower
+    movement: 0.75
+  - index: 4
+    idleMs: 2000
+    moveMs: 30000
+    cameraMode: follow
+    driveMode: fixed
+    movement: 0.5
+`,
+  './configs/quick.yml': `title: Quick
+description: Short smoke-test timings
+stages:
+  - stage_white_paper
+  - stage_animals
+  - stage_eiffel
+  - stage_white_rect
+  - stage_maze
+warmupMs: 250
+idleMs: 1000
+moveMs: 1000
+cameraMode: orbit
+movement: 0.75
+`,
+}
 
 const FALLBACK_PRESET: BenchmarkPreset = {
   id: 'default',
