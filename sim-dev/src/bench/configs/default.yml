@@ -1,8 +1,8 @@
 title: Default
 description: Current benchmark settings
 stages:
-  - stage_eiffel
   - stage_white_rect
+  - stage_eiffel
   - stage_animals
   - stage_white_paper
   - stage_maze
@@ -14,19 +14,19 @@ cameraMode: orbit
 stageOverrides:
   - index: 0
     idleMs: 2000
-    moveMs: 4000
-    cameraMode: orbit
-    driveMode: fixed
-    movement: 0.75
-  - index: 1
-    idleMs: 2000
-    moveMs: 4000
+    moveMs: 30000
     cameraMode: orbit
     driveMode: fixed
     movement: 1
+  - index: 1
+    idleMs: 2000
+    moveMs: 30000
+    cameraMode: orbit
+    driveMode: fixed
+    movement: 0.75
   - index: 2
-    idleMs: 100
-    moveMs: 5000
+    idleMs: 2000
+    moveMs: 30000
     cameraMode: top
     driveMode: fixed
     movement: 0.75
@@ -38,7 +38,7 @@ stageOverrides:
     movement: 0.75
   - index: 4
     idleMs: 2000
-    moveMs: 5000
+    moveMs: 30000
     cameraMode: follow
     driveMode: fixed
     movement: 0.5

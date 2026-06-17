@@ -7,7 +7,7 @@ import { makeWheel, type WheelMesh } from './wheel'
 // proven correct. We reproduce them here so the new tree owns its own loader
 // without importing from sim-dev or js-simulator.
 
-const BASE_URL = '/js-simulator/models/robots/v2'
+const DEFAULT_BASE_URL = '/js-simulator/models/robots/v2'
 
 const PARTS = [
   'b1_p_f', 'b2_p_f', 'b3_p_f',
@@ -141,10 +141,15 @@ function mirrorGeometryX(src: THREE.BufferGeometry): THREE.BufferGeometry {
   return g
 }
 
-export async function loadRobotV2(targetWidth = DEFAULT_TARGET_WIDTH_M): Promise<RobotV2> {
+export async function loadRobotV2(
+  targetWidth = DEFAULT_TARGET_WIDTH_M,
+  baseUrl = DEFAULT_BASE_URL,
+): Promise<RobotV2> {
   // 1. Load all visual STL parts in parallel.
+  const normalizedBaseUrl = baseUrl.replace(/\/$/, '')
+  const wheelBaseUrl = normalizedBaseUrl.replace(/\/v2$/, '/v1')
   const geoms = await Promise.all(
-    PARTS.map((p) => loadStl(`${BASE_URL}/${p}.stl`)),
+    PARTS.map((p) => loadStl(`${normalizedBaseUrl}/${p}.stl`)),
   )
   const meshes: THREE.Mesh[] = geoms.map((g, i) => makePartMesh(PARTS[i], g))
   const byName: Partial<Record<PartName, THREE.Mesh>> = {}
@@ -223,8 +228,8 @@ export async function loadRobotV2(targetWidth = DEFAULT_TARGET_WIDTH_M): Promise
   // 11. Body position. Apply the tuned BODY_OFFSET_M so the body sits where the
   //     position tuner left it (overrides the older fender-Y / wheel-radius
   //     auto-alignment).
-  const leftWheel = await makeWheel('left')
-  const rightWheel = await makeWheel('right')
+  const leftWheel = await makeWheel('left', wheelBaseUrl)
+  const rightWheel = await makeWheel('right', wheelBaseUrl)
   pivot.position.set(...BODY_OFFSET_M)
   pivot.updateMatrixWorld(true)
 

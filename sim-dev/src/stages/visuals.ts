@@ -28,6 +28,14 @@ interface FloorEntry {
   name?: string
 }
 
+interface BaseEntry {
+  type: 'base'
+  dimensions: [number, number]
+  material?: { color?: string | number }
+  position: [number, number]
+  name?: string
+}
+
 interface CubeEntry {
   type: 'cube'
   dimensions: [number, number, number]
@@ -164,6 +172,7 @@ function dynamicBodyFor(entry: { mass?: number; position: [number, number, numbe
 // ── Texture / model loading ──
 
 const textureLoader = new THREE.TextureLoader()
+const LEGACY_FLOOR_SIZE_M = 10
 
 const objLoader = new OBJLoader()
 const objCache = new Map<string, Promise<THREE.Group>>()
@@ -182,10 +191,11 @@ function loadOBJ(url: string): Promise<THREE.Group> {
 // ── Builders ──
 
 export function buildFloorVisual(entry: FloorEntry): VisualBuilt {
-  const [tileW, tileH] = entry.dimensions
-  const [repU, repV] = entry.repeat ?? [1, 1]
-  const w = tileW * repU
-  const h = tileH * repV
+  // The legacy platform simulator renders one fixed 10m x 10m floor and uses
+  // `repeat` only for texture tiling. Keep v2 aligned during the opt-in phase;
+  // multiplying dimensions by repeat made floors appear 2x-25x too large.
+  const w = LEGACY_FLOOR_SIZE_M
+  const h = LEGACY_FLOOR_SIZE_M
 
   const geom = new THREE.PlaneGeometry(w, h)
   geom.rotateX(-Math.PI / 2)
@@ -199,6 +209,8 @@ export function buildFloorVisual(entry: FloorEntry): VisualBuilt {
       (tex) => {
         tex.wrapS = THREE.RepeatWrapping
         tex.wrapT = THREE.RepeatWrapping
+        tex.colorSpace = THREE.SRGBColorSpace
+        const [repU, repV] = entry.repeat ?? [1, 1]
         tex.repeat.set(repU, repV)
         if (entry.offset) tex.offset.set(entry.offset[0], entry.offset[1])
         mat.map = tex
@@ -212,6 +224,24 @@ export function buildFloorVisual(entry: FloorEntry): VisualBuilt {
   const mesh = new THREE.Mesh(geom, mat)
   mesh.name = entry.name ?? 'floor'
   mesh.receiveShadow = true
+  return { object: mesh }
+}
+
+export function buildBaseVisual(entry: BaseEntry): VisualBuilt {
+  const [w, h] = entry.dimensions
+  const geom = new THREE.PlaneGeometry(w, h)
+  geom.rotateX(-Math.PI / 2)
+  const mat = new THREE.MeshStandardMaterial({
+    color: parseColor(entry.material?.color),
+    side: THREE.DoubleSide,
+    polygonOffset: true,
+    polygonOffsetFactor: -1,
+    polygonOffsetUnits: -1,
+  })
+  const mesh = new THREE.Mesh(geom, mat)
+  mesh.position.set(entry.position[0], 0.001, entry.position[1])
+  mesh.name = entry.name ?? 'base'
+  mesh.renderOrder = 4
   return { object: mesh }
 }
 

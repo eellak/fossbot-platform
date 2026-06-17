@@ -2,30 +2,36 @@ import * as THREE from 'three'
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js'
 import { MTLLoader } from 'three/examples/jsm/loaders/MTLLoader.js'
 
-import wheelObjUrl from '../assets/wheel/wheel.obj?url'
-import wheelMtlUrl from '../assets/wheel/wheel.mtl?url'
-
 // V1 wheel asset: native units are millimeters; we apply the same 0.001 scale
 // the original simulator used so radius/track come out in meters.
 const WHEEL_SCALE = 0.001
+const DEFAULT_WHEEL_BASE_URL = '/js-simulator/models/robots/v1'
 
-let _template: THREE.Object3D | null = null
-let _loadingPromise: Promise<THREE.Object3D> | null = null
+const templates = new Map<string, THREE.Object3D>()
+const loadingPromises = new Map<string, Promise<THREE.Object3D>>()
 
-function loadTemplate(): Promise<THREE.Object3D> {
-  if (_template) return Promise.resolve(_template)
-  if (_loadingPromise) return _loadingPromise
+function normalizeBaseUrl(baseUrl: string): string {
+  return baseUrl.replace(/\/$/, '')
+}
 
-  _loadingPromise = new Promise((resolve, reject) => {
+function loadTemplate(baseUrl = DEFAULT_WHEEL_BASE_URL): Promise<THREE.Object3D> {
+  const normalizedBaseUrl = normalizeBaseUrl(baseUrl)
+  const cached = templates.get(normalizedBaseUrl)
+  if (cached) return Promise.resolve(cached)
+
+  const pending = loadingPromises.get(normalizedBaseUrl)
+  if (pending) return pending
+
+  const next = new Promise<THREE.Object3D>((resolve, reject) => {
     const mtlLoader = new MTLLoader()
     mtlLoader.load(
-      wheelMtlUrl,
+      `${normalizedBaseUrl}/wheel.mtl`,
       (mats) => {
         mats.preload()
         const objLoader = new OBJLoader()
         objLoader.setMaterials(mats)
         objLoader.load(
-          wheelObjUrl,
+          `${normalizedBaseUrl}/wheel.obj`,
           (root) => {
             root.scale.setScalar(WHEEL_SCALE)
             root.traverse((c) => {
@@ -36,7 +42,7 @@ function loadTemplate(): Promise<THREE.Object3D> {
                 m.userData.isRobotPart = true
               }
             })
-            _template = root
+            templates.set(normalizedBaseUrl, root)
             resolve(root)
           },
           undefined,
@@ -47,7 +53,9 @@ function loadTemplate(): Promise<THREE.Object3D> {
       reject,
     )
   })
-  return _loadingPromise
+
+  loadingPromises.set(normalizedBaseUrl, next)
+  return next
 }
 
 export interface WheelMesh {
@@ -59,8 +67,11 @@ export interface WheelMesh {
  * Returns a fresh wheel instance. `side` controls the ±90° about Y so the
  * spin axis points outward to the matching side of the chassis.
  */
-export async function makeWheel(side: 'left' | 'right'): Promise<WheelMesh> {
-  const tpl = await loadTemplate()
+export async function makeWheel(
+  side: 'left' | 'right',
+  baseUrl = DEFAULT_WHEEL_BASE_URL,
+): Promise<WheelMesh> {
+  const tpl = await loadTemplate(baseUrl)
   const inst = tpl.clone(true)
   // The OBJ template already has the WHEEL_SCALE applied, but clone() copies
   // the scale value; ensure it's set so siblings don't compound on it.

@@ -1,22 +1,31 @@
-/**
- * Stage registry — populates from JSON files in `front-end/public/js-simulator/stages/`
- * via Vite's `import.meta.glob` (eager) so stage data is bundled at build
- * time. The keys of `STAGES` are stage names like `stage_object`, matching
- * the V1 js-simulator naming.
- */
-const modules = import.meta.glob('../../../front-end/public/js-simulator/stages/*.json', {
-  eager: true,
-  import: 'default',
-}) as Record<string, unknown[]>
+import stageAnimals from './data/stage_animals.json'
+import stageCones from './data/stage_cones.json'
+import stageEiffel from './data/stage_eiffel.json'
+import stageMaze from './data/stage_maze.json'
+import stageNumbers from './data/stage_numbers.json'
+import stageObject from './data/stage_object.json'
+import stageRamp from './data/stage_ramp.json'
+import stageWhitePaper from './data/stage_white_paper.json'
+import stageWhiteRect from './data/stage_white_rect.json'
 
+/**
+ * Built-in stage registry. Stage data lives inside the simulator source so the
+ * engine is bundler-neutral (CRA, Vite, tests) and no longer depends on
+ * Vite-only `import.meta.glob` or on the platform's legacy public directory.
+ */
 export type StageName = string
 export type RawStageEntry = Record<string, unknown>
 
-export const STAGES: Record<StageName, RawStageEntry[]> = {}
-
-for (const [path, data] of Object.entries(modules)) {
-  const match = path.match(/(stage_[a-z_]+)\.json$/)
-  if (match) STAGES[match[1]] = data as RawStageEntry[]
+export const STAGES: Record<StageName, RawStageEntry[]> = {
+  stage_animals: stageAnimals as RawStageEntry[],
+  stage_cones: stageCones as RawStageEntry[],
+  stage_eiffel: stageEiffel as RawStageEntry[],
+  stage_maze: stageMaze as RawStageEntry[],
+  stage_numbers: stageNumbers as RawStageEntry[],
+  stage_object: stageObject as RawStageEntry[],
+  stage_ramp: stageRamp as RawStageEntry[],
+  stage_white_paper: stageWhitePaper as RawStageEntry[],
+  stage_white_rect: stageWhiteRect as RawStageEntry[],
 }
 
 export const STAGE_NAMES: StageName[] = Object.keys(STAGES).sort()
