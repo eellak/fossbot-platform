@@ -23,7 +23,9 @@ export interface StageSceneHierarchyProps {
   stage: EditorStage;
   selectedId: string | null;
   selectedIds: string[];
+  selectedGroupId: string | null;
   onSelectObject: (id: string | null) => void;
+  onSelectGroup: (id: string | null) => void;
   onSelectionChange: (ids: string[]) => void;
   onObjectChange: (object: EditorStageObject) => void;
   onDuplicateObjects: (ids: string[]) => void;
@@ -271,11 +273,13 @@ function GroupBlock({
   objects,
   selectedId,
   selectedIds,
+  selectedGroupId,
   depth,
   last,
   draggedObjectId,
   dropTarget,
   onSelectObject,
+  onSelectGroup,
   onSelectionChange,
   onObjectChange,
   onDuplicateObjects,
@@ -292,11 +296,13 @@ function GroupBlock({
   objects: EditorStageObject[];
   selectedId: string | null;
   selectedIds: string[];
+  selectedGroupId: string | null;
   depth: number;
   last: boolean;
   draggedObjectId: string | null;
   dropTarget: HierarchyDropTarget | null;
   onSelectObject: (id: string | null) => void;
+  onSelectGroup: (id: string | null) => void;
   onSelectionChange: (ids: string[]) => void;
   onObjectChange: (object: EditorStageObject) => void;
   onDuplicateObjects: (ids: string[]) => void;
@@ -314,7 +320,7 @@ function GroupBlock({
   const ids = objects.map((object) => object.id);
   const allHidden = objects.length > 0 && objects.every((object) => object.hidden);
   const allLocked = objects.length > 0 && objects.every((object) => object.locked);
-  const selected = ids.length > 0 && ids.every((id) => selectedIds.includes(id));
+  const selected = selectedGroupId === group.id;
   const activeDrop = dropTarget?.type === 'group' && dropTarget.id === group.id ? dropTarget.position : null;
   const { contentX } = treeMetrics(depth);
   const targetFor = (event: React.DragEvent<HTMLDivElement>): HierarchyDropTarget => ({ type: 'group', id: group.id, position: positionFromPointer(event) });
@@ -323,7 +329,7 @@ function GroupBlock({
     <Box>
       <TreeRowShell depth={depth} last={last}>
         <Box
-          onClick={() => onSelectionChange(ids)}
+          onClick={() => onSelectGroup(group.id)}
           onDoubleClick={() => setEditing(true)}
           onDragOver={(event) => onTargetDragOver(targetFor(event), event)}
           onDragLeave={(event) => onTargetDragLeave(targetFor(event), event)}
@@ -395,7 +401,9 @@ export function StageSceneHierarchy({
   stage,
   selectedId,
   selectedIds,
+  selectedGroupId,
   onSelectObject,
+  onSelectGroup,
   onSelectionChange,
   onObjectChange,
   onDuplicateObjects,
@@ -522,11 +530,13 @@ export function StageSceneHierarchy({
             objects={item.entry.objects}
             selectedId={selectedId}
             selectedIds={selectedIds}
+            selectedGroupId={selectedGroupId}
             depth={0}
             last={index === rootItems.length - 1}
             draggedObjectId={draggedObjectId}
             dropTarget={dropTarget}
             onSelectObject={onSelectObject}
+            onSelectGroup={onSelectGroup}
             onSelectionChange={onSelectionChange}
             onObjectChange={onObjectChange}
             onDuplicateObjects={onDuplicateObjects}

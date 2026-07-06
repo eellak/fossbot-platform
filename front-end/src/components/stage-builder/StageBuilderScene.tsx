@@ -2,7 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
 import { disposeScene, initScene, renderScene, type SceneHandle } from 'src/simulator/scene/scene';
-import type { EditorStageObject, StageBuilderMode, StageBuilderTransformSpace, Vec3 } from './types';
+import type { EditorStageObject, StageBuilderGroup, StageBuilderMode, StageBuilderTransformSpace, Vec3 } from './types';
 import type { StageBuilderControlScheme, StageBuilderLockMode, StageBuilderStyleVariant } from './stageBuilderPreferences';
 import type { StageBuilderSnapSettings } from './stageBuilderSnapping';
 import { getSnapSettings, snapAngle, snapDimensions, snapPosition } from './stageBuilderSnapping';
@@ -19,8 +19,10 @@ export type StageBuilderPlacementStatus = {
 
 export interface StageBuilderSceneProps {
   objects: EditorStageObject[];
+  groups?: StageBuilderGroup[];
   selectedId: string | null;
   selectedIds?: string[];
+  selectedGroupId?: string | null;
   transformMode: StageBuilderTransformMode;
   builderMode?: StageBuilderMode;
   placementObject?: EditorStageObject | null;
@@ -38,6 +40,7 @@ export interface StageBuilderSceneProps {
   onSelect: (id: string | null) => void;
   onSelectionChange?: (ids: string[]) => void;
   onObjectChange: (object: EditorStageObject) => void;
+  onObjectsChange?: (objects: EditorStageObject[]) => void;
   onPlaceAt?: (position: Vec3) => void;
   onPlacementStatusChange?: (status: StageBuilderPlacementStatus | null) => void;
   onLockedSelectionAttempt?: () => void;
@@ -47,6 +50,14 @@ type MeshRecord = {
   objectId: string;
   root: THREE.Object3D;
   pickables: THREE.Object3D[];
+};
+
+type GroupTransformState = {
+  groupId: string;
+  pivotStartInverse: THREE.Matrix4;
+  rootStartMatrices: Map<string, THREE.Matrix4>;
+  rootStartScales: Map<string, THREE.Vector3>;
+  objectSnapshots: Map<string, EditorStageObject>;
 };
 
 type FriendlyHandleKind = 'move' | 'rotate' | 'resize';
@@ -70,6 +81,10 @@ const floorPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 const floorHit = new THREE.Vector3();
 const dragStartHit = new THREE.Vector3();
 const dragStartPosition = new THREE.Vector3();
+
+function cloneObjectForTransform(object: EditorStageObject): EditorStageObject {
+  return JSON.parse(JSON.stringify(object));
+}
 
 function color(value: string): THREE.Color {
   try { return new THREE.Color(value || '#ffffff'); } catch { return new THREE.Color('#ffffff'); }
@@ -256,6 +271,81 @@ function physicalScale(value: number): number {
   return Math.max(0.01, Math.abs(value));
 }
 
+function scaleRatio(value: number, baseline?: number): number {
+  return physicalScale(value) / (baseline === undefined ? 1 : physicalScale(baseline));
+}
+
+function objectFromRootTransform(object: EditorStageObject, root: THREE.Object3D, snap: StageBuilderSnapSettings, baselineScale?: THREE.Vector3): EditorStageObject | null {
+  if (object.kind === 'line') return null;
+  const scaleX = scaleRatio(root.scale.x, baselineScale?.x);
+  const scaleY = scaleRatio(root.scale.y, baselineScale?.y);
+  const scaleZ = scaleRatio(root.scale.z, baselineScale?.z);
+
+  if (object.kind === 'base') {
+    return {
+      ...object,
+      position: snapPosition([root.position.x, 0, root.position.z], snap),
+      dimensions: snapDimensions([object.dimensions[0] * scaleX, object.dimensions[1] * scaleY], snap) as [number, number],
+    };
+  }
+  if (object.kind === 'cube') {
+    const orientation: Vec3 = [snapAngle(root.rotation.x, snap), snapAngle(root.rotation.y, snap), snapAngle(root.rotation.z, snap)];
+    const hasFullOrientation = object.semanticKind === 'ramp' || object.orientation || Math.abs(orientation[0]) > 0.001 || Math.abs(orientation[2]) > 0.001;
+    return {
+      ...object,
+      position: snapPosition([root.position.x, root.position.y, root.position.z], snap),
+      rotationY: orientation[1],
+      orientation: hasFullOrientation ? orientation : undefined,
+      rampAngle: object.semanticKind === 'ramp' ? orientation[0] : object.rampAngle,
+      dimensions: snapDimensions([object.dimensions[0] * scaleX, object.dimensions[1] * scaleY, object.dimensions[2] * scaleZ], snap) as [number, number, number],
+    };
+  }
+  if (object.kind === 'cylinder') {
+    const radialScale = Math.max(scaleX, scaleZ);
+    return {
+      ...object,
+      position: snapPosition([root.position.x, root.position.y, root.position.z], snap),
+      dimensions: snapDimensions([object.dimensions[0] * radialScale, object.dimensions[1] * radialScale, object.dimensions[2] * scaleY, object.dimensions[3]], snap) as [number, number, number, number],
+    };
+  }
+  if (object.kind === 'fossbot') {
+    return { ...object, position: snapPosition([root.position.x, root.position.y, root.position.z], snap), rotationY: snapAngle(root.rotation.y, snap) };
+  }
+  if (object.kind === 'text') {
+    const scaleFactor = Math.max(scaleX, scaleY);
+    return { ...object, position: snapPosition([root.position.x, root.position.y, root.position.z], snap), scale: Math.max(0.05, object.scale * scaleFactor) };
+  }
+  return null;
+}
+
+function transformLineObjectWithMatrix(object: EditorStageObject, matrix: THREE.Matrix4, snap: StageBuilderSnapSettings): EditorStageObject {
+  if (object.kind !== 'line') return object;
+  const transformed = object.points.map(([x, z]) => snapPosition(new THREE.Vector3(x, object.y ?? 0, z).applyMatrix4(matrix).toArray() as Vec3, snap));
+  const matrixScale = new THREE.Vector3();
+  matrix.decompose(new THREE.Vector3(), new THREE.Quaternion(), matrixScale);
+  const widthScale = Math.max(scaleRatio(matrixScale.x), scaleRatio(matrixScale.z));
+  const nextY = transformed.length ? transformed.reduce((sum, point) => sum + point[1], 0) / transformed.length : object.y;
+  return {
+    ...object,
+    points: transformed.map((point) => [point[0], point[2]] as [number, number]),
+    width: snapDimensions([object.width * widthScale], snap)[0],
+    y: object.y !== undefined || (nextY !== undefined && Math.abs(nextY) > 0.001) ? nextY : undefined,
+  };
+}
+
+function transformObjectWithMatrix(object: EditorStageObject, matrix: THREE.Matrix4, snap: StageBuilderSnapSettings): EditorStageObject {
+  if (object.kind === 'line') return transformLineObjectWithMatrix(object, matrix, snap);
+  const record = makeObjectRoot(object);
+  const baselineScale = record.root.scale.clone();
+  record.root.updateMatrixWorld(true);
+  const nextMatrix = matrix.clone().multiply(record.root.matrixWorld);
+  nextMatrix.decompose(record.root.position, record.root.quaternion, record.root.scale);
+  record.root.updateMatrixWorld(true);
+  const next = objectFromRootTransform(object, record.root, snap, baselineScale) || object;
+  disposeObject(record.root);
+  return next;
+}
+
 function supportsResize(object: EditorStageObject | undefined): boolean {
   return !!object && (object.kind === 'base' || object.kind === 'cube' || object.kind === 'cylinder' || object.kind === 'text');
 }
@@ -316,8 +406,10 @@ function validationSeverityFor(objectId: string, results: StageBuilderValidation
 
 export function StageBuilderScene({
   objects,
+  groups = [],
   selectedId,
   selectedIds = selectedId ? [selectedId] : [],
+  selectedGroupId = null,
   transformMode,
   builderMode = 'edit',
   placementObject = null,
@@ -335,6 +427,7 @@ export function StageBuilderScene({
   onSelect,
   onSelectionChange,
   onObjectChange,
+  onObjectsChange,
   onPlaceAt,
   onPlacementStatusChange,
   onLockedSelectionAttempt,
@@ -343,8 +436,10 @@ export function StageBuilderScene({
   const sceneRef = useRef<SceneHandle | null>(null);
   const transformRef = useRef<TransformControls | null>(null);
   const selectionHelperRef = useRef<THREE.BoxHelper | null>(null);
+  const groupSelectionHelperRef = useRef<THREE.Box3Helper | null>(null);
   const hoverHelperRef = useRef<THREE.BoxHelper | null>(null);
   const friendlyHandlesRef = useRef<FriendlyHandleRecord | null>(null);
+  const groupPivotRef = useRef<THREE.Group | null>(null);
   const objectMapRef = useRef<Map<string, MeshRecord>>(new Map());
   const ghostRef = useRef<MeshRecord | null>(null);
   const floorMeshRef = useRef<THREE.Mesh | null>(null);
@@ -353,8 +448,10 @@ export function StageBuilderScene({
   const marqueeElementRef = useRef<HTMLDivElement | null>(null);
   const marqueeRef = useRef<{ startX: number; startY: number; currentX: number; currentY: number } | null>(null);
   const objectsRef = useRef(objects);
+  const groupsRef = useRef(groups);
   const selectedRef = useRef(selectedId);
   const selectedIdsRef = useRef(selectedIds);
+  const selectedGroupRef = useRef(selectedGroupId);
   const builderModeRef = useRef(builderMode);
   const placementObjectRef = useRef(placementObject);
   const stageDimensionsRef = useRef(stageDimensions);
@@ -370,6 +467,7 @@ export function StageBuilderScene({
   const onSelectRef = useRef(onSelect);
   const onSelectionChangeRef = useRef(onSelectionChange);
   const onObjectChangeRef = useRef(onObjectChange);
+  const onObjectsChangeRef = useRef(onObjectsChange);
   const onPlaceAtRef = useRef(onPlaceAt);
   const onPlacementStatusChangeRef = useRef(onPlacementStatusChange);
   const onLockedSelectionAttemptRef = useRef(onLockedSelectionAttempt);
@@ -379,10 +477,13 @@ export function StageBuilderScene({
   const axisLockRef = useRef<AxisLock>(null);
   const placementStatusRef = useRef<string>('');
   const friendlyDragRef = useRef<{ kind: FriendlyHandleKind; startAngle?: number; startRotation?: number; startDistance?: number; startDimensions?: number[] } | null>(null);
+  const groupTransformRef = useRef<GroupTransformState | null>(null);
 
   useEffect(() => { objectsRef.current = objects; }, [objects]);
+  useEffect(() => { groupsRef.current = groups; }, [groups]);
   useEffect(() => { selectedRef.current = selectedId; }, [selectedId]);
   useEffect(() => { selectedIdsRef.current = selectedIds; }, [selectedIds]);
+  useEffect(() => { selectedGroupRef.current = selectedGroupId; }, [selectedGroupId]);
   useEffect(() => { builderModeRef.current = builderMode; }, [builderMode]);
   useEffect(() => { placementObjectRef.current = placementObject; }, [placementObject]);
   useEffect(() => { stageDimensionsRef.current = stageDimensions; }, [stageDimensions]);
@@ -398,46 +499,134 @@ export function StageBuilderScene({
   useEffect(() => { onSelectRef.current = onSelect; }, [onSelect]);
   useEffect(() => { onSelectionChangeRef.current = onSelectionChange; }, [onSelectionChange]);
   useEffect(() => { onObjectChangeRef.current = onObjectChange; }, [onObjectChange]);
+  useEffect(() => { onObjectsChangeRef.current = onObjectsChange; }, [onObjectsChange]);
   useEffect(() => { onPlaceAtRef.current = onPlaceAt; }, [onPlaceAt]);
   useEffect(() => { onPlacementStatusChangeRef.current = onPlacementStatusChange; }, [onPlacementStatusChange]);
   useEffect(() => { onLockedSelectionAttemptRef.current = onLockedSelectionAttempt; }, [onLockedSelectionAttempt]);
+
+  const groupMemberObjects = (groupId: string): EditorStageObject[] => {
+    const group = groupsRef.current.find((item) => item.id === groupId);
+    if (!group) return [];
+    const objectById = new Map(objectsRef.current.map((object) => [object.id, object]));
+    return group.objectIds.map((id) => objectById.get(id)).filter((object): object is EditorStageObject => !!object);
+  };
+
+  const groupBoxFor = (groupId: string): THREE.Box3 | null => {
+    const box = new THREE.Box3();
+    let hasBox = false;
+    for (const object of groupMemberObjects(groupId)) {
+      const root = objectMapRef.current.get(object.id)?.root;
+      if (!root) continue;
+      root.updateMatrixWorld(true);
+      const next = new THREE.Box3().setFromObject(root);
+      if (!hasBox) box.copy(next);
+      else box.union(next);
+      hasBox = true;
+    }
+    return hasBox ? box : null;
+  };
+
+  const updateGroupPivotFromBounds = (groupId: string): boolean => {
+    const pivot = groupPivotRef.current;
+    const box = groupBoxFor(groupId);
+    if (!pivot || !box) return false;
+    pivot.position.copy(box.getCenter(new THREE.Vector3()));
+    pivot.rotation.set(0, 0, 0);
+    pivot.scale.set(1, 1, 1);
+    pivot.updateMatrixWorld(true);
+    return true;
+  };
+
+  const syncTransformAttachment = () => {
+    const transform = transformRef.current;
+    if (!transform) return;
+    transform.detach();
+    if (builderModeRef.current !== 'edit' || controlSchemeRef.current !== 'legacyGizmo') return;
+
+    const groupId = selectedGroupRef.current;
+    if (groupId && updateGroupPivotFromBounds(groupId) && groupPivotRef.current) {
+      transform.attach(groupPivotRef.current);
+      return;
+    }
+
+    const selected = objectsRef.current.find((item) => item.id === selectedRef.current);
+    const root = selected ? objectMapRef.current.get(selected.id)?.root : null;
+    if (root && canTransform(selected)) transform.attach(root);
+  };
+
+  const beginGroupTransform = () => {
+    const groupId = selectedGroupRef.current;
+    const pivot = groupPivotRef.current;
+    if (!groupId || !pivot) return;
+    const members = groupMemberObjects(groupId);
+    if (!members.length) return;
+
+    pivot.updateMatrixWorld(true);
+    const rootStartMatrices = new Map<string, THREE.Matrix4>();
+    const rootStartScales = new Map<string, THREE.Vector3>();
+    const objectSnapshots = new Map<string, EditorStageObject>();
+    for (const object of members) {
+      objectSnapshots.set(object.id, cloneObjectForTransform(object));
+      const root = objectMapRef.current.get(object.id)?.root;
+      if (!root) continue;
+      root.updateMatrixWorld(true);
+      rootStartMatrices.set(object.id, root.matrixWorld.clone());
+      rootStartScales.set(object.id, root.scale.clone());
+    }
+    groupTransformRef.current = {
+      groupId,
+      pivotStartInverse: pivot.matrixWorld.clone().invert(),
+      rootStartMatrices,
+      rootStartScales,
+      objectSnapshots,
+    };
+  };
+
+  const groupTransformDelta = (): THREE.Matrix4 | null => {
+    const state = groupTransformRef.current;
+    const pivot = groupPivotRef.current;
+    if (!state || !pivot) return null;
+    pivot.updateMatrixWorld(true);
+    return pivot.matrixWorld.clone().multiply(state.pivotStartInverse);
+  };
+
+  const previewGroupTransform = () => {
+    const state = groupTransformRef.current;
+    const delta = groupTransformDelta();
+    if (!state || !delta) return;
+    for (const [id, startMatrix] of state.rootStartMatrices) {
+      const root = objectMapRef.current.get(id)?.root;
+      if (!root) continue;
+      const nextMatrix = delta.clone().multiply(startMatrix);
+      nextMatrix.decompose(root.position, root.quaternion, root.scale);
+      root.updateMatrixWorld(true);
+    }
+  };
+
+  const commitGroupTransform = () => {
+    previewGroupTransform();
+    const state = groupTransformRef.current;
+    const delta = groupTransformDelta();
+    groupTransformRef.current = null;
+    if (!state || !delta) return;
+    const snap = snapSettingsRef.current;
+    const nextObjects = Array.from(state.objectSnapshots.values()).map((object) => {
+      if (object.kind === 'line') return transformLineObjectWithMatrix(object, delta, snap);
+      const root = objectMapRef.current.get(object.id)?.root;
+      const baselineScale = state.rootStartScales.get(object.id);
+      if (root && baselineScale) return objectFromRootTransform(object, root, snap, baselineScale) || object;
+      return transformObjectWithMatrix(object, delta, snap);
+    });
+    if (onObjectsChangeRef.current) onObjectsChangeRef.current(nextObjects);
+    else nextObjects.forEach((object) => onObjectChangeRef.current(object));
+  };
 
   const commitSelectedTransform = () => {
     const selected = objectsRef.current.find((item) => item.id === selectedRef.current);
     const root = selected ? objectMapRef.current.get(selected.id)?.root : null;
     if (!selected || !root || selected.kind === 'line') return;
-    const snap = snapSettingsRef.current;
-
-    if (selected.kind === 'base') {
-      onObjectChangeRef.current({
-        ...selected,
-        position: snapPosition([root.position.x, 0, root.position.z], snap),
-        dimensions: snapDimensions([selected.dimensions[0] * physicalScale(root.scale.x), selected.dimensions[1] * physicalScale(root.scale.y)], snap) as [number, number],
-      });
-    } else if (selected.kind === 'cube') {
-      const orientation: Vec3 = [snapAngle(root.rotation.x, snap), snapAngle(root.rotation.y, snap), snapAngle(root.rotation.z, snap)];
-      const hasFullOrientation = selected.semanticKind === 'ramp' || selected.orientation || Math.abs(orientation[0]) > 0.001 || Math.abs(orientation[2]) > 0.001;
-      onObjectChangeRef.current({
-        ...selected,
-        position: snapPosition([root.position.x, root.position.y, root.position.z], snap),
-        rotationY: orientation[1],
-        orientation: hasFullOrientation ? orientation : undefined,
-        rampAngle: selected.semanticKind === 'ramp' ? orientation[0] : selected.rampAngle,
-        dimensions: snapDimensions([selected.dimensions[0] * physicalScale(root.scale.x), selected.dimensions[1] * physicalScale(root.scale.y), selected.dimensions[2] * physicalScale(root.scale.z)], snap) as [number, number, number],
-      });
-    } else if (selected.kind === 'cylinder') {
-      const radialScale = Math.max(physicalScale(root.scale.x), physicalScale(root.scale.z));
-      onObjectChangeRef.current({
-        ...selected,
-        position: snapPosition([root.position.x, root.position.y, root.position.z], snap),
-        dimensions: snapDimensions([selected.dimensions[0] * radialScale, selected.dimensions[1] * radialScale, selected.dimensions[2] * physicalScale(root.scale.y), selected.dimensions[3]], snap) as [number, number, number, number],
-      });
-    } else if (selected.kind === 'fossbot') {
-      onObjectChangeRef.current({ ...selected, position: snapPosition([root.position.x, root.position.y, root.position.z], snap), rotationY: snapAngle(root.rotation.y, snap) });
-    } else if (selected.kind === 'text') {
-      const scaleFactor = Math.max(physicalScale(root.scale.x), physicalScale(root.scale.y));
-      onObjectChangeRef.current({ ...selected, position: snapPosition([root.position.x, root.position.y, root.position.z], snap), scale: Math.max(0.05, selected.scale * scaleFactor) });
-    }
+    const next = objectFromRootTransform(selected, root, snapSettingsRef.current);
+    if (next) onObjectChangeRef.current(next);
   };
 
   useEffect(() => {
@@ -476,6 +665,16 @@ export function StageBuilderScene({
     sceneHandle.scene.add(selectionHelper);
     selectionHelperRef.current = selectionHelper;
 
+    const groupSelectionHelper = new THREE.Box3Helper(new THREE.Box3(), 0xf0a7d7);
+    groupSelectionHelper.visible = false;
+    sceneHandle.scene.add(groupSelectionHelper);
+    groupSelectionHelperRef.current = groupSelectionHelper;
+
+    const groupPivot = new THREE.Group();
+    groupPivot.name = 'Stage builder group pivot';
+    sceneHandle.scene.add(groupPivot);
+    groupPivotRef.current = groupPivot;
+
     const hoverHelper = new THREE.BoxHelper(new THREE.Object3D(), 0xffffff);
     hoverHelper.visible = false;
     sceneHandle.scene.add(hoverHelper);
@@ -502,11 +701,14 @@ export function StageBuilderScene({
       sceneHandle.controls.enabled = !event.value;
       if (event.value) {
         wasDraggingRef.current = true;
+        beginGroupTransform();
       } else if (wasDraggingRef.current) {
         wasDraggingRef.current = false;
-        commitSelectedTransform();
+        if (groupTransformRef.current) commitGroupTransform();
+        else commitSelectedTransform();
       }
     });
+    transform.addEventListener('objectChange', () => previewGroupTransform());
     sceneHandle.scene.add(transform as unknown as THREE.Object3D);
     transformRef.current = transform;
 
@@ -760,6 +962,15 @@ export function StageBuilderScene({
       } else if (helper) {
         helper.visible = false;
       }
+      const groupHelper = groupSelectionHelperRef.current;
+      const selectedGroupId = selectedGroupRef.current;
+      const groupBox = selectedGroupId ? groupBoxFor(selectedGroupId) : null;
+      if (groupHelper && groupBox) {
+        groupHelper.box.copy(groupBox);
+        groupHelper.visible = true;
+      } else if (groupHelper) {
+        groupHelper.visible = false;
+      }
       const hoverHelper = hoverHelperRef.current;
       const hoverRoot = hoverIdRef.current ? objectMapRef.current.get(hoverIdRef.current)?.root : null;
       if (hoverHelper && hoverRoot && hoverIdRef.current !== selectedRef.current) {
@@ -798,6 +1009,8 @@ export function StageBuilderScene({
       }
       selectionHelper.geometry.dispose();
       (selectionHelper.material as THREE.Material).dispose();
+      groupSelectionHelper.geometry.dispose();
+      (groupSelectionHelper.material as THREE.Material).dispose();
       hoverHelper.geometry.dispose();
       (hoverHelper.material as THREE.Material).dispose();
       if (friendlyHandlesRef.current) {
@@ -816,12 +1029,15 @@ export function StageBuilderScene({
       sceneRef.current = null;
       transformRef.current = null;
       selectionHelperRef.current = null;
+      groupSelectionHelperRef.current = null;
       hoverHelperRef.current = null;
       friendlyHandlesRef.current = null;
+      groupPivotRef.current = null;
       ghostRef.current = null;
       floorMeshRef.current = null;
       gridRef.current = null;
       boundaryRef.current = null;
+      groupTransformRef.current = null;
     };
   }, []);
 
@@ -864,7 +1080,6 @@ export function StageBuilderScene({
     const scene = sceneRef.current?.scene;
     if (!scene) return;
 
-    const attachedId = selectedRef.current;
     transformRef.current?.detach();
 
     for (const record of objectMapRef.current.values()) {
@@ -880,9 +1095,7 @@ export function StageBuilderScene({
       scene.add(record.root);
     }
 
-    const selected = objects.find((item) => item.id === attachedId);
-    const root = selected ? objectMapRef.current.get(selected.id)?.root : null;
-    if (root && canTransform(selected) && builderModeRef.current === 'edit' && controlSchemeRef.current === 'legacyGizmo') transformRef.current?.attach(root);
+    syncTransformAttachment();
   }, [objects, validationResults]);
 
   useEffect(() => {
@@ -902,13 +1115,8 @@ export function StageBuilderScene({
   }, [placementObject, builderMode, onPlacementStatusChange]);
 
   useEffect(() => {
-    const transform = transformRef.current;
-    if (!transform) return;
-    const selected = objects.find((item) => item.id === selectedId);
-    const root = selected ? objectMapRef.current.get(selected.id)?.root : null;
-    if (root && canTransform(selected) && builderMode === 'edit' && controlScheme === 'legacyGizmo') transform.attach(root);
-    else transform.detach();
-  }, [objects, selectedId, controlScheme, builderMode]);
+    syncTransformAttachment();
+  }, [objects, groups, selectedId, selectedGroupId, controlScheme, builderMode]);
 
   useEffect(() => {
     transformRef.current?.setMode(transformMode);
@@ -919,14 +1127,15 @@ export function StageBuilderScene({
   }, [transformSpace]);
 
   useEffect(() => {
-    if (controlScheme === 'friendly' || builderMode !== 'edit') transformRef.current?.detach();
+    syncTransformAttachment();
   }, [controlScheme, builderMode]);
 
   useEffect(() => {
     const sceneHandle = sceneRef.current;
     if (!sceneHandle || !focusRequestNonce) return;
     const currentSelectedId = selectedRef.current;
-    const ids = selectedIdsRef.current.length ? selectedIdsRef.current : (currentSelectedId ? [currentSelectedId] : []);
+    const currentGroupId = selectedGroupRef.current;
+    const ids = selectedIdsRef.current.length ? selectedIdsRef.current : (currentSelectedId ? [currentSelectedId] : currentGroupId ? groupMemberObjects(currentGroupId).map((object) => object.id) : []);
     const box = new THREE.Box3();
     let hasBox = false;
     for (const id of ids) {

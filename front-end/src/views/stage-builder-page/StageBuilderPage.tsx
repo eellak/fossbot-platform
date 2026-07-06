@@ -78,6 +78,7 @@ const StageBuilderPage = () => {
   const [stage, setStage] = useState<EditorStage>(() => emptyEditorStage());
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
   const [builderMode, setBuilderMode] = useState<StageBuilderMode>('edit');
   const [transformMode, setTransformMode] = useState<StageBuilderTransformMode>('translate');
   const [focusRequestNonce, setFocusRequestNonce] = useState(0);
@@ -95,13 +96,15 @@ const StageBuilderPage = () => {
   const snapSettings = useMemo(() => getSnapSettings(prefs.snapPreset, prefs.rotationSnapPreset), [prefs.snapPreset, prefs.rotationSnapPreset]);
   const validationResults = useMemo(() => validateStageBuilderStage(stage), [stage]);
   const selectedObject = stage.objects.find((object) => object.id === selectedId) || null;
-  const selectedCount = selectedIds.length || (selectedId ? 1 : 0);
+  const selectedGroup = selectedGroupId ? stage.metadata.groups.find((group) => group.id === selectedGroupId) || null : null;
+  const selectedGroupObjectIds = selectedGroup ? selectedGroup.objectIds.filter((id) => stage.objects.some((object) => object.id === id)) : [];
+  const selectedCount = selectedGroup ? selectedGroupObjectIds.length : selectedIds.length || (selectedId ? 1 : 0);
   const dirty = useMemo(() => stageFingerprint(stage) !== lastExportFingerprint, [stage, lastExportFingerprint]);
   const gridVisible = stage.metadata.gridVisible ?? true;
   const gridSize = stage.metadata.gridSize ?? 0.5;
   const studio = prefs.styleVariant === 'studio';
-  const selectedStatus = selectedObject ? selectedObject.name : selectedCount ? `${selectedCount} objects` : inspectorTab === 'stage' ? 'Stage' : 'None';
-  const selectedTone = selectedObject ? editorColors.warning : inspectorTab === 'stage' ? editorColors.accentText : editorColors.text;
+  const selectedStatus = selectedGroup ? selectedGroup.name : selectedObject ? selectedObject.name : selectedCount ? `${selectedCount} objects` : inspectorTab === 'stage' ? 'Stage' : 'None';
+  const selectedTone = selectedGroup ? editorColors.accentText : selectedObject ? editorColors.warning : inspectorTab === 'stage' ? editorColors.accentText : editorColors.text;
 
   useEffect(() => {
     setPrefs(readStageBuilderPreferences(scope));
@@ -142,7 +145,7 @@ const StageBuilderPage = () => {
   const bumpHistory = () => setHistoryVersion((value) => value + 1);
   const setPref = (patch: Partial<StageBuilderPreferences>) => setPrefs((current) => ({ ...current, ...patch }));
 
-  const commitStage = (updater: (current: EditorStage) => EditorStage, options: { selectIds?: string[]; message?: string } = {}) => {
+  const commitStage = (updater: (current: EditorStage) => EditorStage, options: { selectIds?: string[]; selectGroupId?: string | null; message?: string } = {}) => {
     setStage((current) => {
       historyRef.current = pushStageHistory(historyRef.current, current);
       const next = updater(cloneStage(current));
@@ -150,8 +153,15 @@ const StageBuilderPage = () => {
     });
     bumpHistory();
     if (options.selectIds) {
+      setSelectedGroupId(null);
       setSelectedIds(options.selectIds);
       setSelectedId(options.selectIds[options.selectIds.length - 1] || null);
+    }
+    if ('selectGroupId' in options) {
+      setSelectedGroupId(options.selectGroupId || null);
+      setSelectedIds([]);
+      setSelectedId(null);
+      setInspectorTab('stage');
     }
     if (options.message) setMessage(options.message);
   };
@@ -171,6 +181,7 @@ const StageBuilderPage = () => {
     }
     setSelectedId(null);
     setSelectedIds([]);
+    setSelectedGroupId(null);
     setBuilderMode('edit');
     if (options.clean) {
       setLastExportFingerprint(stageFingerprint(next));
@@ -184,26 +195,44 @@ const StageBuilderPage = () => {
 
   const handleSelectionChange = (ids: string[]) => {
     const existing = ids.filter((id) => stage.objects.some((object) => object.id === id));
+    setSelectedGroupId(null);
     setSelectedIds(existing);
     setSelectedId(existing[existing.length - 1] || null);
     setInspectorTab(existing.length ? 'object' : 'stage');
   };
 
   const handleSelect = (id: string | null) => {
+    setSelectedGroupId(null);
     setSelectedId(id);
     setSelectedIds(id ? [id] : []);
     setInspectorTab(id ? 'object' : 'stage');
     if (id) setBuilderMode('edit');
   };
 
+  const handleSelectGroup = (id: string | null) => {
+    const group = id ? stage.metadata.groups.find((item) => item.id === id) : null;
+    setSelectedGroupId(group ? group.id : null);
+    setSelectedId(null);
+    setSelectedIds([]);
+    setInspectorTab('stage');
+    if (group) setBuilderMode('edit');
+  };
+
   const handleOpenStageSettings = () => {
     setSelectedId(null);
     setSelectedIds([]);
+    setSelectedGroupId(null);
     setInspectorTab('stage');
     setRightPanelVisible(true);
   };
 
   const updateObject = (nextObject: EditorStageObject) => commitStage((current) => ({ ...current, objects: current.objects.map((object) => object.id === nextObject.id ? nextObject : object) }));
+
+  const updateObjects = (nextObjects: EditorStageObject[]) => {
+    if (!nextObjects.length) return;
+    const nextById = new Map(nextObjects.map((object) => [object.id, object]));
+    commitStage((current) => ({ ...current, objects: current.objects.map((object) => nextById.get(object.id) || object) }));
+  };
 
   const patchObjects = (ids: string[], patch: Partial<EditorStageObject>) => {
     if (!ids.length) return;
@@ -233,7 +262,7 @@ const StageBuilderPage = () => {
     }, { selectIds: selectedIds.filter((id) => !ids.includes(id)) });
   };
 
-  const deleteSelected = () => deleteObjects(selectedIds.length ? selectedIds : (selectedId ? [selectedId] : []));
+  const deleteSelected = () => deleteObjects(selectedGroup ? selectedGroupObjectIds : selectedIds.length ? selectedIds : (selectedId ? [selectedId] : []));
 
   const duplicateObjects = (ids: string[]) => {
     const source = stage.objects.filter((object) => ids.includes(object.id));
@@ -245,7 +274,7 @@ const StageBuilderPage = () => {
     commitStage((current) => ({ ...current, objects: [...current.objects, ...copies] }), { selectIds: copies.map((copy) => copy.id), message: 'Duplicated selection.' });
   };
 
-  const duplicateSelected = () => duplicateObjects(selectedIds.length ? selectedIds : (selectedId ? [selectedId] : []));
+  const duplicateSelected = () => duplicateObjects(selectedGroup ? selectedGroupObjectIds : selectedIds.length ? selectedIds : (selectedId ? [selectedId] : []));
 
   const addObject = (kind: StageSemanticKind) => {
     if (kind === 'floor') {
@@ -345,6 +374,7 @@ const StageBuilderPage = () => {
   const handleOpenSettings = () => {
     setSelectedId(null);
     setSelectedIds([]);
+    setSelectedGroupId(null);
     setInspectorTab('settings');
     setRightPanelVisible(true);
   };
@@ -356,6 +386,7 @@ const StageBuilderPage = () => {
       setStage(previous);
       setSelectedId(null);
       setSelectedIds([]);
+      setSelectedGroupId(null);
       bumpHistory();
     }
   };
@@ -367,6 +398,7 @@ const StageBuilderPage = () => {
       setStage(next);
       setSelectedId(null);
       setSelectedIds([]);
+      setSelectedGroupId(null);
       bumpHistory();
     }
   };
@@ -386,7 +418,7 @@ const StageBuilderPage = () => {
         objects: current.objects.map((object) => idSet.has(object.id) ? { ...object, groupId } as EditorStageObject : object),
         metadata: { ...current.metadata, groups: [...groups, { id: groupId, name: `Group ${groups.length + 1}`, objectIds: ids, createdAt: now, updatedAt: now }] },
       };
-    }, { selectIds: ids, message: 'Grouped selected objects.' });
+    }, { selectGroupId: groupId, message: 'Grouped selected objects.' });
   };
 
   const handleHierarchyDrop = (draggedId: string, target: HierarchyDropTarget) => {
@@ -537,7 +569,7 @@ const StageBuilderPage = () => {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [prefs.keyboardShortcutsEnabled, stage, selectedId, selectedIds, snapSettings, historyVersion]);
+  }, [prefs.keyboardShortcutsEnabled, stage, selectedId, selectedIds, selectedGroupId, snapSettings, historyVersion]);
 
   return (
     <Box ref={rootRef} sx={{ '--fossbot-box-border-radius': '0px', borderRadius: 0, width: '100vw', height: '100vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', bgcolor: studio ? editorColors.viewport : '#e5e7eb' }}>
@@ -579,10 +611,12 @@ const StageBuilderPage = () => {
               stage={stage}
               selectedId={selectedId}
               selectedIds={selectedIds}
+              selectedGroupId={selectedGroupId}
               prefabs={prefabs}
               onAddKind={addObject}
               onAddPrefab={addPrefab}
               onSelectObject={handleSelect}
+              onSelectGroup={handleSelectGroup}
               onSelectionChange={handleSelectionChange}
               onObjectChange={updateObject}
               onDuplicateObjects={duplicateObjects}
@@ -597,8 +631,10 @@ const StageBuilderPage = () => {
         <Box sx={{ minWidth: 0, minHeight: 0, position: 'relative', bgcolor: editorColors.viewport }}>
           <StageBuilderScene
             objects={stage.objects}
+            groups={stage.metadata.groups}
             selectedId={selectedId}
             selectedIds={selectedIds}
+            selectedGroupId={selectedGroupId}
             transformMode={transformMode}
             builderMode={builderMode}
             stageDimensions={stage.floor.dimensions}
@@ -615,6 +651,7 @@ const StageBuilderPage = () => {
             onSelect={handleSelect}
             onSelectionChange={handleSelectionChange}
             onObjectChange={updateObject}
+            onObjectsChange={updateObjects}
             onLockedSelectionAttempt={() => setMessage('Selection is locked to the current object. Change Selection behavior in Settings to select through objects.')}
           />
           <Box sx={{ position: 'absolute', top: 12, left: 12, zIndex: 5 }}>

@@ -10,10 +10,12 @@ export interface EditorLeftPanelProps {
   stage: EditorStage;
   selectedId: string | null;
   selectedIds: string[];
+  selectedGroupId: string | null;
   prefabs: StageBuilderPrefab[];
   onAddKind: (kind: StageSemanticKind) => void;
   onAddPrefab: (prefab: StageBuilderPrefab) => void;
   onSelectObject: (id: string | null) => void;
+  onSelectGroup: (id: string | null) => void;
   onSelectionChange: (ids: string[]) => void;
   onObjectChange: (object: EditorStageObject) => void;
   onDuplicateObjects: (ids: string[]) => void;
@@ -47,7 +49,9 @@ export function EditorLeftPanel(props: EditorLeftPanelProps) {
             stage={props.stage}
             selectedId={props.selectedId}
             selectedIds={props.selectedIds}
+            selectedGroupId={props.selectedGroupId}
             onSelectObject={props.onSelectObject}
+            onSelectGroup={props.onSelectGroup}
             onSelectionChange={props.onSelectionChange}
             onObjectChange={props.onObjectChange}
             onDuplicateObjects={props.onDuplicateObjects}
