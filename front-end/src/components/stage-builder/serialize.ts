@@ -128,6 +128,7 @@ export function editorStageToConfig(stage: EditorStage): StageJsonEntry[] {
         castShadow: true,
         mass: object.immovable ? 0 : object.mass,
         immovable: object.immovable,
+        collision: object.collision,
       });
     } else if (object.kind === 'cylinder') {
       entries.push({
@@ -139,6 +140,7 @@ export function editorStageToConfig(stage: EditorStage): StageJsonEntry[] {
         castShadow: true,
         mass: object.immovable ? 0 : object.mass,
         immovable: object.immovable,
+        collision: object.collision,
       });
     } else if (object.kind === 'line') {
       entries.push({
@@ -285,6 +287,7 @@ function configEntryToEditorObject(entry: StageJsonEntry): EditorStageObject | n
       color: String(cube.material?.color || '#f57c00'),
       mass: cube.mass || 0,
       immovable: cube.immovable ?? (cube.mass || 0) <= 0,
+      collision: cube.collision || 'auto',
     };
   }
   if (entry.type === 'cylinder') {
@@ -300,6 +303,7 @@ function configEntryToEditorObject(entry: StageJsonEntry): EditorStageObject | n
       color: String(cylinder.material?.color || 'orange'),
       mass: cylinder.mass || 0,
       immovable: cylinder.immovable ?? (cylinder.mass || 0) <= 0,
+      collision: cylinder.collision || 'auto',
     };
   }
   if (entry.type === 'line') {

@@ -374,6 +374,7 @@ function collisionWireMaterial(colors: ReturnType<typeof getEditorColors>): THRE
 }
 
 function addCollisionWireVisual(root: THREE.Object3D, object: EditorStageObject, colors: ReturnType<typeof getEditorColors>): void {
+  if ((object.kind === 'cube' || object.kind === 'cylinder') && object.collision === 'none') return;
   let wire: THREE.Mesh | null = null;
   if (object.kind === 'cube') {
     wire = new THREE.Mesh(new THREE.BoxGeometry(object.dimensions[0], object.dimensions[1], object.dimensions[2]), collisionWireMaterial(colors));
@@ -508,35 +509,56 @@ function textStyleValue<T>(style: StageTextStyle | undefined, key: keyof StageTe
   return value === undefined ? fallback : value as T;
 }
 
-function labelSize(object: Extract<EditorStageObject, { kind: 'text' }>): [number, number] {
-  const size = object.style?.backgroundSize;
-  return [Math.max(0.05, size?.[0] ?? object.scale), Math.max(0.03, size?.[1] ?? object.scale * 0.3125)];
+const LABEL_CANVAS_SIZE = [512, 160] as const;
+const LABEL_HEIGHT_RATIO = LABEL_CANVAS_SIZE[1] / LABEL_CANVAS_SIZE[0];
+
+function labelTextSize(object: Extract<EditorStageObject, { kind: 'text' }>): [number, number] {
+  return [Math.max(0.05, object.scale), Math.max(0.03, object.scale * LABEL_HEIGHT_RATIO)];
 }
 
-function makeTextCanvas(text: string, colorValue: string, style?: StageTextStyle): HTMLCanvasElement {
+function labelDecorSize(object: Extract<EditorStageObject, { kind: 'text' }>): [number, number] {
+  const size = object.style?.backgroundSize;
+  return [Math.max(0.05, size?.[0] ?? object.scale), Math.max(0.03, size?.[1] ?? object.scale * LABEL_HEIGHT_RATIO)];
+}
+
+function labelSize(object: Extract<EditorStageObject, { kind: 'text' }>): [number, number] {
+  const textSize = labelTextSize(object);
+  const hasDecor = textStyleValue(object.style, 'backgroundVisible', true) || textStyleValue(object.style, 'borderVisible', true);
+  if (!hasDecor) return textSize;
+  const decorSize = labelDecorSize(object);
+  return [Math.max(textSize[0], decorSize[0]), Math.max(textSize[1], decorSize[1])];
+}
+
+function makeTextCanvas(text: string, colorValue: string, style: StageTextStyle | undefined, planeSize: [number, number], textSize: [number, number], decorSize: [number, number]): HTMLCanvasElement {
   const canvas = document.createElement('canvas');
-  canvas.width = 512;
-  canvas.height = 160;
+  canvas.width = LABEL_CANVAS_SIZE[0];
+  canvas.height = LABEL_CANVAS_SIZE[1];
   const ctx = canvas.getContext('2d');
   if (!ctx) return canvas;
   const backgroundVisible = textStyleValue(style, 'backgroundVisible', true);
   const borderVisible = textStyleValue(style, 'borderVisible', true);
   const borderWidth = borderVisible ? Math.max(0, textStyleValue(style, 'borderWidth', 8)) : 0;
-  const inset = Math.max(0, borderWidth / 2);
   const background = color(textStyleValue(style, 'backgroundColor', '#ffffff'));
   const opacity = backgroundVisible ? Math.min(1, Math.max(0, textStyleValue(style, 'backgroundOpacity', 0.9))) : 0;
+  const decorWidth = Math.min(canvas.width, canvas.width * decorSize[0] / Math.max(0.001, planeSize[0]));
+  const decorHeight = Math.min(canvas.height, canvas.height * decorSize[1] / Math.max(0.001, planeSize[1]));
+  const decorX = (canvas.width - decorWidth) / 2;
+  const decorY = (canvas.height - decorHeight) / 2;
+  const inset = Math.max(0, Math.min(borderWidth / 2, decorWidth / 2, decorHeight / 2));
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   if (backgroundVisible) {
     ctx.fillStyle = `rgba(${Math.round(background.r * 255)},${Math.round(background.g * 255)},${Math.round(background.b * 255)},${opacity})`;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillRect(decorX, decorY, decorWidth, decorHeight);
   }
   if (borderWidth > 0) {
     ctx.strokeStyle = color(textStyleValue(style, 'borderColor', '#0f172a')).getStyle();
     ctx.lineWidth = borderWidth;
-    ctx.strokeRect(inset, inset, canvas.width - borderWidth, canvas.height - borderWidth);
+    ctx.strokeRect(decorX + inset, decorY + inset, Math.max(0, decorWidth - inset * 2), Math.max(0, decorHeight - inset * 2));
   }
   ctx.fillStyle = color(colorValue).getStyle();
-  ctx.font = `700 ${Math.max(8, textStyleValue(style, 'fontSize', 56))}px sans-serif`;
+  const baseFontSize = Math.max(8, textStyleValue(style, 'fontSize', 56));
+  const canvasFontSize = Math.max(1, baseFontSize * textSize[1] / Math.max(0.001, planeSize[1]));
+  ctx.font = `700 ${canvasFontSize}px sans-serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText(text || 'Label', canvas.width / 2, canvas.height / 2);
@@ -544,12 +566,15 @@ function makeTextCanvas(text: string, colorValue: string, style?: StageTextStyle
 }
 
 function labelPlaneMaterial(texture: THREE.CanvasTexture, options: ObjectVisualOptions): THREE.MeshBasicMaterial {
-  return new THREE.MeshBasicMaterial({ map: texture, transparent: true, opacity: options.ghost ? 0.45 : 1, depthWrite: false, side: THREE.DoubleSide });
+  return new THREE.MeshBasicMaterial({ map: texture, transparent: true, opacity: options.ghost ? 0.45 : 1, depthWrite: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
 }
 
 function makeLabelPlane(object: Extract<EditorStageObject, { kind: 'text' }>, options: ObjectVisualOptions): THREE.Mesh {
-  const texture = new THREE.CanvasTexture(makeTextCanvas(object.text, object.color, object.style));
-  const [width, height] = labelSize(object);
+  const textSize = labelTextSize(object);
+  const decorSize = labelDecorSize(object);
+  const size = labelSize(object);
+  const texture = new THREE.CanvasTexture(makeTextCanvas(object.text, object.color, object.style, size, textSize, decorSize));
+  const [width, height] = size;
   const mesh = new THREE.Mesh(new THREE.PlaneGeometry(width, height), labelPlaneMaterial(texture, options));
   mesh.userData.stageBuilderPickPriority = 10;
   mesh.renderOrder = 4;
@@ -557,6 +582,7 @@ function makeLabelPlane(object: Extract<EditorStageObject, { kind: 'text' }>, op
 }
 
 const labelDefaultNormal = new THREE.Vector3(0, 0, 1);
+const labelSurfaceLift = 0.001;
 
 function faceFrame(face: StageLabelFace): { normal: THREE.Vector3; u: THREE.Vector3; v: THREE.Vector3 } {
   if (face === 'back') return { normal: new THREE.Vector3(0, 0, -1), u: new THREE.Vector3(-1, 0, 0), v: new THREE.Vector3(0, 1, 0) };
@@ -597,8 +623,7 @@ function parentQuaternion(parent: EditorStageObject): THREE.Quaternion {
 
 function labelLocalPosition(attachment: StageLabelAttachment, parent: EditorStageObject): THREE.Vector3 {
   const frame = faceFrame(attachment.face);
-  const surfaceLift = 0.006;
-  return frame.normal.clone().multiplyScalar(parentHalfExtent(parent, attachment.face) + surfaceLift)
+  return frame.normal.clone().multiplyScalar(parentHalfExtent(parent, attachment.face) + labelSurfaceLift)
     .add(frame.u.clone().multiplyScalar(attachment.offset[0]))
     .add(frame.v.clone().multiplyScalar(attachment.offset[1]));
 }
@@ -1292,12 +1317,10 @@ function objectFromRootTransform(object: EditorStageObject, root: THREE.Object3D
   if (object.kind === 'text') {
     if (object.attachment?.parentId) return object;
     const scaleFactor = Math.max(scaleX, scaleY);
-    const backgroundSize = object.style?.backgroundSize ? [object.style.backgroundSize[0] * scaleFactor, object.style.backgroundSize[1] * scaleFactor] as [number, number] : undefined;
     return {
       ...object,
       position: snapPosition([root.position.x, root.position.y, root.position.z], snap),
       scale: Math.max(0.05, object.scale * scaleFactor),
-      style: backgroundSize ? { ...object.style, backgroundSize } : object.style,
     };
   }
   if (object.kind === 'light') {
