@@ -125,8 +125,8 @@ export function objectBounds(object: EditorStageObject): StageObjectBounds | nul
     };
   }
   if (object.kind === 'text') {
-    const width = object.scale;
-    const depth = object.onFloor ? object.scale * 0.35 : 0.08;
+    const width = object.style?.backgroundSize?.[0] ?? object.scale;
+    const depth = object.onFloor ? object.style?.backgroundSize?.[1] ?? object.scale * 0.35 : 0.08;
     return {
       objectId: object.id,
       minX: object.position[0] - width / 2,

@@ -5,7 +5,7 @@ import {
 } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { Sketch, Swatch } from '@uiw/react-color';
-import type { EditorCameraObject, EditorStageObject, StageAudioSourceType, StageLightSubtype, StageSemanticKind, Vec2, Vec3 } from './types';
+import type { EditorCameraObject, EditorStageObject, StageAudioSourceType, StageLabelFace, StageLightSubtype, StageSemanticKind, Vec2, Vec3 } from './types';
 import { displayObjectType, STAGE_OBJECT_CATALOG } from './stageBuilderCatalog';
 import { editorColors, editorType } from './stageBuilderEditorTheme';
 import { StageBuilderNumberField } from './StageBuilderNumberField';
@@ -43,7 +43,28 @@ function rad(degValue: number): number {
   return degValue * Math.PI / 180;
 }
 
-function minPositive(value: unknown, fallback: number, minimum = 0.01): number {
+function isLabelAttachTarget(object: EditorStageObject): boolean {
+  return object.kind === 'base' || object.kind === 'cube' || object.kind === 'cylinder';
+}
+
+function defaultLabelFace(parent?: EditorStageObject | null): StageLabelFace {
+  return parent?.kind === 'base' ? 'top' : 'front';
+}
+
+function labelStyle(object: Extract<EditorStageObject, { kind: 'text' }>) {
+  return {
+    backgroundVisible: object.style?.backgroundVisible ?? true,
+    backgroundSize: object.style?.backgroundSize || [object.scale, object.scale * 0.3125] as [number, number],
+    backgroundColor: object.style?.backgroundColor || '#ffffff',
+    backgroundOpacity: object.style?.backgroundOpacity ?? 0.9,
+    borderVisible: object.style?.borderVisible ?? true,
+    borderColor: object.style?.borderColor || '#0f172a',
+    borderWidth: object.style?.borderWidth ?? 8,
+    fontSize: object.style?.fontSize ?? 56,
+  };
+}
+
+function minPositive(value: unknown, fallback = 0.01, minimum = 0.01): number {
   return Math.max(minimum, num(value, fallback));
 }
 
@@ -127,6 +148,7 @@ export interface StageInspectorProps {
   advancedOpen?: boolean;
   onAdvancedOpenChange?: (open: boolean) => void;
   onChange: (object: EditorStageObject) => void;
+  objects?: EditorStageObject[];
   onLookThroughCamera?: (camera: EditorCameraObject) => void;
   // Kept for deprecated drawer callers; deletion now lives outside the inspector body.
   onDelete?: (id: string) => void;
@@ -135,9 +157,9 @@ export interface StageInspectorProps {
 const commonNumberProps = { type: 'number', size: 'small' as const, fullWidth: true, inputProps: { step: 0.1 } };
 const commonFieldProps = { size: 'small' as const, fullWidth: true };
 
-function FieldRow({ label, children, align = 'center' }: { label: string; children: React.ReactNode; align?: 'center' | 'start' }) {
+function FieldRow({ label, children, align = 'center', noPadding = false }: { label: string; children: React.ReactNode; align?: 'center' | 'start'; noPadding?: boolean }) {
   return (
-    <Box sx={{ display: 'grid', gridTemplateColumns: '96px minmax(0, 1fr)', gap: 0.75, alignItems: align, px: 1.25, py: 0.5 }}>
+    <Box sx={{ display: 'grid', gridTemplateColumns: '96px minmax(0, 1fr)', gap: 0.75, alignItems: align, px: noPadding ? 0 : 1.25, py: noPadding ? 0 : 0.5 }}>
       <Typography variant="body2" sx={{ ...editorType.body, color: editorColors.textMuted, lineHeight: 1.2 }}>{label}</Typography>
       <Box sx={{ minWidth: 0 }}>{children}</Box>
     </Box>
@@ -328,7 +350,7 @@ export function ColorPickerField({
   );
 }
 
-export function StageInspector({ object, selectedCount = object ? 1 : 0, advancedOpen = false, onAdvancedOpenChange, onChange, onLookThroughCamera }: StageInspectorProps) {
+export function StageInspector({ object, selectedCount = object ? 1 : 0, advancedOpen = false, onAdvancedOpenChange, onChange, objects = [], onLookThroughCamera }: StageInspectorProps) {
   const audioPreviewRef = React.useRef<HTMLAudioElement | null>(null);
   const [audioPreviewError, setAudioPreviewError] = React.useState<string | null>(null);
   const stopAudioPreview = React.useCallback(() => {
@@ -521,11 +543,18 @@ export function StageInspector({ object, selectedCount = object ? 1 : 0, advance
         {object.kind === 'text' && (
           <>
             <FieldRow label="Scale">
-              <StageBuilderNumberField {...commonNumberProps} disabled={locked} value={object.scale} inputProps={{ step: 0.05, 'aria-label': 'Text scale' }} onChange={(event) => onChange({ ...object, scale: minPositive(event.target.value, object.scale, 0.05) })} />
+              <StageBuilderNumberField {...commonNumberProps} disabled={locked} value={object.scale} inputProps={{ step: 0.05, 'aria-label': 'Text scale' }} onChange={(event) => {
+                const nextScale = minPositive(event.target.value, object.scale, 0.05);
+                const ratio = nextScale / Math.max(0.05, object.scale);
+                const currentStyle = labelStyle(object);
+                onChange({ ...object, scale: nextScale, style: { ...currentStyle, backgroundSize: [currentStyle.backgroundSize[0] * ratio, currentStyle.backgroundSize[1] * ratio] } });
+              }} />
             </FieldRow>
-            <FieldRow label="Placement">
-              <FormControlLabel control={<Checkbox checked={object.onFloor} disabled={locked} onChange={(event) => onChange({ ...object, onFloor: event.target.checked, position: [object.position[0], event.target.checked ? 0.02 : Math.max(0.3, object.position[1]), object.position[2]] })} />} label="Place on floor" />
-            </FieldRow>
+            {!object.attachment?.parentId && (
+              <FieldRow label="Placement">
+                <FormControlLabel control={<Checkbox checked={object.onFloor} disabled={locked} onChange={(event) => onChange({ ...object, onFloor: event.target.checked, position: [object.position[0], event.target.checked ? 0.02 : Math.max(0.3, object.position[1]), object.position[2]] })} />} label="Place on floor" />
+              </FieldRow>
+            )}
           </>
         )}
 
@@ -545,9 +574,105 @@ export function StageInspector({ object, selectedCount = object ? 1 : 0, advance
             </FieldRow>
           )}
           {object.kind === 'text' && (
-            <FieldRow label="Text">
-              <TextField {...commonFieldProps} disabled={locked} value={object.text} inputProps={{ 'aria-label': 'Label text' }} onChange={(event) => onChange({ ...object, text: event.target.value })} />
-            </FieldRow>
+            <>
+              <FieldRow label="Text">
+                <TextField {...commonFieldProps} disabled={locked} value={object.text} inputProps={{ 'aria-label': 'Label text' }} onChange={(event) => onChange({ ...object, text: event.target.value })} />
+              </FieldRow>
+              <FieldRow label="Font size">
+                <StageBuilderNumberField {...commonNumberProps} disabled={locked} value={labelStyle(object).fontSize} inputProps={{ step: 1, min: 8, 'aria-label': 'Label font size' }} onChange={(event) => onChange({ ...object, style: { ...labelStyle(object), fontSize: Math.max(8, num(event.target.value, labelStyle(object).fontSize)) } })} />
+              </FieldRow>
+              <FieldRow label="Background">
+                <FormControlLabel control={<Checkbox checked={labelStyle(object).backgroundVisible} disabled={locked} onChange={(event) => onChange({ ...object, style: { ...labelStyle(object), backgroundVisible: event.target.checked } })} />} label="Enabled" />
+              </FieldRow>
+              {labelStyle(object).backgroundVisible && (
+                <>
+                  <FieldRow label="Background size">
+                    <InlineFields>
+                      <StageBuilderNumberField label="W" {...commonNumberProps} disabled={locked} value={labelStyle(object).backgroundSize[0]} onChange={(event) => onChange({ ...object, style: { ...labelStyle(object), backgroundSize: [minPositive(event.target.value, labelStyle(object).backgroundSize[0], 0.05), labelStyle(object).backgroundSize[1]] } })} />
+                      <StageBuilderNumberField label="H" {...commonNumberProps} disabled={locked} value={labelStyle(object).backgroundSize[1]} onChange={(event) => onChange({ ...object, style: { ...labelStyle(object), backgroundSize: [labelStyle(object).backgroundSize[0], minPositive(event.target.value, labelStyle(object).backgroundSize[1], 0.03)] } })} />
+                    </InlineFields>
+                  </FieldRow>
+                  <FieldRow label="Background color" align="start">
+                    <ColorPickerField value={labelStyle(object).backgroundColor} disabled={locked} pickerAriaLabel="Label background color picker" valueAriaLabel="Label background color value" onChange={(color) => onChange({ ...object, style: { ...labelStyle(object), backgroundColor: color } })} />
+                  </FieldRow>
+                  <FieldRow label="Background opacity">
+                    <StageBuilderNumberField {...commonNumberProps} disabled={locked} value={labelStyle(object).backgroundOpacity} inputProps={{ step: 0.05, min: 0, max: 1, 'aria-label': 'Label background opacity' }} onChange={(event) => onChange({ ...object, style: { ...labelStyle(object), backgroundOpacity: clamp01(event.target.value, labelStyle(object).backgroundOpacity) } })} />
+                  </FieldRow>
+                </>
+              )}
+              <FieldRow label="Border">
+                <FormControlLabel control={<Checkbox checked={labelStyle(object).borderVisible} disabled={locked} onChange={(event) => onChange({ ...object, style: { ...labelStyle(object), borderVisible: event.target.checked } })} />} label="Enabled" />
+              </FieldRow>
+              {labelStyle(object).borderVisible && (
+                <>
+                  <FieldRow label="Border color" align="start">
+                    <ColorPickerField value={labelStyle(object).borderColor} disabled={locked} pickerAriaLabel="Label border color picker" valueAriaLabel="Label border color value" onChange={(color) => onChange({ ...object, style: { ...labelStyle(object), borderColor: color } })} />
+                  </FieldRow>
+                  <FieldRow label="Border size">
+                    <StageBuilderNumberField {...commonNumberProps} disabled={locked} value={labelStyle(object).borderWidth} inputProps={{ step: 1, min: 0, 'aria-label': 'Label border width' }} onChange={(event) => onChange({ ...object, style: { ...labelStyle(object), borderWidth: Math.max(0, num(event.target.value, labelStyle(object).borderWidth)) } })} />
+                  </FieldRow>
+                </>
+              )}
+            </>
+          )}
+        </Section>
+      )}
+
+      {object.kind === 'text' && (
+        <Section title="Attachment" meta={object.attachment?.parentId ? 'Local space' : 'Free'}>
+          <FieldRow label="Parent">
+            <TextField
+              {...commonFieldProps}
+              select
+              disabled={locked}
+              value={object.attachment?.parentId || ''}
+              inputProps={{ 'aria-label': 'Attached label parent' }}
+              onChange={(event) => {
+                const parentId = event.target.value;
+                const parent = objects.find((item) => item.id === parentId);
+                onChange({
+                  ...object,
+                  parentId: parentId || undefined,
+                  onFloor: parentId ? false : object.onFloor,
+                  attachment: parentId && parent ? {
+                    parentId,
+                    face: object.attachment?.face || defaultLabelFace(parent),
+                    offset: object.attachment?.offset || [0, 0],
+                    rotation: object.attachment?.rotation || 0,
+                    billboard: false,
+                  } : undefined,
+                });
+              }}
+            >
+              <MenuItem value="">None — free label</MenuItem>
+              {objects.filter((item) => item.id !== object.id && isLabelAttachTarget(item)).map((item) => <MenuItem key={item.id} value={item.id}>{item.name}</MenuItem>)}
+            </TextField>
+          </FieldRow>
+          {object.attachment?.parentId ? (
+            <>
+              <FieldRow label="Face">
+                <TextField {...commonFieldProps} select disabled={locked} value={object.attachment.face} inputProps={{ 'aria-label': 'Attached label face' }} onChange={(event) => onChange({ ...object, attachment: { ...object.attachment!, face: event.target.value as StageLabelFace } })}>
+                  <MenuItem value="front">Front</MenuItem>
+                  <MenuItem value="back">Back</MenuItem>
+                  <MenuItem value="left">Left</MenuItem>
+                  <MenuItem value="right">Right</MenuItem>
+                  <MenuItem value="top">Top</MenuItem>
+                  <MenuItem value="bottom">Bottom</MenuItem>
+                </TextField>
+              </FieldRow>
+              <FieldRow label="Offset">
+                <InlineFields>
+                  <StageBuilderNumberField label="U" {...commonNumberProps} disabled={locked} value={object.attachment.offset[0]} onChange={(event) => onChange({ ...object, attachment: { ...object.attachment!, offset: [num(event.target.value, object.attachment!.offset[0]), object.attachment!.offset[1]] } })} />
+                  <StageBuilderNumberField label="V" {...commonNumberProps} disabled={locked} value={object.attachment.offset[1]} onChange={(event) => onChange({ ...object, attachment: { ...object.attachment!, offset: [object.attachment!.offset[0], num(event.target.value, object.attachment!.offset[1])] } })} />
+                </InlineFields>
+              </FieldRow>
+              <FieldRow label="Rotation">
+                <StageBuilderNumberField {...commonNumberProps} disabled={locked} value={deg(object.attachment.rotation)} inputProps={{ step: 1, 'aria-label': 'Attached label rotation' }} onChange={(event) => onChange({ ...object, attachment: { ...object.attachment!, rotation: rad(num(event.target.value, deg(object.attachment!.rotation))) } })} />
+              </FieldRow>
+              <FullRow><Alert severity="info">Attached labels are fixed in the parent object's local space. They do not follow the editor camera.</Alert></FullRow>
+            </>
+          ) : (
+            <FullRow><Typography variant="caption" sx={editorType.caption}>Choose a parent object to pin this label to a face or surface.</Typography></FullRow>
           )}
         </Section>
       )}

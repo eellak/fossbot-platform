@@ -7,7 +7,7 @@ import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 import { disposeScene, initScene, renderScene, type SceneHandle } from 'src/simulator/scene/scene';
 import { loadRobotV2 } from 'src/simulator/robot/v2';
 import { SENSOR_LAYOUT } from 'src/simulator/sensors/layout';
-import type { EditorStageObject, StageBuilderGroup, StageBuilderMode, StageBuilderTransformSpace, Vec3 } from './types';
+import type { EditorStageObject, StageBuilderGroup, StageBuilderMode, StageBuilderTransformSpace, StageLabelAttachment, StageLabelFace, StageTextStyle, Vec3 } from './types';
 import type { StageBuilderControlScheme, StageBuilderLockMode, StageBuilderStyleVariant } from './stageBuilderPreferences';
 import type { StageBuilderSnapSettings } from './stageBuilderSnapping';
 import { getSnapSettings, snapAngle, snapDimensions, snapPosition } from './stageBuilderSnapping';
@@ -276,24 +276,136 @@ function constrainRobotSpawnTransform(root: THREE.Object3D, fallbackYaw = 0): vo
   root.scale.set(1, 1, 1);
 }
 
-function makeTextCanvas(text: string, colorValue: string): HTMLCanvasElement {
+function textStyleValue<T>(style: StageTextStyle | undefined, key: keyof StageTextStyle, fallback: T): T {
+  const value = style?.[key];
+  return value === undefined ? fallback : value as T;
+}
+
+function labelSize(object: Extract<EditorStageObject, { kind: 'text' }>): [number, number] {
+  const size = object.style?.backgroundSize;
+  return [Math.max(0.05, size?.[0] ?? object.scale), Math.max(0.03, size?.[1] ?? object.scale * 0.3125)];
+}
+
+function makeTextCanvas(text: string, colorValue: string, style?: StageTextStyle): HTMLCanvasElement {
   const canvas = document.createElement('canvas');
   canvas.width = 512;
   canvas.height = 160;
   const ctx = canvas.getContext('2d');
   if (!ctx) return canvas;
+  const backgroundVisible = textStyleValue(style, 'backgroundVisible', true);
+  const borderVisible = textStyleValue(style, 'borderVisible', true);
+  const borderWidth = borderVisible ? Math.max(0, textStyleValue(style, 'borderWidth', 8)) : 0;
+  const inset = Math.max(0, borderWidth / 2);
+  const background = color(textStyleValue(style, 'backgroundColor', '#ffffff'));
+  const opacity = backgroundVisible ? Math.min(1, Math.max(0, textStyleValue(style, 'backgroundOpacity', 0.9))) : 0;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.fillStyle = 'rgba(255,255,255,0.86)';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.strokeStyle = 'rgba(15,23,42,0.28)';
-  ctx.lineWidth = 8;
-  ctx.strokeRect(4, 4, canvas.width - 8, canvas.height - 8);
+  if (backgroundVisible) {
+    ctx.fillStyle = `rgba(${Math.round(background.r * 255)},${Math.round(background.g * 255)},${Math.round(background.b * 255)},${opacity})`;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
+  if (borderWidth > 0) {
+    ctx.strokeStyle = color(textStyleValue(style, 'borderColor', '#0f172a')).getStyle();
+    ctx.lineWidth = borderWidth;
+    ctx.strokeRect(inset, inset, canvas.width - borderWidth, canvas.height - borderWidth);
+  }
   ctx.fillStyle = color(colorValue).getStyle();
-  ctx.font = '700 56px sans-serif';
+  ctx.font = `700 ${Math.max(8, textStyleValue(style, 'fontSize', 56))}px sans-serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText(text || 'Label', canvas.width / 2, canvas.height / 2);
   return canvas;
+}
+
+function labelPlaneMaterial(texture: THREE.CanvasTexture, options: ObjectVisualOptions): THREE.MeshBasicMaterial {
+  return new THREE.MeshBasicMaterial({ map: texture, transparent: true, opacity: options.ghost ? 0.45 : 1, depthWrite: false, side: THREE.DoubleSide });
+}
+
+function makeLabelPlane(object: Extract<EditorStageObject, { kind: 'text' }>, options: ObjectVisualOptions): THREE.Mesh {
+  const texture = new THREE.CanvasTexture(makeTextCanvas(object.text, object.color, object.style));
+  const [width, height] = labelSize(object);
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(width, height), labelPlaneMaterial(texture, options));
+  mesh.userData.stageBuilderPickPriority = 10;
+  mesh.renderOrder = 4;
+  return mesh;
+}
+
+const labelDefaultNormal = new THREE.Vector3(0, 0, 1);
+
+function faceFrame(face: StageLabelFace): { normal: THREE.Vector3; u: THREE.Vector3; v: THREE.Vector3 } {
+  if (face === 'back') return { normal: new THREE.Vector3(0, 0, -1), u: new THREE.Vector3(-1, 0, 0), v: new THREE.Vector3(0, 1, 0) };
+  if (face === 'left') return { normal: new THREE.Vector3(-1, 0, 0), u: new THREE.Vector3(0, 0, 1), v: new THREE.Vector3(0, 1, 0) };
+  if (face === 'right') return { normal: new THREE.Vector3(1, 0, 0), u: new THREE.Vector3(0, 0, -1), v: new THREE.Vector3(0, 1, 0) };
+  if (face === 'top') return { normal: new THREE.Vector3(0, 1, 0), u: new THREE.Vector3(1, 0, 0), v: new THREE.Vector3(0, 0, -1) };
+  if (face === 'bottom') return { normal: new THREE.Vector3(0, -1, 0), u: new THREE.Vector3(1, 0, 0), v: new THREE.Vector3(0, 0, 1) };
+  return { normal: new THREE.Vector3(0, 0, 1), u: new THREE.Vector3(1, 0, 0), v: new THREE.Vector3(0, 1, 0) };
+}
+
+function parentHalfExtent(parent: EditorStageObject, face: StageLabelFace): number {
+  if (parent.kind === 'cube') {
+    if (face === 'left' || face === 'right') return Math.abs(parent.dimensions[0]) / 2;
+    if (face === 'top' || face === 'bottom') return Math.abs(parent.dimensions[1]) / 2;
+    return Math.abs(parent.dimensions[2]) / 2;
+  }
+  if (parent.kind === 'cylinder') {
+    if (face === 'top' || face === 'bottom') return Math.abs(parent.dimensions[2]) / 2;
+    return Math.max(Math.abs(parent.dimensions[0]), Math.abs(parent.dimensions[1]));
+  }
+  if (parent.kind === 'base') return 0.012;
+  return 0;
+}
+
+function parentPosition(parent: EditorStageObject): THREE.Vector3 {
+  if (parent.kind === 'base') return new THREE.Vector3(parent.position[0], 0.006, parent.position[2]);
+  if ('position' in parent) return new THREE.Vector3(...parent.position);
+  return new THREE.Vector3();
+}
+
+function parentQuaternion(parent: EditorStageObject): THREE.Quaternion {
+  if (parent.kind === 'cube') {
+    const orientation = parent.orientation || [0, parent.rotationY, 0];
+    return new THREE.Quaternion().setFromEuler(new THREE.Euler(orientation[0], orientation[1], orientation[2]));
+  }
+  return new THREE.Quaternion();
+}
+
+function labelLocalPosition(attachment: StageLabelAttachment, parent: EditorStageObject): THREE.Vector3 {
+  const frame = faceFrame(attachment.face);
+  const surfaceLift = 0.006;
+  return frame.normal.clone().multiplyScalar(parentHalfExtent(parent, attachment.face) + surfaceLift)
+    .add(frame.u.clone().multiplyScalar(attachment.offset[0]))
+    .add(frame.v.clone().multiplyScalar(attachment.offset[1]));
+}
+
+function labelFaceQuaternion(attachment: StageLabelAttachment): THREE.Quaternion {
+  const frame = faceFrame(attachment.face);
+  const faceQ = new THREE.Quaternion().setFromUnitVectors(labelDefaultNormal, frame.normal);
+  return faceQ.multiply(new THREE.Quaternion().setFromAxisAngle(labelDefaultNormal, attachment.rotation));
+}
+
+function applyAttachedLabelTransform(mesh: THREE.Mesh, attachment: StageLabelAttachment, parent: EditorStageObject): void {
+  const parentQ = parentQuaternion(parent);
+  mesh.position.copy(parentPosition(parent).add(labelLocalPosition(attachment, parent).applyQuaternion(parentQ)));
+  mesh.quaternion.copy(parentQ.multiply(labelFaceQuaternion(attachment)));
+}
+
+function applyAttachedLabelTransformFromRoot(mesh: THREE.Object3D, attachment: StageLabelAttachment, parent: EditorStageObject, parentRoot: THREE.Object3D): void {
+  if (parent.kind === 'base') {
+    applyAttachedLabelTransform(mesh as THREE.Mesh, attachment, parent);
+    mesh.position.x = parentRoot.position.x + attachment.offset[0];
+    mesh.position.z = parentRoot.position.z - attachment.offset[1];
+    return;
+  }
+  parentRoot.updateMatrixWorld(true);
+  mesh.position.copy(labelLocalPosition(attachment, parent).applyMatrix4(parentRoot.matrixWorld));
+  const parentQ = new THREE.Quaternion();
+  parentRoot.getWorldQuaternion(parentQ);
+  mesh.quaternion.copy(parentQ.multiply(labelFaceQuaternion(attachment)));
+}
+
+function makeAttachedLabelRoot(object: Extract<EditorStageObject, { kind: 'text' }>, parent: EditorStageObject, options: ObjectVisualOptions): { root: THREE.Mesh; pickables: THREE.Object3D[] } {
+  const mesh = makeLabelPlane(object, options);
+  applyAttachedLabelTransform(mesh, object.attachment!, parent);
+  return { root: mesh, pickables: [mesh] };
 }
 
 function makeAudioWave(radius: number, colorValue: THREE.Color, options: ObjectVisualOptions): THREE.Line {
@@ -675,7 +787,7 @@ function makeRobotSpawnVisual(object: Extract<EditorStageObject, { kind: 'fossbo
   return { root: group, pickables };
 }
 
-export function makeObjectRoot(object: EditorStageObject, options: ObjectVisualOptions = {}): MeshRecord {
+export function makeObjectRoot(object: EditorStageObject, options: ObjectVisualOptions = {}, context: { objects?: EditorStageObject[] } = {}): MeshRecord {
   let pickables: THREE.Object3D[] = [];
   let root: THREE.Object3D;
 
@@ -736,23 +848,17 @@ export function makeObjectRoot(object: EditorStageObject, options: ObjectVisualO
     }
     root = group;
   } else if (object.kind === 'text') {
-    const texture = new THREE.CanvasTexture(makeTextCanvas(object.text, object.color));
-    if (object.onFloor) {
-      const geometry = new THREE.PlaneGeometry(object.scale, object.scale * 0.3125);
-      geometry.rotateX(-Math.PI / 2);
-      const mesh = new THREE.Mesh(
-        geometry,
-        new THREE.MeshBasicMaterial({ map: texture, transparent: true, opacity: options.ghost ? 0.45 : 1, depthWrite: false, side: THREE.DoubleSide }),
-      );
+    const parent = object.attachment?.parentId ? context.objects?.find((item) => item.id === object.attachment?.parentId) : null;
+    if (object.attachment && parent) {
+      const label = makeAttachedLabelRoot(object, parent, options);
+      root = label.root;
+      pickables = label.pickables;
+    } else {
+      const mesh = makeLabelPlane(object, options);
+      if (object.onFloor) mesh.rotation.x = -Math.PI / 2;
       mesh.position.set(...object.position);
       root = mesh;
       pickables.push(mesh);
-    } else {
-      const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, opacity: options.ghost ? 0.45 : 1 }));
-      sprite.scale.set(object.scale, object.scale * 0.3125, 1);
-      sprite.position.set(...object.position);
-      root = sprite;
-      pickables.push(sprite);
     }
   } else if (object.kind === 'light') {
     const group = new THREE.Group();
@@ -893,7 +999,7 @@ export function disposeObject(root: THREE.Object3D): void {
 }
 
 function canTransform(object: EditorStageObject | undefined): boolean {
-  return !!object && !object.locked && object.kind !== 'line';
+  return !!object && !object.locked && object.kind !== 'line' && !(object.kind === 'text' && object.attachment?.parentId);
 }
 
 function physicalScale(value: number): number {
@@ -941,8 +1047,15 @@ function objectFromRootTransform(object: EditorStageObject, root: THREE.Object3D
     return { ...object, position: snapPosition([root.position.x, root.position.y, root.position.z], snap), rotationY: snapAngle(yawFromObject(root, object.rotationY), snap) };
   }
   if (object.kind === 'text') {
+    if (object.attachment?.parentId) return object;
     const scaleFactor = Math.max(scaleX, scaleY);
-    return { ...object, position: snapPosition([root.position.x, root.position.y, root.position.z], snap), scale: Math.max(0.05, object.scale * scaleFactor) };
+    const backgroundSize = object.style?.backgroundSize ? [object.style.backgroundSize[0] * scaleFactor, object.style.backgroundSize[1] * scaleFactor] as [number, number] : undefined;
+    return {
+      ...object,
+      position: snapPosition([root.position.x, root.position.y, root.position.z], snap),
+      scale: Math.max(0.05, object.scale * scaleFactor),
+      style: backgroundSize ? { ...object.style, backgroundSize } : object.style,
+    };
   }
   if (object.kind === 'light') {
     return {
@@ -996,7 +1109,7 @@ function transformObjectWithMatrix(object: EditorStageObject, matrix: THREE.Matr
 }
 
 function supportsResize(object: EditorStageObject | undefined): boolean {
-  return !!object && (object.kind === 'base' || object.kind === 'cube' || object.kind === 'cylinder' || object.kind === 'text');
+  return !!object && (object.kind === 'base' || object.kind === 'cube' || object.kind === 'cylinder' || (object.kind === 'text' && !object.attachment?.parentId));
 }
 
 function makeFriendlyHandles(styleVariant: StageBuilderStyleVariant): FriendlyHandleRecord {
@@ -1291,6 +1404,25 @@ export function StageBuilderScene({
     return hasBox ? box : null;
   };
 
+  const updateAttachedLabelVisuals = (parentIds?: Set<string>) => {
+    const objectById = new Map(objectsRef.current.map((object) => [object.id, object]));
+    for (const object of objectsRef.current) {
+      if (object.kind !== 'text' || !object.attachment?.parentId) continue;
+      if (parentIds && !parentIds.has(object.attachment.parentId)) continue;
+      const parent = objectById.get(object.attachment.parentId);
+      const parentRoot = parent ? objectMapRef.current.get(parent.id)?.root : null;
+      const labelRoot = objectMapRef.current.get(object.id)?.root;
+      if (!parent || !parentRoot || !labelRoot) continue;
+      applyAttachedLabelTransformFromRoot(labelRoot, object.attachment, parent, parentRoot);
+    }
+  };
+
+  const selectionCanBypassLock = (currentId: string, nextId: string): boolean => {
+    const next = objectsRef.current.find((item) => item.id === nextId);
+    const current = objectsRef.current.find((item) => item.id === currentId);
+    return (next?.kind === 'text' && !!next.attachment?.parentId) || next?.parentId === currentId || current?.parentId === nextId;
+  };
+
   const updateGroupPivotFromBounds = (groupId: string): boolean => {
     const pivot = groupPivotRef.current;
     const box = groupBoxFor(groupId);
@@ -1499,6 +1631,10 @@ export function StageBuilderScene({
       const root = selected ? objectMapRef.current.get(selected.id)?.root : null;
       if (selected?.kind === 'fossbot' && root) constrainRobotSpawnTransform(root, selected.rotationY);
       previewGroupTransform();
+      const parentIds = new Set<string>();
+      if (selected) parentIds.add(selected.id);
+      groupTransformRef.current?.rootStartMatrices.forEach((_, id) => parentIds.add(id));
+      updateAttachedLabelVisuals(parentIds);
     });
     sceneHandle.scene.add(transform as unknown as THREE.Object3D);
     transformRef.current = transform;
@@ -1648,7 +1784,8 @@ export function StageBuilderScene({
 
       const pickables = Array.from(objectMapRef.current.values()).flatMap((record) => record.pickables);
       const hits = raycaster.intersectObjects(pickables, true);
-      const firstHit = hits[0];
+      const priorityHit = hits.find((entry) => Number(entry.object.userData.stageBuilderPickPriority || 0) > 0);
+      const firstHit = priorityHit || hits[0];
       if (firstHit?.object.userData.stageObjectId) {
         const currentId = selectedRef.current;
         let nextId = firstHit.object.userData.stageObjectId as string;
@@ -1656,7 +1793,7 @@ export function StageBuilderScene({
           const throughHit = hits.find((entry) => entry.object.userData.stageObjectId && entry.object.userData.stageObjectId !== currentId);
           if (throughHit?.object.userData.stageObjectId) nextId = throughHit.object.userData.stageObjectId as string;
         }
-        if (currentId && nextId !== currentId && lockModeRef.current === 'ignore' && !event.shiftKey) {
+        if (currentId && nextId !== currentId && lockModeRef.current === 'ignore' && !event.shiftKey && !selectionCanBypassLock(currentId, nextId)) {
           onLockedSelectionAttemptRef.current?.();
           return;
         }
@@ -1731,6 +1868,7 @@ export function StageBuilderScene({
         const factor = Math.max(0.2, Math.min(5, distance / (drag.startDistance || distance)));
         selectedRoot.scale.set(factor, selected.kind === 'base' ? 1 : factor, factor);
       }
+      updateAttachedLabelVisuals(new Set([selected.id]));
     };
 
     const handlePointerUp = (event: PointerEvent) => {
@@ -1959,7 +2097,8 @@ export function StageBuilderScene({
 
     for (const object of objects) {
       if (object.hidden) continue;
-      const record = makeObjectRoot(object, { validationSeverity: validationSeverityFor(object.id, validationResultsRef.current), sensorHelpersVisible });
+      if (object.kind === 'text' && object.attachment?.parentId && objects.find((item) => item.id === object.attachment?.parentId)?.hidden) continue;
+      const record = makeObjectRoot(object, { validationSeverity: validationSeverityFor(object.id, validationResultsRef.current), sensorHelpersVisible }, { objects });
       if (object.id === lookThroughCameraId) record.root.visible = false;
       objectMapRef.current.set(object.id, record);
       scene.add(record.root);

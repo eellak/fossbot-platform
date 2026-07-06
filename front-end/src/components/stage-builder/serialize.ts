@@ -77,14 +77,18 @@ function markerTextFor(object: EditorStageObject): StageTextEntry | null {
     scale: Math.min(0.65, Math.max(0.35, object.dimensions[0] * 0.8)),
     onFloor: true,
     color: 'black',
+    style: { backgroundVisible: true, backgroundColor: '#ffffff', backgroundOpacity: 0.9, borderVisible: true, borderColor: '#0f172a', borderWidth: 8, fontSize: 56 },
   };
 }
 
 export function editorStageToConfig(stage: EditorStage): StageJsonEntry[] {
   const entries: StageJsonEntry[] = [floorToConfig(stage.floor || DEFAULT_STAGE_FLOOR)];
 
+  const hiddenObjectIds = new Set(stage.objects.filter((object) => object.hidden).map((object) => object.id));
+
   for (const object of stage.objects) {
     if (object.hidden) continue;
+    if (object.kind === 'text' && object.attachment?.parentId && hiddenObjectIds.has(object.attachment.parentId)) continue;
     if (object.kind === 'base') {
       entries.push({
         type: 'base',
@@ -131,6 +135,7 @@ export function editorStageToConfig(stage: EditorStage): StageJsonEntry[] {
         name: object.name || 'line',
       });
     } else if (object.kind === 'text') {
+      const parent = object.attachment?.parentId ? stage.objects.find((candidate) => candidate.id === object.attachment?.parentId) : null;
       entries.push({
         type: 'text',
         text: object.text,
@@ -138,6 +143,14 @@ export function editorStageToConfig(stage: EditorStage): StageJsonEntry[] {
         color: object.color,
         scale: object.scale,
         onFloor: object.onFloor,
+        attachment: object.attachment,
+        attach: object.attachment && parent ? {
+          parentName: parent.name || parent.id,
+          face: object.attachment.face,
+          offset: object.attachment.offset,
+          rotation: object.attachment.rotation,
+        } : undefined,
+        style: object.style,
         name: object.name || object.semanticKind || 'text',
       });
     } else if (object.kind === 'light') {
@@ -282,6 +295,9 @@ function configEntryToEditorObject(entry: StageJsonEntry): EditorStageObject | n
       color: String(text.color || 'black'),
       scale: text.scale || 0.75,
       onFloor: text.onFloor ?? true,
+      parentId: text.attachment?.parentId,
+      attachment: text.attachment,
+      style: text.style,
     };
   }
   if (entry.type === 'fossbot') {
