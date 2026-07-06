@@ -21,7 +21,7 @@ import { activeValidationResults, validateStageBuilderStage } from './stageBuild
 export const DEFAULT_STAGE_FLOOR: EditorStageFloorSettings = {
   name: 'floor',
   dimensions: [10, 10],
-  color: 'white',
+  color: 'dodgerblue',
   texture: '',
   repeat: [25, 25],
   offset: [0, 0],
@@ -40,7 +40,7 @@ export const DEFAULT_STAGE_METADATA: StageBuilderMetadata = {
 export const DEFAULT_FLOOR_ENTRY: StageJsonEntry = {
   type: 'floor',
   dimensions: [10, 10],
-  material: { color: 'white' },
+  material: { color: 'dodgerblue' },
   name: 'floor',
   texture: '',
   repeat: [25, 25],
@@ -266,7 +266,7 @@ function floorFromConfig(config: StageJsonEntry[]): EditorStageFloorSettings {
   return {
     name: floor.name || 'floor',
     dimensions: floor.dimensions || DEFAULT_STAGE_FLOOR.dimensions,
-    color: String(floor.material?.color || 'white'),
+    color: String(floor.material?.color || DEFAULT_STAGE_FLOOR.color),
     texture: floor.texture || '',
     repeat: floor.repeat || [25, 25],
     offset: floor.offset || [0, 0],

@@ -4,7 +4,7 @@ import {
 } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import type { EditorStage, EditorStageObject } from './types';
-import { StageInspector } from './StageInspector';
+import { ColorPickerField, StageInspector } from './StageInspector';
 import { StageValidationPanel } from './StageValidationPanel';
 import type { StageBuilderValidationResult } from './stageBuilderValidation';
 import type { StageBuilderPreferences } from './stageBuilderPreferences';
@@ -132,7 +132,12 @@ function StageContext({ stage, prefs, onStageChange, onPrefsChange }: Pick<Edito
           </InlineFields>
         </FieldRow>
         <FieldRow label="Color">
-          <TextField {...commonFieldProps} value={stage.floor.color} inputProps={{ 'aria-label': 'Floor color' }} onChange={(event) => onStageChange({ ...stage, floor: { ...stage.floor, color: event.target.value } })} />
+          <ColorPickerField
+            value={stage.floor.color}
+            pickerAriaLabel="Floor color picker"
+            valueAriaLabel="Floor color value"
+            onChange={(color) => onStageChange({ ...stage, floor: { ...stage.floor, color } })}
+          />
         </FieldRow>
       </Section>
 

@@ -43,7 +43,23 @@ function colorInputValue(value: string): string {
   if (/^#[0-9a-fA-F]{3}$/.test(trimmed)) {
     return `#${trimmed.slice(1).split('').map((char) => char + char).join('')}`;
   }
-  return '#ffffff';
+  if (typeof document === 'undefined') return '#ffffff';
+
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return '#ffffff';
+
+  try {
+    ctx.fillStyle = '#ffffff';
+    ctx.fillStyle = trimmed;
+  } catch {
+    return '#ffffff';
+  }
+
+  ctx.fillRect(0, 0, 1, 1);
+  const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
+  const toHex = (channel: number) => channel.toString(16).padStart(2, '0');
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
 }
 
 export interface StageInspectorProps {
@@ -100,7 +116,19 @@ function EnabledSwitch({ checked, disabled, onChange }: { checked: boolean; disa
   return <Switch size="small" checked={checked} disabled={disabled} onChange={(event) => onChange?.(event.target.checked)} />;
 }
 
-function ColorPickerField({ value, disabled, onChange }: { value: string; disabled?: boolean; onChange: (value: string) => void }) {
+export function ColorPickerField({
+  value,
+  disabled,
+  onChange,
+  pickerAriaLabel = 'Color picker',
+  valueAriaLabel = 'Color value',
+}: {
+  value: string;
+  disabled?: boolean;
+  onChange: (value: string) => void;
+  pickerAriaLabel?: string;
+  valueAriaLabel?: string;
+}) {
   return (
     <Box sx={{ display: 'grid', gridTemplateColumns: '40px minmax(0, 1fr)', gap: 0.75, alignItems: 'center' }}>
       <TextField
@@ -108,7 +136,7 @@ function ColorPickerField({ value, disabled, onChange }: { value: string; disabl
         size="small"
         disabled={disabled}
         value={colorInputValue(value)}
-        inputProps={{ 'aria-label': 'Color picker' }}
+        inputProps={{ 'aria-label': pickerAriaLabel }}
         onChange={(event) => onChange(event.target.value)}
         sx={{
           width: 40,
@@ -116,7 +144,7 @@ function ColorPickerField({ value, disabled, onChange }: { value: string; disabl
           '& input': { cursor: disabled ? 'default' : 'pointer', p: '4px' },
         }}
       />
-      <TextField {...commonFieldProps} disabled={disabled} value={value} inputProps={{ 'aria-label': 'Object color value' }} onChange={(event) => onChange(event.target.value)} />
+      <TextField {...commonFieldProps} disabled={disabled} value={value} inputProps={{ 'aria-label': valueAriaLabel }} onChange={(event) => onChange(event.target.value)} />
     </Box>
   );
 }
@@ -149,7 +177,6 @@ export function StageInspector({ object, selectedCount = object ? 1 : 0, advance
         </FieldRow>
         <FieldRow label="State">
           <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', rowGap: 0.25 }}>
-            <FormControlLabel control={<EnabledSwitch checked={!object.hidden} onChange={(checked) => set({ hidden: !checked } as Partial<EditorStageObject>)} />} label="Enabled" />
             <FormControlLabel control={<EnabledSwitch checked={!object.hidden} onChange={(checked) => set({ hidden: !checked } as Partial<EditorStageObject>)} />} label="Visible" />
             <FormControlLabel control={<EnabledSwitch checked={!!object.locked} onChange={(checked) => set({ locked: checked } as Partial<EditorStageObject>)} />} label="Locked" />
           </Stack>
@@ -281,7 +308,13 @@ export function StageInspector({ object, selectedCount = object ? 1 : 0, advance
       <Section title="Appearance">
         {'color' in object && (
           <FieldRow label="Color">
-            <ColorPickerField value={object.color} disabled={locked} onChange={(color) => set({ color } as Partial<EditorStageObject>)} />
+            <ColorPickerField
+              value={object.color}
+              disabled={locked}
+              pickerAriaLabel="Color picker"
+              valueAriaLabel="Object color value"
+              onChange={(color) => set({ color } as Partial<EditorStageObject>)}
+            />
           </FieldRow>
         )}
         {object.kind === 'text' && (

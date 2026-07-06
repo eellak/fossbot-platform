@@ -60,36 +60,36 @@ const menuButtonSx = {
   minWidth: 52,
   px: 1,
   borderRadius: 0.75,
-  color: '#cbd5e1',
+  color: editorColors.text,
   textTransform: 'none',
-  '&:hover': { bgcolor: 'rgba(148,163,184,0.09)', color: '#f8fafc' },
+  '&:hover': { bgcolor: editorColors.panelRaised, color: editorColors.textStrong },
 } as const;
 
 const topbarIconButtonSx = {
   width: 32,
   height: 32,
   borderRadius: 0.75,
-  color: '#cbd5e1',
-  '&:hover': { bgcolor: 'rgba(148,163,184,0.1)', color: '#f8fafc' },
+  color: editorColors.textMuted,
+  '&:hover': { bgcolor: editorColors.panelRaised, color: editorColors.textStrong },
 } as const;
 
 const exportButtonSx = {
   height: 34,
-  borderColor: 'rgba(226,232,240,0.28)',
-  color: '#dbeafe',
-  bgcolor: 'rgba(15,23,42,0.45)',
+  borderColor: 'rgba(216, 225, 232, 0.28)',
+  color: editorColors.accentText,
+  bgcolor: editorColors.viewport,
   textTransform: 'none',
-  '&:hover': { borderColor: 'rgba(226,232,240,0.45)', bgcolor: 'rgba(30,41,59,0.7)' },
+  '&:hover': { borderColor: editorColors.borderStrong, bgcolor: editorColors.accentSoft },
 } as const;
 
 const runButtonSx = {
   height: 34,
   px: 1.75,
-  bgcolor: '#6ee7c2',
-  color: '#06251f',
+  bgcolor: editorColors.success,
+  color: '#082114',
   fontWeight: 800,
   textTransform: 'none',
-  '&:hover': { bgcolor: '#7cf0cb' },
+  '&:hover': { bgcolor: '#72e7a0' },
 } as const;
 
 function MenuButton({ label, children }: { label: string; children: (close: () => void) => React.ReactNode }) {
@@ -153,17 +153,17 @@ export function EditorTopBar({
             color: 'inherit',
             textAlign: 'left',
             display: 'block',
-            '&:hover': { bgcolor: 'rgba(148,163,184,0.08)' },
+            '&:hover': { bgcolor: 'rgba(156, 175, 184, 0.08)' },
             '&:focus-visible': { outline: `2px solid ${editorColors.accent}`, outlineOffset: 2 },
           }}
         >
           <Typography variant="subtitle2" fontWeight={800} lineHeight={1}>Stage Builder</Typography>
-          <Typography variant="caption" sx={{ color: '#94a3b8' }} noWrap>{stageName || 'Untitled Stage'}</Typography>
+          <Typography variant="caption" sx={{ color: editorColors.textSubtle }} noWrap>{stageName || 'Untitled Stage'}</Typography>
         </ButtonBase>
       </Tooltip>
-      <Divider flexItem orientation="vertical" sx={{ borderColor: 'rgba(148,163,184,0.25)' }} />
+      <Divider flexItem orientation="vertical" sx={{ borderColor: editorColors.border }} />
 
-      <Stack direction="row" spacing={0.25} alignItems="center" sx={{ px: 0.25, py: 0.25, borderRadius: 1, bgcolor: 'rgba(15,23,42,0.24)', border: '1px solid rgba(148,163,184,0.08)' }}>
+      <Stack direction="row" spacing={0.25} alignItems="center" sx={{ px: 0.25, py: 0.25, borderRadius: 1, bgcolor: editorColors.panelInset, border: `1px solid ${editorColors.border}` }}>
         <MenuButton label="File">
         {(close) => [
           <MenuItem key="new" onClick={() => { close(); onNew(); }}>New stage</MenuItem>,
@@ -214,9 +214,9 @@ export function EditorTopBar({
           label={dirty ? 'Unsaved changes' : exportedAt ? 'Exported' : 'No changes'}
           variant="outlined"
           sx={{
-            color: dirty ? '#ffd58a' : '#9df0b8',
-            borderColor: dirty ? 'rgba(243,184,77,0.5)' : 'rgba(91,220,139,0.45)',
-            bgcolor: dirty ? 'rgba(243,184,77,0.12)' : 'rgba(91,220,139,0.08)',
+            color: dirty ? editorColors.warning : editorColors.success,
+            borderColor: dirty ? 'rgba(243, 184, 77, 0.4)' : 'rgba(91, 220, 139, 0.4)',
+            bgcolor: dirty ? 'rgba(243, 184, 77, 0.08)' : 'rgba(91, 220, 139, 0.08)',
             fontWeight: 700,
           }}
         />
@@ -227,11 +227,11 @@ export function EditorTopBar({
           label={validationSummary(validationResults)}
           variant="outlined"
           sx={{
-            color: hasErrors ? '#ffb4a5' : hasWarnings ? '#ffd58a' : '#9df0b8',
-            borderColor: hasErrors ? 'rgba(242,139,116,0.55)' : hasWarnings ? 'rgba(243,184,77,0.5)' : 'rgba(91,220,139,0.45)',
-            bgcolor: hasErrors ? 'rgba(242,139,116,0.12)' : hasWarnings ? 'rgba(243,184,77,0.12)' : 'rgba(91,220,139,0.08)',
+            color: hasErrors ? editorColors.danger : hasWarnings ? editorColors.warning : editorColors.success,
+            borderColor: hasErrors ? 'rgba(242, 139, 116, 0.4)' : hasWarnings ? 'rgba(243, 184, 77, 0.4)' : 'rgba(91, 220, 139, 0.4)',
+            bgcolor: hasErrors ? 'rgba(242, 139, 116, 0.08)' : hasWarnings ? 'rgba(243, 184, 77, 0.08)' : 'rgba(91, 220, 139, 0.08)',
             fontWeight: 700,
-            '&:hover': { bgcolor: hasErrors ? 'rgba(242,139,116,0.18)' : hasWarnings ? 'rgba(243,184,77,0.18)' : 'rgba(91,220,139,0.12)' },
+            '&:hover': { bgcolor: hasErrors ? 'rgba(242, 139, 116, 0.12)' : hasWarnings ? 'rgba(243, 184, 77, 0.12)' : 'rgba(91, 220, 139, 0.12)' },
           }}
         />
       </Stack>
@@ -239,7 +239,7 @@ export function EditorTopBar({
         <Tooltip title="Toggle left panel"><IconButton size="small" onClick={onToggleLeftPanel} sx={topbarIconButtonSx}><ViewSidebarIcon fontSize="small" /></IconButton></Tooltip>
         <Tooltip title="Editor settings"><IconButton size="small" onClick={onOpenSettings} sx={topbarIconButtonSx}><SettingsIcon fontSize="small" /></IconButton></Tooltip>
       </Stack>
-      <Stack direction="row" spacing={0.75} alignItems="center" sx={{ pl: 0.75, ml: 0.25, borderLeft: '1px solid rgba(148,163,184,0.16)' }}>
+      <Stack direction="row" spacing={0.75} alignItems="center" sx={{ pl: 0.75, ml: 0.25, borderLeft: `1px solid ${editorColors.border}` }}>
         <Button size="small" color="inherit" variant="outlined" startIcon={<FileDownloadIcon />} onClick={onExport} sx={exportButtonSx}>Export JSON</Button>
         <Button size="small" variant="contained" disableElevation startIcon={<PlayArrowIcon />} onClick={onRunTest} sx={runButtonSx}>Run Test</Button>
         <IconButton size="small" onClick={overflow.openMenu} sx={topbarIconButtonSx}><MoreVertIcon fontSize="small" /></IconButton>
