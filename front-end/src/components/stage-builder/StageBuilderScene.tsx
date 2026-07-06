@@ -1,6 +1,9 @@
 import React, { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
+import { LineSegments2 } from 'three/examples/jsm/lines/LineSegments2.js';
+import { LineSegmentsGeometry } from 'three/examples/jsm/lines/LineSegmentsGeometry.js';
+import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 import { disposeScene, initScene, renderScene, type SceneHandle } from 'src/simulator/scene/scene';
 import { loadRobotV2 } from 'src/simulator/robot/v2';
 import type { EditorStageObject, StageBuilderGroup, StageBuilderMode, StageBuilderTransformSpace, Vec3 } from './types';
@@ -109,6 +112,63 @@ const robotSpawnForward = new THREE.Vector3();
 
 function cloneObjectForTransform(object: EditorStageObject): EditorStageObject {
   return JSON.parse(JSON.stringify(object));
+}
+
+// Multi-level floor grid. Each level is a fat-line (LineSegments2) layer drawn at a
+// multiple of the base cell size. Lines are unlit (no specular) and depth-tested with
+// polygonOffset so they read as part of the floor instead of a floating overlay.
+// To add a third tier, append another entry here.
+// Color strength (`shade`) is kept similar across levels so every tier reads on
+// both light and dark floors; the major/minor hierarchy comes from linewidth +
+// opacity, not from making minors lighter.
+const GRID_LEVELS = [
+  { cellStep: 1, opacity: 0.5, shade: 0.5, linewidth: 1 },   // minor — every cell
+  { cellStep: 5, opacity: 0.9, shade: 0.6, linewidth: 2 },  // major — every 5 cells
+] as const;
+
+const GRID_Y = 0.002;
+const gridOppositeColor = new THREE.Color();
+
+// Lines are tinted toward the opposite end of the luminance range from the floor,
+// so light floors get darker lines and dark floors get lighter lines. `shade`
+// controls how far; opacity then lets the floor bleed through so lines feel
+// "one with" the surface.
+function gridLineColor(floor: THREE.Color, lum: number, shade: number): THREE.Color {
+  gridOppositeColor.set(lum >= 0.5 ? 0x000000 : 0xffffff);
+  return floor.clone().lerp(gridOppositeColor, shade);
+}
+
+function buildGridLevel(width: number, depth: number, spacing: number, level: (typeof GRID_LEVELS)[number], floor: THREE.Color, lum: number): LineSegments2 {
+  const positions: number[] = [];
+  const halfW = width / 2;
+  const halfD = depth / 2;
+  const eps = 1e-4;
+  // Lines parallel to X (stepping along Z).
+  for (let z = -halfD; z <= halfD + eps; z += spacing) {
+    const zz = Math.min(z, halfD);
+    positions.push(-halfW, 0, zz, halfW, 0, zz);
+  }
+  // Lines parallel to Z (stepping along X).
+  for (let x = -halfW; x <= halfW + eps; x += spacing) {
+    const xx = Math.min(x, halfW);
+    positions.push(xx, 0, -halfD, xx, 0, halfD);
+  }
+  const geometry = new LineSegmentsGeometry();
+  geometry.setPositions(positions);
+  const material = new LineMaterial({
+    color: gridLineColor(floor, lum, level.shade),
+    linewidth: level.linewidth, // pixels (worldUnits: false)
+    transparent: true,
+    opacity: level.opacity,
+    depthWrite: false,
+    polygonOffset: true,
+    polygonOffsetFactor: -1,
+    polygonOffsetUnits: -1,
+  });
+  const line = new LineSegments2(geometry, material);
+  line.position.y = GRID_Y;
+  line.renderOrder = 1;
+  return line;
 }
 
 function color(value: string): THREE.Color {
@@ -886,7 +946,8 @@ export function StageBuilderScene({
   const objectMapRef = useRef<Map<string, MeshRecord>>(new Map());
   const ghostRef = useRef<MeshRecord | null>(null);
   const floorMeshRef = useRef<THREE.Mesh | null>(null);
-  const gridRef = useRef<THREE.GridHelper | null>(null);
+  const gridGroupRef = useRef<THREE.Group | null>(null);
+  const gridMaterialsRef = useRef<LineMaterial[]>([]);
   const boundaryRef = useRef<THREE.Line | null>(null);
   const marqueeElementRef = useRef<HTMLDivElement | null>(null);
   const marqueeRef = useRef<{ startX: number; startY: number; currentX: number; currentY: number } | null>(null);
@@ -1105,11 +1166,11 @@ export function StageBuilderScene({
     sceneHandle.scene.add(floor);
     floorMeshRef.current = floor;
 
-    const grid = new THREE.GridHelper(10, 20, 0x9e9e9e, 0xd0d0d0);
-    grid.position.y = 0.002;
-    grid.visible = gridVisibleRef.current;
-    sceneHandle.scene.add(grid);
-    gridRef.current = grid;
+    const gridGroup = new THREE.Group();
+    gridGroup.visible = gridVisibleRef.current;
+    sceneHandle.scene.add(gridGroup);
+    gridGroupRef.current = gridGroup;
+    gridMaterialsRef.current = [];
 
     const boundaryGeom = new THREE.BufferGeometry().setFromPoints([
       new THREE.Vector3(-5, 0.01, -5), new THREE.Vector3(5, 0.01, -5), new THREE.Vector3(5, 0.01, 5), new THREE.Vector3(-5, 0.01, 5), new THREE.Vector3(-5, 0.01, -5),
@@ -1434,6 +1495,14 @@ export function StageBuilderScene({
     let raf = 0;
     const frame = () => {
       const elapsed = performance.now() / 1000;
+      // Fat-line widths are in pixels; keep their resolution uniform in sync with
+      // the canvas so they stay crisp through resizes/dolly.
+      const gridMaterials = gridMaterialsRef.current;
+      if (gridMaterials.length) {
+        const el = sceneHandle.renderer.domElement;
+        gridMaterials[0].resolution.set(el.clientWidth || 1, el.clientHeight || 1);
+        for (let i = 1; i < gridMaterials.length; i++) gridMaterials[i].resolution.copy(gridMaterials[0].resolution);
+      }
       const animatedObjectIds = new Set(selectedIdsRef.current);
       if (selectedRef.current) animatedObjectIds.add(selectedRef.current);
       const animatedGroupId = selectedGroupRef.current;
@@ -1503,10 +1572,15 @@ export function StageBuilderScene({
       }
       floor.geometry.dispose();
       (floor.material as THREE.Material).dispose();
-      grid.geometry.dispose();
-      const gridMaterial = grid.material as THREE.Material | THREE.Material[];
-      if (Array.isArray(gridMaterial)) gridMaterial.forEach((item) => item.dispose());
-      else gridMaterial.dispose();
+      const gridGroup = gridGroupRef.current;
+      if (gridGroup) {
+        for (const child of gridGroup.children) {
+          const line = child as LineSegments2;
+          line.geometry.dispose();
+          (line.material as THREE.Material).dispose();
+        }
+        sceneHandle.scene.remove(gridGroup);
+      }
       boundaryGeom.dispose();
       (boundary.material as THREE.Material).dispose();
       disposeScene(sceneHandle);
@@ -1518,7 +1592,8 @@ export function StageBuilderScene({
       groupPivotRef.current = null;
       ghostRef.current = null;
       floorMeshRef.current = null;
-      gridRef.current = null;
+      gridGroupRef.current = null;
+      gridMaterialsRef.current = [];
       boundaryRef.current = null;
       groupTransformRef.current = null;
     };
@@ -1534,19 +1609,25 @@ export function StageBuilderScene({
       mat.color = color(floorColor);
       mat.needsUpdate = true;
     }
-    const grid = gridRef.current;
-    if (grid) {
-      const spacing = Math.max(0.1, gridSize || 0.5);
-      const maxSize = Math.max(width, depth, spacing);
-      const divisions = Math.max(1, Math.round(maxSize / spacing));
-      const nextGrid = new THREE.GridHelper(maxSize, divisions, 0x9e9e9e, 0xd0d0d0);
-      grid.geometry.dispose();
-      grid.geometry = nextGrid.geometry;
-      const nextMaterial = nextGrid.material as THREE.Material | THREE.Material[];
-      if (Array.isArray(nextMaterial)) nextMaterial.forEach((item) => item.dispose());
-      else nextMaterial.dispose();
-      grid.scale.set(width / maxSize, 1, depth / maxSize);
-      grid.visible = gridVisible;
+    const gridGroup = gridGroupRef.current;
+    if (gridGroup) {
+      for (const child of gridGroup.children) {
+        const line = child as LineSegments2;
+        line.geometry.dispose();
+        (line.material as THREE.Material).dispose();
+      }
+      gridGroup.clear();
+      gridMaterialsRef.current = [];
+      const baseCell = Math.max(0.1, gridSize || 0.5);
+      const floorColor3 = color(floorColor);
+      const lum = 0.2126 * floorColor3.r + 0.7152 * floorColor3.g + 0.0722 * floorColor3.b;
+      for (const level of GRID_LEVELS) {
+        const spacing = baseCell * level.cellStep;
+        const line = buildGridLevel(width, depth, spacing, level, floorColor3, lum);
+        gridGroup.add(line);
+        gridMaterialsRef.current.push(line.material as LineMaterial);
+      }
+      gridGroup.visible = gridVisible;
     }
     const boundary = boundaryRef.current;
     if (boundary) {
