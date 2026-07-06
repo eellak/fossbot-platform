@@ -35,6 +35,9 @@ export type StageBaseEntry = {
   name?: string;
 };
 
+export type StagePrimitiveCollisionMode = 'auto' | 'none';
+export type StageModelCollisionMode = 'auto' | 'none' | 'trimesh' | 'convexHull' | 'compoundConvex';
+
 export type StageCubeEntry = {
   type: 'cube';
   dimensions: [number, number, number];
@@ -45,6 +48,7 @@ export type StageCubeEntry = {
   castShadow?: boolean;
   immovable?: boolean;
   mass?: number;
+  collision?: StagePrimitiveCollisionMode;
 };
 
 export type StageCylinderEntry = {
@@ -56,6 +60,7 @@ export type StageCylinderEntry = {
   castShadow?: boolean;
   immovable?: boolean;
   mass?: number;
+  collision?: StagePrimitiveCollisionMode;
 };
 
 export type StageLineEntry = {
@@ -128,7 +133,7 @@ export type StageModelEntry = {
   castShadow?: boolean;
   mass?: number;
   immovable?: boolean;
-  collision?: 'auto' | 'none' | 'trimesh' | 'convexHull' | 'compoundConvex' | { mode?: 'auto' | 'none' | 'trimesh' | 'convexHull' | 'compoundConvex'; source?: string };
+  collision?: StageModelCollisionMode | { mode?: StageModelCollisionMode; source?: string };
 };
 
 export type StageLightSubtype = 'point' | 'directional' | 'spot' | 'ambient';
@@ -277,6 +282,7 @@ export type EditorCubeObject = EditorObjectCommon & {
   color: string;
   mass: number;
   immovable: boolean;
+  collision?: StagePrimitiveCollisionMode;
   rampAngle?: number;
 };
 
@@ -287,6 +293,7 @@ export type EditorCylinderObject = EditorObjectCommon & {
   color: string;
   mass: number;
   immovable: boolean;
+  collision?: StagePrimitiveCollisionMode;
 };
 
 export type EditorLineObject = EditorObjectCommon & {
@@ -328,7 +335,7 @@ export type EditorModelObject = EditorObjectCommon & {
   color: string;
   mass: number;
   immovable: boolean;
-  collision: 'auto' | 'none' | 'trimesh' | 'convexHull' | 'compoundConvex';
+  collision: StageModelCollisionMode;
 };
 
 export type EditorLightObject = EditorObjectCommon & {

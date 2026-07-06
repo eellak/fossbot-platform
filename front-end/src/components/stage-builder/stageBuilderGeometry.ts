@@ -59,7 +59,7 @@ export function objectBounds(object: EditorStageObject): StageObjectBounds | nul
       maxY: object.position[1] + h / 2,
       minZ: object.position[2] - d / 2,
       maxZ: object.position[2] + d / 2,
-      solid: true,
+      solid: object.collision !== 'none',
       soft: false,
     };
   }
@@ -74,7 +74,7 @@ export function objectBounds(object: EditorStageObject): StageObjectBounds | nul
       maxY: object.position[1] + height / 2,
       minZ: object.position[2] - radius,
       maxZ: object.position[2] + radius,
-      solid: true,
+      solid: object.collision !== 'none',
       soft: false,
     };
   }
@@ -142,8 +142,13 @@ export function objectBounds(object: EditorStageObject): StageObjectBounds | nul
     };
   }
   if (object.kind === 'text') {
-    const width = object.style?.backgroundSize?.[0] ?? object.scale;
-    const depth = object.onFloor ? object.style?.backgroundSize?.[1] ?? object.scale * 0.35 : 0.08;
+    const textWidth = Math.max(0.05, object.scale);
+    const textDepth = Math.max(0.03, object.scale * 0.3125);
+    const hasDecor = (object.style?.backgroundVisible ?? true) || (object.style?.borderVisible ?? true);
+    const decorWidth = Math.max(0.05, object.style?.backgroundSize?.[0] ?? object.scale);
+    const decorDepth = Math.max(0.03, object.style?.backgroundSize?.[1] ?? object.scale * 0.3125);
+    const width = hasDecor ? Math.max(textWidth, decorWidth) : textWidth;
+    const depth = object.onFloor ? (hasDecor ? Math.max(textDepth, decorDepth) : textDepth) : 0.08;
     return {
       objectId: object.id,
       minX: object.position[0] - width / 2,

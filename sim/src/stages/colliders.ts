@@ -25,6 +25,7 @@ interface CubeEntry {
   name?: string
   mass?: number
   immovable?: boolean
+  collision?: 'auto' | 'none'
 }
 
 interface CylinderEntry {
@@ -33,6 +34,7 @@ interface CylinderEntry {
   name?: string
   mass?: number
   immovable?: boolean
+  collision?: 'auto' | 'none'
 }
 
 interface ModelEntry {
@@ -70,6 +72,7 @@ export function buildFloorCollider(_entry: FloorEntry, dimensions: [number, numb
 }
 
 export function buildCubeCollider(entry: CubeEntry): ColliderBuilt {
+  if (entry.collision === 'none') return { colliders: [], debugMeshes: [] }
   const [w, h, d] = entry.dimensions
   const dynamic = isDynamicEntry(entry)
 
@@ -99,6 +102,7 @@ export function buildCubeCollider(entry: CubeEntry): ColliderBuilt {
 }
 
 export function buildCylinderCollider(entry: CylinderEntry): ColliderBuilt {
+  if (entry.collision === 'none') return { colliders: [], debugMeshes: [] }
   const [rTop, rBottom, height] = entry.dimensions
   const dynamic = isDynamicEntry(entry)
 

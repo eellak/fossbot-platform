@@ -5,7 +5,7 @@ import {
 } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { Sketch, Swatch } from '@uiw/react-color';
-import type { EditorCameraObject, EditorStageObject, StageAudioSourceType, StageLabelFace, StageLightSubtype, StageSemanticKind, Vec2, Vec3 } from './types';
+import type { EditorCameraObject, EditorStageObject, StageAudioSourceType, StageLabelFace, StageLightSubtype, StageModelCollisionMode, StageSemanticKind, Vec2, Vec3 } from './types';
 import { displayObjectType, STAGE_OBJECT_CATALOG } from './stageBuilderCatalog';
 import { useEditorTheme } from './stageBuilderEditorTheme';
 import { StageBuilderNumberField } from './StageBuilderNumberField';
@@ -63,6 +63,14 @@ function labelStyle(object: Extract<EditorStageObject, { kind: 'text' }>) {
     borderWidth: object.style?.borderWidth ?? 8,
     fontSize: object.style?.fontSize ?? 56,
   };
+}
+
+function collisionEnabled(object: Extract<EditorStageObject, { kind: 'cube' | 'cylinder' | 'model' }>): boolean {
+  return object.collision !== 'none';
+}
+
+function modelCollisionMode(object: Extract<EditorStageObject, { kind: 'model' }>): StageModelCollisionMode {
+  return object.collision || 'auto';
 }
 
 function minPositive(value: unknown, fallback = 0.01, minimum = 0.01): number {
@@ -574,12 +582,7 @@ export function StageInspector({ object, selectedCount = object ? 1 : 0, advance
         {object.kind === 'text' && (
           <>
             <FieldRow label="Scale">
-              <StageBuilderNumberField {...commonNumberProps} disabled={locked} value={object.scale} inputProps={{ step: 0.05, 'aria-label': 'Text scale' }} onChange={(event) => {
-                const nextScale = minPositive(event.target.value, object.scale, 0.05);
-                const ratio = nextScale / Math.max(0.05, object.scale);
-                const currentStyle = labelStyle(object);
-                onChange({ ...object, scale: nextScale, style: { ...currentStyle, backgroundSize: [currentStyle.backgroundSize[0] * ratio, currentStyle.backgroundSize[1] * ratio] } });
-              }} />
+              <StageBuilderNumberField {...commonNumberProps} disabled={locked} value={object.scale} inputProps={{ step: 0.05, 'aria-label': 'Text scale' }} onChange={(event) => onChange({ ...object, scale: minPositive(event.target.value, object.scale, 0.05) })} />
             </FieldRow>
             {!object.attachment?.parentId && (
               <FieldRow label="Placement">
@@ -726,14 +729,6 @@ export function StageInspector({ object, selectedCount = object ? 1 : 0, advance
               ))}
               <Button size="small" variant="outlined" disabled={locked} onClick={() => onChange({ ...object, scale: 1, normalize: true })}>Original</Button>
             </Stack>
-          </FieldRow>
-          <FieldRow label="Collision">
-            <TextField {...commonFieldProps} select disabled={locked} value={object.collision} inputProps={{ 'aria-label': 'Model collision mode' }} onChange={(event) => set({ collision: event.target.value as typeof object.collision } as Partial<EditorStageObject>)}>
-              <MenuItem value="auto">Auto</MenuItem>
-              <MenuItem value="trimesh">Mesh</MenuItem>
-              <MenuItem value="convexHull">Convex hull</MenuItem>
-              <MenuItem value="none">None</MenuItem>
-            </TextField>
           </FieldRow>
           <FullRow><Typography variant="caption" sx={editorType.caption}>Custom objects import OBJ or STL files and export with the stage JSON.</Typography></FullRow>
         </Section>
@@ -911,10 +906,49 @@ export function StageInspector({ object, selectedCount = object ? 1 : 0, advance
 
       {(object.kind === 'cube' || object.kind === 'cylinder' || object.kind === 'model') && (
         <Section title="Collision">
-          <FieldRow label="Enabled"><EnabledSwitch checked={object.kind === 'model' ? object.collision !== 'none' : true} disabled /></FieldRow>
-          <FieldRow label="Type">
-            <TextField {...commonFieldProps} value={object.kind === 'cube' ? 'Box' : object.kind === 'model' ? object.collision : object.dimensions[0] === 0 ? 'Cone approximation' : 'Cylinder'} disabled inputProps={{ 'aria-label': 'Collider type' }} />
+          <FieldRow label="Enabled">
+            <EnabledSwitch
+              checked={object.kind === 'model' && !object.immovable ? true : collisionEnabled(object)}
+              disabled={locked || (object.kind === 'model' && !object.immovable)}
+              onChange={(enabled) => set({ collision: enabled ? 'auto' : 'none' } as Partial<EditorStageObject>)}
+            />
           </FieldRow>
+          {object.kind === 'model' ? (
+            <FieldRow label="Type">
+              <TextField
+                {...commonFieldProps}
+                select
+                disabled={locked || !collisionEnabled(object)}
+                value={collisionEnabled(object) ? modelCollisionMode(object) : 'auto'}
+                inputProps={{ 'aria-label': 'Model collision type' }}
+                onChange={(event) => set({ collision: event.target.value as StageModelCollisionMode } as Partial<EditorStageObject>)}
+              >
+                <MenuItem value="auto" disabled={!object.immovable}>Auto</MenuItem>
+                <MenuItem value="trimesh" disabled={!object.immovable}>Mesh</MenuItem>
+                <MenuItem value="convexHull">Convex hull</MenuItem>
+                <MenuItem value="compoundConvex" disabled>Compound convex (COACD)</MenuItem>
+              </TextField>
+            </FieldRow>
+          ) : (
+            <FieldRow label="Type">
+              <TextField
+                {...commonFieldProps}
+                value={object.kind === 'cube' ? 'Box' : object.dimensions[0] === 0 ? 'Cone approximation' : 'Cylinder'}
+                disabled
+                inputProps={{ 'aria-label': 'Collider type' }}
+              />
+            </FieldRow>
+          )}
+          {object.kind === 'model' && (
+            <FullRow>
+              <Stack spacing={0.5} sx={{ color: editorColors.textMuted }}>
+                <Typography variant="caption" sx={editorType.caption}><strong>Auto:</strong> fixed scenery; tries a COACD collider and falls back to mesh.</Typography>
+                <Typography variant="caption" sx={editorType.caption}><strong>Mesh:</strong> precise fixed scenery; not suitable for dynamic rigidbodies.</Typography>
+                <Typography variant="caption" sx={editorType.caption}><strong>Convex hull:</strong> recommended for moving custom objects.</Typography>
+                <Typography variant="caption" sx={editorType.caption}><strong>Compound convex (COACD):</strong> requires a precomputed collider asset.</Typography>
+              </Stack>
+            </FullRow>
+          )}
         </Section>
       )}
 
@@ -923,7 +957,7 @@ export function StageInspector({ object, selectedCount = object ? 1 : 0, advance
           <FieldRow label="Type">
             <TextField {...commonFieldProps} select disabled={locked} value={object.immovable ? 'fixed' : 'dynamic'} inputProps={{ 'aria-label': 'Rigidbody type' }} onChange={(event) => {
               const dynamic = event.target.value === 'dynamic';
-              set({ immovable: !dynamic, mass: dynamic ? Math.max(0.1, object.mass || 0.4) : 0 } as Partial<EditorStageObject>);
+              set({ immovable: !dynamic, mass: dynamic ? Math.max(0.1, object.mass || 0.4) : 0, ...(object.kind === 'model' && dynamic ? { collision: 'convexHull' as StageModelCollisionMode } : {}) } as Partial<EditorStageObject>);
             }}>
               <MenuItem value="fixed">Fixed</MenuItem>
               <MenuItem value="dynamic">Dynamic</MenuItem>
