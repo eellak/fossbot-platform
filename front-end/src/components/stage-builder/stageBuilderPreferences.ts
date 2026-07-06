@@ -39,7 +39,7 @@ export const defaultStageBuilderPreferences: StageBuilderPreferences = {
   lockMode: 'stopAtFirstHit',
   keyboardShortcutsEnabled: true,
   captureKeyboardInViewport: true,
-  snapPreset: 'medium',
+  snapPreset: 'fine',
   rotationSnapPreset: '15',
   transformSpace: 'world',
   showAdvancedInspector: false,
@@ -51,7 +51,7 @@ function migrateSnapPreset(value: unknown): StageBuilderSnapPreset {
   if (value === 'off' || value === 'free') return 'off';
   if (value === 'fine') return 'fine';
   if (value === 'coarse') return 'coarse';
-  return 'medium';
+  return 'fine';
 }
 
 function migrateRotationSnapPreset(value: unknown): StageBuilderRotationSnapPreset {

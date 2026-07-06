@@ -36,7 +36,7 @@ export const DEFAULT_STAGE_METADATA: StageBuilderMetadata = {
   validationOverrides: {},
   gridVisible: true,
   gridSize: 0.5,
-  defaultSnapPreset: 'medium',
+  defaultSnapPreset: 'fine',
   defaultRotationSnapPreset: '15',
 };
 
