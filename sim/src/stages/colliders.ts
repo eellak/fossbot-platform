@@ -39,6 +39,7 @@ interface ModelEntry {
   filename: string
   position: [number, number, number]
   orientation?: [number, number, number]
+  normalize?: boolean
   name?: string
   mass?: number
   immovable?: boolean
@@ -175,6 +176,16 @@ function meshesFromObject(root: THREE.Object3D): THREE.Mesh[] {
   return meshes
 }
 
+function normalizeModelRoot(root: THREE.Object3D): void {
+  root.updateMatrixWorld(true)
+  const box = new THREE.Box3().setFromObject(root)
+  if (box.isEmpty()) return
+  const center = box.getCenter(new THREE.Vector3())
+  root.position.x -= center.x
+  root.position.y -= box.min.y
+  root.position.z -= center.z
+}
+
 function makeTrimeshCollider(root: THREE.Object3D): RAPIER.ColliderDesc | undefined {
   root.updateMatrixWorld(true)
   const meshes = meshesFromObject(root)
@@ -284,16 +295,19 @@ async function loadCompoundConvex(
     if (collisionRoot) { collisionPath = candidate; break }
   }
   if (!collisionRoot) return null
+  if (entry.normalize) normalizeModelRoot(collisionRoot)
 
-  collisionRoot.position.copy(dynamic ? new THREE.Vector3() : visualRoot.position)
-  collisionRoot.quaternion.copy(dynamic ? new THREE.Quaternion() : visualRoot.quaternion)
-  collisionRoot.scale.copy(visualRoot.scale)
-  collisionRoot.updateMatrixWorld(true)
+  const collisionPivot = new THREE.Group()
+  collisionPivot.add(collisionRoot)
+  collisionPivot.position.copy(dynamic ? new THREE.Vector3() : visualRoot.position)
+  collisionPivot.quaternion.copy(dynamic ? new THREE.Quaternion() : visualRoot.quaternion)
+  collisionPivot.scale.copy(visualRoot.scale)
+  collisionPivot.updateMatrixWorld(true)
 
   const colliders: RAPIER.ColliderDesc[] = []
   const debugMeshes: Array<THREE.Mesh | THREE.LineSegments> = []
 
-  for (const mesh of meshesFromObject(collisionRoot)) {
+  for (const mesh of meshesFromObject(collisionPivot)) {
     const partRoot = new THREE.Group()
     const partMesh = new THREE.Mesh(mesh.geometry.clone())
     partMesh.geometry.applyMatrix4(mesh.matrixWorld)

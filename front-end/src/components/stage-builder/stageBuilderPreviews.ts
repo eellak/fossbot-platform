@@ -82,6 +82,7 @@ const CATEGORY_BY_KIND: Record<StageSemanticKind, EditorTone> = {
   light: editorTones.lighting,
   camera: editorTones.camera,
   audio: editorTones.audio,
+  customObject: editorTones.structures,
 };
 
 let renderer: THREE.WebGLRenderer | null = null;

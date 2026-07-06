@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js'
+import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js'
 import { parseColor } from './parseColor'
 
 /**
@@ -62,6 +63,9 @@ interface CylinderEntry {
 interface ModelEntry {
   type: 'model'
   filename: string
+  format?: 'obj' | 'stl'
+  normalize?: boolean
+  nativeDimensions?: [number, number, number]
   position: [number, number, number]
   scale?: number
   orientation?: [number, number, number]
@@ -204,7 +208,9 @@ const textureLoader = new THREE.TextureLoader()
 const LEGACY_FLOOR_SIZE_M = 10
 
 const objLoader = new OBJLoader()
+const stlLoader = new STLLoader()
 const objCache = new Map<string, Promise<THREE.Group>>()
+const stlCache = new Map<string, Promise<THREE.BufferGeometry>>()
 
 function loadOBJ(url: string): Promise<THREE.Group> {
   let pending = objCache.get(url)
@@ -214,7 +220,47 @@ function loadOBJ(url: string): Promise<THREE.Group> {
     })
     objCache.set(url, pending)
   }
-  return pending.then((g) => g.clone(true))
+  return pending.then((g) => {
+    const clone = g.clone(true)
+    clone.traverse((child) => {
+      const mesh = child as THREE.Mesh
+      if (!mesh.isMesh) return
+      if (mesh.geometry) mesh.geometry = mesh.geometry.clone()
+      if (Array.isArray(mesh.material)) mesh.material = mesh.material.map((material) => material.clone())
+      else if (mesh.material) mesh.material = mesh.material.clone()
+    })
+    return clone
+  })
+}
+
+function loadSTL(url: string): Promise<THREE.BufferGeometry> {
+  let pending = stlCache.get(url)
+  if (!pending) {
+    pending = new Promise<THREE.BufferGeometry>((resolve, reject) => {
+      stlLoader.load(url, resolve, undefined, reject)
+    })
+    stlCache.set(url, pending)
+  }
+  return pending.then((geometry) => geometry.clone())
+}
+
+async function loadModel(entry: ModelEntry): Promise<THREE.Object3D> {
+  if (entry.format === 'stl' || (!entry.format && entry.filename.toLowerCase().endsWith('.stl'))) {
+    const group = new THREE.Group()
+    group.add(new THREE.Mesh(await loadSTL(entry.filename)))
+    return group
+  }
+  return loadOBJ(entry.filename)
+}
+
+function normalizeModelRoot(root: THREE.Object3D): void {
+  root.updateMatrixWorld(true)
+  const box = new THREE.Box3().setFromObject(root)
+  if (box.isEmpty()) return
+  const center = box.getCenter(new THREE.Vector3())
+  root.position.x -= center.x
+  root.position.y -= box.min.y
+  root.position.z -= center.z
 }
 
 // ── Builders ──
@@ -300,25 +346,29 @@ export function buildCylinderVisual(entry: CylinderEntry): VisualBuilt {
 }
 
 export async function buildModelVisual(entry: ModelEntry): Promise<VisualBuilt> {
-  const root = await loadOBJ(entry.filename)
-  if (entry.scale != null) root.scale.setScalar(entry.scale)
-  root.position.fromArray(entry.position)
-  if (entry.orientation) root.rotation.set(entry.orientation[0], entry.orientation[1], entry.orientation[2])
-  root.name = entry.name ?? 'model'
+  const content = await loadModel(entry)
+  if (entry.normalize) normalizeModelRoot(content)
 
   if (entry.color != null) {
     const color = parseColor(entry.color)
-    root.traverse((child) => {
+    content.traverse((child) => {
       const mesh = child as THREE.Mesh
       if (mesh.isMesh) mesh.material = new THREE.MeshStandardMaterial({ color })
     })
   }
   if (entry.castShadow) {
-    root.traverse((child) => {
+    content.traverse((child) => {
       const mesh = child as THREE.Mesh
       if (mesh.isMesh) mesh.castShadow = true
     })
   }
+
+  const root = new THREE.Group()
+  root.name = entry.name ?? 'model'
+  root.add(content)
+  if (entry.scale != null) root.scale.setScalar(entry.scale)
+  root.position.fromArray(entry.position)
+  if (entry.orientation) root.rotation.set(entry.orientation[0], entry.orientation[1], entry.orientation[2])
 
   return { object: root, dynamicBody: dynamicBodyFor(entry) }
 }

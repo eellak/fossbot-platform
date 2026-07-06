@@ -1,6 +1,6 @@
 import type { EditorStageObject, StageSemanticKind, Vec3 } from './types';
 
-export type StageObjectCatalogCategory = 'surface' | 'structure' | 'challenge' | 'robot' | 'marker';
+export type StageObjectCatalogCategory = 'surface' | 'structure' | 'challenge' | 'robot' | 'marker' | 'custom';
 
 export type StageObjectCatalogItem = {
   id: StageSemanticKind;
@@ -30,6 +30,7 @@ export const STAGE_OBJECT_CATALOG: StageObjectCatalogItem[] = [
   { id: 'light', label: 'Light', shortLabel: 'Light', description: 'A scene light. Pick point, spot, directional, or ambient in the inspector.', category: 'marker', placeable: true },
   { id: 'camera', label: 'Camera', shortLabel: 'Camera', description: 'A stage camera. Run Test starts from this view; optionally lock it.', category: 'marker', placeable: true },
   { id: 'audio', label: 'Audio', shortLabel: 'Audio', description: 'A placed audio source with source, volume, loop, and spatial range metadata.', category: 'marker', placeable: true },
+  { id: 'customObject', label: 'Custom object', shortLabel: 'Custom', description: 'An imported OBJ model with transform and collision settings.', category: 'custom', placeable: false },
 ];
 
 export function catalogItem(id: StageSemanticKind): StageObjectCatalogItem | undefined {
@@ -52,6 +53,7 @@ export function displayObjectType(object: EditorStageObject): string {
   if (object.kind === 'light') return 'Light';
   if (object.kind === 'camera') return 'Camera';
   if (object.kind === 'audio') return 'Audio';
+  if (object.kind === 'model') return 'Custom object';
   return 'Object';
 }
 
@@ -123,6 +125,7 @@ export function inferSemanticKindFromConfig(type: string, name?: string, color?:
   if (type === 'light') return 'light';
   if (type === 'camera') return 'camera';
   if (type === 'audio') return 'audio';
+  if (type === 'model') return 'customObject';
   if (type === 'line') return 'line';
   if (type === 'text') return 'label';
   if (lower.includes('target') || lower.includes('goal')) return 'target';

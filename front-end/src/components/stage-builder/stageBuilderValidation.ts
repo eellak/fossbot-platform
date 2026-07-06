@@ -59,7 +59,7 @@ export function validateStageBuilderStage(stage: EditorStage): StageBuilderValid
     results.push(result(stage, 'stage:target-missing', 'error', [], 'Target is missing.', 'Place a Target marker to define the minimum valid challenge goal.', false));
   }
 
-  const physicalObjectCount = stage.objects.filter((object) => object.kind === 'cube' || object.kind === 'cylinder').length;
+  const physicalObjectCount = stage.objects.filter((object) => object.kind === 'cube' || object.kind === 'cylinder' || object.kind === 'model').length;
   if (physicalObjectCount > 50) {
     results.push(result(stage, 'stage:many-objects', 'warning', [], 'Obstacle count is above 50.', 'Large stages may be slow on older machines.'));
   }
@@ -97,6 +97,10 @@ export function validateStageBuilderStage(stage: EditorStage): StageBuilderValid
 
     if (object.semanticKind === 'target' || object.semanticKind === 'checkpoint') {
       results.push(result(stage, `object:${object.id}:reachability-unverified`, 'warning', [object.id], `${labelFor(object)} reachability is not guaranteed.`, 'Reachability detection is approximate in this phase; test the stage and override this warning if it is intentional.'));
+    }
+
+    if (object.kind === 'model' && !object.filename.trim()) {
+      results.push(result(stage, `object:${object.id}:model-source`, 'error', [object.id], `${labelFor(object)} has no model file.`, 'Import or reference an OBJ file before exporting this object.', false));
     }
 
     if (object.kind === 'light' && object.intensity < 0) {

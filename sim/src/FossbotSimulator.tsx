@@ -15,6 +15,8 @@ export interface FossbotSimulatorHandle {
   changeCamera(): void
   setSensorHelpersVisible(visible: boolean): void
   isSensorHelpersVisible(): boolean
+  setCollisionWireVisible(visible: boolean): void
+  isCollisionWireVisible(): boolean
   getDistance(): number
   getAcceleration(axis: 'x' | 'y' | 'z' | string): number
   getGyroscope(axis: 'x' | 'y' | 'z' | string): number
@@ -54,6 +56,8 @@ export const FossbotSimulator = forwardRef<FossbotSimulatorHandle, FossbotSimula
       changeCamera: () => engineRef.current?.changeCamera(),
       setSensorHelpersVisible: (visible) => engineRef.current?.setSensorHelpersVisible(visible),
       isSensorHelpersVisible: () => engineRef.current?.isSensorHelpersVisible() ?? false,
+      setCollisionWireVisible: (visible) => engineRef.current?.setCollisionWireVisible(visible),
+      isCollisionWireVisible: () => engineRef.current?.isCollisionWireVisible() ?? false,
       getDistance: () => engineRef.current?.getDistance() ?? 3,
       getAcceleration: (axis) => engineRef.current?.getAcceleration(axis) ?? 0,
       getGyroscope: (axis) => engineRef.current?.getGyroscope(axis) ?? 0,

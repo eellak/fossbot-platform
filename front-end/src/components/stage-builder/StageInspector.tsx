@@ -9,6 +9,7 @@ import type { EditorCameraObject, EditorStageObject, StageAudioSourceType, Stage
 import { displayObjectType, STAGE_OBJECT_CATALOG } from './stageBuilderCatalog';
 import { useEditorTheme } from './stageBuilderEditorTheme';
 import { StageBuilderNumberField } from './StageBuilderNumberField';
+import { CUSTOM_OBJECT_FIT_PRESETS, CUSTOM_OBJECT_MIN_SCALE, CUSTOM_OBJECT_SCALE_STEP } from './stageBuilderCustomObjects';
 
 function num(value: unknown, fallback = 0): number {
   const parsed = Number(value);
@@ -16,7 +17,7 @@ function num(value: unknown, fallback = 0): number {
 }
 
 function supportsColor(object: EditorStageObject): object is Extract<EditorStageObject, { color: string }> {
-  return object.kind === 'base' || object.kind === 'cube' || object.kind === 'cylinder' || object.kind === 'line' || object.kind === 'text' || object.kind === 'light';
+  return object.kind === 'base' || object.kind === 'cube' || object.kind === 'cylinder' || object.kind === 'line' || object.kind === 'text' || object.kind === 'light' || object.kind === 'model';
 }
 
 function supportsAppearance(object: EditorStageObject): boolean {
@@ -156,6 +157,16 @@ export interface StageInspectorProps {
 
 const commonNumberProps = { type: 'number', size: 'small' as const, fullWidth: true, inputProps: { step: 0.1 } };
 const commonFieldProps = { size: 'small' as const, fullWidth: true };
+function modelScaleForFit(object: Extract<EditorStageObject, { kind: 'model' }>, targetMeters: number): number {
+  const dimensions = object.nativeDimensions || [1, 1, 1];
+  const maxDimension = Math.max(...dimensions);
+  return maxDimension > 0 ? Number((targetMeters / maxDimension).toPrecision(6)) : object.scale;
+}
+
+function modelDimensionsLabel(object: Extract<EditorStageObject, { kind: 'model' }>): string {
+  const dimensions = object.nativeDimensions || [1, 1, 1];
+  return dimensions.map((value) => `${(value * object.scale).toFixed(3)} m`).join(' × ');
+}
 
 function FieldRow({ label, children, align = 'center', noPadding = false }: { label: string; children: React.ReactNode; align?: 'center' | 'start'; noPadding?: boolean }) {
   const { colors: editorColors, type: editorType } = useEditorTheme();
@@ -401,7 +412,7 @@ export function StageInspector({ object, selectedCount = object ? 1 : 0, advance
 
   const setRotationY = (degrees: number) => {
     const rotationY = rad(degrees);
-    if (object.kind === 'cube') {
+    if (object.kind === 'cube' || object.kind === 'model') {
       const orientation = object.orientation ? [object.orientation[0], rotationY, object.orientation[2]] as Vec3 : undefined;
       onChange({ ...object, rotationY, orientation });
     } else if ('rotationY' in object) set({ rotationY } as Partial<EditorStageObject>);
@@ -467,6 +478,16 @@ export function StageInspector({ object, selectedCount = object ? 1 : 0, advance
           <FieldRow label="Rotation">
             <InlineFields>
               <StageBuilderNumberField axis="Y" {...commonNumberProps} disabled={locked} value={deg(object.rotationY)} onChange={(event) => setRotationY(num(event.target.value, deg(object.rotationY)))} />
+            </InlineFields>
+          </FieldRow>
+        )}
+
+        {object.kind === 'model' && (
+          <FieldRow label="Rotation">
+            <InlineFields>
+              <StageBuilderNumberField axis="X" {...commonNumberProps} disabled={locked} value={deg(object.orientation?.[0] || 0)} onChange={(event) => onChange({ ...object, orientation: [rad(num(event.target.value, deg(object.orientation?.[0] || 0))), object.orientation?.[1] || object.rotationY, object.orientation?.[2] || 0] })} />
+              <StageBuilderNumberField axis="Y" {...commonNumberProps} disabled={locked} value={deg(object.rotationY)} onChange={(event) => setRotationY(num(event.target.value, deg(object.rotationY)))} />
+              <StageBuilderNumberField axis="Z" {...commonNumberProps} disabled={locked} value={deg(object.orientation?.[2] || 0)} onChange={(event) => onChange({ ...object, orientation: [object.orientation?.[0] || 0, object.orientation?.[1] || object.rotationY, rad(num(event.target.value, deg(object.orientation?.[2] || 0)))] })} />
             </InlineFields>
           </FieldRow>
         )}
@@ -542,6 +563,12 @@ export function StageInspector({ object, selectedCount = object ? 1 : 0, advance
             ))}
             <FullRow><Button size="small" disabled={locked} onClick={() => onChange({ ...object, points: [...object.points, [0, 0]] })}>Add point</Button></FullRow>
           </>
+        )}
+
+        {object.kind === 'model' && (
+          <FieldRow label="Scale">
+            <StageBuilderNumberField {...commonNumberProps} disabled={locked} value={object.scale} inputProps={{ step: CUSTOM_OBJECT_SCALE_STEP, min: CUSTOM_OBJECT_MIN_SCALE, 'aria-label': 'Model scale' }} onChange={(event) => onChange({ ...object, scale: minPositive(event.target.value, object.scale, CUSTOM_OBJECT_MIN_SCALE) })} />
+          </FieldRow>
         )}
 
         {object.kind === 'text' && (
@@ -678,6 +705,37 @@ export function StageInspector({ object, selectedCount = object ? 1 : 0, advance
           ) : (
             <FullRow><Typography variant="caption" sx={editorType.caption}>Choose a parent object to pin this label to a face or surface.</Typography></FullRow>
           )}
+        </Section>
+      )}
+
+      {object.kind === 'model' && (
+        <Section title="Custom Object">
+          <FieldRow label="File">
+            <TextField {...commonFieldProps} value={object.originalFileName || object.name || `Imported ${(object.format || 'obj').toUpperCase()}`} disabled inputProps={{ 'aria-label': 'Imported model file' }} />
+          </FieldRow>
+          <FieldRow label="Format">
+            <TextField {...commonFieldProps} value={(object.format || 'obj').toUpperCase()} disabled inputProps={{ 'aria-label': 'Imported model format' }} />
+          </FieldRow>
+          <FieldRow label="Size">
+            <TextField {...commonFieldProps} value={modelDimensionsLabel(object)} disabled inputProps={{ 'aria-label': 'Model current dimensions' }} />
+          </FieldRow>
+          <FieldRow label="Fit size" align="start">
+            <Stack direction="row" spacing={0.5} sx={{ flexWrap: 'wrap', rowGap: 0.5 }}>
+              {CUSTOM_OBJECT_FIT_PRESETS.map((preset) => (
+                <Button key={preset.label} size="small" variant="outlined" disabled={locked} onClick={() => onChange({ ...object, scale: modelScaleForFit(object, preset.targetMeters), normalize: true })}>{preset.label}</Button>
+              ))}
+              <Button size="small" variant="outlined" disabled={locked} onClick={() => onChange({ ...object, scale: 1, normalize: true })}>Original</Button>
+            </Stack>
+          </FieldRow>
+          <FieldRow label="Collision">
+            <TextField {...commonFieldProps} select disabled={locked} value={object.collision} inputProps={{ 'aria-label': 'Model collision mode' }} onChange={(event) => set({ collision: event.target.value as typeof object.collision } as Partial<EditorStageObject>)}>
+              <MenuItem value="auto">Auto</MenuItem>
+              <MenuItem value="trimesh">Mesh</MenuItem>
+              <MenuItem value="convexHull">Convex hull</MenuItem>
+              <MenuItem value="none">None</MenuItem>
+            </TextField>
+          </FieldRow>
+          <FullRow><Typography variant="caption" sx={editorType.caption}>Custom objects import OBJ or STL files and export with the stage JSON.</Typography></FullRow>
         </Section>
       )}
 
@@ -851,16 +909,16 @@ export function StageInspector({ object, selectedCount = object ? 1 : 0, advance
         </Section>
       )}
 
-      {(object.kind === 'cube' || object.kind === 'cylinder') && (
+      {(object.kind === 'cube' || object.kind === 'cylinder' || object.kind === 'model') && (
         <Section title="Collision">
-          <FieldRow label="Enabled"><EnabledSwitch checked disabled /></FieldRow>
+          <FieldRow label="Enabled"><EnabledSwitch checked={object.kind === 'model' ? object.collision !== 'none' : true} disabled /></FieldRow>
           <FieldRow label="Type">
-            <TextField {...commonFieldProps} value={object.kind === 'cube' ? 'Box' : object.dimensions[0] === 0 ? 'Cone approximation' : 'Cylinder'} disabled inputProps={{ 'aria-label': 'Collider type' }} />
+            <TextField {...commonFieldProps} value={object.kind === 'cube' ? 'Box' : object.kind === 'model' ? object.collision : object.dimensions[0] === 0 ? 'Cone approximation' : 'Cylinder'} disabled inputProps={{ 'aria-label': 'Collider type' }} />
           </FieldRow>
         </Section>
       )}
 
-      {(object.kind === 'cube' || object.kind === 'cylinder') && (
+      {(object.kind === 'cube' || object.kind === 'cylinder' || object.kind === 'model') && (
         <Section title="Rigidbody">
           <FieldRow label="Type">
             <TextField {...commonFieldProps} select disabled={locked} value={object.immovable ? 'fixed' : 'dynamic'} inputProps={{ 'aria-label': 'Rigidbody type' }} onChange={(event) => {

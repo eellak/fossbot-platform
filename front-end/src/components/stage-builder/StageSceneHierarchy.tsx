@@ -206,6 +206,17 @@ function ObjectPreview({ object }: { object: EditorStageObject }) {
   const { tones: editorTones } = useEditorTheme();
   const tone = toneForObject(object, hierarchyTonesFor(editorTones));
   const kind = previewKindForObject(object);
+  if (object.kind === 'model') {
+    const format = (object.format || 'obj').toUpperCase();
+    return (
+      <Box sx={{ width: 32, height: 32, display: 'grid', placeItems: 'center', overflow: 'hidden', borderRadius: 0.5, bgcolor: 'transparent' }}>
+        <Box sx={{ position: 'relative', width: 26, height: 24 }}>
+          <Box sx={{ position: 'absolute', left: 5, top: 6, width: 14, height: 14, bgcolor: object.color || tone.accent, opacity: 0.72, transform: 'skewY(-18deg)' }} />
+          <Box sx={{ position: 'absolute', right: 0, bottom: 0, px: 0.25, minWidth: 17, height: 10, display: 'grid', placeItems: 'center', borderRadius: 0.25, bgcolor: tone.accent, color: tone.text, fontSize: '0.43rem', fontWeight: 900, lineHeight: 1 }}>{format}</Box>
+        </Box>
+      </Box>
+    );
+  }
   if (object.kind === 'text') {
     return (
       <Box sx={{ width: 32, height: 32, display: 'grid', placeItems: 'center', overflow: 'hidden', borderRadius: 0.5, bgcolor: 'transparent' }}>

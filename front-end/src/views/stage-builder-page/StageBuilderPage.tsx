@@ -1,4 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import * as THREE from 'three';
+import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
+import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js';
 import { Alert, Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, Snackbar, Stack, Typography } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from 'src/authentication/AuthProvider';
@@ -29,6 +32,7 @@ import { EditorRightInspector, type InspectorTab } from 'src/components/stage-bu
 import { clearStageBuilderDraft, draftToEditorStage, readStageBuilderDraft, stageFingerprint, writeStageBuilderDraft, type StageBuilderDraft } from 'src/components/stage-builder/stageBuilderDrafts';
 import { writeStageBuilderRunHandoff } from 'src/components/stage-builder/stageBuilderRunHandoff';
 import { EditorThemeProvider, getEditorColors, getEditorPanelSx, getEditorTabsSx, getEditorTones, getEditorType, getInspectorPanelSx, useEditorTheme } from 'src/components/stage-builder/stageBuilderEditorTheme';
+import { CUSTOM_OBJECT_DEFAULT_FIT_METERS, CUSTOM_OBJECT_DIMENSION_EPSILON, CUSTOM_OBJECT_MAX_FILE_SIZE_BYTES } from 'src/components/stage-builder/stageBuilderCustomObjects';
 
 function userScope(user: ReturnType<typeof useAuth>['user']): string {
   if (!user) return 'anonymous';
@@ -60,6 +64,8 @@ function isTypingTarget(target: EventTarget | null): boolean {
 }
 
 const leaveMessage = 'You have unsaved changes. A local recovery draft will be kept, but you should export JSON when you are ready to save.';
+const customObjectObjLoader = new OBJLoader();
+const customObjectStlLoader = new STLLoader();
 
 const stageBuilderPanelSizing = {
   minWidth: 240,
@@ -89,6 +95,40 @@ function cameraPreviewName(name: string): string {
 
 function hasVisibleStageCamera(stage: EditorStage): boolean {
   return stage.objects.some((object) => object.kind === 'camera' && !object.hidden);
+}
+
+function dimensionsForObject(root: THREE.Object3D): Vec3 {
+  root.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(root);
+  if (box.isEmpty()) return [1, 1, 1];
+  const size = box.getSize(new THREE.Vector3());
+  return [Math.max(CUSTOM_OBJECT_DIMENSION_EPSILON, size.x), Math.max(CUSTOM_OBJECT_DIMENSION_EPSILON, size.y), Math.max(CUSTOM_OBJECT_DIMENSION_EPSILON, size.z)];
+}
+
+function scaleForMaxDimension(dimensions: Vec3, targetMeters: number): number {
+  const maxDimension = Math.max(...dimensions);
+  return maxDimension > 0 ? Number((targetMeters / maxDimension).toPrecision(6)) : 1;
+}
+
+function measureImportedModel(file: File, format: 'obj' | 'stl'): Promise<Vec3> {
+  if (format === 'stl') {
+    return file.arrayBuffer().then((buffer) => {
+      const geometry = customObjectStlLoader.parse(buffer);
+      const mesh = new THREE.Mesh(geometry);
+      const dimensions = dimensionsForObject(mesh);
+      geometry.dispose();
+      return dimensions;
+    });
+  }
+  return file.text().then((text) => {
+    const root = customObjectObjLoader.parse(text);
+    const dimensions = dimensionsForObject(root);
+    root.traverse((child) => {
+      const mesh = child as THREE.Mesh;
+      if (mesh.isMesh) mesh.geometry?.dispose();
+    });
+    return dimensions;
+  });
 }
 
 function canAttachLabelTo(object: EditorStageObject | null | undefined): object is Extract<EditorStageObject, { kind: 'base' | 'cube' | 'cylinder' }> {
@@ -216,6 +256,7 @@ const StageBuilderPage = () => {
   const editorColors = useMemo(() => getEditorColors(prefs.styleVariant), [prefs.styleVariant]);
   const editorTones = useMemo(() => getEditorTones(prefs.styleVariant), [prefs.styleVariant]);
   const importInputRef = useRef<HTMLInputElement | null>(null);
+  const customObjectInputRef = useRef<HTMLInputElement | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const historyRef = useRef<StageBuilderHistory>(createStageBuilderHistory());
   const [historyVersion, setHistoryVersion] = useState(0);
@@ -229,6 +270,7 @@ const StageBuilderPage = () => {
   const [cameraViewRequest, setCameraViewRequest] = useState<{ view: StageBuilderCameraView; nonce: number } | null>(null);
   const [lookThroughCameraId, setLookThroughCameraId] = useState<string | null>(null);
   const [sensorHelpersVisible, setSensorHelpersVisible] = useState(false);
+  const [collisionWireVisible, setCollisionWireVisible] = useState(false);
   const [leftPanelVisible, setLeftPanelVisible] = useState(true);
   const [rightPanelVisible, setRightPanelVisible] = useState(true);
   const [leftPanelWidth, setLeftPanelWidth] = useState<number>(stageBuilderPanelSizing.leftDefaultWidth);
@@ -348,8 +390,13 @@ const StageBuilderPage = () => {
   const bumpHistory = () => setHistoryVersion((value) => value + 1);
   const setPref = (patch: Partial<StageBuilderPreferences>) => setPrefs((current) => ({ ...current, ...patch }));
   const requestCameraView = (view: StageBuilderCameraView) => {
-    setLookThroughCameraId(null);
-    setCameraViewRequest((current) => ({ view, nonce: (current?.nonce || 0) + 1 }));
+    if (view === 'camera') {
+      const activeCamera = stage.objects.find((o) => o.kind === 'camera' && !o.hidden);
+      if (activeCamera) setLookThroughCameraId(activeCamera.id);
+    } else {
+      setLookThroughCameraId(null);
+      setCameraViewRequest((current) => ({ view, nonce: (current?.nonce || 0) + 1 }));
+    }
   };
   const requestLookThroughCamera = (object: EditorStageObject) => {
     if (object.kind !== 'camera' || object.hidden) return;
@@ -583,6 +630,51 @@ const StageBuilderPage = () => {
     replaceStage(createDemoEditorStage(), { undoable: true, clean: false, message: 'Demo stage loaded.' });
   };
 
+  const readFileAsDataUrl = (file: File): Promise<string> => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(reader.error || new Error('File read failed.'));
+    reader.readAsDataURL(file);
+  });
+
+  const handleImportCustomObject = async (file?: File) => {
+    if (!file) return;
+    try {
+      if (file.size > CUSTOM_OBJECT_MAX_FILE_SIZE_BYTES) throw new Error('Custom object is too large. Keep OBJ/STL files under 2 MB for now.');
+      const lowerName = file.name.toLowerCase();
+      const format = lowerName.endsWith('.stl') ? 'stl' : lowerName.endsWith('.obj') ? 'obj' : null;
+      if (!format) throw new Error('Custom object import supports OBJ and STL files.');
+      const id = makeLocalStageId();
+      const nativeDimensions = await measureImportedModel(file, format);
+      const object: EditorStageObject = {
+        id,
+        kind: 'model',
+        semanticKind: 'customObject',
+        name: file.name.replace(/\.(obj|stl)$/i, '') || 'custom object',
+        filename: await readFileAsDataUrl(file),
+        format,
+        originalFileName: file.name,
+        position: [0, 0, 0],
+        rotationY: 0,
+        scale: scaleForMaxDimension(nativeDimensions, CUSTOM_OBJECT_DEFAULT_FIT_METERS),
+        normalize: true,
+        nativeDimensions,
+        color: '#9aa8b6',
+        mass: 0,
+        immovable: true,
+        collision: 'auto',
+      };
+      commitStage((current) => ({ ...current, objects: [...current.objects, object] }), {
+        selectIds: [id],
+        message: `${file.name} imported and fit to 0.5 m. Imported objects could have been made in another scale, so the next step is figuring out the correct scale for the object.`,
+      });
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Custom object import failed.');
+    } finally {
+      if (customObjectInputRef.current) customObjectInputRef.current.value = '';
+    }
+  };
+
   const handleImportFile = async (file?: File) => {
     if (!file) return;
     if (!confirmIfDirty('Import this JSON file and replace the current stage? Unsaved changes will remain only as a recovery draft.')) {
@@ -616,7 +708,11 @@ const StageBuilderPage = () => {
       setMessage(`Fix ${blocking.length} validation error${blocking.length === 1 ? '' : 's'} before running the test simulation.`);
       return;
     }
-    const handoffId = writeStageBuilderRunHandoff(editorStageToRecord(stage));
+    const handoffId = writeStageBuilderRunHandoff(editorStageToRecord(stage), undefined, { collisionWireVisible });
+    if (!handoffId) {
+      setMessage('Run Test could not store this stage locally. Remove a large imported object or export JSON, then try again.');
+      return;
+    }
     const url = `/stage-builder/test?handoff=${encodeURIComponent(handoffId)}`;
     const opened = window.open(url, '_blank');
     if (!opened) {
@@ -898,6 +994,7 @@ const StageBuilderPage = () => {
         onToggleRightPanel={toggleRightPanel}
       />
       <input ref={importInputRef} type="file" accept="application/json,.json" hidden onChange={(event) => handleImportFile(event.target.files?.[0])} />
+      <input ref={customObjectInputRef} type="file" accept=".obj,.stl,model/obj,model/stl,text/plain,application/sla" hidden onChange={(event) => handleImportCustomObject(event.target.files?.[0])} />
 
       <Box sx={{ flex: 1, minHeight: 0, display: 'flex', overflow: 'hidden' }}>
         {leftPanelVisible && (
@@ -910,6 +1007,7 @@ const StageBuilderPage = () => {
               prefabs={prefabs}
               onAddKind={addObject}
               onAddPrefab={addPrefab}
+              onImportObject={() => customObjectInputRef.current?.click()}
               onSelectObject={handleSelect}
               onSelectGroup={handleSelectGroup}
               onSelectionChange={handleSelectionChange}
@@ -937,6 +1035,7 @@ const StageBuilderPage = () => {
             builderMode={builderMode}
             stageDimensions={stage.floor.dimensions}
             floorColor={stage.floor.color}
+            skybox={stage.metadata.skybox}
             gridVisible={gridVisible}
             gridSize={gridSize}
             snapSettings={snapSettings}
@@ -949,6 +1048,7 @@ const StageBuilderPage = () => {
             cameraViewRequest={cameraViewRequest}
             lookThroughCameraId={lookThroughCamera?.id || null}
             sensorHelpersVisible={sensorHelpersVisible}
+            collisionWireVisible={collisionWireVisible}
             onSelect={handleSelect}
             onSelectionChange={handleSelectionChange}
             onObjectChange={updateObject}
@@ -962,6 +1062,7 @@ const StageBuilderPage = () => {
               selectedCount={selectedCount}
               canUndo={canUndo(historyRef.current)}
               sensorHelpersVisible={sensorHelpersVisible}
+              collisionWireVisible={collisionWireVisible}
               canRedo={canRedo(historyRef.current)}
               onTransformModeChange={(mode) => { setBuilderMode('edit'); setTransformMode(mode); }}
               onSnapPresetChange={(snapPreset) => {
@@ -969,6 +1070,7 @@ const StageBuilderPage = () => {
                 commitStage((current) => ({ ...current, metadata: { ...current.metadata, defaultSnapPreset: snapPreset === 'free' || snapPreset === 'grid' ? 'medium' : snapPreset } }));
               }}
               onSensorHelpersToggle={() => setSensorHelpersVisible((visible) => !visible)}
+              onCollisionWireToggle={() => setCollisionWireVisible((visible) => !visible)}
               onFocusSelected={() => setFocusRequestNonce((value) => value + 1)}
               onUndo={undo}
               onRedo={redo}
@@ -976,7 +1078,7 @@ const StageBuilderPage = () => {
             />
           </Box>
           <Box sx={{ position: 'absolute', top: 12, right: 12, zIndex: 5 }}>
-            <EditorViewportCameraGizmo currentView={cameraViewRequest?.view || 'perspective'} onCameraViewChange={requestCameraView} />
+            <EditorViewportCameraGizmo currentView={lookThroughCameraId && lookThroughCamera ? 'camera' : (cameraViewRequest?.view || 'perspective')} hasActiveCamera={hasVisibleStageCamera(stage)} onCameraViewChange={requestCameraView} />
           </Box>
           {lookThroughCamera && lookThroughCamera.kind === 'camera' && (
             <Box sx={{ position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)', zIndex: 6, maxWidth: 'min(420px, calc(100% - 32px))', pointerEvents: 'none' }}>
@@ -1002,7 +1104,7 @@ const StageBuilderPage = () => {
                 <Button
                   size="small"
                   variant="text"
-                  onClick={() => setLookThroughCameraId(null)}
+                  onClick={() => { setLookThroughCameraId(null); setCameraViewRequest(null); }}
                   sx={{
                     flexShrink: 0,
                     minWidth: 0,
@@ -1058,6 +1160,7 @@ const StageBuilderPage = () => {
           <StatusItem label="Selected" value={selectedStatus} tone={selectedTone} />
           <StatusItem label="Snap" value={snapLabel(snapSettings)} tone={snapSettings.move ? editorColors.success : editorColors.textMuted} />
           <StatusItem label="Grid" value={gridVisible ? `${gridSize} m` : 'Hidden'} tone={editorColors.text} />
+          <StatusItem label="Collision" value={collisionWireVisible ? 'Wire' : 'Hidden'} tone={collisionWireVisible ? editorColors.warning : editorColors.textMuted} />
         </Stack>
         <ShortcutHint />
       </Box>

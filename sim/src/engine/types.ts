@@ -28,6 +28,8 @@ export interface SimEngineConfig {
   lockCamera?: boolean
   /** Show sensor ray/helper overlays without enabling the full dev UI. */
   sensorHelpersVisible?: boolean
+  /** Show robot/stage collider wireframes without enabling the full dev UI. */
+  showColliders?: boolean
 }
 
 /**
