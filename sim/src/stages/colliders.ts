@@ -2,6 +2,7 @@ import * as RAPIER from '@dimforge/rapier3d-compat'
 import * as THREE from 'three'
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js'
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js'
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 
 /**
  * Collider result from a stage builder. Contains only Rapier ColliderDescs
@@ -31,6 +32,25 @@ interface CubeEntry {
 interface CylinderEntry {
   dimensions: [number, number, number, number?]
   position: [number, number, number]
+  name?: string
+  mass?: number
+  immovable?: boolean
+  collision?: 'auto' | 'none'
+}
+
+interface SphereEntry {
+  dimensions: [number]
+  position: [number, number, number]
+  name?: string
+  mass?: number
+  immovable?: boolean
+  collision?: 'auto' | 'none'
+}
+
+interface WedgeEntry {
+  dimensions: [number, number, number]
+  position: [number, number, number]
+  orientation?: [number, number, number]
   name?: string
   mass?: number
   immovable?: boolean
@@ -121,12 +141,71 @@ export function buildCylinderCollider(entry: CylinderEntry): ColliderBuilt {
   return { colliders: [collider], debugMeshes: [debugMesh] }
 }
 
+export function buildSphereCollider(entry: SphereEntry): ColliderBuilt {
+  if (entry.collision === 'none') return { colliders: [], debugMeshes: [] }
+  const dynamic = isDynamicEntry(entry)
+  const radius = entry.dimensions[0] / 2
+  const collider = RAPIER.ColliderDesc.ball(radius)
+  if (!dynamic) collider.setTranslation(entry.position[0], entry.position[1], entry.position[2])
+
+  const debugMesh = new THREE.Mesh(
+    new THREE.SphereGeometry(radius, 24, 16),
+    new THREE.MeshBasicMaterial({ color: 0xff8800, wireframe: true }),
+  )
+  debugMesh.name = `collider_${entry.name ?? 'sphere'}`
+  if (!dynamic) debugMesh.position.fromArray(entry.position)
+
+  return { colliders: [collider], debugMeshes: [debugMesh] }
+}
+
+function wedgeVertices([width, height, depth]: [number, number, number]): Float32Array {
+  const w = width / 2
+  const h = height / 2
+  const d = depth / 2
+  return new Float32Array([
+    -w, -h, -d,  w, -h, -d,  -w, -h, d,  w, -h, d,  -w, h, d,  w, h, d,
+  ])
+}
+
+function wedgeDebugGeometry(dimensions: [number, number, number]): THREE.BufferGeometry {
+  const geometry = new THREE.BufferGeometry()
+  geometry.setAttribute('position', new THREE.BufferAttribute(wedgeVertices(dimensions), 3))
+  geometry.setIndex([0, 3, 1, 0, 2, 3, 2, 5, 3, 2, 4, 5, 0, 1, 5, 0, 5, 4, 0, 4, 2, 1, 3, 5])
+  geometry.computeVertexNormals()
+  return geometry
+}
+
+export function buildWedgeCollider(entry: WedgeEntry): ColliderBuilt {
+  if (entry.collision === 'none') return { colliders: [], debugMeshes: [] }
+  const dynamic = isDynamicEntry(entry)
+  const collider = RAPIER.ColliderDesc.convexHull(wedgeVertices(entry.dimensions))
+  if (!collider) return { colliders: [], debugMeshes: [] }
+  if (!dynamic) {
+    collider.setTranslation(entry.position[0], entry.position[1], entry.position[2])
+    if (entry.orientation) {
+      const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(entry.orientation[0], entry.orientation[1], entry.orientation[2]))
+      collider.setRotation({ x: q.x, y: q.y, z: q.z, w: q.w })
+    }
+  }
+
+  const debugMesh = new THREE.Mesh(wedgeDebugGeometry(entry.dimensions), new THREE.MeshBasicMaterial({ color: 0xff8800, wireframe: true }))
+  debugMesh.name = `collider_${entry.name ?? 'wedge'}`
+  if (!dynamic) {
+    debugMesh.position.fromArray(entry.position)
+    if (entry.orientation) debugMesh.rotation.set(entry.orientation[0], entry.orientation[1], entry.orientation[2])
+  }
+
+  return { colliders: [collider], debugMeshes: [debugMesh] }
+}
+
 // ── Model collider helpers ──
 
 const objLoader = new OBJLoader()
 const stlLoader = new STLLoader()
+const gltfLoader = new GLTFLoader()
 const objCache = new Map<string, Promise<THREE.Group>>()
 const stlCache = new Map<string, Promise<THREE.BufferGeometry>>()
+const glbCache = new Map<string, Promise<THREE.Group>>()
 
 function loadOBJ(url: string): Promise<THREE.Group> {
   let pending = objCache.get(url)
@@ -148,6 +227,17 @@ function loadSTL(url: string): Promise<THREE.BufferGeometry> {
     stlCache.set(url, pending)
   }
   return pending.then((g) => g.clone())
+}
+
+function loadGLB(url: string): Promise<THREE.Group> {
+  let pending = glbCache.get(url)
+  if (!pending) {
+    pending = new Promise<THREE.Group>((resolve, reject) => {
+      gltfLoader.load(url, (gltf) => resolve(gltf.scene), undefined, reject)
+    })
+    glbCache.set(url, pending)
+  }
+  return pending.then((g) => g.clone(true))
 }
 
 function coacdPathFor(filename: string): string {
@@ -274,6 +364,7 @@ async function loadCollisionModel(url: string): Promise<THREE.Object3D> {
     group.add(new THREE.Mesh(geometry))
     return group
   }
+  if (ext === 'glb') return loadGLB(url)
   return loadOBJ(url)
 }
 

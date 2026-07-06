@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { LineSegments2 } from 'three/examples/jsm/lines/LineSegments2.js';
 import { LineSegmentsGeometry } from 'three/examples/jsm/lines/LineSegmentsGeometry.js';
 import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
@@ -117,8 +118,10 @@ const transformGuideNeutralColor = 0xffffff;
 
 const stageBuilderObjLoader = new OBJLoader();
 const stageBuilderStlLoader = new STLLoader();
+const stageBuilderGltfLoader = new GLTFLoader();
 const stageBuilderObjCache = new Map<string, Promise<THREE.Group>>();
 const stageBuilderStlCache = new Map<string, Promise<THREE.BufferGeometry>>();
+const stageBuilderGlbCache = new Map<string, Promise<THREE.Group>>();
 
 const tmpPointer = new THREE.Vector2();
 const raycaster = new THREE.Raycaster();
@@ -164,13 +167,38 @@ function loadStageBuilderSTL(url: string): Promise<THREE.BufferGeometry> {
   return pending.then((geometry) => geometry.clone());
 }
 
+function cloneGltfScene(scene: THREE.Group): THREE.Group {
+  const clone = scene.clone(true);
+  clone.traverse((child) => {
+    const mesh = child as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    if (mesh.geometry) mesh.geometry = mesh.geometry.clone();
+    if (Array.isArray(mesh.material)) mesh.material = mesh.material.map((material) => material.clone());
+    else if (mesh.material) mesh.material = mesh.material.clone();
+  });
+  return clone;
+}
+
+function loadStageBuilderGLB(url: string): Promise<THREE.Group> {
+  let pending = stageBuilderGlbCache.get(url);
+  if (!pending) {
+    pending = new Promise<THREE.Group>((resolve, reject) => {
+      stageBuilderGltfLoader.load(url, (gltf) => resolve(gltf.scene), undefined, reject);
+    });
+    stageBuilderGlbCache.set(url, pending);
+  }
+  return pending.then(cloneGltfScene);
+}
+
 async function loadStageBuilderModel(object: Extract<EditorStageObject, { kind: 'model' }>): Promise<THREE.Object3D> {
-  if (object.format === 'stl' || (!object.format && (object.originalFileName || object.filename).toLowerCase().endsWith('.stl'))) {
+  const name = (object.originalFileName || object.filename).toLowerCase();
+  if (object.format === 'stl' || (!object.format && name.endsWith('.stl'))) {
     const geometry = await loadStageBuilderSTL(object.filename);
     const group = new THREE.Group();
     group.add(new THREE.Mesh(geometry));
     return group;
   }
+  if (object.format === 'glb' || (!object.format && name.endsWith('.glb'))) return loadStageBuilderGLB(object.filename);
   return loadStageBuilderOBJ(object.filename);
 }
 
@@ -360,11 +388,21 @@ function makeImportedModelPickProxy(root: THREE.Object3D, objectId: string): THR
 }
 
 function applyImportedModelMaterial(root: THREE.Object3D, object: Extract<EditorStageObject, { kind: 'model' }>, options: ObjectVisualOptions, colors: ReturnType<typeof getEditorColors>): void {
+  const preserveGlbMaterials = object.format === 'glb';
   const tint = materialColor(object.color, options, colors);
   root.traverse((child) => {
     const mesh = child as THREE.Mesh;
     if (!mesh.isMesh) return;
-    mesh.material = new THREE.MeshStandardMaterial({ color: tint, transparent: !!options.ghost, opacity: options.ghost ? 0.42 : 1 });
+    if (preserveGlbMaterials) {
+      const materials = Array.isArray(mesh.material) ? mesh.material : mesh.material ? [mesh.material] : [];
+      for (const material of materials) {
+        material.transparent = !!options.ghost || material.transparent;
+        if (options.ghost && 'opacity' in material) material.opacity = 0.42;
+        material.needsUpdate = true;
+      }
+    } else {
+      mesh.material = new THREE.MeshStandardMaterial({ color: tint, transparent: !!options.ghost, opacity: options.ghost ? 0.42 : 1 });
+    }
     mesh.castShadow = !options.ghost;
   });
 }
@@ -373,14 +411,61 @@ function collisionWireMaterial(colors: ReturnType<typeof getEditorColors>): THRE
   return new THREE.MeshBasicMaterial({ color: colors.warning, wireframe: true, transparent: true, opacity: 0.9, depthTest: false, depthWrite: false });
 }
 
+function makeWedgeGeometry(width: number, height: number, depth: number): THREE.BufferGeometry {
+  const w = width / 2;
+  const h = height / 2;
+  const d = depth / 2;
+  const vertices = new Float32Array([
+    -w, -h, -d,  w, -h, -d,  -w, -h, d,  w, -h, d,  -w, h, d,  w, h, d,
+  ]);
+  const indices = [
+    0, 3, 1, 0, 2, 3,
+    2, 5, 3, 2, 4, 5,
+    0, 1, 5, 0, 5, 4,
+    0, 4, 2,
+    1, 3, 5,
+  ];
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
+function makeArrowGeometry(width: number, depth: number, thickness: number): THREE.BufferGeometry {
+  const w = width / 2;
+  const d = depth / 2;
+  const t = Math.max(0.002, thickness);
+  const neckX = width * 0.14;
+  const shaftD = depth * 0.42;
+  const points = [
+    new THREE.Vector2(-w, -shaftD / 2),
+    new THREE.Vector2(neckX, -shaftD / 2),
+    new THREE.Vector2(neckX, -d),
+    new THREE.Vector2(w, 0),
+    new THREE.Vector2(neckX, d),
+    new THREE.Vector2(neckX, shaftD / 2),
+    new THREE.Vector2(-w, shaftD / 2),
+  ];
+  const geometry = new THREE.ExtrudeGeometry(new THREE.Shape(points), { depth: t, bevelEnabled: false });
+  geometry.translate(0, 0, -t / 2);
+  geometry.rotateX(-Math.PI / 2);
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
 function addCollisionWireVisual(root: THREE.Object3D, object: EditorStageObject, colors: ReturnType<typeof getEditorColors>): void {
-  if ((object.kind === 'cube' || object.kind === 'cylinder') && object.collision === 'none') return;
+  if ((object.kind === 'cube' || object.kind === 'cylinder' || object.kind === 'sphere' || object.kind === 'wedge') && object.collision === 'none') return;
   let wire: THREE.Mesh | null = null;
   if (object.kind === 'cube') {
     wire = new THREE.Mesh(new THREE.BoxGeometry(object.dimensions[0], object.dimensions[1], object.dimensions[2]), collisionWireMaterial(colors));
   } else if (object.kind === 'cylinder') {
     const radius = (object.dimensions[0] + object.dimensions[1]) / 2;
     wire = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, object.dimensions[2], 24), collisionWireMaterial(colors));
+  } else if (object.kind === 'sphere') {
+    wire = new THREE.Mesh(new THREE.SphereGeometry(object.dimensions[0] / 2, 24, 16), collisionWireMaterial(colors));
+  } else if (object.kind === 'wedge') {
+    wire = new THREE.Mesh(makeWedgeGeometry(object.dimensions[0], object.dimensions[1], object.dimensions[2]), collisionWireMaterial(colors));
   }
   if (!wire) return;
   wire.name = 'collision wire';
@@ -1065,6 +1150,45 @@ export function makeObjectRoot(object: EditorStageObject, options: ObjectVisualO
     mesh.castShadow = true;
     root = mesh;
     pickables.push(mesh);
+  } else if (object.kind === 'sphere') {
+    const mesh = new THREE.Mesh(
+      new THREE.SphereGeometry(object.dimensions[0] / 2, 32, 20),
+      standardMaterial(object.color, options, 1, colors),
+    );
+    mesh.position.set(...object.position);
+    mesh.castShadow = true;
+    root = mesh;
+    pickables.push(mesh);
+  } else if (object.kind === 'wedge') {
+    const mesh = new THREE.Mesh(
+      makeWedgeGeometry(object.dimensions[0], object.dimensions[1], object.dimensions[2]),
+      standardMaterial(object.color, options, 1, colors),
+    );
+    mesh.position.set(...object.position);
+    if (object.orientation) mesh.rotation.set(object.orientation[0], object.orientation[1], object.orientation[2]);
+    else mesh.rotation.y = object.rotationY;
+    mesh.castShadow = true;
+    root = mesh;
+    pickables.push(mesh);
+  } else if (object.kind === 'arrow') {
+    const mesh = new THREE.Mesh(
+      makeArrowGeometry(object.dimensions[0], object.dimensions[1], object.dimensions[2]),
+      new THREE.MeshStandardMaterial({
+        color: materialColor(object.color, options, colors),
+        side: THREE.DoubleSide,
+        transparent: true,
+        opacity: options.ghost ? 0.42 : 0.92,
+        polygonOffset: true,
+        polygonOffsetFactor: -1,
+        polygonOffsetUnits: -1,
+      }),
+    );
+    mesh.position.set(...object.position);
+    if (object.orientation) mesh.rotation.set(object.orientation[0], object.orientation[1], object.orientation[2]);
+    else mesh.rotation.y = object.rotationY;
+    mesh.renderOrder = 5;
+    root = mesh;
+    pickables.push(mesh);
   } else if (object.kind === 'base') {
     const softOpacity = ['target', 'checkpoint', 'dangerZone', 'sensorZone'].includes(object.semanticKind || '') ? 0.62 : 0.9;
     const mesh = new THREE.Mesh(
@@ -1300,6 +1424,39 @@ function objectFromRootTransform(object: EditorStageObject, root: THREE.Object3D
       dimensions: snapDimensions([object.dimensions[0] * radialScale, object.dimensions[1] * radialScale, object.dimensions[2] * scaleY, object.dimensions[3]], snap) as [number, number, number, number],
     };
   }
+  if (object.kind === 'sphere') {
+    const radialScale = Math.max(scaleX, scaleY, scaleZ);
+    return {
+      ...object,
+      position: snapPosition([root.position.x, root.position.y, root.position.z], snap),
+      dimensions: snapDimensions([object.dimensions[0] * radialScale], snap) as [number],
+    };
+  }
+  if (object.kind === 'wedge') {
+    const orientation: Vec3 = [snapAngle(root.rotation.x, snap), snapAngle(root.rotation.y, snap), snapAngle(root.rotation.z, snap)];
+    const hasFullOrientation = object.orientation || Math.abs(orientation[0]) > 0.001 || Math.abs(orientation[2]) > 0.001;
+    return {
+      ...object,
+      position: snapPosition([root.position.x, root.position.y, root.position.z], snap),
+      rotationY: orientation[1],
+      orientation: hasFullOrientation ? orientation : undefined,
+      dimensions: snapDimensions([object.dimensions[0] * scaleX, object.dimensions[1] * scaleY, object.dimensions[2] * scaleZ], snap) as [number, number, number],
+    };
+  }
+  if (object.kind === 'arrow') {
+    const orientation: Vec3 = [snapAngle(root.rotation.x, snap), snapAngle(root.rotation.y, snap), snapAngle(root.rotation.z, snap)];
+    const hasFullOrientation = object.orientation || Math.abs(orientation[0]) > 0.001 || Math.abs(orientation[2]) > 0.001;
+    return {
+      ...object,
+      position: snapPosition([root.position.x, root.position.y, root.position.z], snap),
+      rotationY: orientation[1],
+      orientation: hasFullOrientation ? orientation : undefined,
+      dimensions: [
+        ...snapDimensions([object.dimensions[0] * scaleX, object.dimensions[1] * scaleZ], snap) as [number, number],
+        Math.max(0.002, Number((object.dimensions[2] * scaleY).toFixed(4))),
+      ],
+    };
+  }
   if (object.kind === 'fossbot') {
     return { ...object, position: snapPosition([root.position.x, root.position.y, root.position.z], snap), rotationY: snapAngle(yawFromObject(root, object.rotationY), snap) };
   }
@@ -1375,7 +1532,7 @@ function transformObjectWithMatrix(object: EditorStageObject, matrix: THREE.Matr
 }
 
 function supportsResize(object: EditorStageObject | undefined): boolean {
-  return !!object && (object.kind === 'base' || object.kind === 'cube' || object.kind === 'cylinder' || object.kind === 'model' || (object.kind === 'text' && !object.attachment?.parentId));
+  return !!object && (object.kind === 'base' || object.kind === 'cube' || object.kind === 'cylinder' || object.kind === 'sphere' || object.kind === 'wedge' || object.kind === 'arrow' || object.kind === 'model' || (object.kind === 'text' && !object.attachment?.parentId));
 }
 
 function makeFriendlyHandles(styleVariant: StageBuilderStyleVariant): FriendlyHandleRecord {

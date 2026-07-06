@@ -17,7 +17,7 @@ function num(value: unknown, fallback = 0): number {
 }
 
 function supportsColor(object: EditorStageObject): object is Extract<EditorStageObject, { color: string }> {
-  return object.kind === 'base' || object.kind === 'cube' || object.kind === 'cylinder' || object.kind === 'line' || object.kind === 'text' || object.kind === 'light' || object.kind === 'model';
+  return object.kind === 'base' || object.kind === 'cube' || object.kind === 'cylinder' || object.kind === 'sphere' || object.kind === 'wedge' || object.kind === 'arrow' || object.kind === 'line' || object.kind === 'text' || object.kind === 'light' || (object.kind === 'model' && object.format !== 'glb');
 }
 
 function supportsAppearance(object: EditorStageObject): boolean {
@@ -65,7 +65,7 @@ function labelStyle(object: Extract<EditorStageObject, { kind: 'text' }>) {
   };
 }
 
-function collisionEnabled(object: Extract<EditorStageObject, { kind: 'cube' | 'cylinder' | 'model' }>): boolean {
+function collisionEnabled(object: Extract<EditorStageObject, { kind: 'cube' | 'cylinder' | 'sphere' | 'wedge' | 'model' }>): boolean {
   return object.collision !== 'none';
 }
 
@@ -420,7 +420,7 @@ export function StageInspector({ object, selectedCount = object ? 1 : 0, advance
 
   const setRotationY = (degrees: number) => {
     const rotationY = rad(degrees);
-    if (object.kind === 'cube' || object.kind === 'model') {
+    if (object.kind === 'cube' || object.kind === 'wedge' || object.kind === 'arrow' || object.kind === 'model') {
       const orientation = object.orientation ? [object.orientation[0], rotationY, object.orientation[2]] as Vec3 : undefined;
       onChange({ ...object, rotationY, orientation });
     } else if ('rotationY' in object) set({ rotationY } as Partial<EditorStageObject>);
@@ -469,12 +469,14 @@ export function StageInspector({ object, selectedCount = object ? 1 : 0, advance
           </FieldRow>
         )}
 
-        {object.kind === 'cube' && (
+        {(object.kind === 'cube' || object.kind === 'wedge' || object.kind === 'arrow') && (
           <FieldRow label="Rotation">
             <InlineFields>
               <StageBuilderNumberField axis="X" {...commonNumberProps} disabled={locked} value={deg(object.orientation?.[0] || 0)} onChange={(event) => {
                 const x = rad(num(event.target.value, deg(object.orientation?.[0] || 0)));
-                onChange({ ...object, orientation: [x, object.orientation?.[1] || object.rotationY, object.orientation?.[2] || 0], rampAngle: object.semanticKind === 'ramp' ? x : object.rampAngle });
+                onChange(object.kind === 'cube'
+                  ? { ...object, orientation: [x, object.orientation?.[1] || object.rotationY, object.orientation?.[2] || 0], rampAngle: object.semanticKind === 'ramp' ? x : object.rampAngle }
+                  : { ...object, orientation: [x, object.orientation?.[1] || object.rotationY, object.orientation?.[2] || 0] });
               }} />
               <StageBuilderNumberField axis="Y" {...commonNumberProps} disabled={locked} value={deg(object.rotationY)} onChange={(event) => setRotationY(num(event.target.value, deg(object.rotationY)))} />
               <StageBuilderNumberField axis="Z" {...commonNumberProps} disabled={locked} value={deg(object.orientation?.[2] || 0)} onChange={(event) => onChange({ ...object, orientation: [object.orientation?.[0] || 0, object.orientation?.[1] || object.rotationY, rad(num(event.target.value, deg(object.orientation?.[2] || 0)))] })} />
@@ -520,12 +522,28 @@ export function StageInspector({ object, selectedCount = object ? 1 : 0, advance
           </>
         )}
 
-        {object.kind === 'cube' && (
+        {(object.kind === 'cube' || object.kind === 'wedge') && (
           <FieldRow label="Scale">
             <InlineFields>
               <StageBuilderNumberField axis="X" {...commonNumberProps} disabled={locked} value={object.dimensions[0]} onChange={(event) => onChange({ ...object, dimensions: updateVec3(object.dimensions, 0, minPositive(event.target.value, object.dimensions[0])) })} />
               <StageBuilderNumberField axis="Y" {...commonNumberProps} disabled={locked} value={object.dimensions[1]} onChange={(event) => onChange({ ...object, dimensions: updateVec3(object.dimensions, 1, minPositive(event.target.value, object.dimensions[1])) })} />
               <StageBuilderNumberField axis="Z" {...commonNumberProps} disabled={locked} value={object.dimensions[2]} onChange={(event) => onChange({ ...object, dimensions: updateVec3(object.dimensions, 2, minPositive(event.target.value, object.dimensions[2])) })} />
+            </InlineFields>
+          </FieldRow>
+        )}
+
+        {object.kind === 'sphere' && (
+          <FieldRow label="Diameter">
+            <StageBuilderNumberField {...commonNumberProps} disabled={locked} value={object.dimensions[0]} onChange={(event) => onChange({ ...object, dimensions: [minPositive(event.target.value, object.dimensions[0])] })} />
+          </FieldRow>
+        )}
+
+        {object.kind === 'arrow' && (
+          <FieldRow label="Scale">
+            <InlineFields>
+              <StageBuilderNumberField axis="X" {...commonNumberProps} disabled={locked} value={object.dimensions[0]} onChange={(event) => onChange({ ...object, dimensions: [minPositive(event.target.value, object.dimensions[0]), object.dimensions[1], object.dimensions[2]] })} />
+              <StageBuilderNumberField axis="Y" {...commonNumberProps} disabled={locked} value={object.dimensions[2]} inputProps={{ step: 0.01, min: 0.002, 'aria-label': 'Arrow thickness' }} onChange={(event) => onChange({ ...object, dimensions: [object.dimensions[0], object.dimensions[1], minPositive(event.target.value, object.dimensions[2], 0.002)] })} />
+              <StageBuilderNumberField axis="Z" {...commonNumberProps} disabled={locked} value={object.dimensions[1]} onChange={(event) => onChange({ ...object, dimensions: [object.dimensions[0], minPositive(event.target.value, object.dimensions[1]), object.dimensions[2]] })} />
             </InlineFields>
           </FieldRow>
         )}
@@ -730,7 +748,7 @@ export function StageInspector({ object, selectedCount = object ? 1 : 0, advance
               <Button size="small" variant="outlined" disabled={locked} onClick={() => onChange({ ...object, scale: 1, normalize: true })}>Original</Button>
             </Stack>
           </FieldRow>
-          <FullRow><Typography variant="caption" sx={editorType.caption}>Custom objects import OBJ or STL files and export with the stage JSON.</Typography></FullRow>
+          <FullRow><Typography variant="caption" sx={editorType.caption}>Custom objects import OBJ, STL, or GLB files and export with the stage JSON.</Typography></FullRow>
         </Section>
       )}
 
@@ -904,7 +922,7 @@ export function StageInspector({ object, selectedCount = object ? 1 : 0, advance
         </Section>
       )}
 
-      {(object.kind === 'cube' || object.kind === 'cylinder' || object.kind === 'model') && (
+      {(object.kind === 'cube' || object.kind === 'cylinder' || object.kind === 'sphere' || object.kind === 'wedge' || object.kind === 'model') && (
         <Section title="Collision">
           <FieldRow label="Enabled">
             <EnabledSwitch
@@ -933,7 +951,7 @@ export function StageInspector({ object, selectedCount = object ? 1 : 0, advance
             <FieldRow label="Type">
               <TextField
                 {...commonFieldProps}
-                value={object.kind === 'cube' ? 'Box' : object.dimensions[0] === 0 ? 'Cone approximation' : 'Cylinder'}
+                value={object.kind === 'cube' ? 'Box' : object.kind === 'sphere' ? 'Sphere' : object.kind === 'wedge' ? 'Convex wedge' : object.dimensions[0] === 0 ? 'Cone approximation' : 'Cylinder'}
                 disabled
                 inputProps={{ 'aria-label': 'Collider type' }}
               />
@@ -952,7 +970,7 @@ export function StageInspector({ object, selectedCount = object ? 1 : 0, advance
         </Section>
       )}
 
-      {(object.kind === 'cube' || object.kind === 'cylinder' || object.kind === 'model') && (
+      {(object.kind === 'cube' || object.kind === 'cylinder' || object.kind === 'sphere' || object.kind === 'wedge' || object.kind === 'model') && (
         <Section title="Rigidbody">
           <FieldRow label="Type">
             <TextField {...commonFieldProps} select disabled={locked} value={object.immovable ? 'fixed' : 'dynamic'} inputProps={{ 'aria-label': 'Rigidbody type' }} onChange={(event) => {

@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { Alert, Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, Snackbar, Stack, Typography } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from 'src/authentication/AuthProvider';
@@ -66,6 +67,7 @@ function isTypingTarget(target: EventTarget | null): boolean {
 const leaveMessage = 'You have unsaved changes. A local recovery draft will be kept, but you should export JSON when you are ready to save.';
 const customObjectObjLoader = new OBJLoader();
 const customObjectStlLoader = new STLLoader();
+const customObjectGltfLoader = new GLTFLoader();
 
 const stageBuilderPanelSizing = {
   minWidth: 240,
@@ -110,7 +112,7 @@ function scaleForMaxDimension(dimensions: Vec3, targetMeters: number): number {
   return maxDimension > 0 ? Number((targetMeters / maxDimension).toPrecision(6)) : 1;
 }
 
-function measureImportedModel(file: File, format: 'obj' | 'stl'): Promise<Vec3> {
+function measureImportedModel(file: File, format: 'obj' | 'stl' | 'glb'): Promise<Vec3> {
   if (format === 'stl') {
     return file.arrayBuffer().then((buffer) => {
       const geometry = customObjectStlLoader.parse(buffer);
@@ -119,6 +121,18 @@ function measureImportedModel(file: File, format: 'obj' | 'stl'): Promise<Vec3> 
       geometry.dispose();
       return dimensions;
     });
+  }
+  if (format === 'glb') {
+    return file.arrayBuffer().then((buffer) => new Promise<Vec3>((resolve, reject) => {
+      customObjectGltfLoader.parse(buffer, '', (gltf) => {
+        const dimensions = dimensionsForObject(gltf.scene);
+        gltf.scene.traverse((child) => {
+          const mesh = child as THREE.Mesh;
+          if (mesh.isMesh) mesh.geometry?.dispose();
+        });
+        resolve(dimensions);
+      }, reject);
+    }));
   }
   return file.text().then((text) => {
     const root = customObjectObjLoader.parse(text);
@@ -640,17 +654,17 @@ const StageBuilderPage = () => {
   const handleImportCustomObject = async (file?: File) => {
     if (!file) return;
     try {
-      if (file.size > CUSTOM_OBJECT_MAX_FILE_SIZE_BYTES) throw new Error('Custom object is too large. Keep OBJ/STL files under 2 MB for now.');
+      if (file.size > CUSTOM_OBJECT_MAX_FILE_SIZE_BYTES) throw new Error('Custom object is too large. Keep OBJ/STL/GLB files under 10 MB for now.');
       const lowerName = file.name.toLowerCase();
-      const format = lowerName.endsWith('.stl') ? 'stl' : lowerName.endsWith('.obj') ? 'obj' : null;
-      if (!format) throw new Error('Custom object import supports OBJ and STL files.');
+      const format = lowerName.endsWith('.stl') ? 'stl' : lowerName.endsWith('.obj') ? 'obj' : lowerName.endsWith('.glb') ? 'glb' : null;
+      if (!format) throw new Error('Custom object import supports OBJ, STL, and GLB files.');
       const id = makeLocalStageId();
       const nativeDimensions = await measureImportedModel(file, format);
       const object: EditorStageObject = {
         id,
         kind: 'model',
         semanticKind: 'customObject',
-        name: file.name.replace(/\.(obj|stl)$/i, '') || 'custom object',
+        name: file.name.replace(/\.(obj|stl|glb)$/i, '') || 'custom object',
         filename: await readFileAsDataUrl(file),
         format,
         originalFileName: file.name,
@@ -994,7 +1008,7 @@ const StageBuilderPage = () => {
         onToggleRightPanel={toggleRightPanel}
       />
       <input ref={importInputRef} type="file" accept="application/json,.json" hidden onChange={(event) => handleImportFile(event.target.files?.[0])} />
-      <input ref={customObjectInputRef} type="file" accept=".obj,.stl,model/obj,model/stl,text/plain,application/sla" hidden onChange={(event) => handleImportCustomObject(event.target.files?.[0])} />
+      <input ref={customObjectInputRef} type="file" accept=".obj,.stl,.glb,model/obj,model/stl,model/gltf-binary,text/plain,application/sla" hidden onChange={(event) => handleImportCustomObject(event.target.files?.[0])} />
 
       <Box sx={{ flex: 1, minHeight: 0, display: 'flex', overflow: 'hidden' }}>
         {leftPanelVisible && (

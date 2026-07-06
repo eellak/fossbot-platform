@@ -7,6 +7,9 @@ import type {
   StageBuilderMetadata,
   StageCubeEntry,
   StageCylinderEntry,
+  StageSphereEntry,
+  StageWedgeEntry,
+  StageArrowEntry,
   StageFloorEntry,
   StageFossbotEntry,
   StageSkyboxEntry,
@@ -141,6 +144,41 @@ export function editorStageToConfig(stage: EditorStage): StageJsonEntry[] {
         mass: object.immovable ? 0 : object.mass,
         immovable: object.immovable,
         collision: object.collision,
+      });
+    } else if (object.kind === 'sphere') {
+      entries.push({
+        type: 'sphere',
+        dimensions: object.dimensions,
+        material: { color: object.color },
+        position: object.position,
+        name: object.name || object.semanticKind || 'sphere',
+        castShadow: true,
+        mass: object.immovable ? 0 : object.mass,
+        immovable: object.immovable,
+        collision: object.collision,
+      });
+    } else if (object.kind === 'wedge') {
+      entries.push({
+        type: 'wedge',
+        dimensions: object.dimensions,
+        material: { color: object.color },
+        position: object.position,
+        orientation: object.orientation || [0, object.rotationY, 0],
+        name: object.name || object.semanticKind || 'wedge',
+        castShadow: true,
+        mass: object.immovable ? 0 : object.mass,
+        immovable: object.immovable,
+        collision: object.collision,
+      });
+    } else if (object.kind === 'arrow') {
+      entries.push({
+        type: 'arrow',
+        dimensions: object.dimensions,
+        color: object.color,
+        position: object.position,
+        rotationY: object.rotationY,
+        orientation: object.orientation || [0, object.rotationY, 0],
+        name: object.name || object.semanticKind || 'direction arrow',
       });
     } else if (object.kind === 'line') {
       entries.push({
@@ -306,6 +344,52 @@ function configEntryToEditorObject(entry: StageJsonEntry): EditorStageObject | n
       collision: cylinder.collision || 'auto',
     };
   }
+  if (entry.type === 'sphere') {
+    const sphere = entry as StageSphereEntry;
+    return {
+      id: makeLocalStageId(),
+      kind: 'sphere',
+      semanticKind: inferSemanticKindFromConfig('sphere', sphere.name, sphere.material?.color),
+      name: sphere.name || 'sphere',
+      position: sphere.position,
+      dimensions: [sphere.dimensions[0]],
+      color: String(sphere.material?.color || '#26a69a'),
+      mass: sphere.mass || 0,
+      immovable: sphere.immovable ?? (sphere.mass || 0) <= 0,
+      collision: sphere.collision || 'auto',
+    };
+  }
+  if (entry.type === 'wedge') {
+    const wedge = entry as StageWedgeEntry;
+    return {
+      id: makeLocalStageId(),
+      kind: 'wedge',
+      semanticKind: inferSemanticKindFromConfig('wedge', wedge.name, wedge.material?.color),
+      name: wedge.name || 'wedge',
+      position: wedge.position,
+      rotationY: wedge.orientation?.[1] || 0,
+      orientation: wedge.orientation,
+      dimensions: wedge.dimensions,
+      color: String(wedge.material?.color || '#ec407a'),
+      mass: wedge.mass || 0,
+      immovable: wedge.immovable ?? (wedge.mass || 0) <= 0,
+      collision: wedge.collision || 'auto',
+    };
+  }
+  if (entry.type === 'arrow') {
+    const arrow = entry as StageArrowEntry;
+    return {
+      id: makeLocalStageId(),
+      kind: 'arrow',
+      semanticKind: inferSemanticKindFromConfig('arrow', arrow.name, arrow.color),
+      name: arrow.name || 'direction arrow',
+      position: arrow.position || [0, 0.012, 0],
+      rotationY: arrow.orientation?.[1] ?? arrow.rotationY ?? 0,
+      orientation: arrow.orientation,
+      dimensions: [arrow.dimensions?.[0] || 0.75, arrow.dimensions?.[1] || 0.42, arrow.dimensions?.[2] || 0.04],
+      color: String(arrow.color || '#111827'),
+    };
+  }
   if (entry.type === 'line') {
     const line = entry as StageLineEntry;
     return {
@@ -420,8 +504,11 @@ function configEntryToEditorObject(entry: StageJsonEntry): EditorStageObject | n
 }
 
 function modelFormatFrom(filename?: string, format?: StageModelEntry['format']): StageModelEntry['format'] {
-  if (format === 'stl' || format === 'obj') return format;
-  return filename?.toLowerCase().endsWith('.stl') ? 'stl' : 'obj';
+  if (format === 'stl' || format === 'obj' || format === 'glb') return format;
+  const lower = filename?.toLowerCase() || '';
+  if (lower.endsWith('.stl')) return 'stl';
+  if (lower.endsWith('.glb')) return 'glb';
+  return 'obj';
 }
 
 function skyboxFromConfig(config: StageJsonEntry[]) {

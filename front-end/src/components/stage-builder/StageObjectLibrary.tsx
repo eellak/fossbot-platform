@@ -9,20 +9,17 @@ import { PreviewImage } from './PreviewImage';
 import { fitDisplaySizeToTile, getKindSettings, getLibraryPreviewAreaSize, getPreviewAuthoringKind, setLibraryPreviewAreaSize, usePreviewSettingsVersion } from './stageBuilderPreviewSettings';
 
 export type StageBuilderLibraryGroup = {
-  id: 'floorPaths' | 'structures' | 'robot' | 'challenge' | 'labels' | 'lighting' | 'camera' | 'audio';
+  id: 'floorPaths' | 'structures' | 'robot' | 'challenge' | 'labels' | 'lighting';
   label: string;
   items: StageSemanticKind[];
 };
 
 export const STAGE_BUILDER_LIBRARY_GROUPS: StageBuilderLibraryGroup[] = [
-  { id: 'floorPaths', label: 'Floor and Paths', items: ['line', 'baseTile'] },
-  { id: 'structures', label: 'Structures', items: ['wall', 'block', 'ramp', 'platform', 'cylinder', 'obstacle'] },
-  { id: 'robot', label: 'Robot', items: ['robotSpawn'] },
-  { id: 'challenge', label: 'Challenge Markers', items: ['target', 'checkpoint', 'dangerZone', 'sensorZone'] },
-  { id: 'labels', label: 'Labels', items: ['label'] },
-  { id: 'lighting', label: 'Lighting', items: ['light'] },
-  { id: 'camera', label: 'Camera', items: ['camera'] },
-  { id: 'audio', label: 'Audio', items: ['audio'] },
+  { id: 'robot', label: 'Mission setup', items: ['robotSpawn', 'target', 'checkpoint'] },
+  { id: 'floorPaths', label: 'Paths and floor markers', items: ['line', 'baseTile', 'dangerZone', 'sensorZone', 'directionArrow'] },
+  { id: 'structures', label: 'Build shapes', items: ['block', 'wall', 'ramp', 'platform', 'cylinder', 'obstacle', 'sphere'] },
+  { id: 'labels', label: 'Annotations', items: ['label'] },
+  { id: 'lighting', label: 'Scene setup', items: ['camera', 'light', 'audio'] },
 ];
 
 export interface StageObjectLibraryProps {
@@ -44,11 +41,13 @@ const STATIC_PREVIEW_KINDS = new Set<StageSemanticKind>([
   'baseTile',
   'block',
   'cylinder',
+  'directionArrow',
   'line',
   'obstacle',
   'platform',
   'ramp',
   'robotSpawn',
+  'sphere',
   'target',
   'wall',
 ]);
@@ -116,7 +115,9 @@ export function PreviewShape({ kind, tone, width, height }: { kind: PreviewKind;
         <Box sx={{ position: 'absolute', bottom: 3, left: 3, width: 28, height: 13, borderRadius: '50%', border: `2px solid ${accent}`, bgcolor: soft }} />
       </Box>
     );
-  } else if (kind === 'obstacle') icon = <Box sx={{ width: 0, height: 0, borderLeft: '18px solid transparent', borderRight: '18px solid transparent', borderBottom: `34px solid ${accent}`, opacity: 0.75 }} />;
+  } else if (kind === 'sphere') icon = <Box sx={{ width: 34, height: 34, borderRadius: '50%', bgcolor: soft, border: `2px solid ${accent}`, boxShadow: `inset -8px -8px 0 ${accent}33` }} />;
+  else if (kind === 'wedge') icon = <Box sx={{ width: 42, height: 28, clipPath: 'polygon(0 100%, 100% 100%, 100% 0)', bgcolor: soft, borderBottom: `3px solid ${accent}`, borderRight: `3px solid ${accent}` }} />;
+  else if (kind === 'obstacle') icon = <Box sx={{ width: 0, height: 0, borderLeft: '18px solid transparent', borderRight: '18px solid transparent', borderBottom: `34px solid ${accent}`, opacity: 0.75 }} />;
   else if (kind === 'robotSpawn') icon = <Box sx={{ width: 34, height: 24, border: `2px solid ${accent}`, borderRadius: 1, display: 'grid', placeItems: 'center', color: accent, fontSize: 13, fontWeight: 900 }}>R</Box>;
   else if (kind === 'target') icon = <Box sx={{ width: 34, height: 34, borderRadius: '50%', border: `2px solid ${accent}`, boxShadow: `inset 0 0 0 7px ${soft}, inset 0 0 0 13px ${accent}` }} />;
   else if (kind === 'checkpoint') icon = <Box sx={{ position: 'relative', width: 34, height: 34, borderLeft: `2px solid ${accent}` }}><Box sx={{ position: 'absolute', top: 4, left: 2, width: 24, height: 15, bgcolor: soft, border: `2px solid ${accent}` }} /></Box>;
@@ -142,6 +143,13 @@ export function PreviewShape({ kind, tone, width, height }: { kind: PreviewKind;
     icon = (
       <Box component="svg" viewBox="0 0 52 34" sx={{ width: 52, height: 34 }}>
         <path d="M5 24 C15 4 30 31 47 10" fill="none" stroke={accent} strokeWidth="4" strokeLinecap="round" />
+      </Box>
+    );
+  } else if (kind === 'directionArrow') {
+    icon = (
+      <Box component="svg" viewBox="0 0 52 34" sx={{ width: 52, height: 34 }}>
+        <path d="M5 17 H34" fill="none" stroke={accent} strokeWidth="7" strokeLinecap="round" />
+        <path d="M31 6 L47 17 L31 28 Z" fill={soft} stroke={accent} strokeWidth="3" strokeLinejoin="round" />
       </Box>
     );
   } else if (kind === 'baseTile') icon = <Box sx={{ width: 38, height: 28, border: `2px solid ${accent}`, bgcolor: soft, transform: 'skewX(-12deg)' }} />;
@@ -293,7 +301,7 @@ export function StageObjectLibrary({
         onClick={onImportObject}
         sx={{ justifyContent: 'flex-start' }}
       >
-        Import OBJ/STL object
+        Import OBJ/STL/GLB model
       </Button>
 
       {STAGE_BUILDER_LIBRARY_GROUPS.map((group) => {

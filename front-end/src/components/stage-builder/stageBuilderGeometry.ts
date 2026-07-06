@@ -78,6 +78,34 @@ export function objectBounds(object: EditorStageObject): StageObjectBounds | nul
       soft: false,
     };
   }
+  if (object.kind === 'sphere') {
+    const radius = Math.abs(object.dimensions[0]) / 2;
+    return {
+      objectId: object.id,
+      minX: object.position[0] - radius,
+      maxX: object.position[0] + radius,
+      minY: object.position[1] - radius,
+      maxY: object.position[1] + radius,
+      minZ: object.position[2] - radius,
+      maxZ: object.position[2] + radius,
+      solid: object.collision !== 'none',
+      soft: false,
+    };
+  }
+  if (object.kind === 'wedge') {
+    const [w, h, d] = object.dimensions.map((value) => Math.abs(value)) as [number, number, number];
+    return {
+      objectId: object.id,
+      minX: object.position[0] - w / 2,
+      maxX: object.position[0] + w / 2,
+      minY: object.position[1] - h / 2,
+      maxY: object.position[1] + h / 2,
+      minZ: object.position[2] - d / 2,
+      maxZ: object.position[2] + d / 2,
+      solid: object.collision !== 'none',
+      soft: false,
+    };
+  }
   if (object.kind === 'base') {
     const [w, d] = object.dimensions.map((value) => Math.abs(value)) as [number, number];
     const soft = ['target', 'checkpoint', 'dangerZone', 'sensorZone', 'baseTile'].includes(object.semanticKind || '');
@@ -91,6 +119,20 @@ export function objectBounds(object: EditorStageObject): StageObjectBounds | nul
       maxZ: object.position[2] + d / 2,
       solid: false,
       soft,
+    };
+  }
+  if (object.kind === 'arrow') {
+    const [w, d, h] = object.dimensions.map((value) => Math.abs(value)) as [number, number, number];
+    return {
+      objectId: object.id,
+      minX: object.position[0] - w / 2,
+      maxX: object.position[0] + w / 2,
+      minY: object.position[1] - h / 2,
+      maxY: object.position[1] + h / 2,
+      minZ: object.position[2] - d / 2,
+      maxZ: object.position[2] + d / 2,
+      solid: false,
+      soft: true,
     };
   }
   if (object.kind === 'model') {
@@ -230,6 +272,9 @@ export function objectDimensionsAreValid(object: EditorStageObject): boolean {
   if (object.kind === 'base') return object.dimensions.every((value) => Number.isFinite(value) && value > 0);
   if (object.kind === 'cube') return object.dimensions.every((value) => Number.isFinite(value) && value > 0);
   if (object.kind === 'cylinder') return object.dimensions.slice(0, 3).every((value) => Number.isFinite(value) && value >= 0) && object.dimensions[2] > 0;
+  if (object.kind === 'sphere') return object.dimensions[0] > 0;
+  if (object.kind === 'wedge') return object.dimensions.every((value) => Number.isFinite(value) && value > 0);
+  if (object.kind === 'arrow') return object.dimensions.every((value) => Number.isFinite(value) && value > 0);
   if (object.kind === 'line') return object.points.length >= 2 && object.width > 0;
   if (object.kind === 'text') return object.scale > 0;
   if (object.kind === 'model') return object.scale > 0 && !!object.filename;
