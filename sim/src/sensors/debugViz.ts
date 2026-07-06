@@ -74,7 +74,7 @@ export function createSensorDebugViz(opts: SensorDebugVizOptions): SensorDebugVi
   const _q = new THREE.Quaternion()
 
   // LDR has no range — render a short upward indicator line.
-  const LDR_VIZ_LEN = 0.04
+  const LDR_VIZ_LEN = 0.12
 
   // Only invoked for entries that have a maxRange (mic is filtered out at
   // buildSensor() call sites). LDR has no range so we substitute a short
@@ -207,7 +207,40 @@ export function createSensorDebugViz(opts: SensorDebugVizOptions): SensorDebugVi
   }
 
   // Microphone is omnidirectional and has no ray-style readout — its
-  // overlay lives in micViz.ts. Skip it here.
+  // radius overlay lives in micViz.ts. Still show a marker + label here so
+  // it isn't absent from the sensor helper overlay.
+  const micEntry = opts.layout.find((e) => e.kind === 'microphone')
+  let micMarker: THREE.Mesh | null = null
+  let micLabel: THREE.Sprite | null = null
+  let micLabelTex: THREE.CanvasTexture | null = null
+  let micLabelCanvas: HTMLCanvasElement | null = null
+  let micLabelCtx: CanvasRenderingContext2D | null = null
+  let micLastText = ''
+  if (micEntry) {
+    const micGroup = new THREE.Group()
+    micGroup.name = 'sensor_microphone'
+    micGroup.position.set(micEntry.localPos[0], micEntry.localPos[1], micEntry.localPos[2])
+    root.add(micGroup)
+    micMarker = new THREE.Mesh(
+      new THREE.SphereGeometry(0.012, 12, 8),
+      new THREE.MeshBasicMaterial({ color: 0xf472b6, depthTest: false, transparent: true }),
+    )
+    micMarker.renderOrder = 999
+    micGroup.add(micMarker)
+    micLabelCanvas = document.createElement('canvas')
+    micLabelCanvas.width = 128
+    micLabelCanvas.height = 32
+    micLabelCtx = micLabelCanvas.getContext('2d')!
+    micLabelTex = new THREE.CanvasTexture(micLabelCanvas)
+    micLabelTex.minFilter = THREE.LinearFilter
+    const micLabelMat = new THREE.SpriteMaterial({ map: micLabelTex, depthTest: false, transparent: true })
+    micLabel = new THREE.Sprite(micLabelMat)
+    micLabel.scale.set(0.04, 0.01, 1)
+    micLabel.renderOrder = 1000
+    micLabel.position.set(0, 0.025, 0)
+    micGroup.add(micLabel)
+  }
+
   for (const entry of opts.layout) {
     if (entry.kind === 'microphone') continue
     sensors.push(buildSensor(entry))
@@ -306,6 +339,27 @@ export function createSensorDebugViz(opts: SensorDebugVizOptions): SensorDebugVi
 
       syncVisibility(s)
     }
+
+    // Microphone marker + label (omnidirectional — no rays).
+    if (micMarker && micLabel && micLabelCtx && micLabelCanvas && micLabelTex) {
+      const r = readings.bySensorId.get('microphone')
+      const text = r?.kind === 'microphone' ? `${r.analog0to1023}` : '—'
+      if (text !== micLastText) {
+        micLastText = text
+        const ctx = micLabelCtx
+        ctx.clearRect(0, 0, micLabelCanvas.width, micLabelCanvas.height)
+        ctx.fillStyle = 'rgba(0,0,0,0.65)'
+        ctx.fillRect(0, 0, micLabelCanvas.width, micLabelCanvas.height)
+        ctx.font = 'bold 18px sans-serif'
+        ctx.fillStyle = '#fff'
+        ctx.textBaseline = 'middle'
+        ctx.textAlign = 'center'
+        ctx.fillText(text, micLabelCanvas.width / 2, micLabelCanvas.height / 2)
+        micLabelTex.needsUpdate = true
+      }
+      micMarker.visible = hitsVisible
+      micLabel.visible = labelsVisible
+    }
   }
 
   let _enabled = false
@@ -366,6 +420,12 @@ export function createSensorDebugViz(opts: SensorDebugVizOptions): SensorDebugVi
         s.group.removeFromParent()
       }
       sensors.length = 0
+      if (micMarker) {
+        micMarker.geometry.dispose()
+        ;(micMarker.material as THREE.Material).dispose()
+      }
+      if (micLabelTex) micLabelTex.dispose()
+      if (micLabel) micLabel.material.dispose()
       root.removeFromParent()
     },
   }
