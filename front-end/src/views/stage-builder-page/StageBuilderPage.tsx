@@ -164,7 +164,7 @@ const StageBuilderPage = () => {
   const [leftPanelWidth, setLeftPanelWidth] = useState<number>(stageBuilderPanelSizing.leftDefaultWidth);
   const [rightPanelWidth, setRightPanelWidth] = useState<number>(stageBuilderPanelSizing.rightDefaultWidth);
   const [panelResize, setPanelResize] = useState<PanelResizeState | null>(null);
-  const [inspectorTab, setInspectorTab] = useState<InspectorTab>('stage');
+  const [inspectorTab, setInspectorTab] = useState<InspectorTab>('empty');
   const [message, setMessage] = useState<string>('');
   const [lastExportFingerprint, setLastExportFingerprint] = useState(() => stageFingerprint(emptyEditorStage()));
   const [exportedAt, setExportedAt] = useState<string | null>(null);
@@ -201,7 +201,7 @@ const StageBuilderPage = () => {
 
   useEffect(() => {
     if (selectedId) setInspectorTab('object');
-    else setInspectorTab((current) => current === 'object' ? 'stage' : current);
+    else setInspectorTab((current) => current === 'object' ? 'empty' : current);
   }, [selectedId]);
 
   useEffect(() => {
@@ -310,7 +310,7 @@ const StageBuilderPage = () => {
       setSelectedGroupId(options.selectGroupId || null);
       setSelectedIds([]);
       setSelectedId(null);
-      setInspectorTab('stage');
+      setInspectorTab('empty');
     }
     if (options.message) setMessage(options.message);
   };
@@ -332,6 +332,7 @@ const StageBuilderPage = () => {
     setSelectedId(null);
     setSelectedIds([]);
     setSelectedGroupId(null);
+    setInspectorTab('empty');
     setBuilderMode('edit');
     if (options.clean) {
       setLastExportFingerprint(stageFingerprint(normalizedNext));
@@ -348,14 +349,14 @@ const StageBuilderPage = () => {
     setSelectedGroupId(null);
     setSelectedIds(existing);
     setSelectedId(existing[existing.length - 1] || null);
-    setInspectorTab(existing.length ? 'object' : 'stage');
+    setInspectorTab(existing.length ? 'object' : 'empty');
   };
 
   const handleSelect = (id: string | null) => {
     setSelectedGroupId(null);
     setSelectedId(id);
     setSelectedIds(id ? [id] : []);
-    setInspectorTab(id ? 'object' : 'stage');
+    setInspectorTab(id ? 'object' : 'empty');
     if (id) setBuilderMode('edit');
   };
 
@@ -364,7 +365,7 @@ const StageBuilderPage = () => {
     setSelectedGroupId(group ? group.id : null);
     setSelectedId(null);
     setSelectedIds([]);
-    setInspectorTab('stage');
+    setInspectorTab('empty');
     if (group) setBuilderMode('edit');
   };
 

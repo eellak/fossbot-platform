@@ -780,7 +780,6 @@ function makeObjectRoot(object: EditorStageObject, options: ObjectVisualOptions 
     const waveNear = makeAudioWave(0.11, iconColor, options);
     const waveFar = makeAudioWave(0.18, iconColor, options);
     group.add(waveNear, waveFar);
-    pickables.push(waveNear, waveFar);
 
     if (object.spatial) {
       const ring = makeAudioRangeRing(object.range, iconColor, options);
