@@ -3,7 +3,7 @@ import { Box, ButtonBase, Stack, Tooltip, Typography } from '@mui/material';
 import type { StageSemanticKind } from './types';
 import { STAGE_OBJECT_CATALOG, catalogItem } from './stageBuilderCatalog';
 import type { StageBuilderPrefab } from './stageBuilderPrefabs';
-import { editorColors, editorTones, editorType, type EditorTone } from './stageBuilderEditorTheme';
+import { useEditorTheme, type EditorTone } from './stageBuilderEditorTheme';
 import { PreviewImage } from './PreviewImage';
 import { fitDisplaySizeToTile, getKindSettings, getLibraryPreviewAreaSize, getPreviewAuthoringKind, setLibraryPreviewAreaSize, usePreviewSettingsVersion } from './stageBuilderPreviewSettings';
 
@@ -36,7 +36,6 @@ export interface StageObjectLibraryProps {
   onDeletePrefab?: (id: string) => void;
 }
 
-const tones: Record<StageBuilderLibraryGroup['id'] | 'prefab', EditorTone> = editorTones;
 export type PreviewKind = StageSemanticKind | 'prefab';
 
 const STATIC_PREVIEW_KINDS = new Set<StageSemanticKind>([
@@ -60,7 +59,7 @@ export function staticPreviewUrl(kind: StageSemanticKind): string {
   return `${process.env.PUBLIC_URL || ''}/stage-builder/previews/preview-${kind}.png`;
 }
 
-const libraryTileSx = {
+const libraryTileSx = (editorColors: ReturnType<typeof useEditorTheme>['colors']) => ({
   width: '100%',
   minHeight: 76,
   p: 0.5,
@@ -79,7 +78,7 @@ const libraryTileSx = {
   '&:active': { transform: 'translateY(1px)' },
   '&:hover .library-preview': { opacity: 1, transform: 'translateY(-1px)' },
   '&:focus-visible': { outline: `2px solid ${editorColors.accent}`, outlineOffset: 1 },
-} as const;
+});
 
 function itemFor(kind: StageSemanticKind) {
   return STAGE_OBJECT_CATALOG.find((item) => item.id === kind);
@@ -184,6 +183,7 @@ export function PreviewShape({ kind, tone, width, height }: { kind: PreviewKind;
 }
 
 function LibraryTile({ label, detail, active, tone, previewKind, onClick }: { label: string; detail?: string; active?: boolean; tone: EditorTone; previewKind: PreviewKind; onClick: () => void }) {
+  const { colors: editorColors, type: editorType } = useEditorTheme();
   // Pull the current display size from the settings store. Re-renders when
   // settings change (via the version hook below) so the user can tune the one
   // authoring tile live without kicking off WebGL renders for every visible tile.
@@ -222,7 +222,7 @@ function LibraryTile({ label, detail, active, tone, previewKind, onClick }: { la
       <ButtonBase
         onClick={onClick}
         sx={{
-          ...libraryTileSx,
+          ...libraryTileSx(editorColors),
           color: active ? tone.text : editorColors.text,
           bgcolor: active ? tone.surface : editorColors.panelInset,
           borderColor: active ? `${tone.accent}66` : editorColors.border,
@@ -251,6 +251,7 @@ function LibraryTile({ label, detail, active, tone, previewKind, onClick }: { la
 }
 
 function SectionHeader({ label, count }: { label: string; count: number }) {
+  const { colors: editorColors, type: editorType } = useEditorTheme();
   return (
     <Box sx={{ px: 0.25, minHeight: 20, display: 'flex', alignItems: 'center', gap: 0.75 }}>
       <Typography variant="caption" sx={{ ...editorType.sectionLabel, minWidth: 0, flex: 1, color: editorColors.textMuted }}>{label}</Typography>
@@ -270,6 +271,7 @@ export function StageObjectLibrary({
   onSelectKind,
   onSelectPrefab,
 }: StageObjectLibraryProps) {
+  const { colors: editorColors, tones: editorTones, type: editorType } = useEditorTheme();
   const addKind = onAddKind || onSelectKind;
   const addPrefab = onAddPrefab || onSelectPrefab;
 
@@ -281,7 +283,7 @@ export function StageObjectLibrary({
       </Box>
 
       {STAGE_BUILDER_LIBRARY_GROUPS.map((group) => {
-        const tone = tones[group.id];
+        const tone = editorTones[group.id];
         const placeableItems = group.items.map((kind) => itemFor(kind)).filter((item) => item?.placeable);
         return (
           <Stack key={group.id} spacing={0.5}>
@@ -316,7 +318,7 @@ export function StageObjectLibrary({
               label={prefab.title}
               detail={prefab.description || `${prefab.objects.length} objects`}
               active={activePrefabId === prefab.id}
-              tone={tones.prefab}
+              tone={editorTones.prefab}
               previewKind="prefab"
               onClick={() => addPrefab?.(prefab)}
             />

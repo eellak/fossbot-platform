@@ -15,8 +15,8 @@ import RestartAltIcon from '@mui/icons-material/RestartAlt';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import type { StageSemanticKind } from './types';
-import { PreviewShape, STAGE_BUILDER_LIBRARY_GROUPS, libraryLabel } from './StageObjectLibrary';
-import { editorColors, editorTones, editorType, type EditorTone } from './stageBuilderEditorTheme';
+import { PreviewShape, STAGE_BUILDER_LIBRARY_GROUPS, libraryLabel, type StageBuilderLibraryGroup } from './StageObjectLibrary';
+import { useEditorTheme, type EditorTone } from './stageBuilderEditorTheme';
 import { PreviewImage } from './PreviewImage';
 import { ColorPickerField } from './StageInspector';
 import {
@@ -62,9 +62,9 @@ function rad(value: number): number {
   return (value * Math.PI) / 180;
 }
 
-function previewToneForKind(kind: StageSemanticKind, colorOverride?: string | null): EditorTone {
+function previewToneForKind(kind: StageSemanticKind, tones: Record<StageBuilderLibraryGroup['id'] | 'prefab', EditorTone>, colorOverride?: string | null): EditorTone {
   const groupId = STAGE_BUILDER_LIBRARY_GROUPS.find((group) => group.items.includes(kind))?.id ?? 'structures';
-  const baseTone = editorTones[groupId];
+  const baseTone = tones[groupId];
   return colorOverride ? { ...baseTone, accent: colorOverride } : baseTone;
 }
 
@@ -85,6 +85,7 @@ function normalizedDegrees(value: number): number {
 }
 
 function ChoiceButton({ active, children, onClick }: { active?: boolean; children: React.ReactNode; onClick: () => void }) {
+  const { colors: editorColors } = useEditorTheme();
   return (
     <Button
       size="small"
@@ -104,6 +105,7 @@ function ChoiceButton({ active, children, onClick }: { active?: boolean; childre
 }
 
 function SimpleSlider({ label, value, min, max, step, valueLabel, helper, onChange }: { label: string; value: number; min: number; max: number; step: number; valueLabel: string; helper?: string; onChange: (value: number) => void }) {
+  const { colors: editorColors, type: editorType } = useEditorTheme();
   return (
     <Box>
       <Stack direction="row" alignItems="center" spacing={1}>
@@ -126,6 +128,7 @@ function SimpleSlider({ label, value, min, max, step, valueLabel, helper, onChan
 }
 
 function PreviewGridItem({ kind, selected, onSelect }: { kind: StageSemanticKind; selected: boolean; onSelect: () => void }) {
+  const { colors: editorColors, type: editorType, tones: editorTones } = useEditorTheme();
   const settings = getKindSettings(kind);
   return (
     <Box
@@ -148,7 +151,7 @@ function PreviewGridItem({ kind, selected, onSelect }: { kind: StageSemanticKind
       onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onSelect(); } }}
     >
       <Box sx={{ display: 'grid', placeItems: 'center', minHeight: 52 }}>
-        <PreviewShape kind={kind} tone={previewToneForKind(kind, settings.objectColorOverride)} width={GRID_ICON_SIZE} height={GRID_ICON_SIZE} />
+        <PreviewShape kind={kind} tone={previewToneForKind(kind, editorTones, settings.objectColorOverride)} width={GRID_ICON_SIZE} height={GRID_ICON_SIZE} />
       </Box>
       <Typography variant="caption" noWrap sx={{ ...editorType.caption, color: editorColors.text, fontWeight: 700, textAlign: 'center' }}>
         {libraryLabel(kind)}
@@ -158,7 +161,8 @@ function PreviewGridItem({ kind, selected, onSelect }: { kind: StageSemanticKind
 }
 
 function KindDetails({ kind, settings, onChange, onReset }: { kind: StageSemanticKind; settings: PreviewSettings; onChange: (patch: Partial<PreviewSettings>) => void; onReset: () => void }) {
-  const categoryTone = previewToneForKind(kind, settings.objectColorOverride);
+  const { colors: editorColors, type: editorType } = useEditorTheme();
+  const categoryTone = previewToneForKind(kind, useEditorTheme().tones, settings.objectColorOverride);
   const fill = fillPercent(settings);
   const turn = normalizedDegrees(deg(settings.rotation[1]));
   const areaSize = getLibraryPreviewAreaSize();
@@ -273,6 +277,7 @@ function KindDetails({ kind, settings, onChange, onReset }: { kind: StageSemanti
 }
 
 export function PreviewSettingsPanel() {
+  const { colors: editorColors, type: editorType } = useEditorTheme();
   const version = usePreviewSettingsVersion();
   const [selectedKind, setSelectedKind] = useState<StageSemanticKind | null>(null);
   const [exporting, setExporting] = useState(false);

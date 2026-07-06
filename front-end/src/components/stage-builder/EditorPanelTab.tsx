@@ -2,7 +2,7 @@ import React from 'react';
 import { Box, IconButton, Paper, Tooltip, Typography } from '@mui/material';
 import KeyboardDoubleArrowLeftIcon from '@mui/icons-material/KeyboardDoubleArrowLeft';
 import KeyboardDoubleArrowRightIcon from '@mui/icons-material/KeyboardDoubleArrowRight';
-import { editorColors } from './stageBuilderEditorTheme';
+import { useEditorTheme } from './stageBuilderEditorTheme';
 
 export type EditorPanelTabSide = 'left' | 'right';
 
@@ -18,6 +18,7 @@ export function EditorPanelTab({ side, label, onClick }: EditorPanelTabProps) {
   const isLeft = side === 'left';
   const title = `Show ${label} panel`;
   const ArrowIcon = isLeft ? KeyboardDoubleArrowRightIcon : KeyboardDoubleArrowLeftIcon;
+  const { colors: editorColors } = useEditorTheme();
 
   return (
     <Paper

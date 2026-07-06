@@ -13,6 +13,7 @@ import type { StageBuilderSnapSettings } from './stageBuilderSnapping';
 import { getSnapSettings, snapAngle, snapDimensions, snapPosition } from './stageBuilderSnapping';
 import type { StageBuilderValidationResult } from './stageBuilderValidation';
 import { objectBounds, stageHalfExtents, cameraLookDirection } from './stageBuilderGeometry';
+import { getEditorColors, getEditorTones } from './stageBuilderEditorTheme';
 
 export type StageBuilderTransformMode = 'select' | 'translate' | 'rotate' | 'scale';
 export type StageBuilderCameraView = 'perspective' | 'top' | 'bottom' | 'front' | 'back' | 'left' | 'right';
@@ -232,21 +233,21 @@ function isTransformControlDragging(transform: TransformControls | null): boolea
   return (transform as { dragging?: unknown } | null)?.dragging === true;
 }
 
-function validationTint(severity?: 'error' | 'warning' | 'info'): string | undefined {
-  if (severity === 'error') return '#ef4444';
-  if (severity === 'warning') return '#f59e0b';
-  if (severity === 'info') return '#38bdf8';
+function validationTint(severity: 'error' | 'warning' | 'info' | undefined, colors: ReturnType<typeof getEditorColors>): string | undefined {
+  if (severity === 'error') return colors.friendlyHandleInvalid;
+  if (severity === 'warning') return colors.warning;
+  if (severity === 'info') return colors.accentText;
   return undefined;
 }
 
-function materialColor(base: string, options: ObjectVisualOptions = {}): THREE.Color {
-  if (options.ghost) return new THREE.Color(options.ghostValid === false ? '#ef4444' : '#22c55e');
-  return color(validationTint(options.validationSeverity) || base);
+function materialColor(base: string, options: ObjectVisualOptions = {}, colors: ReturnType<typeof getEditorColors>): THREE.Color {
+  if (options.ghost) return new THREE.Color(options.ghostValid === false ? colors.friendlyHandleInvalid : colors.friendlyHandleValid);
+  return color(validationTint(options.validationSeverity, colors) || base);
 }
 
-function standardMaterial(base: string, options: ObjectVisualOptions = {}, opacity = 1): THREE.MeshStandardMaterial {
-  const mat = new THREE.MeshStandardMaterial({ color: materialColor(base, options), transparent: options.ghost || opacity < 1, opacity: options.ghost ? 0.42 : opacity });
-  const tint = validationTint(options.validationSeverity);
+function standardMaterial(base: string, options: ObjectVisualOptions = {}, opacity = 1, colors: ReturnType<typeof getEditorColors>): THREE.MeshStandardMaterial {
+  const mat = new THREE.MeshStandardMaterial({ color: materialColor(base, options, colors), transparent: options.ghost || opacity < 1, opacity: options.ghost ? 0.42 : opacity });
+  const tint = validationTint(options.validationSeverity, colors);
   if (tint && !options.ghost) {
     mat.emissive = new THREE.Color(tint);
     mat.emissiveIntensity = options.validationSeverity === 'error' ? 0.18 : 0.1;
@@ -254,8 +255,8 @@ function standardMaterial(base: string, options: ObjectVisualOptions = {}, opaci
   return mat;
 }
 
-function basicMaterial(base: string, options: ObjectVisualOptions = {}, opacity = 1): THREE.MeshBasicMaterial {
-  return new THREE.MeshBasicMaterial({ color: materialColor(base, options), transparent: options.ghost || opacity < 1, opacity: options.ghost ? 0.42 : opacity });
+function basicMaterial(base: string, options: ObjectVisualOptions = {}, opacity = 1, colors: ReturnType<typeof getEditorColors>): THREE.MeshBasicMaterial {
+  return new THREE.MeshBasicMaterial({ color: materialColor(base, options, colors), transparent: options.ghost || opacity < 1, opacity: options.ghost ? 0.42 : opacity });
 }
 
 function setObjectUserData(root: THREE.Object3D, id: string): void {
@@ -433,9 +434,9 @@ function makeAudioRangeRing(range: number, colorValue: THREE.Color, options: Obj
   );
 }
 
-function robotSpawnAccent(options: ObjectVisualOptions = {}): string {
-  if (options.ghostValid === false) return '#ef4444';
-  return validationTint(options.validationSeverity) || '#38bdf8';
+function robotSpawnAccent(options: ObjectVisualOptions, colors: ReturnType<typeof getEditorColors>): string {
+  if (options.ghostValid === false) return colors.friendlyHandleInvalid;
+  return validationTint(options.validationSeverity, colors) || colors.friendlyMarquee;
 }
 
 function robotSpawnOpacity(options: ObjectVisualOptions, opacity: number): number {
@@ -470,12 +471,12 @@ function robotSpawnBasicMaterial(colorValue: string, opacity: number, role: Robo
   return tagRobotSpawnMaterial(mat, role);
 }
 
-function sensorHelperColor(kind: string): string {
-  if (kind === 'ultrasonic') return '#38bdf8';
-  if (kind === 'ir-proximity') return '#f59e0b';
-  if (kind === 'ir-floor') return '#22c55e';
-  if (kind === 'ldr') return '#fde047';
-  return '#f472b6';
+function sensorHelperColor(kind: string, colors: ReturnType<typeof getEditorColors>): string {
+  if (kind === 'ultrasonic') return colors.sensorUltrasonic;
+  if (kind === 'ir-proximity') return colors.sensorIrProximity;
+  if (kind === 'ir-floor') return colors.sensorIrFloor;
+  if (kind === 'ldr') return colors.sensorLdr;
+  return colors.sensorOther;
 }
 
 function sensorHelperLength(entry: (typeof SENSOR_LAYOUT)[number]): number {
@@ -486,13 +487,13 @@ function sensorHelperLength(entry: (typeof SENSOR_LAYOUT)[number]): number {
   return entry.maxRange;
 }
 
-function makeSensorHelpersVisual(): THREE.Group {
+function makeSensorHelpersVisual(colors: ReturnType<typeof getEditorColors>): THREE.Group {
   const group = new THREE.Group();
   group.name = 'sensor_helpers';
   group.renderOrder = 20;
 
   for (const entry of SENSOR_LAYOUT) {
-    const accent = sensorHelperColor(entry.kind);
+    const accent = sensorHelperColor(entry.kind, colors);
     const marker = new THREE.Mesh(
       new THREE.SphereGeometry(entry.kind === 'microphone' ? 0.016 : 0.01, 10, 8),
       new THREE.MeshBasicMaterial({ color: color(accent), transparent: true, opacity: 0.9, depthWrite: false }),
@@ -546,15 +547,15 @@ function makeSensorHelpersVisual(): THREE.Group {
   return group;
 }
 
-function applyRobotSpawnTint(root: THREE.Object3D, accentValue: string): void {
+function applyRobotSpawnTint(root: THREE.Object3D, accentValue: string, colors: ReturnType<typeof getEditorColors>): void {
   root.userData.robotSpawnAccent = accentValue;
   const accent = color(accentValue);
-  const body = new THREE.Color('#7dd3fc');
-  const soft = new THREE.Color('#bae6fd');
-  const wheel = new THREE.Color('#2563eb');
-  const rim = new THREE.Color(accentValue === '#ef4444' ? '#fee2e2' : accentValue === '#f59e0b' ? '#fff7ed' : '#e0f7ff');
-  const wheelGlow = new THREE.Color('#1d4ed8');
-  const bodyGlow = new THREE.Color('#0ea5e9');
+  const body = color(colors.robot);
+  const soft = color(colors.accentText);
+  const wheel = color(colors.accent);
+  const rim = color(accentValue === colors.friendlyHandleInvalid ? colors.dangerSurface : accentValue === colors.warning ? `${colors.warning}33` : `${colors.accent}26`);
+  const wheelGlow = color(colors.accent);
+  const bodyGlow = color(colors.accentText);
   root.traverse((child) => {
     const material = (child as THREE.Mesh).material as THREE.Material | THREE.Material[] | undefined;
     const materials = Array.isArray(material) ? material : material ? [material] : [];
@@ -652,7 +653,7 @@ function robotSpawnRoleForPart(part: THREE.Object3D, modelRoot: THREE.Object3D):
   return 'body';
 }
 
-function styleRobotSpawnModel(modelRoot: THREE.Object3D, options: ObjectVisualOptions, accentValue: string): void {
+function styleRobotSpawnModel(modelRoot: THREE.Object3D, options: ObjectVisualOptions, accentValue: string, colors: ReturnType<typeof getEditorColors>): void {
   modelRoot.traverse((child) => {
     const mesh = child as THREE.Mesh;
     if (!(mesh as any).isMesh) return;
@@ -673,11 +674,11 @@ function styleRobotSpawnModel(modelRoot: THREE.Object3D, options: ObjectVisualOp
       mat.needsUpdate = true;
     }
   });
-  applyRobotSpawnTint(modelRoot, accentValue);
+  applyRobotSpawnTint(modelRoot, accentValue, colors);
 }
 
-function styleRobotSpawnRim(modelRoot: THREE.Object3D, options: ObjectVisualOptions, accentValue: string): void {
-  const rimColor = accentValue === '#ef4444' ? '#fee2e2' : accentValue === '#f59e0b' ? '#fff7ed' : '#e0f7ff';
+function styleRobotSpawnRim(modelRoot: THREE.Object3D, options: ObjectVisualOptions, accentValue: string, colors: ReturnType<typeof getEditorColors>): void {
+  const rimColor = accentValue === colors.friendlyHandleInvalid ? colors.dangerSurface : accentValue === colors.warning ? `${colors.warning}33` : `${colors.accent}26`;
   modelRoot.scale.setScalar(1.045);
   modelRoot.traverse((child) => {
     const mesh = child as THREE.Mesh;
@@ -708,7 +709,7 @@ function makeRobotSpawnChevronGeometry(): THREE.ShapeGeometry {
   return new THREE.ShapeGeometry(shape);
 }
 
-function attachRobotSpawnModel(host: THREE.Group, pickables: THREE.Object3D[], options: ObjectVisualOptions, accentValue: string): void {
+function attachRobotSpawnModel(host: THREE.Group, pickables: THREE.Object3D[], options: ObjectVisualOptions, accentValue: string, colors: ReturnType<typeof getEditorColors>): void {
   loadRobotSpawnModelTemplate()
     .then((template) => {
       if (host.userData.stageBuilderDisposed) return;
@@ -716,11 +717,11 @@ function attachRobotSpawnModel(host: THREE.Group, pickables: THREE.Object3D[], o
       model.name = 'robot_spawn_fossbot_model';
       cloneOwnedMeshResources(model);
       const activeAccent = typeof host.userData.robotSpawnAccent === 'string' ? host.userData.robotSpawnAccent : accentValue;
-      styleRobotSpawnModel(model, options, activeAccent);
+      styleRobotSpawnModel(model, options, activeAccent, colors);
       const rim = model.clone(true);
       rim.name = 'robot_spawn_fossbot_rim';
       cloneOwnedMeshResources(rim);
-      styleRobotSpawnRim(rim, options, activeAccent);
+      styleRobotSpawnRim(rim, options, activeAccent, colors);
       const stageObjectId = host.userData.stageObjectId;
       if (typeof stageObjectId === 'string') {
         setObjectUserData(model, stageObjectId);
@@ -733,10 +734,11 @@ function attachRobotSpawnModel(host: THREE.Group, pickables: THREE.Object3D[], o
     .catch((error) => console.warn('[stage-builder] failed to load Fossbot spawn model', error));
 }
 
-function makeRobotSpawnVisual(object: Extract<EditorStageObject, { kind: 'fossbot' }>, options: ObjectVisualOptions = {}): { root: THREE.Group; pickables: THREE.Object3D[] } {
+function makeRobotSpawnVisual(object: Extract<EditorStageObject, { kind: 'fossbot' }>, options: ObjectVisualOptions = {}, context: { colors?: ReturnType<typeof getEditorColors> } = {}): { root: THREE.Group; pickables: THREE.Object3D[] } {
+  const colors = context.colors ?? getEditorColors('studio');
   const group = new THREE.Group();
   const pickables: THREE.Object3D[] = [];
-  const accent = robotSpawnAccent(options);
+  const accent = robotSpawnAccent(options, colors);
   group.userData.stageBuilderVisualKind = 'robotSpawn';
   group.userData.robotSpawnAccent = accent;
   group.userData.spawnAnimationPhase = object.id.split('').reduce((sum, letter) => sum + letter.charCodeAt(0), 0) * 0.031;
@@ -761,7 +763,7 @@ function makeRobotSpawnVisual(object: Extract<EditorStageObject, { kind: 'fossbo
 
   const outerHalo = new THREE.Mesh(
     new THREE.TorusGeometry(0.265, 0.004, 8, 96),
-    robotSpawnBasicMaterial('#e0f7ff', robotSpawnOpacity(options, 0.86), 'rim'),
+    robotSpawnBasicMaterial(`${colors.accent}26`, robotSpawnOpacity(options, 0.86), 'rim'),
   );
   outerHalo.rotation.x = Math.PI / 2;
   outerHalo.position.y = 0.024;
@@ -770,7 +772,7 @@ function makeRobotSpawnVisual(object: Extract<EditorStageObject, { kind: 'fossbo
 
   const directionArrow = new THREE.Mesh(
     makeRobotSpawnChevronGeometry(),
-    robotSpawnBasicMaterial('#e0f7ff', robotSpawnOpacity(options, 0.84), 'rim', THREE.DoubleSide),
+    robotSpawnBasicMaterial(`${colors.accent}26`, robotSpawnOpacity(options, 0.84), 'rim', THREE.DoubleSide),
   );
   directionArrow.rotation.x = -Math.PI / 2;
   directionArrow.position.y = 0.026;
@@ -778,23 +780,24 @@ function makeRobotSpawnVisual(object: Extract<EditorStageObject, { kind: 'fossbo
   directionArrow.userData.robotSpawnAnimationRole = 'directionArrow';
 
   group.add(field, halo, outerHalo, directionArrow);
-  if (options.sensorHelpersVisible) group.add(makeSensorHelpersVisual());
+  if (options.sensorHelpersVisible) group.add(makeSensorHelpersVisual(colors));
   pickables.push(halo, outerHalo, directionArrow);
-  attachRobotSpawnModel(group, pickables, options, accent);
+  attachRobotSpawnModel(group, pickables, options, accent, colors);
   group.position.set(...object.position);
   group.rotation.y = object.rotationY;
-  applyRobotSpawnTint(group, accent);
+  applyRobotSpawnTint(group, accent, colors);
   return { root: group, pickables };
 }
 
-export function makeObjectRoot(object: EditorStageObject, options: ObjectVisualOptions = {}, context: { objects?: EditorStageObject[] } = {}): MeshRecord {
+export function makeObjectRoot(object: EditorStageObject, options: ObjectVisualOptions = {}, context: { objects?: EditorStageObject[]; colors?: ReturnType<typeof getEditorColors> } = {}): MeshRecord {
+  const colors = context.colors ?? getEditorColors('studio');
   let pickables: THREE.Object3D[] = [];
   let root: THREE.Object3D;
 
   if (object.kind === 'cube') {
     const mesh = new THREE.Mesh(
       new THREE.BoxGeometry(object.dimensions[0], object.dimensions[1], object.dimensions[2]),
-      standardMaterial(object.color, options),
+      standardMaterial(object.color, options, 1, colors),
     );
     mesh.position.set(...object.position);
     if (object.orientation) mesh.rotation.set(object.orientation[0], object.orientation[1], object.orientation[2]);
@@ -805,7 +808,7 @@ export function makeObjectRoot(object: EditorStageObject, options: ObjectVisualO
   } else if (object.kind === 'cylinder') {
     const mesh = new THREE.Mesh(
       new THREE.CylinderGeometry(object.dimensions[0], object.dimensions[1], object.dimensions[2], object.dimensions[3] || 24),
-      standardMaterial(object.color, options),
+      standardMaterial(object.color, options, 1, colors),
     );
     mesh.position.set(...object.position);
     mesh.castShadow = true;
@@ -816,7 +819,7 @@ export function makeObjectRoot(object: EditorStageObject, options: ObjectVisualO
     const mesh = new THREE.Mesh(
       new THREE.PlaneGeometry(object.dimensions[0], object.dimensions[1]),
       new THREE.MeshStandardMaterial({
-        color: materialColor(object.color, options),
+        color: materialColor(object.color, options, colors),
         side: THREE.DoubleSide,
         transparent: true,
         opacity: options.ghost ? 0.42 : softOpacity,
@@ -832,8 +835,8 @@ export function makeObjectRoot(object: EditorStageObject, options: ObjectVisualO
   } else if (object.kind === 'line') {
     const group = new THREE.Group();
     group.name = object.name;
-    const lineMat = new THREE.LineBasicMaterial({ color: materialColor(object.color, options), transparent: options.ghost, opacity: options.ghost ? 0.45 : 1 });
-    const markerMat = basicMaterial(object.color, options);
+    const lineMat = new THREE.LineBasicMaterial({ color: materialColor(object.color, options, colors), transparent: options.ghost, opacity: options.ghost ? 0.45 : 1 });
+    const markerMat = basicMaterial(object.color, options, 1, colors);
     const points = object.points.map(([x, z]) => new THREE.Vector3(x, object.y ?? 0.03, z));
     if (points.length >= 2) {
       const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), lineMat);
@@ -863,7 +866,7 @@ export function makeObjectRoot(object: EditorStageObject, options: ObjectVisualO
   } else if (object.kind === 'light') {
     const group = new THREE.Group();
     const realColor = color(object.color);
-    const iconColor = materialColor(object.color, options);
+    const iconColor = materialColor(object.color, options, colors);
     const intensity = Math.max(0, object.intensity);
     let light: THREE.Light;
     if (object.subtype === 'ambient') {
@@ -919,9 +922,9 @@ export function makeObjectRoot(object: EditorStageObject, options: ObjectVisualO
     group.rotation.y = object.rotationY;
   } else if (object.kind === 'camera') {
     const group = new THREE.Group();
-    const cameraIconColor = '#5eead4';
-    const iconColor = materialColor(cameraIconColor, options);
-    const bodyMat = standardMaterial(cameraIconColor, options);
+    const cameraIconColor = colors.sensorUltrasonic;
+    const iconColor = materialColor(cameraIconColor, options, colors);
+    const bodyMat = standardMaterial(cameraIconColor, options, 1, colors);
     const body = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.09, 0.09), bodyMat);
     group.add(body);
     pickables.push(body);
@@ -947,9 +950,9 @@ export function makeObjectRoot(object: EditorStageObject, options: ObjectVisualO
     group.rotation.set(-object.pitch, object.rotationY, 0);
   } else if (object.kind === 'audio') {
     const group = new THREE.Group();
-    const audioColor = '#f472b6';
-    const iconColor = materialColor(audioColor, options);
-    const body = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.13, 0.09), standardMaterial(audioColor, options));
+    const audioColor = colors.sensorOther;
+    const iconColor = materialColor(audioColor, options, colors);
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.13, 0.09), standardMaterial(audioColor, options, 1, colors));
     body.position.set(-0.035, 0, 0);
     group.add(body);
     pickables.push(body);
@@ -977,7 +980,7 @@ export function makeObjectRoot(object: EditorStageObject, options: ObjectVisualO
     root = group;
     group.position.set(...object.position);
   } else {
-    const spawn = makeRobotSpawnVisual(object, options);
+    const spawn = makeRobotSpawnVisual(object, options, { colors });
     root = spawn.root;
     pickables = spawn.pickables;
   }
@@ -1115,10 +1118,11 @@ function supportsResize(object: EditorStageObject | undefined): boolean {
 function makeFriendlyHandles(styleVariant: StageBuilderStyleVariant): FriendlyHandleRecord {
   const group = new THREE.Group();
   const pickables: THREE.Object3D[] = [];
-  const accent = styleVariant === 'studio' ? '#7dd3fc' : '#6c63ff';
+  const colors = getEditorColors(styleVariant);
+  const accent = colors.accent;
   const moveMat = new THREE.MeshBasicMaterial({ color: accent, transparent: true, opacity: 0.82 });
-  const rotateMat = new THREE.MeshBasicMaterial({ color: '#ffb020', transparent: true, opacity: 0.72 });
-  const resizeMat = new THREE.MeshBasicMaterial({ color: '#22c55e', transparent: true, opacity: 0.86 });
+  const rotateMat = new THREE.MeshBasicMaterial({ color: colors.friendlyHandleRotate, transparent: true, opacity: 0.72 });
+  const resizeMat = new THREE.MeshBasicMaterial({ color: colors.friendlyHandleResize, transparent: true, opacity: 0.86 });
 
   const puck = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.035, 32), moveMat);
   puck.position.y = 0.035;
@@ -1144,12 +1148,12 @@ function makeFriendlyHandles(styleVariant: StageBuilderStyleVariant): FriendlyHa
   return { root: group, pickables };
 }
 
-function tintGhost(root: THREE.Object3D, valid: boolean): void {
+function tintGhost(root: THREE.Object3D, valid: boolean, colors: ReturnType<typeof getEditorColors>): void {
   if (root.userData.stageBuilderVisualKind === 'robotSpawn') {
-    applyRobotSpawnTint(root, valid ? '#38bdf8' : '#ef4444');
+    applyRobotSpawnTint(root, valid ? colors.friendlyMarquee : colors.friendlyHandleInvalid, colors);
     return;
   }
-  const next = new THREE.Color(valid ? '#22c55e' : '#ef4444');
+  const next = new THREE.Color(valid ? colors.friendlyHandleValid : colors.friendlyHandleInvalid);
   root.traverse((child) => {
     const mesh = child as THREE.Mesh;
     const material = mesh.material as THREE.Material | THREE.Material[] | undefined;
@@ -1280,7 +1284,7 @@ export function StageBuilderScene({
   transformSpace = 'world',
   controlScheme = 'friendly',
   lockMode = 'ignore',
-  styleVariant = 'playful',
+  styleVariant = 'fossbot',
   validationResults = [],
   focusRequestNonce = 0,
   cameraViewRequest = null,
@@ -1327,6 +1331,8 @@ export function StageBuilderScene({
   const controlSchemeRef = useRef(controlScheme);
   const lockModeRef = useRef(lockMode);
   const styleVariantRef = useRef(styleVariant);
+  const styleColorsRef = useRef(getEditorColors(styleVariant));
+  const styleTonesRef = useRef(getEditorTones(styleVariant));
   const validationResultsRef = useRef(validationResults);
   const snapSettingsRef = useRef(snapSettings || getSnapSettings('medium', '15'));
   const transformSpaceRef = useRef(transformSpace);
@@ -1370,7 +1376,7 @@ export function StageBuilderScene({
   useEffect(() => { gridSizeRef.current = gridSize; }, [gridSize]);
   useEffect(() => { controlSchemeRef.current = controlScheme; }, [controlScheme]);
   useEffect(() => { lockModeRef.current = lockMode; }, [lockMode]);
-  useEffect(() => { styleVariantRef.current = styleVariant; }, [styleVariant]);
+  useEffect(() => { styleVariantRef.current = styleVariant; styleColorsRef.current = getEditorColors(styleVariant); styleTonesRef.current = getEditorTones(styleVariant); const handle = sceneRef.current; if (handle) { const c = getEditorColors(styleVariant); handle.scene.background = new THREE.Color(c.viewport); handle.renderer.setClearColor(new THREE.Color(c.viewport), 1); } }, [styleVariant]);
   useEffect(() => { validationResultsRef.current = validationResults; }, [validationResults]);
   useEffect(() => { snapSettingsRef.current = snapSettings || getSnapSettings('medium', '15'); }, [snapSettings]);
   useEffect(() => { transformSpaceRef.current = transformSpace; }, [transformSpace]);
@@ -1554,6 +1560,12 @@ export function StageBuilderScene({
 
     const sceneHandle = initScene(containerRef.current, { gizmo: false });
     sceneRef.current = sceneHandle;
+    // Override the simulator's hardcoded dark scene background with the active
+    // variant's viewport color so the editor's 3D viewport matches the chrome
+    // (Studio keeps the dark bg; FossBot flips to a light grey).
+    const variantColors = getEditorColors(styleVariantRef.current);
+    sceneHandle.scene.background = new THREE.Color(variantColors.viewport);
+    sceneHandle.renderer.setClearColor(new THREE.Color(variantColors.viewport), 1);
     sceneHandle.camera.position.set(2.4, 2.1, 2.4);
     sceneHandle.controls.target.set(0, 0, 0);
 
@@ -1580,11 +1592,11 @@ export function StageBuilderScene({
     sceneHandle.scene.add(boundary);
     boundaryRef.current = boundary;
 
-    const selectionHelper = makeCornerBoundsHelper('#e2e8f0');
+    const selectionHelper = makeCornerBoundsHelper(styleColorsRef.current.selectionHelper);
     sceneHandle.scene.add(selectionHelper);
     selectionHelperRef.current = selectionHelper;
 
-    const groupSelectionHelper = makeCornerBoundsHelper('#e2e8f0');
+    const groupSelectionHelper = makeCornerBoundsHelper(styleColorsRef.current.selectionHelper);
     sceneHandle.scene.add(groupSelectionHelper);
     groupSelectionHelperRef.current = groupSelectionHelper;
 
@@ -1599,8 +1611,8 @@ export function StageBuilderScene({
 
     const marqueeEl = document.createElement('div');
     marqueeEl.style.position = 'absolute';
-    marqueeEl.style.border = '2px solid #38bdf8';
-    marqueeEl.style.background = 'rgba(56, 189, 248, 0.14)';
+    marqueeEl.style.border = `2px solid ${styleColorsRef.current.friendlyMarquee}`;
+    marqueeEl.style.background = styleColorsRef.current.friendlyMarqueeFill;
     marqueeEl.style.pointerEvents = 'none';
     marqueeEl.style.display = 'none';
     marqueeEl.style.zIndex = '4';
@@ -1683,13 +1695,13 @@ export function StageBuilderScene({
       }
       const ghost = ghostRef.current;
       if (ghost && preview) {
-        tintGhost(ghost.root, valid);
+        tintGhost(ghost.root, valid, styleColorsRef.current);
         if (preview.kind === 'line') {
           const scene = sceneRef.current?.scene;
           if (scene) {
             scene.remove(ghost.root);
             disposeObject(ghost.root);
-            const nextGhost = makeObjectRoot(preview, { ghost: true, ghostValid: valid });
+            const nextGhost = makeObjectRoot(preview, { ghost: true, ghostValid: valid }, { colors: styleColorsRef.current });
             ghostRef.current = nextGhost;
             scene.add(nextGhost.root);
           }
@@ -2098,7 +2110,7 @@ export function StageBuilderScene({
     for (const object of objects) {
       if (object.hidden) continue;
       if (object.kind === 'text' && object.attachment?.parentId && objects.find((item) => item.id === object.attachment?.parentId)?.hidden) continue;
-      const record = makeObjectRoot(object, { validationSeverity: validationSeverityFor(object.id, validationResultsRef.current), sensorHelpersVisible }, { objects });
+      const record = makeObjectRoot(object, { validationSeverity: validationSeverityFor(object.id, validationResultsRef.current), sensorHelpersVisible }, { objects, colors: styleColorsRef.current });
       if (object.id === lookThroughCameraId) record.root.visible = false;
       objectMapRef.current.set(object.id, record);
       scene.add(record.root);
@@ -2116,7 +2128,7 @@ export function StageBuilderScene({
       ghostRef.current = null;
     }
     if (placementObject && builderMode === 'place') {
-      const ghost = makeObjectRoot(placementObject, { ghost: true, ghostValid: true });
+      const ghost = makeObjectRoot(placementObject, { ghost: true, ghostValid: true }, { colors: styleColorsRef.current });
       ghostRef.current = ghost;
       scene.add(ghost.root);
     }

@@ -14,7 +14,7 @@ import StopIcon from '@mui/icons-material/Stop';
 import { useNavigate } from 'react-router-dom';
 import type { FossbotSimulatorHandle } from 'src/simulator/FossbotSimulator';
 import { readStageBuilderRunHandoff } from 'src/components/stage-builder/stageBuilderRunHandoff';
-import { editorColors } from 'src/components/stage-builder/stageBuilderEditorTheme';
+import { editorColors, editorTones, EditorThemeProvider, getEditorColors, getEditorPanelSx, getEditorTabsSx, getEditorTones, getEditorType, getInspectorPanelSx } from 'src/components/stage-builder/stageBuilderEditorTheme';
 
 const LazyFossbotSimulator = lazy(() =>
   import('src/simulator/FossbotSimulator').then((module) => ({ default: module.FossbotSimulator })),
@@ -39,7 +39,7 @@ const remoteBtnSx = {
   height: 48,
   bgcolor: editorColors.panelRaised,
   border: '1px solid',
-  borderColor: 'rgba(148,163,184,0.15)',
+  borderColor: editorColors.borderSoft,
   color: editorColors.textMuted,
   '&:hover': {
     bgcolor: editorColors.accentSoft,
@@ -48,7 +48,7 @@ const remoteBtnSx = {
   },
   '&:active': {
     bgcolor: editorColors.accent,
-    color: '#fff',
+    color: editorColors.textStrong,
   },
 } as const;
 
@@ -63,7 +63,7 @@ const stopBtnSx = {
   },
   '&:active': {
     bgcolor: editorColors.danger,
-    color: '#fff',
+    color: editorColors.textStrong,
   },
 };
 
@@ -132,7 +132,19 @@ const StageBuilderTestPage = () => {
     simRef.current?.setSensorHelpersVisible(next);
   };
 
+  const editorColors = useMemo(() => getEditorColors('fossbot'), []);
+  const editorTones = useMemo(() => getEditorTones('fossbot'), []);
+
   return (
+    <EditorThemeProvider value={useMemo(() => ({
+      variant: 'fossbot',
+      colors: editorColors,
+      tones: editorTones,
+      type: getEditorType('fossbot'),
+      panelSx: getEditorPanelSx('fossbot'),
+      tabsSx: getEditorTabsSx('fossbot'),
+      inspectorSx: getInspectorPanelSx('fossbot'),
+    }), [editorColors, editorTones])}>
     <Box sx={{
       '--fossbot-box-border-radius': '0px',
       borderRadius: 0,
@@ -142,7 +154,7 @@ const StageBuilderTestPage = () => {
       display: 'flex',
       flexDirection: 'column',
       bgcolor: editorColors.viewport,
-      color: '#e2e8f0',
+      color: editorColors.keycapInk,
     }}>
       {/* ── top bar ── */}
       <Box sx={{
@@ -151,7 +163,7 @@ const StageBuilderTestPage = () => {
         display: 'flex',
         alignItems: 'center',
         gap: 0.75,
-        borderBottom: '1px solid rgba(148,163,184,0.2)',
+        borderBottom: `1px solid ${editorColors.divider}`,
         bgcolor: editorColors.topbar,
       }}>
         <Tooltip title="Back to Builder">
@@ -231,9 +243,9 @@ const StageBuilderTestPage = () => {
                   maxWidth: 360,
                   p: 1,
                   borderRadius: 1,
-                  bgcolor: 'rgba(15, 23, 42, 0.82)',
-                  border: '1px solid rgba(148, 163, 184, 0.28)',
-                  color: '#dbeafe',
+                  bgcolor: editorColors.glass,
+                  border: `1px solid ${editorColors.border}`,
+                  color: editorColors.text,
                   pointerEvents: 'none',
                 }}>
                   <Typography variant="caption" sx={{ fontWeight: 700 }}>
@@ -359,6 +371,7 @@ const StageBuilderTestPage = () => {
         </Box>
       </Box>
     </Box>
+    </EditorThemeProvider>
   );
 };
 

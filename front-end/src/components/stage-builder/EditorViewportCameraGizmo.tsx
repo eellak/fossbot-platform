@@ -3,7 +3,7 @@ import { Box, ButtonBase, Paper, Stack, Typography } from '@mui/material';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import VideocamIcon from '@mui/icons-material/Videocam';
 import type { StageBuilderCameraView } from './StageBuilderScene';
-import { editorColors } from './stageBuilderEditorTheme';
+import { useEditorTheme } from './stageBuilderEditorTheme';
 
 export interface EditorViewportCameraGizmoProps {
   currentView: StageBuilderCameraView;
@@ -23,6 +23,7 @@ const cameraViewLabels: Record<StageBuilderCameraView, string> = {
 const cameraViewOptions: StageBuilderCameraView[] = ['perspective', 'top', 'bottom', 'front', 'back', 'left', 'right'];
 
 export function EditorViewportCameraGizmo({ currentView, onCameraViewChange }: EditorViewportCameraGizmoProps) {
+  const { colors: editorColors } = useEditorTheme();
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
 
@@ -42,7 +43,7 @@ export function EditorViewportCameraGizmo({ currentView, onCameraViewChange }: E
 
   return (
     <Box ref={rootRef} sx={{ width: 170 }}>
-      <Paper elevation={0} sx={{ overflow: 'hidden', bgcolor: 'rgba(11, 18, 36, 0.76)', color: editorColors.text, border: `1px solid ${editorColors.border}`, borderRadius: 0.75, boxShadow: 'none', backdropFilter: 'blur(10px)' }}>
+      <Paper elevation={0} sx={{ overflow: 'hidden', bgcolor: editorColors.glass, color: editorColors.text, border: `1px solid ${editorColors.border}`, borderRadius: 0.75, boxShadow: 'none', backdropFilter: 'blur(10px)' }}>
         <ButtonBase
           onClick={() => setOpen((value) => !value)}
           sx={{
@@ -54,7 +55,7 @@ export function EditorViewportCameraGizmo({ currentView, onCameraViewChange }: E
             justifyContent: 'space-between',
             color: editorColors.textStrong,
             textAlign: 'left',
-            '&:hover': { bgcolor: 'rgba(148, 163, 184, 0.09)' },
+            '&:hover': { bgcolor: editorColors.keycapBg },
             '&:focus-visible': { outline: `2px solid ${editorColors.accent}`, outlineOffset: -2 },
           }}
           aria-label="Open camera view options"
@@ -67,7 +68,7 @@ export function EditorViewportCameraGizmo({ currentView, onCameraViewChange }: E
           <KeyboardArrowDownIcon sx={{ fontSize: 18, color: editorColors.textMuted, transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 120ms ease' }} />
         </ButtonBase>
         {open && (
-          <Box sx={{ px: 1, pb: 1, pt: 0.75, bgcolor: 'rgba(18, 31, 40, 0.82)' }}>
+          <Box sx={{ px: 1, pb: 1, pt: 0.75, bgcolor: editorColors.glassDeep }}>
             <Stack spacing={0.25}>
               {cameraViewOptions.map((view) => {
                 const selected = currentView === view;
@@ -85,16 +86,16 @@ export function EditorViewportCameraGizmo({ currentView, onCameraViewChange }: E
                       gap: 1,
                       color: selected ? editorColors.textStrong : editorColors.textMuted,
                       justifyContent: 'flex-start',
-                      '&:hover': { bgcolor: 'rgba(148, 163, 184, 0.08)', color: editorColors.textStrong },
+                      '&:hover': { bgcolor: editorColors.keycapBg, color: editorColors.textStrong },
                     }}
                   >
-                    <Box sx={{ width: 18, height: 18, borderRadius: '50%', border: `2px solid ${selected ? editorColors.textStrong : 'rgba(148, 163, 184, 0.15)'}`, bgcolor: selected ? 'rgba(226, 232, 240, 0.1)' : 'rgba(148, 163, 184, 0.04)', flexShrink: 0 }} />
+                    <Box sx={{ width: 18, height: 18, borderRadius: '50%', border: `2px solid ${selected ? editorColors.textStrong : editorColors.borderSoft}`, bgcolor: selected ? editorColors.keycapBg : 'transparent', flexShrink: 0 }} />
                     <Typography variant="body2" sx={{ color: 'inherit', fontWeight: selected ? 800 : 700 }}>{cameraViewLabels[view]}</Typography>
                   </ButtonBase>
                 );
               })}
               <ButtonBase disabled sx={{ width: '100%', minHeight: 30, px: 0.25, display: 'flex', alignItems: 'center', gap: 1, justifyContent: 'flex-start', color: editorColors.textSubtle, opacity: 0.42 }}>
-                <Box sx={{ width: 18, height: 18, borderRadius: '50%', bgcolor: 'rgba(148, 163, 184, 0.1)', flexShrink: 0 }} />
+                <Box sx={{ width: 18, height: 18, borderRadius: '50%', bgcolor: editorColors.keycapBg, flexShrink: 0 }} />
                 <Typography variant="body2" sx={{ color: 'inherit', fontWeight: 700 }}>Camera</Typography>
               </ButtonBase>
             </Stack>

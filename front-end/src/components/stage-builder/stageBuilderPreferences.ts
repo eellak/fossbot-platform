@@ -1,7 +1,7 @@
 import type { StageBuilderTransformSpace } from './types';
 
 export type StageBuilderControlScheme = 'friendly' | 'legacyGizmo';
-export type StageBuilderStyleVariant = 'playful' | 'studio';
+export type StageBuilderStyleVariant = 'studio' | 'fossbot';
 export type StageBuilderLockMode = 'ignore' | 'selectThrough' | 'stopAtFirstHit';
 // Keep legacy values in the union so old, no-longer-primary components still type-check.
 export type StageBuilderSnapPreset = 'off' | 'fine' | 'medium' | 'coarse' | 'free' | 'grid';
@@ -35,7 +35,7 @@ export function stageBuilderPreferencesKey(scope?: string | number | null): stri
 
 export const defaultStageBuilderPreferences: StageBuilderPreferences = {
   controlScheme: 'legacyGizmo',
-  styleVariant: 'studio',
+  styleVariant: 'fossbot',
   lockMode: 'stopAtFirstHit',
   keyboardShortcutsEnabled: true,
   captureKeyboardInViewport: true,
@@ -65,10 +65,16 @@ function migrateLockMode(value: unknown): StageBuilderLockMode {
   return 'stopAtFirstHit';
 }
 
+function migrateStyleVariant(value: unknown): StageBuilderStyleVariant {
+  if (value === 'studio' || value === 'fossbot') return value;
+  return defaultStageBuilderPreferences.styleVariant;
+}
+
 function normalizePreferences(raw: Partial<StageBuilderPreferences> | Record<string, unknown>): StageBuilderPreferences {
   return {
     ...defaultStageBuilderPreferences,
     ...raw,
+    styleVariant: migrateStyleVariant(raw.styleVariant),
     lockMode: migrateLockMode(raw.lockMode),
     snapPreset: migrateSnapPreset(raw.snapPreset),
     rotationSnapPreset: migrateRotationSnapPreset(raw.rotationSnapPreset),

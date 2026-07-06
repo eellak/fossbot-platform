@@ -7,7 +7,7 @@ import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import { activeValidationResults, validationSummary, type StageBuilderValidationResult } from './stageBuilderValidation';
-import { editorColors } from './stageBuilderEditorTheme';
+import { useEditorTheme } from './stageBuilderEditorTheme';
 
 export interface EditorTopBarProps {
   stageName: string;
@@ -47,34 +47,8 @@ function useMenu() {
   };
 }
 
-const topbarIconButtonSx = {
-  width: 32,
-  height: 32,
-  borderRadius: 0.75,
-  color: editorColors.textMuted,
-  '&:hover': { bgcolor: editorColors.panelRaised, color: editorColors.textStrong },
-} as const;
-
-const exportButtonSx = {
-  height: 34,
-  borderColor: 'rgba(216, 225, 232, 0.16)',
-  color: editorColors.text,
-  bgcolor: 'transparent',
-  textTransform: 'none',
-  '&:hover': { borderColor: 'rgba(216, 225, 232, 0.3)', bgcolor: 'rgba(216, 225, 232, 0.06)', color: editorColors.textStrong },
-} as const;
-
-const runButtonSx = {
-  height: 34,
-  px: 1.75,
-  bgcolor: editorColors.success,
-  color: '#082114',
-  fontWeight: 800,
-  textTransform: 'none',
-  '&:hover': { bgcolor: '#72e7a0' },
-} as const;
-
-function TopStatusText({ label, tone, onClick }: { label: string; tone: string; onClick?: () => void }) {
+function TopStatusText({ label, tone, onClick }: { label: string; tone: string; onClick?: () => void; }) {
+  const { colors: editorColors } = useEditorTheme();
   if (onClick) {
     return (
       <ButtonBase
@@ -90,9 +64,9 @@ function TopStatusText({ label, tone, onClick }: { label: string; tone: string; 
           lineHeight: 1.2,
           cursor: 'pointer',
           textDecoration: 'underline',
-          textDecorationColor: 'rgba(216, 225, 232, 0.28)',
+          textDecorationColor: editorColors.keycapBorderStrong,
           textUnderlineOffset: '3px',
-          '&:hover': { bgcolor: 'rgba(216, 225, 232, 0.06)', textDecorationColor: 'currentColor' },
+          '&:hover': { bgcolor: editorColors.keycapBg, textDecorationColor: 'currentColor' },
           '&:focus-visible': { outline: `2px solid ${editorColors.accent}`, outlineOffset: 2 },
         }}
       >
@@ -135,13 +109,42 @@ export function EditorTopBar({
   onToggleLeftPanel,
   onToggleRightPanel,
 }: EditorTopBarProps) {
+  const { colors: editorColors } = useEditorTheme();
   const overflow = useMenu();
+
+  const topbarIconButtonSx = {
+    width: 32,
+    height: 32,
+    borderRadius: 0.75,
+    color: editorColors.textMuted,
+    '&:hover': { bgcolor: editorColors.panelRaised, color: editorColors.textStrong },
+  } as const;
+
+  const exportButtonSx = {
+    height: 34,
+    borderColor: editorColors.keycapBorder,
+    color: editorColors.text,
+    bgcolor: 'transparent',
+    textTransform: 'none',
+    '&:hover': { borderColor: editorColors.keycapBorderStrong, bgcolor: editorColors.keycapBg, color: editorColors.textStrong },
+  } as const;
+
+  const runButtonSx = {
+    height: 34,
+    px: 1.75,
+    bgcolor: editorColors.success,
+    color: editorColors.successInk,
+    fontWeight: 800,
+    textTransform: 'none',
+    '&:hover': { bgcolor: editorColors.success },
+  } as const;
+
   const active = activeValidationResults(validationResults);
   const hasErrors = active.some((item) => item.severity === 'error');
   const hasWarnings = active.some((item) => item.severity === 'warning');
 
   return (
-    <Toolbar variant="dense" sx={{ minHeight: 48, height: 48, px: 1, gap: 1, bgcolor: editorColors.topbar, color: '#e2e8f0', borderBottom: '1px solid rgba(148,163,184,0.2)' }}>
+    <Toolbar variant="dense" sx={{ minHeight: 48, height: 48, px: 1, gap: 1, bgcolor: editorColors.topbar, color: editorColors.keycapInk, borderBottom: `1px solid ${editorColors.divider}` }}>
       <Tooltip title="Back to Platform">
         <IconButton size="small" onClick={onBack} sx={{ color: 'inherit' }}><ArrowBackIcon fontSize="small" /></IconButton>
       </Tooltip>
@@ -157,7 +160,7 @@ export function EditorTopBar({
             color: 'inherit',
             textAlign: 'left',
             display: 'block',
-            '&:hover': { bgcolor: 'rgba(156, 175, 184, 0.08)' },
+            '&:hover': { bgcolor: editorColors.keycapBg },
             '&:focus-visible': { outline: `2px solid ${editorColors.accent}`, outlineOffset: 2 },
           }}
         >

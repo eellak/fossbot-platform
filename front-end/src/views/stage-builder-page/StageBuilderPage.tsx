@@ -28,7 +28,7 @@ import { EditorPanelTab } from 'src/components/stage-builder/EditorPanelTab';
 import { EditorRightInspector, type InspectorTab } from 'src/components/stage-builder/EditorRightInspector';
 import { clearStageBuilderDraft, draftToEditorStage, readStageBuilderDraft, stageFingerprint, writeStageBuilderDraft, type StageBuilderDraft } from 'src/components/stage-builder/stageBuilderDrafts';
 import { writeStageBuilderRunHandoff } from 'src/components/stage-builder/stageBuilderRunHandoff';
-import { editorColors, editorTones } from 'src/components/stage-builder/stageBuilderEditorTheme';
+import { EditorThemeProvider, getEditorColors, getEditorPanelSx, getEditorTabsSx, getEditorTones, getEditorType, getInspectorPanelSx, useEditorTheme } from 'src/components/stage-builder/stageBuilderEditorTheme';
 
 function userScope(user: ReturnType<typeof useAuth>['user']): string {
   if (!user) return 'anonymous';
@@ -110,16 +110,18 @@ function normalizeCameraMetadata(stage: EditorStage): EditorStage {
   return { ...stage, metadata: { ...stage.metadata, lockCamera: false } };
 }
 
-function StatusItem({ label, value, tone = editorColors.text }: { label: string; value: string; tone?: string }) {
+function StatusItem({ label, value, tone }: { label: string; value: string; tone?: string }) {
+  const { colors: editorColors } = useEditorTheme();
   return (
     <Box sx={{ minWidth: 0, display: 'inline-flex', alignItems: 'baseline', gap: 0.5 }}>
       <Typography variant="caption" sx={{ color: editorColors.textSubtle, fontSize: '0.625rem', fontWeight: 800, letterSpacing: '0.06em', lineHeight: 1, textTransform: 'uppercase' }}>{label}</Typography>
-      <Typography variant="caption" noWrap sx={{ color: tone, fontWeight: 750, lineHeight: 1, minWidth: 0 }}>{value}</Typography>
+      <Typography variant="caption" noWrap sx={{ color: tone ?? editorColors.text, fontWeight: 750, lineHeight: 1, minWidth: 0 }}>{value}</Typography>
     </Box>
   );
 }
 
 function Keycap({ children }: { children: React.ReactNode }) {
+  const { colors: editorColors } = useEditorTheme();
   return (
     <Box
       component="kbd"
@@ -130,10 +132,10 @@ function Keycap({ children }: { children: React.ReactNode }) {
         display: 'inline-flex',
         alignItems: 'center',
         justifyContent: 'center',
-        border: '1px solid rgba(156, 175, 184, 0.28)',
-        borderBottomColor: 'rgba(156, 175, 184, 0.42)',
+        border: `1px solid ${editorColors.keycapBorder}`,
+        borderBottomColor: `1px solid ${editorColors.keycapBorderStrong}`,
         borderRadius: 0.375,
-        bgcolor: 'rgba(216, 225, 232, 0.06)',
+        bgcolor: editorColors.keycapBg,
         color: editorColors.text,
         fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
         fontSize: '0.625rem',
@@ -154,6 +156,7 @@ function ShortcutHint() {
     ['F', 'focus'],
     ['Del', 'remove'],
   ] as const;
+  const { colors: editorColors } = useEditorTheme();
 
   return (
     <Stack direction="row" spacing={1.25} alignItems="center" sx={{ ml: 'auto', minWidth: 0, color: editorColors.textMuted }}>
@@ -168,6 +171,7 @@ function ShortcutHint() {
 }
 
 function PanelResizeHandle({ side, onPointerDown, onDoubleClick }: { side: PanelResizeSide; onPointerDown: React.PointerEventHandler<HTMLDivElement>; onDoubleClick: React.MouseEventHandler<HTMLDivElement> }) {
+  const { colors: editorColors } = useEditorTheme();
   return (
     <Box
       role="separator"
@@ -197,7 +201,7 @@ function PanelResizeHandle({ side, onPointerDown, onDoubleClick }: { side: Panel
           bgcolor: editorColors.accentText,
           opacity: 0,
         },
-        '&:hover': { bgcolor: 'rgba(74, 163, 255, 0.08)' },
+        '&:hover': { bgcolor: `${editorColors.accent}14` },
         '&:hover:before': { opacity: 0.75 },
       }}
     />
@@ -208,6 +212,9 @@ const StageBuilderPage = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const scope = useMemo(() => userScope(user), [user]);
+  const [prefs, setPrefs] = useState<StageBuilderPreferences>(() => readStageBuilderPreferences(scope));
+  const editorColors = useMemo(() => getEditorColors(prefs.styleVariant), [prefs.styleVariant]);
+  const editorTones = useMemo(() => getEditorTones(prefs.styleVariant), [prefs.styleVariant]);
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const historyRef = useRef<StageBuilderHistory>(createStageBuilderHistory());
@@ -222,7 +229,6 @@ const StageBuilderPage = () => {
   const [cameraViewRequest, setCameraViewRequest] = useState<{ view: StageBuilderCameraView; nonce: number } | null>(null);
   const [lookThroughCameraId, setLookThroughCameraId] = useState<string | null>(null);
   const [sensorHelpersVisible, setSensorHelpersVisible] = useState(false);
-  const [prefs, setPrefs] = useState<StageBuilderPreferences>(() => readStageBuilderPreferences(scope));
   const [leftPanelVisible, setLeftPanelVisible] = useState(true);
   const [rightPanelVisible, setRightPanelVisible] = useState(true);
   const [leftPanelWidth, setLeftPanelWidth] = useState<number>(stageBuilderPanelSizing.leftDefaultWidth);
@@ -245,7 +251,6 @@ const StageBuilderPage = () => {
   const dirty = useMemo(() => stageFingerprint(stage) !== lastExportFingerprint, [stage, lastExportFingerprint]);
   const gridVisible = stage.metadata.gridVisible ?? true;
   const gridSize = stage.metadata.gridSize ?? 0.5;
-  const studio = prefs.styleVariant === 'studio';
   const selectedStatus = selectedGroup ? selectedGroup.name : selectedObject ? selectedObject.name : selectedCount ? `${selectedCount} objects` : inspectorTab === 'stage' ? 'Stage' : 'None';
   const selectedTone = selectedGroup ? editorColors.accentText : selectedObject ? editorColors.warning : inspectorTab === 'stage' ? editorColors.accentText : editorColors.text;
 
@@ -852,7 +857,19 @@ const StageBuilderPage = () => {
   }, [prefs.keyboardShortcutsEnabled, stage, selectedId, selectedIds, selectedGroupId, snapSettings, historyVersion, lookThroughCameraId]);
 
   return (
-    <Box ref={rootRef} sx={{ '--fossbot-box-border-radius': '0px', borderRadius: 0, width: '100vw', height: '100vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', bgcolor: studio ? editorColors.viewport : '#e5e7eb' }}>
+    <EditorThemeProvider value={useMemo(() => {
+      const variant = prefs.styleVariant;
+      return {
+        variant,
+        colors: getEditorColors(variant),
+        tones: getEditorTones(variant),
+        type: getEditorType(variant),
+        panelSx: getEditorPanelSx(variant),
+        tabsSx: getEditorTabsSx(variant),
+        inspectorSx: getInspectorPanelSx(variant),
+      };
+    }, [prefs.styleVariant])}>
+    <Box ref={rootRef} sx={{ '--fossbot-box-border-radius': '0px', borderRadius: 0, width: '100vw', height: '100vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', bgcolor: editorColors.viewport }}>
       <EditorTopBar
         stageName={stage.title}
         dirty={dirty}
@@ -972,7 +989,7 @@ const StageBuilderPage = () => {
                   minWidth: 0,
                   height: 34,
                   px: 1,
-                  bgcolor: 'rgba(11, 18, 36, 0.86)',
+                  bgcolor: editorColors.glass,
                   color: editorColors.text,
                   border: `1px solid ${editorColors.border}`,
                   borderRadius: 0.75,
@@ -993,14 +1010,14 @@ const StageBuilderPage = () => {
                     px: 0.75,
                     py: 0,
                     borderRadius: 0.5,
-                    bgcolor: 'rgba(148, 163, 184, 0.08)',
+                    bgcolor: editorColors.keycapBg,
                     color: editorTones.camera.text,
                     fontSize: '0.6875rem',
                     fontWeight: 800,
                     lineHeight: 1,
                     textTransform: 'none',
                     whiteSpace: 'nowrap',
-                    '&:hover': { bgcolor: 'rgba(148, 163, 184, 0.14)', color: editorColors.textStrong },
+                    '&:hover': { bgcolor: editorColors.keycapBorder, color: editorColors.textStrong },
                     '&:focus-visible': { outline: `2px solid ${editorTones.camera.accent}`, outlineOffset: 2 },
                   }}
                 >
@@ -1035,7 +1052,7 @@ const StageBuilderPage = () => {
         )}
       </Box>
 
-      <Box sx={{ height: 28, pl: 1, pr: 1.25, display: 'flex', alignItems: 'center', gap: 2, bgcolor: editorColors.topbar, color: '#cbd5e1', borderTop: '1px solid rgba(148,163,184,0.16)' }}>
+      <Box sx={{ height: 28, pl: 1, pr: 1.25, display: 'flex', alignItems: 'center', gap: 2, bgcolor: editorColors.topbar, color: editorColors.keycapInk, borderTop: `1px solid ${editorColors.divider}` }}>
         <Stack direction="row" spacing={1.75} alignItems="baseline" sx={{ minWidth: 0, flexShrink: 0 }}>
           <StatusItem label="Mode" value={builderMode === 'edit' ? transformMode : builderMode} tone={editorColors.accentText} />
           <StatusItem label="Selected" value={selectedStatus} tone={selectedTone} />
@@ -1062,6 +1079,7 @@ const StageBuilderPage = () => {
 
       <Snackbar open={!!message} autoHideDuration={3600} onClose={() => setMessage('')} message={message} />
     </Box>
+    </EditorThemeProvider>
   );
 };
 
