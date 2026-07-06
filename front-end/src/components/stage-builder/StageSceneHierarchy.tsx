@@ -38,9 +38,9 @@ export interface StageSceneHierarchyProps {
 const panelText = editorColors.text;
 const panelMuted = editorColors.textMuted;
 const panelLine = editorColors.border;
-const treeLine = 'rgba(148, 163, 184, 0.14)';
-const selectedBg = 'rgba(74, 163, 255, 0.1)';
-const hoverBg = 'rgba(148, 163, 184, 0.06)';
+const treeLine = `${editorColors.border}33`;
+const selectedBg = `${editorColors.accent}1a`;
+const hoverBg = `${editorColors.textMuted}0f`;
 const dragDataType = 'application/x-fossbot-stage-object-id';
 
 const rowActionSx = {
@@ -48,7 +48,7 @@ const rowActionSx = {
   height: 22,
   p: 0,
   color: panelMuted,
-  '&:hover': { bgcolor: 'rgba(148, 163, 184, 0.1)', color: editorColors.textStrong },
+  '&:hover': { bgcolor: `${editorColors.textMuted}1a`, color: editorColors.textStrong },
 } as const;
 
 const hierarchyTones: Record<'robot' | 'structures' | 'markers' | 'labels' | 'groups', EditorTone> = {
@@ -231,7 +231,7 @@ function ObjectRow({
           transition: 'background-color 120ms ease, box-shadow 120ms ease, opacity 120ms ease',
           ...dropSx(activeDrop),
           '&:hover': { bgcolor: activeDrop === 'inside' ? 'rgba(74, 163, 255, 0.14)' : rowSelected ? selectedBg : hoverBg },
-          '&:hover .scene-row-actions': { opacity: 1 },
+          '&:hover .scene-row-actions': { display: 'flex' },
         }}
       >
         <ObjectPreview object={object} selected={rowSelected} />
@@ -257,7 +257,7 @@ function ObjectRow({
           </Tooltip>
         )}
         </Box>
-        <Stack className="scene-row-actions" direction="row" spacing={0} sx={{ opacity: rowSelected ? 1 : 0, transition: 'opacity 120ms ease' }}>
+        <Stack className="scene-row-actions" direction="row" spacing={0} sx={{ display: 'none', flexShrink: 0 }}>
           <Tooltip title={object.hidden ? 'Show' : 'Hide'}><IconButton size="small" onClick={(event) => { stop(event); onObjectChange({ ...object, hidden: !object.hidden } as EditorStageObject); }} sx={rowActionSx} aria-label={object.hidden ? 'Show object' : 'Hide object'}>{object.hidden ? <VisibilityOffIcon sx={{ width: 15, height: 15 }} /> : <VisibilityIcon sx={{ width: 15, height: 15 }} />}</IconButton></Tooltip>
           <Tooltip title={object.locked ? 'Unlock' : 'Lock'}><IconButton size="small" onClick={(event) => { stop(event); onObjectChange({ ...object, locked: !object.locked } as EditorStageObject); }} sx={rowActionSx} aria-label={object.locked ? 'Unlock object' : 'Lock object'}>{object.locked ? <LockIcon sx={{ width: 15, height: 15 }} /> : <LockOpenIcon sx={{ width: 15, height: 15 }} />}</IconButton></Tooltip>
           <Tooltip title="Duplicate"><IconButton size="small" onClick={(event) => { stop(event); onDuplicateObjects([object.id]); }} sx={rowActionSx} aria-label="Duplicate object"><ContentCopyIcon sx={{ width: 15, height: 15 }} /></IconButton></Tooltip>
@@ -349,7 +349,7 @@ function GroupBlock({
             transition: 'background-color 120ms ease, box-shadow 120ms ease',
             ...dropSx(activeDrop),
             '&:hover': { bgcolor: activeDrop === 'inside' ? 'rgba(240, 167, 215, 0.12)' : selected ? selectedBg : hoverBg },
-            '&:hover .scene-row-actions': { opacity: 1 },
+            '&:hover .scene-row-actions': { display: 'flex' },
           }}
         >
           <IconButton size="small" onClick={(event) => { stop(event); setExpanded((value) => !value); }} sx={{ color: panelMuted, p: 0 }}>
@@ -363,7 +363,7 @@ function GroupBlock({
               <Typography variant="body2" noWrap sx={{ ...editorType.body, fontWeight: selected ? 800 : 650, color: 'inherit' }}>{group.name}</Typography>
             )}
           </Box>
-          <Stack className="scene-row-actions" direction="row" spacing={0} sx={{ opacity: selected ? 1 : 0, transition: 'opacity 120ms ease' }}>
+          <Stack className="scene-row-actions" direction="row" spacing={0} sx={{ display: 'none', flexShrink: 0 }}>
             <Tooltip title={allHidden ? 'Show all' : 'Hide all'}><IconButton size="small" onClick={(event) => { stop(event); onPatchObjects(ids, { hidden: !allHidden } as Partial<EditorStageObject>); }} sx={rowActionSx}>{allHidden ? <VisibilityOffIcon sx={{ width: 15, height: 15 }} /> : <VisibilityIcon sx={{ width: 15, height: 15 }} />}</IconButton></Tooltip>
             <Tooltip title={allLocked ? 'Unlock all' : 'Lock all'}><IconButton size="small" onClick={(event) => { stop(event); onPatchObjects(ids, { locked: !allLocked } as Partial<EditorStageObject>); }} sx={rowActionSx}>{allLocked ? <LockIcon sx={{ width: 15, height: 15 }} /> : <LockOpenIcon sx={{ width: 15, height: 15 }} />}</IconButton></Tooltip>
             <Tooltip title="Duplicate group"><IconButton size="small" onClick={(event) => { stop(event); onDuplicateObjects(ids); }} sx={rowActionSx}><ContentCopyIcon sx={{ width: 15, height: 15 }} /></IconButton></Tooltip>

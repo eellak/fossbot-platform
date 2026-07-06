@@ -404,6 +404,65 @@ function validationSeverityFor(objectId: string, results: StageBuilderValidation
   return undefined;
 }
 
+type CornerBoundsHelper = THREE.LineSegments<THREE.BufferGeometry, THREE.LineBasicMaterial>;
+
+function cornerLengthForSpan(span: number): number {
+  if (span <= 0) return 0;
+  return Math.min(Math.max(span * 0.16, 0.06), 0.45, span * 0.5);
+}
+
+function makeCornerBoundsHelper(colorValue: string): CornerBoundsHelper {
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(48 * 3), 3));
+  geometry.setDrawRange(0, 48);
+  const material = new THREE.LineBasicMaterial({
+    color: color(colorValue),
+    transparent: true,
+    opacity: 0.9,
+    depthTest: false,
+    depthWrite: false,
+    toneMapped: false,
+  });
+  const helper = new THREE.LineSegments(geometry, material) as CornerBoundsHelper;
+  helper.visible = false;
+  helper.frustumCulled = false;
+  helper.renderOrder = 999;
+  return helper;
+}
+
+function updateCornerBoundsHelper(helper: CornerBoundsHelper, box: THREE.Box3): void {
+  const position = helper.geometry.getAttribute('position') as THREE.BufferAttribute;
+  const array = position.array as Float32Array;
+  const min = box.min;
+  const max = box.max;
+  const lengths = [
+    cornerLengthForSpan(max.x - min.x),
+    cornerLengthForSpan(max.y - min.y),
+    cornerLengthForSpan(max.z - min.z),
+  ];
+
+  let offset = 0;
+  const emitCorner = (x: number, y: number, z: number, dx: number, dy: number, dz: number) => {
+    array[offset++] = x; array[offset++] = y; array[offset++] = z;
+    array[offset++] = x + dx * lengths[0]; array[offset++] = y; array[offset++] = z;
+    array[offset++] = x; array[offset++] = y; array[offset++] = z;
+    array[offset++] = x; array[offset++] = y + dy * lengths[1]; array[offset++] = z;
+    array[offset++] = x; array[offset++] = y; array[offset++] = z;
+    array[offset++] = x; array[offset++] = y; array[offset++] = z + dz * lengths[2];
+  };
+
+  emitCorner(min.x, min.y, min.z, 1, 1, 1);
+  emitCorner(max.x, min.y, min.z, -1, 1, 1);
+  emitCorner(min.x, max.y, min.z, 1, -1, 1);
+  emitCorner(max.x, max.y, min.z, -1, -1, 1);
+  emitCorner(min.x, min.y, max.z, 1, 1, -1);
+  emitCorner(max.x, min.y, max.z, -1, 1, -1);
+  emitCorner(min.x, max.y, max.z, 1, -1, -1);
+  emitCorner(max.x, max.y, max.z, -1, -1, -1);
+
+  position.needsUpdate = true;
+}
+
 export function StageBuilderScene({
   objects,
   groups = [],
@@ -435,8 +494,8 @@ export function StageBuilderScene({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const sceneRef = useRef<SceneHandle | null>(null);
   const transformRef = useRef<TransformControls | null>(null);
-  const selectionHelperRef = useRef<THREE.BoxHelper | null>(null);
-  const groupSelectionHelperRef = useRef<THREE.Box3Helper | null>(null);
+  const selectionHelperRef = useRef<CornerBoundsHelper | null>(null);
+  const groupSelectionHelperRef = useRef<CornerBoundsHelper | null>(null);
   const hoverHelperRef = useRef<THREE.BoxHelper | null>(null);
   const friendlyHandlesRef = useRef<FriendlyHandleRecord | null>(null);
   const groupPivotRef = useRef<THREE.Group | null>(null);
@@ -660,13 +719,11 @@ export function StageBuilderScene({
     sceneHandle.scene.add(boundary);
     boundaryRef.current = boundary;
 
-    const selectionHelper = new THREE.BoxHelper(new THREE.Object3D(), 0x00e5ff);
-    selectionHelper.visible = false;
+    const selectionHelper = makeCornerBoundsHelper('#e2e8f0');
     sceneHandle.scene.add(selectionHelper);
     selectionHelperRef.current = selectionHelper;
 
-    const groupSelectionHelper = new THREE.Box3Helper(new THREE.Box3(), 0xf0a7d7);
-    groupSelectionHelper.visible = false;
+    const groupSelectionHelper = makeCornerBoundsHelper('#e2e8f0');
     sceneHandle.scene.add(groupSelectionHelper);
     groupSelectionHelperRef.current = groupSelectionHelper;
 
@@ -957,8 +1014,14 @@ export function StageBuilderScene({
       const helper = selectionHelperRef.current;
       const selectedRoot = selectedRef.current ? objectMapRef.current.get(selectedRef.current)?.root : null;
       if (helper && selectedRoot) {
-        helper.visible = true;
-        helper.setFromObject(selectedRoot);
+        selectedRoot.updateMatrixWorld(true);
+        const selectedBox = new THREE.Box3().setFromObject(selectedRoot);
+        if (!selectedBox.isEmpty()) {
+          updateCornerBoundsHelper(helper, selectedBox);
+          helper.visible = true;
+        } else {
+          helper.visible = false;
+        }
       } else if (helper) {
         helper.visible = false;
       }
@@ -966,7 +1029,7 @@ export function StageBuilderScene({
       const selectedGroupId = selectedGroupRef.current;
       const groupBox = selectedGroupId ? groupBoxFor(selectedGroupId) : null;
       if (groupHelper && groupBox) {
-        groupHelper.box.copy(groupBox);
+        updateCornerBoundsHelper(groupHelper, groupBox);
         groupHelper.visible = true;
       } else if (groupHelper) {
         groupHelper.visible = false;

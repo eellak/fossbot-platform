@@ -58,12 +58,67 @@ function isTypingTarget(target: EventTarget | null): boolean {
 
 const leaveMessage = 'You have unsaved changes. A local recovery draft will be kept, but you should export JSON when you are ready to save.';
 
+const stageBuilderPanelSizing = {
+  minWidth: 240,
+  maxWidth: 420,
+  leftDefaultWidth: 280,
+  rightDefaultWidth: 324,
+  handleWidth: 10,
+} as const;
+
+type PanelResizeSide = 'left' | 'right';
+
+type PanelResizeState = {
+  side: PanelResizeSide;
+  startX: number;
+  startWidth: number;
+};
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
 function StatusPill({ label, value, tone = editorColors.text }: { label: string; value: string; tone?: string }) {
   return (
     <Box sx={{ height: 20, minWidth: 0, px: 0.75, display: 'inline-flex', alignItems: 'center', gap: 0.5, borderRadius: 0.75, bgcolor: 'rgba(148, 163, 184, 0.07)', border: '1px solid rgba(148, 163, 184, 0.14)' }}>
       <Typography variant="caption" sx={{ color: editorColors.textSubtle, fontSize: '0.625rem', fontWeight: 800, letterSpacing: '0.06em', lineHeight: 1, textTransform: 'uppercase' }}>{label}</Typography>
       <Typography variant="caption" noWrap sx={{ color: tone, fontWeight: 700, lineHeight: 1, minWidth: 0 }}>{value}</Typography>
     </Box>
+  );
+}
+
+function PanelResizeHandle({ side, onPointerDown }: { side: PanelResizeSide; onPointerDown: React.PointerEventHandler<HTMLDivElement> }) {
+  return (
+    <Box
+      role="separator"
+      aria-orientation="vertical"
+      aria-label={side === 'left' ? 'Resize left panel' : 'Resize right panel'}
+      onPointerDown={onPointerDown}
+      sx={{
+        width: stageBuilderPanelSizing.handleWidth,
+        flex: `0 0 ${stageBuilderPanelSizing.handleWidth}px`,
+        height: '100%',
+        mx: `-${stageBuilderPanelSizing.handleWidth / 2}px`,
+        cursor: 'col-resize',
+        touchAction: 'none',
+        position: 'relative',
+        zIndex: 2,
+        display: { xs: 'none', lg: 'block' },
+        bgcolor: 'transparent',
+        '&:before': {
+          content: '""',
+          position: 'absolute',
+          top: 0,
+          bottom: 0,
+          left: '50%',
+          width: '1px',
+          transform: 'translateX(-50%)',
+          bgcolor: editorColors.border,
+          opacity: 0.9,
+        },
+        '&:hover': { bgcolor: 'rgba(74, 163, 255, 0.08)' },
+      }}
+    />
   );
 }
 
@@ -85,6 +140,9 @@ const StageBuilderPage = () => {
   const [prefs, setPrefs] = useState<StageBuilderPreferences>(() => readStageBuilderPreferences(scope));
   const [leftPanelVisible, setLeftPanelVisible] = useState(true);
   const [rightPanelVisible, setRightPanelVisible] = useState(true);
+  const [leftPanelWidth, setLeftPanelWidth] = useState<number>(stageBuilderPanelSizing.leftDefaultWidth);
+  const [rightPanelWidth, setRightPanelWidth] = useState<number>(stageBuilderPanelSizing.rightDefaultWidth);
+  const [panelResize, setPanelResize] = useState<PanelResizeState | null>(null);
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>('stage');
   const [message, setMessage] = useState<string>('');
   const [lastExportFingerprint, setLastExportFingerprint] = useState(() => stageFingerprint(emptyEditorStage()));
@@ -141,6 +199,50 @@ const StageBuilderPage = () => {
     window.addEventListener('beforeunload', onBeforeUnload);
     return () => window.removeEventListener('beforeunload', onBeforeUnload);
   }, [dirty]);
+
+  useEffect(() => {
+    if (!panelResize) return undefined;
+
+    const previousCursor = document.body.style.cursor;
+    const previousUserSelect = document.body.style.userSelect;
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+
+    const handleMove = (event: PointerEvent) => {
+      const delta = event.clientX - panelResize.startX;
+      const nextWidth = panelResize.side === 'left'
+        ? panelResize.startWidth + delta
+        : panelResize.startWidth - delta;
+      const clampedWidth = clamp(nextWidth, stageBuilderPanelSizing.minWidth, stageBuilderPanelSizing.maxWidth);
+      if (panelResize.side === 'left') setLeftPanelWidth(clampedWidth);
+      else setRightPanelWidth(clampedWidth);
+    };
+
+    const stopResizing = () => setPanelResize(null);
+
+    window.addEventListener('pointermove', handleMove);
+    window.addEventListener('pointerup', stopResizing);
+    window.addEventListener('pointercancel', stopResizing);
+
+    return () => {
+      window.removeEventListener('pointermove', handleMove);
+      window.removeEventListener('pointerup', stopResizing);
+      window.removeEventListener('pointercancel', stopResizing);
+      document.body.style.cursor = previousCursor;
+      document.body.style.userSelect = previousUserSelect;
+    };
+  }, [panelResize]);
+
+  const beginPanelResize = (side: PanelResizeSide) => (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setPanelResize({
+      side,
+      startX: event.clientX,
+      startWidth: side === 'left' ? leftPanelWidth : rightPanelWidth,
+    });
+  };
 
   const bumpHistory = () => setHistoryVersion((value) => value + 1);
   const setPref = (patch: Partial<StageBuilderPreferences>) => setPrefs((current) => ({ ...current, ...patch }));
@@ -604,9 +706,9 @@ const StageBuilderPage = () => {
       />
       <input ref={importInputRef} type="file" accept="application/json,.json" hidden onChange={(event) => handleImportFile(event.target.files?.[0])} />
 
-      <Box sx={{ flex: 1, minHeight: 0, display: 'grid', gridTemplateColumns: { xs: '1fr', lg: `${leftPanelVisible ? 280 : 0}px minmax(0, 1fr) ${rightPanelVisible ? 324 : 0}px` }, transition: 'grid-template-columns 160ms ease' }}>
+      <Box sx={{ flex: 1, minHeight: 0, display: 'flex', overflow: 'hidden' }}>
         {leftPanelVisible && (
-          <Box sx={{ minWidth: 0, minHeight: 0, display: { xs: 'none', lg: 'block' } }}>
+          <Box sx={{ width: leftPanelWidth, flex: '0 0 auto', minHeight: 0, display: { xs: 'none', lg: 'block' }, overflow: 'hidden' }}>
             <EditorLeftPanel
               stage={stage}
               selectedId={selectedId}
@@ -627,8 +729,9 @@ const StageBuilderPage = () => {
             />
           </Box>
         )}
+        {leftPanelVisible && <PanelResizeHandle side="left" onPointerDown={beginPanelResize('left')} />}
 
-        <Box sx={{ minWidth: 0, minHeight: 0, position: 'relative', bgcolor: editorColors.viewport }}>
+        <Box sx={{ flex: '1 1 0%', minWidth: 0, minHeight: 0, position: 'relative', bgcolor: editorColors.viewport }}>
           <StageBuilderScene
             objects={stage.objects}
             groups={stage.metadata.groups}
@@ -676,8 +779,9 @@ const StageBuilderPage = () => {
           </Box>
         </Box>
 
+        {rightPanelVisible && <PanelResizeHandle side="right" onPointerDown={beginPanelResize('right')} />}
         {rightPanelVisible && (
-          <Box sx={{ minWidth: 0, minHeight: 0, display: { xs: 'none', lg: 'block' } }}>
+          <Box sx={{ width: rightPanelWidth, flex: '0 0 auto', minHeight: 0, display: { xs: 'none', lg: 'block' }, overflow: 'hidden' }}>
             <EditorRightInspector
               tab={inspectorTab}
               onTabChange={setInspectorTab}
