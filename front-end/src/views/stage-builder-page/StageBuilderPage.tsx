@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, Snackbar, Stack, Typography } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from 'src/authentication/AuthProvider';
-import type { EditorStage, EditorStageObject, StageBuilderMode, StageSemanticKind, Vec3 } from 'src/components/stage-builder/types';
+import type { EditorStage, EditorStageObject, StageBuilderMode, StageLabelAttachment, StageSemanticKind, Vec3 } from 'src/components/stage-builder/types';
 import { downloadStageJson, makeLocalStageId, stageRecordFromImportedJson } from 'src/components/stage-builder/localStages';
 import { StageBuilderScene, type StageBuilderCameraView, type StageBuilderTransformMode } from 'src/components/stage-builder/StageBuilderScene';
 import { configToEditorStage, createDemoEditorStage, DEFAULT_STAGE_FLOOR, DEFAULT_STAGE_METADATA, editorStageToRecord } from 'src/components/stage-builder/serialize';
@@ -89,6 +89,20 @@ function cameraPreviewName(name: string): string {
 
 function hasVisibleStageCamera(stage: EditorStage): boolean {
   return stage.objects.some((object) => object.kind === 'camera' && !object.hidden);
+}
+
+function canAttachLabelTo(object: EditorStageObject | null | undefined): object is Extract<EditorStageObject, { kind: 'base' | 'cube' | 'cylinder' }> {
+  return !!object && (object.kind === 'base' || object.kind === 'cube' || object.kind === 'cylinder');
+}
+
+function defaultLabelAttachment(parent: EditorStageObject): StageLabelAttachment {
+  return {
+    parentId: parent.id,
+    face: parent.kind === 'base' ? 'top' : 'front',
+    offset: [0, 0],
+    rotation: 0,
+    billboard: false,
+  };
 }
 
 function normalizeCameraMetadata(stage: EditorStage): EditorStage {
@@ -446,19 +460,35 @@ const StageBuilderPage = () => {
     commitStage((current) => ({ ...current, objects: current.objects.map((object) => ids.includes(object.id) ? { ...object, ...patch } as EditorStageObject : object) }));
   };
 
+  const descendantIdsFor = (objects: EditorStageObject[], ids: string[]): string[] => {
+    const collected = new Set(ids);
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const object of objects) {
+        if (object.parentId && collected.has(object.parentId) && !collected.has(object.id)) {
+          collected.add(object.id);
+          changed = true;
+        }
+      }
+    }
+    return Array.from(collected);
+  };
+
   const deleteObjects = (ids: string[]) => {
     if (!ids.length) return;
+    const idsWithChildren = descendantIdsFor(stage.objects, ids);
     commitStage((current) => {
       const now = new Date().toISOString();
       const groups = current.metadata.groups
-        .map((group) => ({ ...group, objectIds: group.objectIds.filter((objectId) => !ids.includes(objectId)), updatedAt: now }))
+        .map((group) => ({ ...group, objectIds: group.objectIds.filter((objectId) => !idsWithChildren.includes(objectId)), updatedAt: now }))
         .filter((group) => group.objectIds.length > 0);
       const objectGroupIds = new Map<string, string>();
       groups.forEach((group) => group.objectIds.forEach((objectId) => objectGroupIds.set(objectId, group.id)));
       return {
         ...current,
         objects: current.objects
-          .filter((object) => !ids.includes(object.id))
+          .filter((object) => !idsWithChildren.includes(object.id))
           .map((object) => {
             const nextGroupId = objectGroupIds.get(object.id);
             if (nextGroupId) return object.groupId === nextGroupId ? object : { ...object, groupId: nextGroupId } as EditorStageObject;
@@ -466,19 +496,32 @@ const StageBuilderPage = () => {
           }),
         metadata: { ...current.metadata, groups },
       };
-    }, { selectIds: selectedIds.filter((id) => !ids.includes(id)) });
+    }, { selectIds: selectedIds.filter((id) => !idsWithChildren.includes(id)) });
   };
 
   const deleteSelected = () => deleteObjects(selectedGroup ? selectedGroupObjectIds : selectedIds.length ? selectedIds : (selectedId ? [selectedId] : []));
 
   const duplicateObjects = (ids: string[]) => {
-    const source = stage.objects.filter((object) => ids.includes(object.id));
+    const idsWithChildren = descendantIdsFor(stage.objects, ids);
+    const source = stage.objects.filter((object) => idsWithChildren.includes(object.id));
     if (!source.length) return;
+    const idMap = new Map(source.map((object) => [object.id, makeLocalStageId()]));
     const copies = source.map((object) => {
-      const copy = translateObject(cloneStage(object), [0.5, 0, 0.5]) as EditorStageObject;
-      return { ...copy, id: makeLocalStageId(), name: `${object.name} copy`, groupId: undefined } as EditorStageObject;
+      const copy = translateObject(cloneStage(object), [object.parentId ? 0 : 0.5, 0, object.parentId ? 0 : 0.5]) as EditorStageObject;
+      const nextParentId = object.parentId && idMap.has(object.parentId) ? idMap.get(object.parentId) : object.parentId;
+      const nextAttachment = object.kind === 'text' && object.attachment
+        ? { ...object.attachment, parentId: nextParentId || object.attachment.parentId }
+        : undefined;
+      return {
+        ...copy,
+        id: idMap.get(object.id)!,
+        name: `${object.name} copy`,
+        groupId: undefined,
+        parentId: nextParentId,
+        ...(nextAttachment ? { attachment: nextAttachment } : {}),
+      } as EditorStageObject;
     });
-    commitStage((current) => ({ ...current, objects: [...current.objects, ...copies] }), { selectIds: copies.map((copy) => copy.id), message: 'Duplicated selection.' });
+    commitStage((current) => ({ ...current, objects: [...current.objects, ...copies] }), { selectIds: copies.filter((copy) => ids.includes(source.find((object) => idMap.get(object.id) === copy.id)?.id || '')).map((copy) => copy.id), message: 'Duplicated selection.' });
   };
 
   const duplicateSelected = () => duplicateObjects(selectedGroup ? selectedGroupObjectIds : selectedIds.length ? selectedIds : (selectedId ? [selectedId] : []));
@@ -492,14 +535,18 @@ const StageBuilderPage = () => {
     const id = makeLocalStageId();
     const object = createCatalogObject(kind, id, [0, 0, 0]);
     if (!object) return;
+    const labelParent = kind === 'label' && canAttachLabelTo(selectedObject) ? selectedObject : null;
+    const nextObject = labelParent && object.kind === 'text'
+      ? { ...object, name: `${labelParent.name} label`, position: 'position' in labelParent ? labelParent.position : object.position, onFloor: false, parentId: labelParent.id, attachment: defaultLabelAttachment(labelParent) } as EditorStageObject
+      : object;
     commitStage((current) => ({
       ...current,
-      objects: object.kind === 'fossbot'
-        ? [...current.objects.filter((item) => item.kind !== 'fossbot'), object]
-        : object.kind === 'camera'
-          ? [...current.objects.filter((item) => item.kind !== 'camera'), object]
-          : [...current.objects, object],
-    }), { selectIds: [id], message: `${displayObjectType(object)} added at floor center.` });
+      objects: nextObject.kind === 'fossbot'
+        ? [...current.objects.filter((item) => item.kind !== 'fossbot'), nextObject]
+        : nextObject.kind === 'camera'
+          ? [...current.objects.filter((item) => item.kind !== 'camera'), nextObject]
+          : [...current.objects, nextObject],
+    }), { selectIds: [id], message: labelParent ? `Label attached to ${labelParent.name}.` : `${displayObjectType(nextObject)} added at floor center.` });
   };
 
   const addPrefab = (prefab: StageBuilderPrefab) => {
@@ -646,6 +693,20 @@ const StageBuilderPage = () => {
       const moving = current.objects.find((object) => object.id === draggedId);
       const targetObject = target.type === 'object' ? current.objects.find((object) => object.id === target.id) : null;
       if (!moving || (target.type === 'object' && !targetObject)) return current;
+
+      if (moving.kind === 'text' && target.position === 'inside' && targetObject && canAttachLabelTo(targetObject)) {
+        return {
+          ...current,
+          objects: current.objects.map((object) => object.id === moving.id ? {
+            ...moving,
+            parentId: targetObject.id,
+            groupId: undefined,
+            onFloor: false,
+            attachment: moving.attachment?.parentId === targetObject.id ? moving.attachment : defaultLabelAttachment(targetObject),
+          } as EditorStageObject : object),
+          metadata: { ...current.metadata, groups: current.metadata.groups.map((group) => ({ ...group, objectIds: group.objectIds.filter((objectId) => objectId !== moving.id) })).filter((group) => group.objectIds.length > 0) },
+        };
+      }
 
       const now = new Date().toISOString();
       const existingObjectIds = new Set(current.objects.map((object) => object.id));

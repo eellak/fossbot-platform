@@ -53,6 +53,27 @@ export type StageLineEntry = {
   name?: string;
 };
 
+export type StageLabelFace = 'front' | 'back' | 'left' | 'right' | 'top' | 'bottom';
+
+export type StageLabelAttachment = {
+  parentId: string;
+  face: StageLabelFace;
+  offset: [number, number];
+  rotation: number;
+  billboard?: boolean;
+};
+
+export type StageTextStyle = {
+  backgroundVisible?: boolean;
+  backgroundSize?: [number, number];
+  backgroundColor?: string;
+  backgroundOpacity?: number;
+  borderVisible?: boolean;
+  borderColor?: string;
+  borderWidth?: number;
+  fontSize?: number;
+};
+
 export type StageTextEntry = {
   type: 'text';
   text: string;
@@ -60,6 +81,14 @@ export type StageTextEntry = {
   color?: string | number;
   scale?: number;
   onFloor?: boolean;
+  attachment?: StageLabelAttachment;
+  attach?: {
+    parentName: string;
+    face: StageLabelFace;
+    offset: [number, number];
+    rotation: number;
+  };
+  style?: StageTextStyle;
   name?: string;
 };
 
@@ -189,6 +218,7 @@ export type EditorObjectCommon = {
   name: string;
   semanticKind?: StageSemanticKind;
   groupId?: string;
+  parentId?: string;
   prefabSourceId?: string;
   locked?: boolean;
   hidden?: boolean;
@@ -237,6 +267,8 @@ export type EditorTextObject = EditorObjectCommon & {
   color: string;
   scale: number;
   onFloor: boolean;
+  attachment?: StageLabelAttachment;
+  style?: StageTextStyle;
 };
 
 export type EditorFossbotObject = EditorObjectCommon & {

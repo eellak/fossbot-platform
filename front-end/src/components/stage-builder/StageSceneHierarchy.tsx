@@ -39,7 +39,7 @@ const panelText = editorColors.text;
 const panelMuted = editorColors.textMuted;
 const panelLine = editorColors.border;
 const treeLine = editorColors.borderStrong;
-const treeLineWidth = 2;
+const treeLineWidth = 1;
 const treeLineHalf = treeLineWidth / 2;
 const treeBranchWidth = 14;
 const selectedBg = `${editorColors.accent}1a`;
@@ -105,6 +105,17 @@ function objectMatches(object: EditorStageObject, query: string): boolean {
   if (!query) return true;
   const haystack = `${object.name} ${displayObjectType(object)} ${object.kind} ${object.semanticKind || ''}`.toLowerCase();
   return haystack.includes(query);
+}
+
+function objectVisible(object: EditorStageObject, query: string, childrenByParent: Map<string, EditorStageObject[]>): boolean {
+  if (objectMatches(object, query)) return true;
+  return (childrenByParent.get(object.id) || []).some((child) => objectVisible(child, query, childrenByParent));
+}
+
+function visibleChildren(object: EditorStageObject, query: string, childrenByParent: Map<string, EditorStageObject[]>): EditorStageObject[] {
+  const children = childrenByParent.get(object.id) || [];
+  if (!query || objectMatches(object, query)) return children;
+  return children.filter((child) => objectVisible(child, query, childrenByParent));
 }
 
 function treeMetrics(depth: number) {
@@ -196,6 +207,13 @@ function TreeRowShell({
 function ObjectPreview({ object }: { object: EditorStageObject }) {
   const tone = toneForObject(object);
   const kind = previewKindForObject(object);
+  if (object.kind === 'text') {
+    return (
+      <Box sx={{ width: 32, height: 32, display: 'grid', placeItems: 'center', overflow: 'hidden', borderRadius: 0.5, bgcolor: 'transparent' }}>
+        <Box sx={{ width: 24, height: 18, display: 'grid', placeItems: 'center', border: `1px solid ${tone.accent}`, bgcolor: `${tone.accent}1f`, color: tone.text, fontSize: '0.75rem', fontWeight: 900, lineHeight: 1, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace' }}>T</Box>
+      </Box>
+    );
+  }
   return (
     <Box sx={{ width: 32, height: 32, display: 'grid', placeItems: 'center', overflow: 'hidden', borderRadius: 0.5, bgcolor: 'transparent' }}>
       {hasStaticPreviewAsset(kind) ? (
@@ -243,9 +261,11 @@ function ObjectRow({
   selectedIds,
   depth,
   last,
-  ancestorLines,
+  ancestorLines = [],
   draggedObjectId,
   dropTarget,
+  childrenByParent,
+  normalizedQuery,
   onSelectObject,
   onSelectionChange,
   onObjectChange,
@@ -265,6 +285,8 @@ function ObjectRow({
   ancestorLines?: boolean[];
   draggedObjectId: string | null;
   dropTarget: HierarchyDropTarget | null;
+  childrenByParent: Map<string, EditorStageObject[]>;
+  normalizedQuery: string;
   onSelectObject: (id: string | null) => void;
   onSelectionChange: (ids: string[]) => void;
   onObjectChange: (object: EditorStageObject) => void;
@@ -281,6 +303,7 @@ function ObjectRow({
   const rowSelected = selected || checked;
   const dragging = draggedObjectId === object.id;
   const activeDrop = dropTarget?.type === 'object' && dropTarget.id === object.id ? dropTarget.position : null;
+  const children = visibleChildren(object, normalizedQuery, childrenByParent);
   const { contentX } = treeMetrics(depth);
 
   const select = (event?: React.MouseEvent) => {
@@ -295,66 +318,93 @@ function ObjectRow({
   const targetFor = (event: React.DragEvent<HTMLDivElement>): HierarchyDropTarget => ({ type: 'object', id: object.id, position: positionFromPointer(event) });
 
   return (
-    <TreeRowShell depth={depth} last={last} ancestorLines={ancestorLines}>
-      <Box
-        draggable={!editing}
-        onClick={select}
-        onDoubleClick={() => setEditing(true)}
-        onDragStart={(event) => onObjectDragStart(object.id, event)}
-        onDragOver={(event) => onTargetDragOver(targetFor(event), event)}
-        onDragLeave={(event) => onTargetDragLeave(targetFor(event), event)}
-        onDrop={(event) => onTargetDrop(targetFor(event), event)}
-        onDragEnd={onObjectDragEnd}
-        sx={{
-          minHeight: 40,
-          ml: `${contentX}px`,
-          mr: 0.5,
-          display: 'grid',
-          gridTemplateColumns: '32px minmax(0, 1fr) auto',
-          alignItems: 'center',
-          gap: 0.75,
-          px: 0.625,
-          color: rowSelected ? editorColors.textStrong : panelText,
-          cursor: dragging ? 'grabbing' : 'grab',
-          opacity: dragging ? 0.45 : object.hidden ? 0.55 : 1,
-          bgcolor: activeDrop === 'inside' ? 'rgba(74, 163, 255, 0.14)' : rowSelected ? selectedBg : 'transparent',
-          transition: 'background-color 120ms ease, box-shadow 120ms ease, opacity 120ms ease',
-          ...dropSx(activeDrop),
-          '&:hover': { bgcolor: activeDrop === 'inside' ? 'rgba(74, 163, 255, 0.14)' : rowSelected ? selectedBg : hoverBg },
-          '&:hover .scene-row-actions': { display: 'flex' },
-        }}
-      >
-        <ObjectPreview object={object} />
-        <Box minWidth={0}>
-        {editing ? (
-          <TextField
-            autoFocus
-            size="small"
-            variant="standard"
-            value={object.name}
-            onClick={stop}
-            onBlur={() => setEditing(false)}
-            onKeyDown={(event) => { if (event.key === 'Enter' || event.key === 'Escape') setEditing(false); }}
-            onChange={(event) => onObjectChange({ ...object, name: event.target.value } as EditorStageObject)}
-            InputProps={{ sx: { color: panelText, fontSize: '0.8125rem', lineHeight: 1.2 } }}
-            sx={{ width: '100%' }}
-          />
-        ) : (
-          <Tooltip title={displayObjectType(object)} placement="right">
-            <Typography variant="body2" noWrap sx={{ ...editorType.body, fontWeight: rowSelected ? 800 : 600, color: 'inherit' }}>
-              {object.name}
-            </Typography>
-          </Tooltip>
-        )}
+    <Box>
+      <TreeRowShell depth={depth} last={last} ancestorLines={ancestorLines} childStem={children.length > 0}>
+        <Box
+          draggable={!editing}
+          onClick={select}
+          onDoubleClick={() => setEditing(true)}
+          onDragStart={(event) => onObjectDragStart(object.id, event)}
+          onDragOver={(event) => onTargetDragOver(targetFor(event), event)}
+          onDragLeave={(event) => onTargetDragLeave(targetFor(event), event)}
+          onDrop={(event) => onTargetDrop(targetFor(event), event)}
+          onDragEnd={onObjectDragEnd}
+          sx={{
+            minHeight: 40,
+            ml: `${contentX}px`,
+            mr: 0.5,
+            display: 'grid',
+            gridTemplateColumns: '32px minmax(0, 1fr) auto',
+            alignItems: 'center',
+            gap: 0.75,
+            px: 0.625,
+            color: rowSelected ? editorColors.textStrong : panelText,
+            cursor: dragging ? 'grabbing' : 'grab',
+            opacity: dragging ? 0.45 : object.hidden ? 0.55 : 1,
+            bgcolor: activeDrop === 'inside' ? 'rgba(74, 163, 255, 0.14)' : rowSelected ? selectedBg : 'transparent',
+            transition: 'background-color 120ms ease, box-shadow 120ms ease, opacity 120ms ease',
+            ...dropSx(activeDrop),
+            '&:hover': { bgcolor: activeDrop === 'inside' ? 'rgba(74, 163, 255, 0.14)' : rowSelected ? selectedBg : hoverBg },
+            '&:hover .scene-row-actions': { display: 'flex' },
+          }}
+        >
+          <ObjectPreview object={object} />
+          <Box minWidth={0}>
+          {editing ? (
+            <TextField
+              autoFocus
+              size="small"
+              variant="standard"
+              value={object.name}
+              onClick={stop}
+              onBlur={() => setEditing(false)}
+              onKeyDown={(event) => { if (event.key === 'Enter' || event.key === 'Escape') setEditing(false); }}
+              onChange={(event) => onObjectChange({ ...object, name: event.target.value } as EditorStageObject)}
+              InputProps={{ sx: { color: panelText, fontSize: '0.8125rem', lineHeight: 1.2 } }}
+              sx={{ width: '100%' }}
+            />
+          ) : (
+            <Tooltip title={displayObjectType(object)} placement="right">
+              <Typography variant="body2" noWrap sx={{ ...editorType.body, fontWeight: rowSelected ? 800 : 600, color: 'inherit' }}>
+                {object.name}
+              </Typography>
+            </Tooltip>
+          )}
+          </Box>
+          <Stack className="scene-row-actions" direction="row" spacing={0} sx={{ display: 'none', flexShrink: 0 }}>
+            <Tooltip title={object.hidden ? 'Show' : 'Hide'}><IconButton size="small" onClick={(event) => { stop(event); onObjectChange({ ...object, hidden: !object.hidden } as EditorStageObject); }} sx={rowActionSx} aria-label={object.hidden ? 'Show object' : 'Hide object'}>{object.hidden ? <VisibilityOffIcon sx={{ width: 15, height: 15 }} /> : <VisibilityIcon sx={{ width: 15, height: 15 }} />}</IconButton></Tooltip>
+            <Tooltip title={object.locked ? 'Unlock' : 'Lock'}><IconButton size="small" onClick={(event) => { stop(event); onObjectChange({ ...object, locked: !object.locked } as EditorStageObject); }} sx={rowActionSx} aria-label={object.locked ? 'Unlock object' : 'Lock object'}>{object.locked ? <LockIcon sx={{ width: 15, height: 15 }} /> : <LockOpenIcon sx={{ width: 15, height: 15 }} />}</IconButton></Tooltip>
+            <Tooltip title="Duplicate"><IconButton size="small" onClick={(event) => { stop(event); onDuplicateObjects([object.id]); }} sx={rowActionSx} aria-label="Duplicate object"><ContentCopyIcon sx={{ width: 15, height: 15 }} /></IconButton></Tooltip>
+            <Tooltip title="Delete"><IconButton size="small" onClick={(event) => { stop(event); onDeleteObjects([object.id]); }} sx={{ ...rowActionSx, color: editorColors.danger, '&:hover': { bgcolor: 'rgba(242, 139, 116, 0.12)', color: '#ffb4a5' } }} aria-label="Delete object"><DeleteIcon sx={{ width: 15, height: 15 }} /></IconButton></Tooltip>
+          </Stack>
         </Box>
-        <Stack className="scene-row-actions" direction="row" spacing={0} sx={{ display: 'none', flexShrink: 0 }}>
-          <Tooltip title={object.hidden ? 'Show' : 'Hide'}><IconButton size="small" onClick={(event) => { stop(event); onObjectChange({ ...object, hidden: !object.hidden } as EditorStageObject); }} sx={rowActionSx} aria-label={object.hidden ? 'Show object' : 'Hide object'}>{object.hidden ? <VisibilityOffIcon sx={{ width: 15, height: 15 }} /> : <VisibilityIcon sx={{ width: 15, height: 15 }} />}</IconButton></Tooltip>
-          <Tooltip title={object.locked ? 'Unlock' : 'Lock'}><IconButton size="small" onClick={(event) => { stop(event); onObjectChange({ ...object, locked: !object.locked } as EditorStageObject); }} sx={rowActionSx} aria-label={object.locked ? 'Unlock object' : 'Lock object'}>{object.locked ? <LockIcon sx={{ width: 15, height: 15 }} /> : <LockOpenIcon sx={{ width: 15, height: 15 }} />}</IconButton></Tooltip>
-          <Tooltip title="Duplicate"><IconButton size="small" onClick={(event) => { stop(event); onDuplicateObjects([object.id]); }} sx={rowActionSx} aria-label="Duplicate object"><ContentCopyIcon sx={{ width: 15, height: 15 }} /></IconButton></Tooltip>
-          <Tooltip title="Delete"><IconButton size="small" onClick={(event) => { stop(event); onDeleteObjects([object.id]); }} sx={{ ...rowActionSx, color: editorColors.danger, '&:hover': { bgcolor: 'rgba(242, 139, 116, 0.12)', color: '#ffb4a5' } }} aria-label="Delete object"><DeleteIcon sx={{ width: 15, height: 15 }} /></IconButton></Tooltip>
-        </Stack>
-      </Box>
-    </TreeRowShell>
+      </TreeRowShell>
+      {children.map((child, index) => (
+        <ObjectRow
+          key={child.id}
+          object={child}
+          selected={child.id === selectedIds[selectedIds.length - 1]}
+          selectedIds={selectedIds}
+          depth={depth + 1}
+          last={index === children.length - 1}
+          ancestorLines={[...ancestorLines, !last]}
+          draggedObjectId={draggedObjectId}
+          dropTarget={dropTarget}
+          childrenByParent={childrenByParent}
+          normalizedQuery={normalizedQuery}
+          onSelectObject={onSelectObject}
+          onSelectionChange={onSelectionChange}
+          onObjectChange={onObjectChange}
+          onDuplicateObjects={onDuplicateObjects}
+          onDeleteObjects={onDeleteObjects}
+          onObjectDragStart={onObjectDragStart}
+          onTargetDragOver={onTargetDragOver}
+          onTargetDragLeave={onTargetDragLeave}
+          onTargetDrop={onTargetDrop}
+          onObjectDragEnd={onObjectDragEnd}
+        />
+      ))}
+    </Box>
   );
 }
 
@@ -369,6 +419,8 @@ function GroupBlock({
   ancestorLines = [],
   draggedObjectId,
   dropTarget,
+  childrenByParent,
+  normalizedQuery,
   onSelectObject,
   onSelectGroup,
   onSelectionChange,
@@ -393,6 +445,8 @@ function GroupBlock({
   ancestorLines?: boolean[];
   draggedObjectId: string | null;
   dropTarget: HierarchyDropTarget | null;
+  childrenByParent: Map<string, EditorStageObject[]>;
+  normalizedQuery: string;
   onSelectObject: (id: string | null) => void;
   onSelectGroup: (id: string | null) => void;
   onSelectionChange: (ids: string[]) => void;
@@ -495,6 +549,8 @@ function GroupBlock({
           ancestorLines={[...ancestorLines, !last]}
           draggedObjectId={draggedObjectId}
           dropTarget={dropTarget}
+          childrenByParent={childrenByParent}
+          normalizedQuery={normalizedQuery}
           onSelectObject={onSelectObject}
           onSelectionChange={onSelectionChange}
           onObjectChange={onObjectChange}
@@ -531,18 +587,26 @@ export function StageSceneHierarchy({
   const [dropTarget, setDropTarget] = useState<HierarchyDropTarget | null>(null);
   const normalizedQuery = query.trim().toLowerCase();
 
-  const { rootItems, objectGroupIds } = useMemo(() => {
+  const { rootItems, objectGroupIds, childrenByParent } = useMemo(() => {
     const objectById = new Map(stage.objects.map((object) => [object.id, object]));
+    const nextChildrenByParent = new Map<string, EditorStageObject[]>();
+    for (const object of stage.objects) {
+      if (!object.parentId || !objectById.has(object.parentId)) continue;
+      const children = nextChildrenByParent.get(object.parentId) || [];
+      children.push(object);
+      nextChildrenByParent.set(object.parentId, children);
+    }
+    const childIds = new Set(Array.from(nextChildrenByParent.values()).flatMap((children) => children.map((object) => object.id)));
     const nextObjectGroupIds = new Map<string, string>();
     const groupEntries = new Map<string, GroupEntry>();
 
     for (const group of stage.metadata.groups) {
       const allObjects = group.objectIds
         .map((objectId) => objectById.get(objectId))
-        .filter((object): object is EditorStageObject => !!object);
+        .filter((object): object is EditorStageObject => !!object && !childIds.has(object.id));
       allObjects.forEach((object) => nextObjectGroupIds.set(object.id, group.id));
       const groupMatches = !normalizedQuery || group.name.toLowerCase().includes(normalizedQuery);
-      const filteredObjects = groupMatches ? allObjects : allObjects.filter((object) => objectMatches(object, normalizedQuery));
+      const filteredObjects = groupMatches ? allObjects : allObjects.filter((object) => objectVisible(object, normalizedQuery, nextChildrenByParent));
       if (filteredObjects.length > 0 || (!normalizedQuery && allObjects.length > 0)) groupEntries.set(group.id, { group, objects: filteredObjects, allObjects });
     }
 
@@ -557,14 +621,15 @@ export function StageSceneHierarchy({
         if (entry) items.push({ type: 'group', entry });
         continue;
       }
-      if (objectMatches(object, normalizedQuery)) items.push({ type: 'object', object });
+      if (childIds.has(object.id)) continue;
+      if (objectVisible(object, normalizedQuery, nextChildrenByParent)) items.push({ type: 'object', object });
     }
 
     for (const [groupId, entry] of groupEntries) {
       if (!seenGroups.has(groupId)) items.push({ type: 'group', entry });
     }
 
-    return { rootItems: items, objectGroupIds: nextObjectGroupIds };
+    return { rootItems: items, objectGroupIds: nextObjectGroupIds, childrenByParent: nextChildrenByParent };
   }, [stage.metadata.groups, stage.objects, normalizedQuery]);
 
   const hasItems = rootItems.length > 0;
@@ -643,6 +708,8 @@ export function StageSceneHierarchy({
             last={index === rootItems.length - 1}
             draggedObjectId={draggedObjectId}
             dropTarget={dropTarget}
+            childrenByParent={childrenByParent}
+            normalizedQuery={normalizedQuery}
             onSelectObject={onSelectObject}
             onSelectGroup={onSelectGroup}
             onSelectionChange={onSelectionChange}
@@ -667,6 +734,8 @@ export function StageSceneHierarchy({
             last={index === rootItems.length - 1}
             draggedObjectId={draggedObjectId}
             dropTarget={dropTarget}
+            childrenByParent={childrenByParent}
+            normalizedQuery={normalizedQuery}
             onSelectObject={onSelectObject}
             onSelectionChange={onSelectionChange}
             onObjectChange={onObjectChange}

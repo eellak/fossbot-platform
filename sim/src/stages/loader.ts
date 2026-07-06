@@ -1,7 +1,7 @@
 import * as RAPIER from '@dimforge/rapier3d-compat'
 import * as THREE from 'three'
 import { STAGES, type RawStageConfig, type RawStageEntry, type StageName } from './index'
-import { buildFloorVisual, buildBaseVisual, buildCubeVisual, buildCylinderVisual, buildModelVisual, buildTextVisual, buildLineVisual, buildLightVisual, lineSegmentsFromEntry } from './visuals'
+import { applyAttachedLabelTransform, buildFloorVisual, buildBaseVisual, buildCubeVisual, buildCylinderVisual, buildModelVisual, buildTextVisual, buildLineVisual, buildLightVisual, lineSegmentsFromEntry } from './visuals'
 import type { VisualBuilt, LineSegment } from './visuals'
 import { buildFloorCollider, buildCubeCollider, buildCylinderCollider, buildModelCollider } from './colliders'
 import type { ColliderBuilt } from './colliders'
@@ -209,7 +209,20 @@ export async function loadStageEntries(
       }
       case 'text': {
         const vis = buildTextVisual(entry as any)
-        scene.add(vis.object)
+        const attachment = (vis.object.userData as { labelAttachment?: { parentName: string; face: 'front' | 'back' | 'left' | 'right' | 'top' | 'bottom'; offset: [number, number]; rotation: number } }).labelAttachment
+        if (attachment) {
+          const parent = objects.find((obj) => obj.name === attachment.parentName)
+          if (parent) {
+            applyAttachedLabelTransform(vis.object, attachment, parent)
+            parent.add(vis.object)
+            vis.object.userData.labelParentName = attachment.parentName
+          } else {
+            console.warn(`[stage] attached label parent "${attachment.parentName}" not found; adding label to scene root`)
+            scene.add(vis.object)
+          }
+        } else {
+          scene.add(vis.object)
+        }
         objects.push(vis.object)
         break
       }
@@ -273,6 +286,8 @@ export async function loadStageEntries(
       for (const dynamicObject of dynamicObjects) {
         syncObjectToBody(dynamicObject.object, dynamicObject.body)
         syncObjectToBody(dynamicObject.collidersGroup, dynamicObject.body)
+        // Attached labels live as children of the dynamic object, so they
+        // follow the body automatically once the parent mesh is synced.
       }
     },
     dispose() {

@@ -152,6 +152,22 @@ interface TextEntry {
   scale?: number
   onFloor?: boolean
   name?: string
+  style?: {
+    backgroundVisible?: boolean
+    backgroundSize?: [number, number]
+    backgroundColor?: string
+    backgroundOpacity?: number
+    borderVisible?: boolean
+    borderColor?: string
+    borderWidth?: number
+    fontSize?: number
+  }
+  attach?: {
+    parentName: string
+    face: 'front' | 'back' | 'left' | 'right' | 'top' | 'bottom'
+    offset: [number, number]
+    rotation: number
+  }
 }
 
 interface LightEntry {
@@ -305,6 +321,51 @@ export async function buildModelVisual(entry: ModelEntry): Promise<VisualBuilt> 
   return { object: root, dynamicBody: dynamicBodyFor(entry) }
 }
 
+type LabelFace = 'front' | 'back' | 'left' | 'right' | 'top' | 'bottom'
+
+interface LabelAttachment {
+  parentName: string
+  face: LabelFace
+  offset: [number, number]
+  rotation: number
+}
+
+function faceFrame(face: LabelFace): { normal: THREE.Vector3; u: THREE.Vector3; v: THREE.Vector3 } {
+  if (face === 'back') return { normal: new THREE.Vector3(0, 0, -1), u: new THREE.Vector3(-1, 0, 0), v: new THREE.Vector3(0, 1, 0) }
+  if (face === 'left') return { normal: new THREE.Vector3(-1, 0, 0), u: new THREE.Vector3(0, 0, 1), v: new THREE.Vector3(0, 1, 0) }
+  if (face === 'right') return { normal: new THREE.Vector3(1, 0, 0), u: new THREE.Vector3(0, 0, -1), v: new THREE.Vector3(0, 1, 0) }
+  if (face === 'top') return { normal: new THREE.Vector3(0, 1, 0), u: new THREE.Vector3(1, 0, 0), v: new THREE.Vector3(0, 0, -1) }
+  if (face === 'bottom') return { normal: new THREE.Vector3(0, -1, 0), u: new THREE.Vector3(1, 0, 0), v: new THREE.Vector3(0, 0, 1) }
+  return { normal: new THREE.Vector3(0, 0, 1), u: new THREE.Vector3(1, 0, 0), v: new THREE.Vector3(0, 1, 0) }
+}
+
+const labelDefaultNormal = new THREE.Vector3(0, 0, 1)
+const labelSurfaceLift = 0.006
+
+function parentHalfExtent(parent: THREE.Object3D, face: LabelFace): number {
+  parent.updateWorldMatrix(true, false)
+  const box = new THREE.Box3().setFromObject(parent)
+  const size = new THREE.Vector3()
+  box.getSize(size)
+  if (face === 'left' || face === 'right') return size.x / 2
+  if (face === 'top' || face === 'bottom') return size.y / 2
+  return size.z / 2
+}
+
+function labelLocalPosition(attachment: LabelAttachment, parent: THREE.Object3D): THREE.Vector3 {
+  const frame = faceFrame(attachment.face)
+  const half = parentHalfExtent(parent, attachment.face)
+  return frame.normal.clone().multiplyScalar(half + labelSurfaceLift)
+    .add(frame.u.clone().multiplyScalar(attachment.offset[0]))
+    .add(frame.v.clone().multiplyScalar(attachment.offset[1]))
+}
+
+function labelFaceQuaternion(attachment: LabelAttachment): THREE.Quaternion {
+  const frame = faceFrame(attachment.face)
+  const faceQ = new THREE.Quaternion().setFromUnitVectors(labelDefaultNormal, frame.normal)
+  return faceQ.multiply(new THREE.Quaternion().setFromAxisAngle(labelDefaultNormal, attachment.rotation))
+}
+
 export function buildTextVisual(entry: TextEntry): VisualBuilt {
   const canvas = document.createElement('canvas')
   canvas.width = 512
@@ -312,41 +373,74 @@ export function buildTextVisual(entry: TextEntry): VisualBuilt {
   const ctx = canvas.getContext('2d')
   if (!ctx) throw new Error('Could not create text label canvas')
 
+  const style = entry.style || {}
+  const backgroundVisible = style.backgroundVisible ?? true
+  const borderVisible = style.borderVisible ?? true
+  const borderWidth = borderVisible ? Math.max(0, style.borderWidth ?? 8) : 0
+  const inset = Math.max(0, borderWidth / 2)
+  const background = new THREE.Color(style.backgroundColor ?? '#ffffff')
+  const opacity = backgroundVisible ? Math.min(1, Math.max(0, style.backgroundOpacity ?? 0.9)) : 0
+
   ctx.clearRect(0, 0, canvas.width, canvas.height)
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.88)'
-  ctx.fillRect(0, 0, canvas.width, canvas.height)
-  ctx.strokeStyle = 'rgba(0, 0, 0, 0.35)'
-  ctx.lineWidth = 8
-  ctx.strokeRect(4, 4, canvas.width - 8, canvas.height - 8)
+  if (backgroundVisible) {
+    ctx.fillStyle = `rgba(${Math.round(background.r * 255)},${Math.round(background.g * 255)},${Math.round(background.b * 255)},${opacity})`
+    ctx.fillRect(0, 0, canvas.width, canvas.height)
+  }
+  if (borderWidth > 0) {
+    ctx.strokeStyle = new THREE.Color(style.borderColor ?? '#0f172a').getStyle()
+    ctx.lineWidth = borderWidth
+    ctx.strokeRect(inset, inset, canvas.width - borderWidth, canvas.height - borderWidth)
+  }
   ctx.fillStyle = new THREE.Color(parseColor(entry.color)).getStyle()
-  ctx.font = '700 56px sans-serif'
+  ctx.font = `700 ${Math.max(8, style.fontSize ?? 56)}px sans-serif`
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
   ctx.fillText(entry.text, canvas.width / 2, canvas.height / 2)
 
   const texture = new THREE.CanvasTexture(canvas)
-  const scale = entry.scale ?? 0.75
+  const fallbackScale = entry.scale ?? 0.75
+  const size = style.backgroundSize || [fallbackScale, fallbackScale * (canvas.height / canvas.width)]
+  const [width, height] = size
+
+  const material = new THREE.MeshBasicMaterial({
+    map: texture,
+    transparent: true,
+    side: THREE.DoubleSide,
+    depthWrite: false,
+    polygonOffset: true,
+    polygonOffsetFactor: -1,
+    polygonOffsetUnits: -1,
+  })
+
+  const geometry = new THREE.PlaneGeometry(width, height)
+  const mesh = new THREE.Mesh(geometry, material)
+  mesh.name = entry.name ?? (entry.onFloor ? 'floor_text_label' : 'text_label')
+  mesh.renderOrder = 10
 
   if (entry.onFloor) {
-    const geometry = new THREE.PlaneGeometry(scale, scale * (canvas.height / canvas.width))
     geometry.rotateX(-Math.PI / 2)
-    const material = new THREE.MeshBasicMaterial({
-      map: texture, transparent: true, side: THREE.DoubleSide,
-      depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1,
-    })
-    const mesh = new THREE.Mesh(geometry, material)
     mesh.position.fromArray(entry.position)
-    mesh.renderOrder = 10
-    mesh.name = entry.name ?? 'floor_text_label'
     return { object: mesh }
   }
 
-  const material = new THREE.SpriteMaterial({ map: texture, transparent: true })
-  const sprite = new THREE.Sprite(material)
-  sprite.scale.set(scale, scale * (canvas.height / canvas.width), 1)
-  sprite.position.fromArray(entry.position)
-  sprite.name = entry.name ?? 'text_label'
-  return { object: sprite }
+  if (entry.attach) {
+    // Local position/rotation are set later by the loader once the parent is
+    // available; expose the raw values so the parent lookup can apply them.
+    mesh.userData.labelAttachment = entry.attach
+    return { object: mesh, dynamicBody: undefined }
+  }
+
+  // Free label in world space: face +Z like a decal (no camera billboard).
+  mesh.quaternion.setFromUnitVectors(labelDefaultNormal, new THREE.Vector3(0, 0, 1))
+  mesh.position.fromArray(entry.position)
+  return { object: mesh }
+}
+
+export function applyAttachedLabelTransform(mesh: THREE.Object3D, attachment: LabelAttachment, parent: THREE.Object3D): void {
+  mesh.position.copy(labelLocalPosition(attachment, parent))
+  const parentQ = new THREE.Quaternion()
+  parent.getWorldQuaternion(parentQ)
+  mesh.quaternion.copy(parentQ.multiply(labelFaceQuaternion(attachment)))
 }
 
 export function buildLightVisual(entry: LightEntry): VisualBuilt {

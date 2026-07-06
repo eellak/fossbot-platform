@@ -311,6 +311,7 @@ export function EditorRightInspector({
           <StageInspector
             object={selectedObject}
             selectedCount={selectedCount}
+            objects={stage.objects}
             advancedOpen={prefs.showAdvancedInspector}
             onAdvancedOpenChange={(showAdvancedInspector) => onPrefsChange({ showAdvancedInspector })}
             onChange={onObjectChange}

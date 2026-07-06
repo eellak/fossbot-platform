@@ -103,7 +103,7 @@ export function createCatalogObject(kind: StageSemanticKind, id: string, positio
     return { id, kind: 'line', semanticKind: kind, name: 'line path', points: [[p[0] - 0.5, p[2]], [p[0], p[2] + 0.4], [p[0] + 0.5, p[2]]], width: 0.03, color: 'black' };
   }
   if (kind === 'label') {
-    return { id, kind: 'text', semanticKind: kind, name: 'text label', text: 'Label', position: [p[0], 0.02, p[2]], color: 'black', scale: 0.75, onFloor: true };
+    return { id, kind: 'text', semanticKind: kind, name: 'text label', text: 'Label', position: [p[0], 0.02, p[2]], color: 'black', scale: 0.75, onFloor: true, style: { backgroundVisible: true, backgroundSize: [0.75, 0.24], backgroundColor: '#ffffff', backgroundOpacity: 0.9, borderVisible: true, borderColor: '#0f172a', borderWidth: 8, fontSize: 56 } };
   }
   if (kind === 'light') {
     return { id, kind: 'light', semanticKind: kind, name: 'light', subtype: 'point', position: [p[0], 1, p[2]], rotationY: 0, color: '#ffd27f', intensity: 1.2, range: 4, angle: Math.PI / 6, penumbra: 0.3 };
