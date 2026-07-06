@@ -220,11 +220,13 @@ function loadOBJ(url: string): Promise<THREE.Group> {
 // ── Builders ──
 
 export function buildFloorVisual(entry: FloorEntry): VisualBuilt {
-  // The legacy platform simulator renders one fixed 10m x 10m floor and uses
-  // `repeat` only for texture tiling. Keep v2 aligned during the opt-in phase;
-  // multiplying dimensions by repeat made floors appear 2x-25x too large.
-  const w = LEGACY_FLOOR_SIZE_M
-  const h = LEGACY_FLOOR_SIZE_M
+  // The stage builder exports the floor dimensions authored in the editor.
+  // The previous v1 build ignored `entry.dimensions` and hard-coded a 10m
+  // square, which made custom floor sizes (e.g. 10x3.25) silently collapse
+  // to a square in the test simulator.
+  const [w, h] = entry.dimensions && entry.dimensions.length === 2
+    ? entry.dimensions
+    : [LEGACY_FLOOR_SIZE_M, LEGACY_FLOOR_SIZE_M]
 
   const geom = new THREE.PlaneGeometry(w, h)
   geom.rotateX(-Math.PI / 2)
