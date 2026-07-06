@@ -3,7 +3,7 @@ import { Box, Divider, Tab, Tabs } from '@mui/material';
 import type { EditorStage, EditorStageObject, StageSemanticKind } from './types';
 import type { StageBuilderPrefab } from './stageBuilderPrefabs';
 import { StageObjectLibrary } from './StageObjectLibrary';
-import { StageSceneHierarchy } from './StageSceneHierarchy';
+import { StageSceneHierarchy, type HierarchyDropTarget } from './StageSceneHierarchy';
 import { editorColors, editorPanelSx, editorTabsSx } from './stageBuilderEditorTheme';
 
 export interface EditorLeftPanelProps {
@@ -18,8 +18,7 @@ export interface EditorLeftPanelProps {
   onObjectChange: (object: EditorStageObject) => void;
   onDuplicateObjects: (ids: string[]) => void;
   onDeleteObjects: (ids: string[]) => void;
-  onGroupSelected: () => void;
-  onUngroupSelected: () => void;
+  onHierarchyDrop: (draggedId: string, target: HierarchyDropTarget) => void;
   onGroupRename: (groupId: string, name: string) => void;
   onPatchObjects: (ids: string[], patch: Partial<EditorStageObject>) => void;
 }
@@ -53,8 +52,7 @@ export function EditorLeftPanel(props: EditorLeftPanelProps) {
             onObjectChange={props.onObjectChange}
             onDuplicateObjects={props.onDuplicateObjects}
             onDeleteObjects={props.onDeleteObjects}
-            onGroupSelected={props.onGroupSelected}
-            onUngroupSelected={props.onUngroupSelected}
+            onHierarchyDrop={props.onHierarchyDrop}
             onGroupRename={props.onGroupRename}
             onPatchObjects={props.onPatchObjects}
           />

@@ -20,6 +20,7 @@ import { canRedo, canUndo, createStageBuilderHistory, pushStageHistory, redoStag
 import { builtInStageBuilderPrefabs, type StageBuilderPrefab } from 'src/components/stage-builder/stageBuilderPrefabs';
 import { EditorTopBar } from 'src/components/stage-builder/EditorTopBar';
 import { EditorLeftPanel } from 'src/components/stage-builder/EditorLeftPanel';
+import type { HierarchyDropTarget } from 'src/components/stage-builder/StageSceneHierarchy';
 import { EditorViewportToolRail } from 'src/components/stage-builder/EditorViewportToolRail';
 import { EditorRightInspector, type InspectorTab } from 'src/components/stage-builder/EditorRightInspector';
 import { clearStageBuilderDraft, draftToEditorStage, readStageBuilderDraft, stageFingerprint, writeStageBuilderDraft, type StageBuilderDraft } from 'src/components/stage-builder/stageBuilderDrafts';
@@ -211,16 +212,25 @@ const StageBuilderPage = () => {
 
   const deleteObjects = (ids: string[]) => {
     if (!ids.length) return;
-    commitStage((current) => ({
-      ...current,
-      objects: current.objects.filter((object) => !ids.includes(object.id)),
-      metadata: {
-        ...current.metadata,
-        groups: current.metadata.groups
-          .map((group) => ({ ...group, objectIds: group.objectIds.filter((objectId) => !ids.includes(objectId)), updatedAt: new Date().toISOString() }))
-          .filter((group) => group.objectIds.length > 1),
-      },
-    }), { selectIds: selectedIds.filter((id) => !ids.includes(id)) });
+    commitStage((current) => {
+      const now = new Date().toISOString();
+      const groups = current.metadata.groups
+        .map((group) => ({ ...group, objectIds: group.objectIds.filter((objectId) => !ids.includes(objectId)), updatedAt: now }))
+        .filter((group) => group.objectIds.length > 0);
+      const objectGroupIds = new Map<string, string>();
+      groups.forEach((group) => group.objectIds.forEach((objectId) => objectGroupIds.set(objectId, group.id)));
+      return {
+        ...current,
+        objects: current.objects
+          .filter((object) => !ids.includes(object.id))
+          .map((object) => {
+            const nextGroupId = objectGroupIds.get(object.id);
+            if (nextGroupId) return object.groupId === nextGroupId ? object : { ...object, groupId: nextGroupId } as EditorStageObject;
+            return object.groupId ? { ...object, groupId: undefined, prefabSourceId: undefined } as EditorStageObject : object;
+          }),
+        metadata: { ...current.metadata, groups },
+      };
+    }, { selectIds: selectedIds.filter((id) => !ids.includes(id)) });
   };
 
   const deleteSelected = () => deleteObjects(selectedIds.length ? selectedIds : (selectedId ? [selectedId] : []));
@@ -366,22 +376,117 @@ const StageBuilderPage = () => {
     if (ids.length < 2) return;
     const now = new Date().toISOString();
     const groupId = makeLocalStageId();
-    commitStage((current) => ({
-      ...current,
-      objects: current.objects.map((object) => ids.includes(object.id) ? { ...object, groupId } as EditorStageObject : object),
-      metadata: { ...current.metadata, groups: [...current.metadata.groups, { id: groupId, name: `Group ${current.metadata.groups.length + 1}`, objectIds: ids, createdAt: now, updatedAt: now }] },
-    }), { selectIds: ids, message: 'Grouped selected objects.' });
+    commitStage((current) => {
+      const idSet = new Set(ids);
+      const groups = current.metadata.groups
+        .map((group) => ({ ...group, objectIds: group.objectIds.filter((objectId) => !idSet.has(objectId)), updatedAt: group.objectIds.some((objectId) => idSet.has(objectId)) ? now : group.updatedAt }))
+        .filter((group) => group.objectIds.length > 0);
+      return {
+        ...current,
+        objects: current.objects.map((object) => idSet.has(object.id) ? { ...object, groupId } as EditorStageObject : object),
+        metadata: { ...current.metadata, groups: [...groups, { id: groupId, name: `Group ${groups.length + 1}`, objectIds: ids, createdAt: now, updatedAt: now }] },
+      };
+    }, { selectIds: ids, message: 'Grouped selected objects.' });
   };
 
-  const ungroupSelected = () => {
-    const ids = selectedIds.length ? selectedIds : (selectedId ? [selectedId] : []);
-    if (!ids.length) return;
-    const groupIds = new Set(stage.objects.filter((object) => ids.includes(object.id) && object.groupId).map((object) => object.groupId as string));
-    commitStage((current) => ({
-      ...current,
-      objects: current.objects.map((object) => groupIds.has(object.groupId || '') ? { ...object, groupId: undefined, prefabSourceId: undefined } as EditorStageObject : object),
-      metadata: { ...current.metadata, groups: current.metadata.groups.filter((group) => !groupIds.has(group.id)) },
-    }), { selectIds: ids, message: 'Ungrouped objects.' });
+  const handleHierarchyDrop = (draggedId: string, target: HierarchyDropTarget) => {
+    if (target.type === 'object' && draggedId === target.id) return;
+    const dragged = stage.objects.find((object) => object.id === draggedId);
+    if (!dragged) return;
+
+    commitStage((current) => {
+      const moving = current.objects.find((object) => object.id === draggedId);
+      const targetObject = target.type === 'object' ? current.objects.find((object) => object.id === target.id) : null;
+      if (!moving || (target.type === 'object' && !targetObject)) return current;
+
+      const now = new Date().toISOString();
+      const existingObjectIds = new Set(current.objects.map((object) => object.id));
+      let groups = current.metadata.groups
+        .map((group) => ({ ...group, objectIds: group.objectIds.filter((objectId) => existingObjectIds.has(objectId)) }))
+        .filter((group) => group.objectIds.length > 0);
+      const groupForObject = (objectId: string) => groups.find((group) => group.objectIds.includes(objectId))?.id || null;
+      const moveObject = (objects: EditorStageObject[], anchorId: string, position: 'before' | 'after') => {
+        const objectToMove = objects.find((object) => object.id === draggedId);
+        if (!objectToMove) return objects;
+        const withoutMoving = objects.filter((object) => object.id !== draggedId);
+        const anchorIndex = withoutMoving.findIndex((object) => object.id === anchorId);
+        if (anchorIndex < 0) return objects;
+        const insertAt = position === 'before' ? anchorIndex : anchorIndex + 1;
+        return [...withoutMoving.slice(0, insertAt), objectToMove, ...withoutMoving.slice(insertAt)];
+      };
+      const groupAnchor = (groupId: string, position: 'before' | 'after', objects: EditorStageObject[]) => {
+        const group = groups.find((item) => item.id === groupId);
+        if (!group) return null;
+        const members = new Set(group.objectIds);
+        const orderedIds = objects.filter((object) => members.has(object.id)).map((object) => object.id);
+        if (!orderedIds.length) return null;
+        return position === 'before' ? orderedIds[0] : orderedIds[orderedIds.length - 1];
+      };
+      const insertIntoGroup = (groupId: string, anchorId?: string, position: 'before' | 'after' = 'after') => {
+        groups = groups.map((group) => {
+          if (group.id !== groupId) return group;
+          const withoutMoving = group.objectIds.filter((objectId) => objectId !== draggedId);
+          const anchorIndex = anchorId ? withoutMoving.indexOf(anchorId) : -1;
+          const insertAt = anchorIndex < 0 ? withoutMoving.length : position === 'before' ? anchorIndex : anchorIndex + 1;
+          return {
+            ...group,
+            objectIds: [...withoutMoving.slice(0, insertAt), draggedId, ...withoutMoving.slice(insertAt)],
+            updatedAt: now,
+          };
+        });
+      };
+
+      groups = groups.map((group) => group.objectIds.includes(draggedId)
+        ? { ...group, objectIds: group.objectIds.filter((objectId) => objectId !== draggedId), updatedAt: now }
+        : group);
+
+      let objects = current.objects;
+      if (target.type === 'object' && targetObject) {
+        const targetGroupId = groupForObject(targetObject.id);
+        if (target.position === 'inside') {
+          const destinationGroupId = targetGroupId || makeLocalStageId();
+          if (!targetGroupId) {
+            groups = [...groups, { id: destinationGroupId, name: `${targetObject.name || 'Object'} group`, objectIds: [targetObject.id], createdAt: now, updatedAt: now }];
+          }
+          insertIntoGroup(destinationGroupId, targetObject.id, 'after');
+          objects = moveObject(objects, targetObject.id, 'after');
+        } else if (targetGroupId) {
+          insertIntoGroup(targetGroupId, targetObject.id, target.position);
+          objects = moveObject(objects, targetObject.id, target.position);
+        } else {
+          objects = moveObject(objects, targetObject.id, target.position);
+        }
+      } else if (target.type === 'group') {
+        const targetGroup = groups.find((group) => group.id === target.id);
+        if (!targetGroup) return current;
+        if (target.position === 'inside') {
+          insertIntoGroup(target.id);
+          const anchorId = groupAnchor(target.id, 'after', objects);
+          if (anchorId) objects = moveObject(objects, anchorId, 'after');
+        } else {
+          const anchorId = groupAnchor(target.id, target.position, objects);
+          if (anchorId) objects = moveObject(objects, anchorId, target.position);
+        }
+      }
+
+      groups = groups.filter((group) => group.objectIds.length > 0);
+      const objectGroupIds = new Map<string, string>();
+      groups.forEach((group) => group.objectIds.forEach((objectId) => objectGroupIds.set(objectId, group.id)));
+
+      return {
+        ...current,
+        objects: objects.map((object) => {
+          const nextGroupId = objectGroupIds.get(object.id);
+          if (nextGroupId) {
+            if (object.groupId === nextGroupId && object.id !== draggedId) return object;
+            return { ...object, groupId: nextGroupId, prefabSourceId: object.id === draggedId ? undefined : object.prefabSourceId } as EditorStageObject;
+          }
+          if (object.groupId || object.id === draggedId) return { ...object, groupId: undefined, prefabSourceId: object.id === draggedId ? undefined : object.prefabSourceId } as EditorStageObject;
+          return object;
+        }),
+        metadata: { ...current.metadata, groups },
+      };
+    }, { selectIds: [draggedId], message: `${dragged.name} moved in hierarchy.` });
   };
 
   const renameGroup = (groupId: string, name: string) => {
@@ -482,8 +587,7 @@ const StageBuilderPage = () => {
               onObjectChange={updateObject}
               onDuplicateObjects={duplicateObjects}
               onDeleteObjects={deleteObjects}
-              onGroupSelected={groupSelected}
-              onUngroupSelected={ungroupSelected}
+              onHierarchyDrop={handleHierarchyDrop}
               onGroupRename={renameGroup}
               onPatchObjects={patchObjects}
             />
