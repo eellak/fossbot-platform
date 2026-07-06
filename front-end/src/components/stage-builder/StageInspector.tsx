@@ -349,9 +349,9 @@ export function StageInspector({ object, selectedCount = object ? 1 : 0, advance
         {'position' in object && (
           <FieldRow label="Position">
             <InlineFields>
-              <StageBuilderNumberField label="X" {...commonNumberProps} disabled={locked} value={object.position[0]} onChange={(event) => set({ position: updateVec3(object.position, 0, event.target.value) } as Partial<EditorStageObject>)} />
-              <StageBuilderNumberField label="Y" {...commonNumberProps} disabled={locked} value={object.position[1]} onChange={(event) => set({ position: updateVec3(object.position, 1, event.target.value) } as Partial<EditorStageObject>)} />
-              <StageBuilderNumberField label="Z" {...commonNumberProps} disabled={locked} value={object.position[2]} onChange={(event) => set({ position: updateVec3(object.position, 2, event.target.value) } as Partial<EditorStageObject>)} />
+              <StageBuilderNumberField axis="X" {...commonNumberProps} disabled={locked} value={object.position[0]} onChange={(event) => set({ position: updateVec3(object.position, 0, event.target.value) } as Partial<EditorStageObject>)} />
+              <StageBuilderNumberField axis="Y" {...commonNumberProps} disabled={locked} value={object.position[1]} onChange={(event) => set({ position: updateVec3(object.position, 1, event.target.value) } as Partial<EditorStageObject>)} />
+              <StageBuilderNumberField axis="Z" {...commonNumberProps} disabled={locked} value={object.position[2]} onChange={(event) => set({ position: updateVec3(object.position, 2, event.target.value) } as Partial<EditorStageObject>)} />
             </InlineFields>
           </FieldRow>
         )}
@@ -359,13 +359,13 @@ export function StageInspector({ object, selectedCount = object ? 1 : 0, advance
         {(object.kind === 'cube' || object.kind === 'fossbot') && (
           <FieldRow label="Rotation">
             <InlineFields>
-              <StageBuilderNumberField label="X" {...commonNumberProps} disabled={locked || object.kind !== 'cube'} value={object.kind === 'cube' ? deg(object.orientation?.[0] || 0) : 0} onChange={(event) => {
+              <StageBuilderNumberField axis="X" {...commonNumberProps} disabled={locked || object.kind !== 'cube'} value={object.kind === 'cube' ? deg(object.orientation?.[0] || 0) : 0} onChange={(event) => {
                 if (object.kind !== 'cube') return;
                 const x = rad(num(event.target.value, deg(object.orientation?.[0] || 0)));
                 onChange({ ...object, orientation: [x, object.orientation?.[1] || object.rotationY, object.orientation?.[2] || 0], rampAngle: object.semanticKind === 'ramp' ? x : object.rampAngle });
               }} />
-              <StageBuilderNumberField label="Y" {...commonNumberProps} disabled={locked} value={deg(object.rotationY)} onChange={(event) => setRotationY(num(event.target.value, deg(object.rotationY)))} />
-              <StageBuilderNumberField label="Z" {...commonNumberProps} disabled={locked || object.kind !== 'cube'} value={object.kind === 'cube' ? deg(object.orientation?.[2] || 0) : 0} onChange={(event) => object.kind === 'cube' && onChange({ ...object, orientation: [object.orientation?.[0] || 0, object.orientation?.[1] || object.rotationY, rad(num(event.target.value, deg(object.orientation?.[2] || 0)))] })} />
+              <StageBuilderNumberField axis="Y" {...commonNumberProps} disabled={locked} value={deg(object.rotationY)} onChange={(event) => setRotationY(num(event.target.value, deg(object.rotationY)))} />
+              <StageBuilderNumberField axis="Z" {...commonNumberProps} disabled={locked || object.kind !== 'cube'} value={object.kind === 'cube' ? deg(object.orientation?.[2] || 0) : 0} onChange={(event) => object.kind === 'cube' && onChange({ ...object, orientation: [object.orientation?.[0] || 0, object.orientation?.[1] || object.rotationY, rad(num(event.target.value, deg(object.orientation?.[2] || 0)))] })} />
             </InlineFields>
           </FieldRow>
         )}
@@ -374,9 +374,9 @@ export function StageInspector({ object, selectedCount = object ? 1 : 0, advance
           <>
             <FieldRow label="Scale">
               <InlineFields>
-                <StageBuilderNumberField label="X" {...commonNumberProps} disabled={locked} value={object.dimensions[0]} onChange={(event) => onChange({ ...object, dimensions: [minPositive(event.target.value, object.dimensions[0]), object.dimensions[1]] })} />
-                <StageBuilderNumberField label="Y" {...commonNumberProps} value={1} disabled />
-                <StageBuilderNumberField label="Z" {...commonNumberProps} disabled={locked} value={object.dimensions[1]} onChange={(event) => onChange({ ...object, dimensions: [object.dimensions[0], minPositive(event.target.value, object.dimensions[1])] })} />
+                <StageBuilderNumberField axis="X" {...commonNumberProps} disabled={locked} value={object.dimensions[0]} onChange={(event) => onChange({ ...object, dimensions: [minPositive(event.target.value, object.dimensions[0]), object.dimensions[1]] })} />
+                <StageBuilderNumberField axis="Y" {...commonNumberProps} value={1} disabled />
+                <StageBuilderNumberField axis="Z" {...commonNumberProps} disabled={locked} value={object.dimensions[1]} onChange={(event) => onChange({ ...object, dimensions: [object.dimensions[0], minPositive(event.target.value, object.dimensions[1])] })} />
               </InlineFields>
             </FieldRow>
             {['target', 'checkpoint', 'dangerZone', 'sensorZone'].includes(object.semanticKind || '') && <FullRow><Alert severity="info">Challenge markers export as visible floor regions plus metadata-style naming for simulator logic.</Alert></FullRow>}
@@ -386,9 +386,9 @@ export function StageInspector({ object, selectedCount = object ? 1 : 0, advance
         {object.kind === 'cube' && (
           <FieldRow label="Scale">
             <InlineFields>
-              <StageBuilderNumberField label="X" {...commonNumberProps} disabled={locked} value={object.dimensions[0]} onChange={(event) => onChange({ ...object, dimensions: updateVec3(object.dimensions, 0, minPositive(event.target.value, object.dimensions[0])) })} />
-              <StageBuilderNumberField label="Y" {...commonNumberProps} disabled={locked} value={object.dimensions[1]} onChange={(event) => onChange({ ...object, dimensions: updateVec3(object.dimensions, 1, minPositive(event.target.value, object.dimensions[1])) })} />
-              <StageBuilderNumberField label="Z" {...commonNumberProps} disabled={locked} value={object.dimensions[2]} onChange={(event) => onChange({ ...object, dimensions: updateVec3(object.dimensions, 2, minPositive(event.target.value, object.dimensions[2])) })} />
+              <StageBuilderNumberField axis="X" {...commonNumberProps} disabled={locked} value={object.dimensions[0]} onChange={(event) => onChange({ ...object, dimensions: updateVec3(object.dimensions, 0, minPositive(event.target.value, object.dimensions[0])) })} />
+              <StageBuilderNumberField axis="Y" {...commonNumberProps} disabled={locked} value={object.dimensions[1]} onChange={(event) => onChange({ ...object, dimensions: updateVec3(object.dimensions, 1, minPositive(event.target.value, object.dimensions[1])) })} />
+              <StageBuilderNumberField axis="Z" {...commonNumberProps} disabled={locked} value={object.dimensions[2]} onChange={(event) => onChange({ ...object, dimensions: updateVec3(object.dimensions, 2, minPositive(event.target.value, object.dimensions[2])) })} />
             </InlineFields>
           </FieldRow>
         )}
@@ -422,10 +422,10 @@ export function StageInspector({ object, selectedCount = object ? 1 : 0, advance
             {object.points.map((point, index) => (
               <FieldRow key={index} label={`Point ${index + 1}`}>
                 <Stack direction="row" spacing={0.75} sx={{ minWidth: 0 }}>
-                  <StageBuilderNumberField label="X" {...commonNumberProps} disabled={locked} value={point[0]} onChange={(event) => {
+                  <StageBuilderNumberField axis="X" {...commonNumberProps} disabled={locked} value={point[0]} onChange={(event) => {
                     const points = [...object.points]; points[index] = updateVec2(point, 0, event.target.value); onChange({ ...object, points });
                   }} />
-                  <StageBuilderNumberField label="Z" {...commonNumberProps} disabled={locked} value={point[1]} onChange={(event) => {
+                  <StageBuilderNumberField axis="Z" {...commonNumberProps} disabled={locked} value={point[1]} onChange={(event) => {
                     const points = [...object.points]; points[index] = updateVec2(point, 1, event.target.value); onChange({ ...object, points });
                   }} />
                   <Button size="small" disabled={locked || object.points.length <= 2} onClick={() => onChange({ ...object, points: object.points.filter((_, i) => i !== index) })}>Remove</Button>
@@ -451,9 +451,9 @@ export function StageInspector({ object, selectedCount = object ? 1 : 0, advance
           <>
             <FieldRow label="Scale">
               <InlineFields>
-                <StageBuilderNumberField label="X" {...commonNumberProps} value={1} disabled />
-                <StageBuilderNumberField label="Y" {...commonNumberProps} value={1} disabled />
-                <StageBuilderNumberField label="Z" {...commonNumberProps} value={1} disabled />
+                <StageBuilderNumberField axis="X" {...commonNumberProps} value={1} disabled />
+                <StageBuilderNumberField axis="Y" {...commonNumberProps} value={1} disabled />
+                <StageBuilderNumberField axis="Z" {...commonNumberProps} value={1} disabled />
               </InlineFields>
             </FieldRow>
             <FullRow><Alert severity="info">The robot spawn uses the FOSSBot simulator model. Adjust its position and rotation in Transform.</Alert></FullRow>
@@ -492,9 +492,9 @@ export function StageInspector({ object, selectedCount = object ? 1 : 0, advance
             </FieldRow>
             <FieldRow label="Offset">
               <InlineFields>
-                <StageBuilderNumberField label="X" {...commonNumberProps} value={0} disabled />
-                <StageBuilderNumberField label="Y" {...commonNumberProps} value={0} disabled />
-                <StageBuilderNumberField label="Z" {...commonNumberProps} value={0} disabled />
+                <StageBuilderNumberField axis="X" {...commonNumberProps} value={0} disabled />
+                <StageBuilderNumberField axis="Y" {...commonNumberProps} value={0} disabled />
+                <StageBuilderNumberField axis="Z" {...commonNumberProps} value={0} disabled />
               </InlineFields>
             </FieldRow>
             <FieldRow label="Trigger"><EnabledSwitch checked={false} disabled /></FieldRow>

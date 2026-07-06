@@ -99,9 +99,11 @@ export const inspectorPanelSx: SxProps<Theme> = {
   '& .MuiFormControlLabel-root.Mui-disabled .MuiFormControlLabel-label': { color: `${editorColors.textDisabled} !important` },
   '& .MuiFormControlLabel-label.Mui-disabled': { color: `${editorColors.textDisabled} !important` },
   '& .MuiTypography-root.Mui-disabled': { color: `${editorColors.textDisabled} !important` },
-  '& .MuiInputBase-root': { color: editorColors.textStrong, bgcolor: '#172027', minHeight: 30, borderRadius: 0.5 },
+  '& .MuiInputBase-root': { color: editorColors.textStrong, bgcolor: '#172027', minHeight: 26, borderRadius: 0.5 },
   '& .MuiInputBase-root.Mui-disabled': { bgcolor: editorColors.panelDisabled, opacity: 1 },
-  '& .MuiInputBase-input': { color: editorColors.textStrong, fontSize: '0.8125rem', paddingTop: '5px', paddingBottom: '5px' },
+  '& .MuiInputBase-input': { color: editorColors.textStrong, fontSize: '0.8125rem', padding: '4px 6px' },
+  '& input[type="number"]::-webkit-inner-spin-button, & input[type="number"]::-webkit-outer-spin-button': { WebkitAppearance: 'none', margin: 0 },
+  '& input[type="number"]': { MozAppearance: 'textfield' },
   '& .MuiInputBase-input.Mui-disabled': {
     WebkitTextFillColor: `${editorColors.textDisabled} !important`,
     color: `${editorColors.textDisabled} !important`,
