@@ -1,8 +1,9 @@
 import React from 'react';
 import {
-  Accordion, AccordionDetails, AccordionSummary, Box, Button, FormControlLabel, MenuItem, Stack, Switch, TextField, Typography,
+  Accordion, AccordionDetails, AccordionSummary, Box, Button, FormControlLabel, IconButton, MenuItem, Stack, Switch, TextField, Tooltip, Typography,
 } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import KeyboardDoubleArrowRightIcon from '@mui/icons-material/KeyboardDoubleArrowRight';
 import type { EditorStage, EditorStageObject } from './types';
 import { ColorPickerField, StageInspector } from './StageInspector';
 import { StageValidationPanel } from './StageValidationPanel';
@@ -28,6 +29,7 @@ export interface EditorRightInspectorProps {
   onToggleValidationOverride: (id: string, enabled: boolean) => void;
   onPrefsChange: (patch: Partial<StageBuilderPreferences>) => void;
   onResetPrefs: () => void;
+  onTogglePanel: () => void;
 }
 
 function num(value: unknown, fallback = 0): number {
@@ -55,6 +57,15 @@ function rotationOptions() {
 
 const commonNumberProps = { type: 'number', size: 'small' as const, fullWidth: true };
 const commonFieldProps = { size: 'small' as const, fullWidth: true };
+
+const panelToggleButtonSx = {
+  width: 28,
+  height: 28,
+  borderRadius: 0.75,
+  color: editorColors.textMuted,
+  '&:hover': { bgcolor: editorColors.panelRaised, color: editorColors.accentText },
+  '&:focus-visible': { outline: `2px solid ${editorColors.accent}`, outlineOffset: 2 },
+} as const;
 
 function FieldRow({ label, children, align = 'center' }: { label: string; children: React.ReactNode; align?: 'center' | 'start' }) {
   return (
@@ -256,11 +267,20 @@ export function EditorRightInspector({
   onToggleValidationOverride,
   onPrefsChange,
   onResetPrefs,
+  onTogglePanel,
 }: EditorRightInspectorProps) {
   const context = tab === 'validation' ? 'validation' : tab === 'settings' ? 'settings' : selectedObject ? 'object' : 'stage';
 
   return (
     <Box sx={inspectorPanelSx}>
+      <Box sx={{ height: 36, flex: '0 0 36px', px: 1, display: 'flex', alignItems: 'center', gap: 1, bgcolor: editorColors.panelInset, borderBottom: `1px solid ${editorColors.border}` }}>
+        <Typography variant="caption" noWrap sx={{ ...editorType.sectionLabel, color: editorColors.textStrong }}>Inspector</Typography>
+        <Tooltip title="Hide Inspector panel" placement="left">
+          <IconButton size="small" aria-label="Hide Inspector panel" onClick={onTogglePanel} sx={{ ...panelToggleButtonSx, ml: 'auto' }}>
+            <KeyboardDoubleArrowRightIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
+      </Box>
       <Box sx={{ flex: 1, overflow: 'auto', scrollbarWidth: 'none', msOverflowStyle: 'none', '&::-webkit-scrollbar': { display: 'none' } }}>
         {context === 'object' && (
           <StageInspector
