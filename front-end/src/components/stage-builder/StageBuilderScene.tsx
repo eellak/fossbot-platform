@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
 import { disposeScene, initScene, renderScene, type SceneHandle } from 'src/simulator/scene/scene';
+import { loadRobotV2 } from 'src/simulator/robot/v2';
 import type { EditorStageObject, StageBuilderGroup, StageBuilderMode, StageBuilderTransformSpace, Vec3 } from './types';
 import type { StageBuilderControlScheme, StageBuilderLockMode, StageBuilderStyleVariant } from './stageBuilderPreferences';
 import type { StageBuilderSnapSettings } from './stageBuilderSnapping';
@@ -67,6 +68,16 @@ type FriendlyHandleRecord = {
   pickables: THREE.Object3D[];
 };
 
+type FriendlyDragState = {
+  kind: FriendlyHandleKind;
+  startAngle?: number;
+  lastAngle?: number;
+  accumulatedAngle?: number;
+  startRotation?: number;
+  startDistance?: number;
+  startDimensions?: number[];
+};
+
 type AxisLock = 'x' | 'y' | 'z' | null;
 
 type ObjectVisualOptions = {
@@ -81,6 +92,7 @@ const floorPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 const floorHit = new THREE.Vector3();
 const dragStartHit = new THREE.Vector3();
 const dragStartPosition = new THREE.Vector3();
+const robotSpawnForward = new THREE.Vector3();
 
 function cloneObjectForTransform(object: EditorStageObject): EditorStageObject {
   return JSON.parse(JSON.stringify(object));
@@ -123,6 +135,17 @@ function setObjectUserData(root: THREE.Object3D, id: string): void {
   });
 }
 
+function yawFromObject(root: THREE.Object3D, fallback = 0): number {
+  robotSpawnForward.set(0, 0, -1).applyQuaternion(root.quaternion);
+  if (Math.hypot(robotSpawnForward.x, robotSpawnForward.z) < 0.0001) return fallback;
+  return Math.atan2(-robotSpawnForward.x, -robotSpawnForward.z);
+}
+
+function constrainRobotSpawnTransform(root: THREE.Object3D, fallbackYaw = 0): void {
+  root.rotation.set(0, yawFromObject(root, fallbackYaw), 0);
+  root.scale.set(1, 1, 1);
+}
+
 function makeTextCanvas(text: string, colorValue: string): HTMLCanvasElement {
   const canvas = document.createElement('canvas');
   canvas.width = 512;
@@ -141,6 +164,260 @@ function makeTextCanvas(text: string, colorValue: string): HTMLCanvasElement {
   ctx.textBaseline = 'middle';
   ctx.fillText(text || 'Label', canvas.width / 2, canvas.height / 2);
   return canvas;
+}
+
+function robotSpawnAccent(options: ObjectVisualOptions = {}): string {
+  if (options.ghostValid === false) return '#ef4444';
+  return validationTint(options.validationSeverity) || '#38bdf8';
+}
+
+function robotSpawnOpacity(options: ObjectVisualOptions, opacity: number): number {
+  if (!options.ghost) return opacity;
+  return Math.min(opacity, Math.max(0.16, opacity * 0.74));
+}
+
+type RobotSpawnMaterialRole = 'body' | 'accent' | 'glow' | 'soft' | 'wheel' | 'rim';
+
+function tagRobotSpawnMaterial<T extends THREE.Material>(material: T, role: RobotSpawnMaterialRole): T {
+  material.userData.robotSpawnRole = role;
+  material.userData.robotSpawnBaseOpacity = material.opacity;
+  return material;
+}
+
+function robotSpawnStandardMaterial(colorValue: string, opacity: number, role: RobotSpawnMaterialRole): THREE.MeshStandardMaterial {
+  const mat = new THREE.MeshStandardMaterial({
+    color: color(colorValue),
+    transparent: true,
+    opacity,
+    depthWrite: false,
+    roughness: 0.42,
+    metalness: 0.05,
+    emissive: color(colorValue),
+    emissiveIntensity: role === 'wheel' ? 0.04 : role === 'body' ? 0.08 : 0.16,
+  });
+  return tagRobotSpawnMaterial(mat, role);
+}
+
+function robotSpawnBasicMaterial(colorValue: string, opacity: number, role: RobotSpawnMaterialRole, side: THREE.Side = THREE.FrontSide): THREE.MeshBasicMaterial {
+  const mat = new THREE.MeshBasicMaterial({ color: color(colorValue), transparent: true, opacity, depthWrite: false, side, toneMapped: false });
+  return tagRobotSpawnMaterial(mat, role);
+}
+
+function applyRobotSpawnTint(root: THREE.Object3D, accentValue: string): void {
+  root.userData.robotSpawnAccent = accentValue;
+  const accent = color(accentValue);
+  const body = new THREE.Color('#7dd3fc');
+  const soft = new THREE.Color('#bae6fd');
+  const wheel = new THREE.Color('#2563eb');
+  const rim = new THREE.Color(accentValue === '#ef4444' ? '#fee2e2' : accentValue === '#f59e0b' ? '#fff7ed' : '#e0f7ff');
+  const wheelGlow = new THREE.Color('#1d4ed8');
+  const bodyGlow = new THREE.Color('#0ea5e9');
+  root.traverse((child) => {
+    const material = (child as THREE.Mesh).material as THREE.Material | THREE.Material[] | undefined;
+    const materials = Array.isArray(material) ? material : material ? [material] : [];
+    for (const mat of materials) {
+      const role = mat.userData.robotSpawnRole as RobotSpawnMaterialRole | undefined;
+      if (!role) continue;
+      const next = role === 'body' ? body : role === 'soft' ? soft : role === 'wheel' ? wheel : role === 'rim' ? rim : accent;
+      const maybe = mat as THREE.MeshBasicMaterial | THREE.MeshStandardMaterial | THREE.LineBasicMaterial | THREE.SpriteMaterial;
+      if ('color' in maybe && maybe.color) maybe.color.copy(next);
+      const standard = mat as THREE.MeshStandardMaterial;
+      if (standard.emissive) standard.emissive.copy(role === 'wheel' ? wheelGlow : role === 'body' ? bodyGlow : role === 'rim' ? rim : accent);
+      mat.needsUpdate = true;
+    }
+  });
+}
+
+function animateRobotSpawnVisual(root: THREE.Object3D, elapsed: number): void {
+  if (root.userData.stageBuilderVisualKind !== 'robotSpawn') return;
+  const phase = Number(root.userData.spawnAnimationPhase || 0);
+  const breath = (Math.sin(elapsed * 1.35 + phase) + 1) / 2;
+  root.traverse((child) => {
+    const role = child.userData.robotSpawnAnimationRole as string | undefined;
+    if (!role) return;
+    if (role === 'pulseRing') {
+      const scale = 1 + breath * 0.045;
+      child.scale.set(scale, scale, scale);
+    }
+    const material = (child as THREE.Mesh).material as THREE.Material | THREE.Material[] | undefined;
+    const materials = Array.isArray(material) ? material : material ? [material] : [];
+    const opacityLift = role === 'directionArrow' ? 0.08 : role === 'spawnField' ? 0.025 : 0.04;
+    for (const mat of materials) {
+      const base = mat.userData.robotSpawnBaseOpacity;
+      if (typeof base !== 'number') continue;
+      mat.opacity = Math.min(0.92, base + breath * opacityLift);
+      mat.needsUpdate = true;
+    }
+  });
+}
+
+let robotSpawnModelTemplatePromise: Promise<THREE.Group> | null = null;
+
+function loadRobotSpawnModelTemplate(): Promise<THREE.Group> {
+  if (!robotSpawnModelTemplatePromise) {
+    robotSpawnModelTemplatePromise = loadRobotV2()
+      .then((robot) => robot.root)
+      .catch((error) => {
+        robotSpawnModelTemplatePromise = null;
+        throw error;
+      });
+  }
+  return robotSpawnModelTemplatePromise;
+}
+
+function cloneOwnedMeshResources(root: THREE.Object3D): void {
+  root.traverse((child) => {
+    const mesh = child as THREE.Mesh;
+    if (!(mesh as any).isMesh) return;
+    if (mesh.geometry) mesh.geometry = mesh.geometry.clone();
+    const material = mesh.material as THREE.Material | THREE.Material[] | undefined;
+    if (Array.isArray(material)) mesh.material = material.map((item) => item.clone());
+    else if (material) mesh.material = material.clone();
+  });
+}
+
+function robotSpawnRoleForPart(part: THREE.Object3D, modelRoot: THREE.Object3D): 'body' | 'accent' | 'soft' | 'wheel' {
+  const names: string[] = [];
+  let cursor: THREE.Object3D | null = part;
+  while (cursor && cursor !== modelRoot) {
+    names.push(cursor.name.toLowerCase());
+    cursor = cursor.parent;
+  }
+  const label = names.join(' ');
+  if (label.includes('wheel')) return 'wheel';
+  if (label.includes('eye') || label.includes('lego') || label.includes('pen_holder')) return 'soft';
+  if (label.includes('fender') || label.includes('b3_p_f')) return 'accent';
+  return 'body';
+}
+
+function styleRobotSpawnModel(modelRoot: THREE.Object3D, options: ObjectVisualOptions, accentValue: string): void {
+  modelRoot.traverse((child) => {
+    const mesh = child as THREE.Mesh;
+    if (!(mesh as any).isMesh) return;
+    mesh.castShadow = false;
+    mesh.receiveShadow = false;
+    const role = robotSpawnRoleForPart(child, modelRoot);
+    const material = mesh.material as THREE.Material | THREE.Material[] | undefined;
+    const materials = Array.isArray(material) ? material : material ? [material] : [];
+    for (const mat of materials) {
+      tagRobotSpawnMaterial(mat, role);
+      mat.transparent = true;
+      mat.opacity = robotSpawnOpacity(options, role === 'soft' ? 0.5 : role === 'accent' ? 0.46 : role === 'wheel' ? 0.5 : 0.36);
+      mat.userData.robotSpawnBaseOpacity = mat.opacity;
+      mat.depthWrite = false;
+      const standard = mat as THREE.MeshStandardMaterial;
+      if ('roughness' in standard) standard.roughness = 0.5;
+      if (standard.emissive) standard.emissiveIntensity = role === 'body' ? 0.08 : 0.14;
+      mat.needsUpdate = true;
+    }
+  });
+  applyRobotSpawnTint(modelRoot, accentValue);
+}
+
+function styleRobotSpawnRim(modelRoot: THREE.Object3D, options: ObjectVisualOptions, accentValue: string): void {
+  const rimColor = accentValue === '#ef4444' ? '#fee2e2' : accentValue === '#f59e0b' ? '#fff7ed' : '#e0f7ff';
+  modelRoot.scale.setScalar(1.045);
+  modelRoot.traverse((child) => {
+    const mesh = child as THREE.Mesh;
+    if (!(mesh as any).isMesh) return;
+    const material = mesh.material as THREE.Material | THREE.Material[] | undefined;
+    if (Array.isArray(material)) material.forEach((item) => item.dispose());
+    else material?.dispose();
+    mesh.material = robotSpawnBasicMaterial(rimColor, robotSpawnOpacity(options, 0.34), 'rim', THREE.BackSide);
+    mesh.renderOrder = 5;
+  });
+}
+
+function collectMeshPickables(root: THREE.Object3D, pickables: THREE.Object3D[]): void {
+  root.traverse((child) => {
+    if ((child as THREE.Mesh).isMesh) pickables.push(child);
+  });
+}
+
+function makeRobotSpawnChevronGeometry(): THREE.ShapeGeometry {
+  const shape = new THREE.Shape();
+  shape.moveTo(0, 0.5);
+  shape.lineTo(-0.1, 0.31);
+  shape.lineTo(-0.042, 0.31);
+  shape.lineTo(0, 0.39);
+  shape.lineTo(0.042, 0.31);
+  shape.lineTo(0.1, 0.31);
+  shape.lineTo(0, 0.5);
+  return new THREE.ShapeGeometry(shape);
+}
+
+function attachRobotSpawnModel(host: THREE.Group, pickables: THREE.Object3D[], options: ObjectVisualOptions, accentValue: string): void {
+  loadRobotSpawnModelTemplate()
+    .then((template) => {
+      if (host.userData.stageBuilderDisposed) return;
+      const model = template.clone(true);
+      model.name = 'robot_spawn_fossbot_model';
+      cloneOwnedMeshResources(model);
+      const activeAccent = typeof host.userData.robotSpawnAccent === 'string' ? host.userData.robotSpawnAccent : accentValue;
+      styleRobotSpawnModel(model, options, activeAccent);
+      const rim = model.clone(true);
+      rim.name = 'robot_spawn_fossbot_rim';
+      cloneOwnedMeshResources(rim);
+      styleRobotSpawnRim(rim, options, activeAccent);
+      const stageObjectId = host.userData.stageObjectId;
+      if (typeof stageObjectId === 'string') setObjectUserData(model, stageObjectId);
+      host.add(rim, model);
+      collectMeshPickables(model, pickables);
+    })
+    .catch((error) => console.warn('[stage-builder] failed to load Fossbot spawn model', error));
+}
+
+function makeRobotSpawnVisual(object: Extract<EditorStageObject, { kind: 'fossbot' }>, options: ObjectVisualOptions = {}): { root: THREE.Group; pickables: THREE.Object3D[] } {
+  const group = new THREE.Group();
+  const pickables: THREE.Object3D[] = [];
+  const accent = robotSpawnAccent(options);
+  group.userData.stageBuilderVisualKind = 'robotSpawn';
+  group.userData.robotSpawnAccent = accent;
+  group.userData.spawnAnimationPhase = object.id.split('').reduce((sum, letter) => sum + letter.charCodeAt(0), 0) * 0.031;
+
+  const field = new THREE.Mesh(
+    new THREE.CircleGeometry(0.42, 48),
+    robotSpawnBasicMaterial(accent, robotSpawnOpacity(options, 0.045), 'glow', THREE.DoubleSide),
+  );
+  field.rotation.x = -Math.PI / 2;
+  field.position.y = 0.008;
+  field.renderOrder = 1;
+  field.userData.robotSpawnAnimationRole = 'spawnField';
+
+  const halo = new THREE.Mesh(
+    new THREE.TorusGeometry(0.24, 0.007, 8, 80),
+    robotSpawnBasicMaterial(accent, robotSpawnOpacity(options, 0.72), 'accent'),
+  );
+  halo.rotation.x = Math.PI / 2;
+  halo.position.y = 0.022;
+  halo.renderOrder = 3;
+  halo.userData.robotSpawnAnimationRole = 'pulseRing';
+
+  const outerHalo = new THREE.Mesh(
+    new THREE.TorusGeometry(0.265, 0.004, 8, 96),
+    robotSpawnBasicMaterial('#e0f7ff', robotSpawnOpacity(options, 0.86), 'rim'),
+  );
+  outerHalo.rotation.x = Math.PI / 2;
+  outerHalo.position.y = 0.024;
+  outerHalo.renderOrder = 4;
+  outerHalo.userData.robotSpawnAnimationRole = 'pulseRing';
+
+  const directionArrow = new THREE.Mesh(
+    makeRobotSpawnChevronGeometry(),
+    robotSpawnBasicMaterial('#e0f7ff', robotSpawnOpacity(options, 0.84), 'rim', THREE.DoubleSide),
+  );
+  directionArrow.rotation.x = -Math.PI / 2;
+  directionArrow.position.y = 0.026;
+  directionArrow.renderOrder = 5;
+  directionArrow.userData.robotSpawnAnimationRole = 'directionArrow';
+
+  group.add(field, halo, outerHalo, directionArrow);
+  pickables.push(halo, outerHalo, directionArrow);
+  attachRobotSpawnModel(group, pickables, options, accent);
+  group.position.set(...object.position);
+  group.rotation.y = object.rotationY;
+  applyRobotSpawnTint(group, accent);
+  return { root: group, pickables };
 }
 
 function makeObjectRoot(object: EditorStageObject, options: ObjectVisualOptions = {}): MeshRecord {
@@ -223,29 +500,9 @@ function makeObjectRoot(object: EditorStageObject, options: ObjectVisualOptions 
       pickables.push(sprite);
     }
   } else {
-    const group = new THREE.Group();
-    const ring = new THREE.Mesh(
-      new THREE.TorusGeometry(0.18, 0.012, 8, 32),
-      basicMaterial('#42a5f5', options),
-    );
-    ring.rotation.x = Math.PI / 2;
-    ring.position.y = 0.018;
-    const body = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.12, 0.12, 0.08, 24),
-      standardMaterial('#1976d2', options),
-    );
-    body.position.y = 0.05;
-    const nose = new THREE.Mesh(
-      new THREE.ConeGeometry(0.08, 0.22, 16),
-      standardMaterial('#ff9800', options),
-    );
-    nose.rotation.x = Math.PI / 2;
-    nose.position.set(0, 0.07, -0.2);
-    group.add(ring, body, nose);
-    group.position.set(...object.position);
-    group.rotation.y = object.rotationY;
-    root = group;
-    pickables.push(ring, body, nose);
+    const spawn = makeRobotSpawnVisual(object, options);
+    root = spawn.root;
+    pickables.push(...spawn.pickables);
   }
 
   root.name = object.name;
@@ -254,6 +511,7 @@ function makeObjectRoot(object: EditorStageObject, options: ObjectVisualOptions 
 }
 
 function disposeObject(root: THREE.Object3D): void {
+  root.userData.stageBuilderDisposed = true;
   root.traverse((child) => {
     const mesh = child as THREE.Mesh;
     if (mesh.geometry) mesh.geometry.dispose();
@@ -309,7 +567,7 @@ function objectFromRootTransform(object: EditorStageObject, root: THREE.Object3D
     };
   }
   if (object.kind === 'fossbot') {
-    return { ...object, position: snapPosition([root.position.x, root.position.y, root.position.z], snap), rotationY: snapAngle(root.rotation.y, snap) };
+    return { ...object, position: snapPosition([root.position.x, root.position.y, root.position.z], snap), rotationY: snapAngle(yawFromObject(root, object.rotationY), snap) };
   }
   if (object.kind === 'text') {
     const scaleFactor = Math.max(scaleX, scaleY);
@@ -383,6 +641,10 @@ function makeFriendlyHandles(styleVariant: StageBuilderStyleVariant): FriendlyHa
 }
 
 function tintGhost(root: THREE.Object3D, valid: boolean): void {
+  if (root.userData.stageBuilderVisualKind === 'robotSpawn') {
+    applyRobotSpawnTint(root, valid ? '#38bdf8' : '#ef4444');
+    return;
+  }
   const next = new THREE.Color(valid ? '#22c55e' : '#ef4444');
   root.traverse((child) => {
     const mesh = child as THREE.Mesh;
@@ -506,6 +768,7 @@ export function StageBuilderScene({
   const boundaryRef = useRef<THREE.Line | null>(null);
   const marqueeElementRef = useRef<HTMLDivElement | null>(null);
   const marqueeRef = useRef<{ startX: number; startY: number; currentX: number; currentY: number } | null>(null);
+  const transformModeRef = useRef(transformMode);
   const objectsRef = useRef(objects);
   const groupsRef = useRef(groups);
   const selectedRef = useRef(selectedId);
@@ -535,9 +798,10 @@ export function StageBuilderScene({
   const spaceHeldRef = useRef(false);
   const axisLockRef = useRef<AxisLock>(null);
   const placementStatusRef = useRef<string>('');
-  const friendlyDragRef = useRef<{ kind: FriendlyHandleKind; startAngle?: number; startRotation?: number; startDistance?: number; startDimensions?: number[] } | null>(null);
+  const friendlyDragRef = useRef<FriendlyDragState | null>(null);
   const groupTransformRef = useRef<GroupTransformState | null>(null);
 
+  useEffect(() => { transformModeRef.current = transformMode; }, [transformMode]);
   useEffect(() => { objectsRef.current = objects; }, [objects]);
   useEffect(() => { groupsRef.current = groups; }, [groups]);
   useEffect(() => { selectedRef.current = selectedId; }, [selectedId]);
@@ -596,9 +860,20 @@ export function StageBuilderScene({
     return true;
   };
 
+  const configureTransformControls = () => {
+    const transform = transformRef.current;
+    if (!transform) return;
+    const selected = objectsRef.current.find((item) => item.id === selectedRef.current);
+    const yawOnly = selected?.kind === 'fossbot' && transformModeRef.current === 'rotate';
+    transform.showX = !yawOnly;
+    transform.showY = true;
+    transform.showZ = !yawOnly;
+  };
+
   const syncTransformAttachment = () => {
     const transform = transformRef.current;
     if (!transform) return;
+    configureTransformControls();
     transform.detach();
     if (builderModeRef.current !== 'edit' || controlSchemeRef.current !== 'legacyGizmo') return;
 
@@ -765,7 +1040,12 @@ export function StageBuilderScene({
         else commitSelectedTransform();
       }
     });
-    transform.addEventListener('objectChange', () => previewGroupTransform());
+    transform.addEventListener('objectChange', () => {
+      const selected = objectsRef.current.find((item) => item.id === selectedRef.current);
+      const root = selected ? objectMapRef.current.get(selected.id)?.root : null;
+      if (selected?.kind === 'fossbot' && root) constrainRobotSpawnTransform(root, selected.rotationY);
+      previewGroupTransform();
+    });
     sceneHandle.scene.add(transform as unknown as THREE.Object3D);
     transformRef.current = transform;
 
@@ -899,7 +1179,7 @@ export function StageBuilderScene({
           const angle = Math.atan2(floorHit.z - selectedRoot.position.z, floorHit.x - selectedRoot.position.x);
           const distance = Math.max(0.01, Math.hypot(floorHit.x - selectedRoot.position.x, floorHit.z - selectedRoot.position.z));
           const dims = 'dimensions' in selected ? [...selected.dimensions] as number[] : [];
-          friendlyDragRef.current = { kind, startAngle: angle, startRotation: 'rotationY' in selected ? selected.rotationY : 0, startDistance: distance, startDimensions: dims };
+          friendlyDragRef.current = { kind, startAngle: angle, lastAngle: angle, accumulatedAngle: 0, startRotation: 'rotationY' in selected ? selected.rotationY : 0, startDistance: distance, startDimensions: dims };
           return;
         }
       }
@@ -974,7 +1254,13 @@ export function StageBuilderScene({
         selectedRoot.position.set(snapped[0], snapped[1], snapped[2]);
       } else if (drag.kind === 'rotate' && 'rotationY' in selected) {
         const angle = Math.atan2(floorHit.z - selectedRoot.position.z, floorHit.x - selectedRoot.position.x);
-        selectedRoot.rotation.y = snapAngle((drag.startRotation || 0) + angle - (drag.startAngle || 0), snap);
+        const previousAngle = drag.lastAngle ?? drag.startAngle ?? angle;
+        let delta = angle - previousAngle;
+        if (delta > Math.PI) delta -= Math.PI * 2;
+        if (delta < -Math.PI) delta += Math.PI * 2;
+        drag.lastAngle = angle;
+        drag.accumulatedAngle = (drag.accumulatedAngle || 0) + delta;
+        selectedRoot.rotation.y = snapAngle((drag.startRotation || 0) + drag.accumulatedAngle, snap);
         if (selected.kind === 'cube' && selected.semanticKind === 'ramp') selectedRoot.rotation.x = selected.rampAngle ?? selected.orientation?.[0] ?? 0;
       } else if (drag.kind === 'resize' && supportsResize(selected)) {
         const distance = Math.max(0.01, Math.hypot(floorHit.x - selectedRoot.position.x, floorHit.z - selectedRoot.position.z));
@@ -1011,6 +1297,10 @@ export function StageBuilderScene({
 
     let raf = 0;
     const frame = () => {
+      const elapsed = performance.now() / 1000;
+      for (const record of objectMapRef.current.values()) animateRobotSpawnVisual(record.root, elapsed);
+      if (ghostRef.current) animateRobotSpawnVisual(ghostRef.current.root, elapsed);
+
       const helper = selectionHelperRef.current;
       const selectedRoot = selectedRef.current ? objectMapRef.current.get(selectedRef.current)?.root : null;
       if (helper && selectedRoot) {
@@ -1182,7 +1472,9 @@ export function StageBuilderScene({
   }, [objects, groups, selectedId, selectedGroupId, controlScheme, builderMode]);
 
   useEffect(() => {
+    transformModeRef.current = transformMode;
     transformRef.current?.setMode(transformMode);
+    configureTransformControls();
   }, [transformMode]);
 
   useEffect(() => {
