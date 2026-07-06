@@ -69,6 +69,21 @@ export type StageFossbotEntry = {
   orientation: [number, number, number];
 };
 
+export type StageLightSubtype = 'point' | 'directional' | 'spot' | 'ambient';
+
+export type StageLightEntry = {
+  type: 'light';
+  subtype?: StageLightSubtype;
+  position: [number, number, number];
+  color?: string | number;
+  intensity?: number;
+  range?: number;
+  angle?: number;
+  penumbra?: number;
+  rotationY?: number;
+  name?: string;
+};
+
 export type StageJsonEntry =
   | StageFloorEntry
   | StageBaseEntry
@@ -76,9 +91,10 @@ export type StageJsonEntry =
   | StageCylinderEntry
   | StageLineEntry
   | StageTextEntry
-  | StageFossbotEntry;
+  | StageFossbotEntry
+  | StageLightEntry;
 
-export type StageObjectKind = 'base' | 'cube' | 'cylinder' | 'line' | 'text' | 'fossbot';
+export type StageObjectKind = 'base' | 'cube' | 'cylinder' | 'line' | 'text' | 'fossbot' | 'light';
 
 export type StageSemanticKind =
   | 'floor'
@@ -96,7 +112,8 @@ export type StageSemanticKind =
   | 'sensorZone'
   | 'cameraMarker'
   | 'line'
-  | 'label';
+  | 'label'
+  | 'light';
 
 export type StageBuilderMode = 'navigate' | 'place' | 'edit' | 'test';
 export type StageBuilderTool = 'select' | 'move' | 'rotate' | 'resize';
@@ -200,13 +217,26 @@ export type EditorFossbotObject = EditorObjectCommon & {
   rotationY: number;
 };
 
+export type EditorLightObject = EditorObjectCommon & {
+  kind: 'light';
+  subtype: StageLightSubtype;
+  position: Vec3;
+  rotationY: number;
+  color: string;
+  intensity: number;
+  range: number;
+  angle: number;
+  penumbra: number;
+};
+
 export type EditorStageObject =
   | EditorBaseObject
   | EditorCubeObject
   | EditorCylinderObject
   | EditorLineObject
   | EditorTextObject
-  | EditorFossbotObject;
+  | EditorFossbotObject
+  | EditorLightObject;
 
 export type EditorStage = {
   id: string;

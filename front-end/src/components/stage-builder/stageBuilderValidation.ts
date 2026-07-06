@@ -87,6 +87,10 @@ export function validateStageBuilderStage(stage: EditorStage): StageBuilderValid
     if (object.semanticKind === 'target' || object.semanticKind === 'checkpoint') {
       results.push(result(stage, `object:${object.id}:reachability-unverified`, 'warning', [object.id], `${labelFor(object)} reachability is not guaranteed.`, 'Reachability detection is approximate in this phase; test the stage and override this warning if it is intentional.'));
     }
+
+    if (object.kind === 'light' && object.intensity < 0) {
+      results.push(result(stage, `object:${object.id}:light-intensity`, 'error', [object.id], `${labelFor(object)} has negative intensity.`, 'Light intensity must be zero or positive.', false));
+    }
   }
 
   const solidBounds = bounds.filter((entry) => entry.bounds.solid);

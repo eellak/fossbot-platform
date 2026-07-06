@@ -63,6 +63,7 @@ export const editorTones = {
   robot: { accent: '#79c7ff', surface: '#12364c', text: '#ccecff' },
   challenge: { accent: editorColors.success, surface: '#153b2c', text: '#c8f7d8' },
   labels: { accent: editorColors.label, surface: '#302848', text: '#eadfff' },
+  lighting: { accent: '#ffd27f', surface: '#3d351d', text: '#ffe9c2' },
   prefab: { accent: editorColors.prefab, surface: '#3b2b3c', text: '#ffd8ef' },
 } as const;
 

@@ -54,11 +54,12 @@ const rowActionSx = {
   '&:hover': { bgcolor: `${editorColors.textMuted}1a`, color: editorColors.textStrong },
 } as const;
 
-const hierarchyTones: Record<'robot' | 'structures' | 'markers' | 'labels' | 'groups', EditorTone> = {
+const hierarchyTones: Record<'robot' | 'structures' | 'markers' | 'labels' | 'lighting' | 'groups', EditorTone> = {
   robot: editorTones.robot,
   structures: editorTones.structures,
   markers: editorTones.challenge,
   labels: editorTones.labels,
+  lighting: editorTones.lighting,
   groups: editorTones.prefab,
 };
 
@@ -68,6 +69,7 @@ type RootItem = { type: 'group'; entry: GroupEntry } | { type: 'object'; object:
 function sectionFor(object: EditorStageObject): keyof typeof hierarchyTones {
   if (object.groupId || object.prefabSourceId) return 'groups';
   if (object.kind === 'fossbot' || object.semanticKind === 'robotSpawn') return 'robot';
+  if (object.kind === 'light' || object.semanticKind === 'light') return 'lighting';
   if (object.kind === 'text' || object.semanticKind === 'cameraMarker' || object.semanticKind === 'label') return 'labels';
   if (['target', 'checkpoint', 'dangerZone', 'sensorZone', 'line', 'baseTile'].includes(object.semanticKind || '')) return 'markers';
   return 'structures';

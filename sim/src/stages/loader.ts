@@ -1,7 +1,7 @@
 import * as RAPIER from '@dimforge/rapier3d-compat'
 import * as THREE from 'three'
 import { STAGES, type RawStageConfig, type RawStageEntry, type StageName } from './index'
-import { buildFloorVisual, buildBaseVisual, buildCubeVisual, buildCylinderVisual, buildModelVisual, buildTextVisual, buildLineVisual, lineSegmentsFromEntry } from './visuals'
+import { buildFloorVisual, buildBaseVisual, buildCubeVisual, buildCylinderVisual, buildModelVisual, buildTextVisual, buildLineVisual, buildLightVisual, lineSegmentsFromEntry } from './visuals'
 import type { VisualBuilt, LineSegment } from './visuals'
 import { buildFloorCollider, buildCubeCollider, buildCylinderCollider, buildModelCollider } from './colliders'
 import type { ColliderBuilt } from './colliders'
@@ -201,6 +201,12 @@ export async function loadStageEntries(
       }
       case 'text': {
         const vis = buildTextVisual(entry as any)
+        scene.add(vis.object)
+        objects.push(vis.object)
+        break
+      }
+      case 'light': {
+        const vis = buildLightVisual(entry as any)
         scene.add(vis.object)
         objects.push(vis.object)
         break

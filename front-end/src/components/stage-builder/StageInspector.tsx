@@ -5,7 +5,7 @@ import {
 } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { Sketch, Swatch } from '@uiw/react-color';
-import type { EditorStageObject, StageSemanticKind, Vec2, Vec3 } from './types';
+import type { EditorStageObject, StageLightSubtype, StageSemanticKind, Vec2, Vec3 } from './types';
 import { displayObjectType, semanticKindLabel, STAGE_OBJECT_CATALOG } from './stageBuilderCatalog';
 import { editorColors, editorType } from './stageBuilderEditorTheme';
 import { StageBuilderNumberField } from './StageBuilderNumberField';
@@ -370,6 +370,14 @@ export function StageInspector({ object, selectedCount = object ? 1 : 0, advance
           </FieldRow>
         )}
 
+        {object.kind === 'light' && (object.subtype === 'directional' || object.subtype === 'spot') && (
+          <FieldRow label="Rotation">
+            <InlineFields>
+              <StageBuilderNumberField axis="Y" {...commonNumberProps} disabled={locked} value={deg(object.rotationY)} onChange={(event) => set({ rotationY: rad(num(event.target.value, deg(object.rotationY))) } as Partial<EditorStageObject>)} />
+            </InlineFields>
+          </FieldRow>
+        )}
+
         {object.kind === 'base' && (
           <>
             <FieldRow label="Scale">
@@ -482,6 +490,71 @@ export function StageInspector({ object, selectedCount = object ? 1 : 0, advance
           <TextField {...commonFieldProps} value="Default" disabled inputProps={{ 'aria-label': 'Opacity' }} />
         </FieldRow>
       </Section>
+
+      {object.kind === 'light' && (
+        <Section title="Light">
+          <FieldRow label="Type">
+            <TextField
+              {...commonFieldProps}
+              select
+              disabled={locked}
+              value={object.subtype}
+              inputProps={{ 'aria-label': 'Light type' }}
+              onChange={(event) => set({ subtype: event.target.value as StageLightSubtype } as Partial<EditorStageObject>)}
+            >
+              <MenuItem value="point">Point</MenuItem>
+              <MenuItem value="spot">Spot</MenuItem>
+              <MenuItem value="directional">Directional</MenuItem>
+              <MenuItem value="ambient">Ambient</MenuItem>
+            </TextField>
+          </FieldRow>
+          <FieldRow label="Intensity">
+            <StageBuilderNumberField
+              {...commonNumberProps}
+              disabled={locked}
+              value={object.intensity}
+              inputProps={{ step: 0.1, min: 0, 'aria-label': 'Light intensity' }}
+              onChange={(event) => set({ intensity: Math.max(0, num(event.target.value, object.intensity)) } as Partial<EditorStageObject>)}
+            />
+          </FieldRow>
+          {(object.subtype === 'point' || object.subtype === 'spot') && (
+            <FieldRow label="Range">
+              <StageBuilderNumberField
+                {...commonNumberProps}
+                disabled={locked}
+                value={object.range}
+                inputProps={{ step: 0.1, min: 0, 'aria-label': 'Light range' }}
+                onChange={(event) => set({ range: Math.max(0, num(event.target.value, object.range)) } as Partial<EditorStageObject>)}
+              />
+            </FieldRow>
+          )}
+          {object.subtype === 'spot' && (
+            <>
+              <FieldRow label="Cone angle">
+                <StageBuilderNumberField
+                  {...commonNumberProps}
+                  disabled={locked}
+                  value={deg(object.angle)}
+                  inputProps={{ step: 1, min: 0, max: 90, 'aria-label': 'Spot cone angle' }}
+                  onChange={(event) => set({ angle: Math.min(Math.PI / 2, Math.max(0, rad(num(event.target.value, deg(object.angle))))) } as Partial<EditorStageObject>)}
+                />
+              </FieldRow>
+              <FieldRow label="Penumbra">
+                <StageBuilderNumberField
+                  {...commonNumberProps}
+                  disabled={locked}
+                  value={object.penumbra}
+                  inputProps={{ step: 0.05, min: 0, max: 1, 'aria-label': 'Spot penumbra' }}
+                  onChange={(event) => set({ penumbra: Math.min(1, Math.max(0, num(event.target.value, object.penumbra))) } as Partial<EditorStageObject>)}
+                />
+              </FieldRow>
+            </>
+          )}
+          {object.subtype === 'ambient' && (
+            <FullRow><Alert severity="info">Ambient light brightens the whole stage evenly. Position and rotation do not affect it.</Alert></FullRow>
+          )}
+        </Section>
+      )}
 
       <Section title="Collision">
         {object.kind === 'cube' || object.kind === 'cylinder' ? (

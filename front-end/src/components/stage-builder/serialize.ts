@@ -10,6 +10,7 @@ import type {
   StageFloorEntry,
   StageFossbotEntry,
   StageJsonEntry,
+  StageLightEntry,
   StageLineEntry,
   StageTextEntry,
 } from './types';
@@ -137,6 +138,19 @@ export function editorStageToConfig(stage: EditorStage): StageJsonEntry[] {
         onFloor: object.onFloor,
         name: object.name || object.semanticKind || 'text',
       });
+    } else if (object.kind === 'light') {
+      entries.push({
+        type: 'light',
+        subtype: object.subtype,
+        position: object.position,
+        color: object.color,
+        intensity: object.intensity,
+        range: object.subtype === 'point' || object.subtype === 'spot' ? object.range : undefined,
+        angle: object.subtype === 'spot' ? object.angle : undefined,
+        penumbra: object.subtype === 'spot' ? object.penumbra : undefined,
+        rotationY: object.subtype === 'directional' || object.subtype === 'spot' ? object.rotationY : undefined,
+        name: object.name || 'light',
+      });
     }
   }
 
@@ -255,6 +269,23 @@ function configEntryToEditorObject(entry: StageJsonEntry): EditorStageObject | n
       name: 'robot spawn',
       position: spawn.position || [0, 0, 0],
       rotationY: spawn.orientation?.[1] || 0,
+    };
+  }
+  if (entry.type === 'light') {
+    const light = entry as StageLightEntry;
+    return {
+      id: makeLocalStageId(),
+      kind: 'light',
+      semanticKind: 'light',
+      name: light.name || 'light',
+      subtype: light.subtype || 'point',
+      position: light.position || [0, 1, 0],
+      rotationY: light.rotationY || 0,
+      color: String(light.color || '#ffd27f'),
+      intensity: light.intensity ?? 1,
+      range: light.range ?? 0,
+      angle: light.angle ?? Math.PI / 6,
+      penumbra: light.penumbra ?? 0.3,
     };
   }
   return null;

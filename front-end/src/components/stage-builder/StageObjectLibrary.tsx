@@ -6,7 +6,7 @@ import type { StageBuilderPrefab } from './stageBuilderPrefabs';
 import { editorColors, editorTones, editorType, type EditorTone } from './stageBuilderEditorTheme';
 
 export type StageBuilderLibraryGroup = {
-  id: 'floorPaths' | 'structures' | 'robot' | 'challenge' | 'labels';
+  id: 'floorPaths' | 'structures' | 'robot' | 'challenge' | 'labels' | 'lighting';
   label: string;
   items: StageSemanticKind[];
 };
@@ -17,6 +17,7 @@ export const STAGE_BUILDER_LIBRARY_GROUPS: StageBuilderLibraryGroup[] = [
   { id: 'robot', label: 'Robot', items: ['robotSpawn'] },
   { id: 'challenge', label: 'Challenge Markers', items: ['target', 'checkpoint', 'dangerZone', 'sensorZone'] },
   { id: 'labels', label: 'Labels', items: ['cameraMarker', 'label'] },
+  { id: 'lighting', label: 'Lighting', items: ['light'] },
 ];
 
 export interface StageObjectLibraryProps {
@@ -92,6 +93,23 @@ export function PreviewShape({ kind, tone }: { kind: PreviewKind; tone: EditorTo
   }
   if (kind === 'baseTile') return <Box sx={{ width: 38, height: 28, border: `2px solid ${accent}`, bgcolor: soft, transform: 'skewX(-12deg)' }} />;
   if (kind === 'label') return <Box sx={{ color: accent, fontSize: 24, fontWeight: 900, lineHeight: 1 }}>T</Box>;
+  if (kind === 'light') {
+    return (
+      <Box component="svg" viewBox="0 0 40 40" sx={{ width: 38, height: 38 }}>
+        <g stroke={accent} strokeWidth="2.4" strokeLinecap="round">
+          <line x1="20" y1="3" x2="20" y2="9" />
+          <line x1="20" y1="31" x2="20" y2="37" />
+          <line x1="3" y1="20" x2="9" y2="20" />
+          <line x1="31" y1="20" x2="37" y2="20" />
+          <line x1="8" y1="8" x2="12" y2="12" />
+          <line x1="28" y1="28" x2="32" y2="32" />
+          <line x1="32" y1="8" x2="28" y2="12" />
+          <line x1="12" y1="28" x2="8" y2="32" />
+        </g>
+        <circle cx="20" cy="20" r="7" fill={`${accent}55`} stroke={accent} strokeWidth="2.4" />
+      </Box>
+    );
+  }
   if (kind === 'prefab') {
     return (
       <Box sx={{ width: 44, height: 34, display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 0.5 }}>

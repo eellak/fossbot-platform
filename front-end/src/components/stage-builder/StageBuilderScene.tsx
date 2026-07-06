@@ -647,6 +647,63 @@ function makeObjectRoot(object: EditorStageObject, options: ObjectVisualOptions 
       root = sprite;
       pickables.push(sprite);
     }
+  } else if (object.kind === 'light') {
+    const group = new THREE.Group();
+    const realColor = color(object.color);
+    const iconColor = materialColor(object.color, options);
+    const intensity = Math.max(0, object.intensity);
+    let light: THREE.Light;
+    if (object.subtype === 'ambient') {
+      light = new THREE.AmbientLight(realColor, intensity);
+    } else if (object.subtype === 'directional') {
+      const dir = new THREE.DirectionalLight(realColor, intensity);
+      dir.target.position.set(0, 0, -1);
+      group.add(dir.target);
+      light = dir;
+    } else if (object.subtype === 'spot') {
+      const spot = new THREE.SpotLight(
+        realColor,
+        intensity,
+        Math.max(0, object.range),
+        Math.min(Math.PI / 2, Math.max(0, object.angle)),
+        Math.min(1, Math.max(0, object.penumbra)),
+      );
+      spot.target.position.set(0, 0, -1);
+      group.add(spot.target);
+      light = spot;
+    } else {
+      light = new THREE.PointLight(realColor, intensity, Math.max(0, object.range));
+    }
+    if (!options.ghost) group.add(light);
+
+    const icon = new THREE.Mesh(
+      new THREE.SphereGeometry(0.08, 20, 14),
+      new THREE.MeshStandardMaterial({
+        color: iconColor,
+        emissive: iconColor,
+        emissiveIntensity: options.ghost ? 0.4 : 1.1,
+        transparent: !!options.ghost,
+        opacity: options.ghost ? 0.5 : 1,
+        depthWrite: !options.ghost,
+      }),
+    );
+    group.add(icon);
+    pickables.push(icon);
+
+    if (object.subtype === 'directional' || object.subtype === 'spot') {
+      const cone = new THREE.Mesh(
+        new THREE.ConeGeometry(0.05, 0.16, 16),
+        new THREE.MeshBasicMaterial({ color: iconColor, transparent: true, opacity: options.ghost ? 0.5 : 0.9, depthWrite: false }),
+      );
+      cone.rotation.x = -Math.PI / 2;
+      cone.position.set(0, 0, -0.14);
+      group.add(cone);
+      pickables.push(cone);
+    }
+
+    root = group;
+    group.position.set(...object.position);
+    group.rotation.y = object.rotationY;
   } else {
     const spawn = makeRobotSpawnVisual(object, options);
     root = spawn.root;
@@ -720,6 +777,13 @@ function objectFromRootTransform(object: EditorStageObject, root: THREE.Object3D
   if (object.kind === 'text') {
     const scaleFactor = Math.max(scaleX, scaleY);
     return { ...object, position: snapPosition([root.position.x, root.position.y, root.position.z], snap), scale: Math.max(0.05, object.scale * scaleFactor) };
+  }
+  if (object.kind === 'light') {
+    return {
+      ...object,
+      position: snapPosition([root.position.x, root.position.y, root.position.z], snap),
+      rotationY: snapAngle(yawFromObject(root, object.rotationY), snap),
+    };
   }
   return null;
 }
@@ -1059,7 +1123,7 @@ export function StageBuilderScene({
     }
     transform.enabled = true;
     const selected = objectsRef.current.find((item) => item.id === selectedRef.current);
-    const yawOnly = selected?.kind === 'fossbot' && transformModeRef.current === 'rotate';
+    const yawOnly = (selected?.kind === 'fossbot' || selected?.kind === 'light') && transformModeRef.current === 'rotate';
     transform.showX = !yawOnly;
     transform.showY = true;
     transform.showZ = !yawOnly;
