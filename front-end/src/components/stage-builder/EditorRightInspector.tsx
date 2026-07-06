@@ -58,7 +58,7 @@ const commonFieldProps = { size: 'small' as const, fullWidth: true };
 
 function FieldRow({ label, children, align = 'center' }: { label: string; children: React.ReactNode; align?: 'center' | 'start' }) {
   return (
-    <Box sx={{ display: 'grid', gridTemplateColumns: '108px minmax(0, 1fr)', gap: 1, alignItems: align, px: 1.25, py: 0.5 }}>
+    <Box sx={{ display: 'grid', gridTemplateColumns: '96px minmax(0, 1fr)', gap: 0.75, alignItems: align, px: 1.25, py: 0.5 }}>
       <Typography variant="body2" sx={{ ...editorType.body, color: editorColors.textMuted, lineHeight: 1.2 }}>{label}</Typography>
       <Box sx={{ minWidth: 0 }}>{children}</Box>
     </Box>
@@ -132,7 +132,7 @@ function StageContext({ stage, prefs, onStageChange, onPrefsChange }: Pick<Edito
             <StageBuilderNumberField label="Depth" {...commonNumberProps} inputProps={{ step: 0.1, min: 0.5 }} value={stage.floor.dimensions[1]} onChange={(event) => onStageChange({ ...stage, floor: { ...stage.floor, dimensions: [stage.floor.dimensions[0], Math.max(0.5, num(event.target.value, stage.floor.dimensions[1]))] } })} />
           </InlineFields>
         </FieldRow>
-        <FieldRow label="Color">
+        <FieldRow label="Color" align="start">
           <ColorPickerField
             value={stage.floor.color}
             pickerAriaLabel="Floor color picker"

@@ -114,7 +114,7 @@ const commonFieldProps = { size: 'small' as const, fullWidth: true };
 
 function FieldRow({ label, children, align = 'center' }: { label: string; children: React.ReactNode; align?: 'center' | 'start' }) {
   return (
-    <Box sx={{ display: 'grid', gridTemplateColumns: '108px minmax(0, 1fr)', gap: 1, alignItems: align, px: 1.25, py: 0.5 }}>
+    <Box sx={{ display: 'grid', gridTemplateColumns: '96px minmax(0, 1fr)', gap: 0.75, alignItems: align, px: 1.25, py: 0.5 }}>
       <Typography variant="body2" sx={{ ...editorType.body, color: editorColors.textMuted, lineHeight: 1.2 }}>{label}</Typography>
       <Box sx={{ minWidth: 0 }}>{children}</Box>
     </Box>
@@ -463,7 +463,7 @@ export function StageInspector({ object, selectedCount = object ? 1 : 0, advance
 
       <Section title="Appearance">
         {'color' in object && (
-          <FieldRow label="Color">
+          <FieldRow label="Color" align="start">
             <ColorPickerField
               value={object.color}
               disabled={locked}
