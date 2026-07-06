@@ -1,6 +1,12 @@
 import React from 'react';
 import { TextField, type TextFieldProps } from '@mui/material';
 
+const axisColor: Record<'X' | 'Y' | 'Z', string> = {
+  X: '#ff6b6b',
+  Y: '#5bdc8b',
+  Z: '#6aa9ff',
+};
+
 const DRAG_START_THRESHOLD_PX = 3;
 const PIXELS_PER_STEP = 8;
 
@@ -32,6 +38,7 @@ type PointerLockElement = HTMLElement & {
 export type StageBuilderNumberFieldProps = Omit<TextFieldProps, 'type'> & {
   type?: TextFieldProps['type'];
   value: number;
+  axis?: 'X' | 'Y' | 'Z';
 };
 
 function numericAttribute(value: unknown): number | undefined {
@@ -80,7 +87,7 @@ function restoreBodyDragStyles(state: NumberFieldDragState) {
   document.body.style.userSelect = state.bodyUserSelect;
 }
 
-export function StageBuilderNumberField({ inputProps, onChange, disabled, InputProps, sx, ...props }: StageBuilderNumberFieldProps) {
+export function StageBuilderNumberField({ inputProps, onChange, disabled, InputProps, sx, axis, ...props }: StageBuilderNumberFieldProps) {
   const dragRef = React.useRef<NumberFieldDragState | null>(null);
   const blockClickRef = React.useRef(false);
   const finishDragRef = React.useRef<(preventClick: boolean, exitPointerLock?: boolean) => void>(() => {});
@@ -252,13 +259,18 @@ export function StageBuilderNumberField({ inputProps, onChange, disabled, InputP
     event.stopPropagation();
   };
 
+  const axisSx = axis
+    ? { '& .MuiInputLabel-root': { color: `${axisColor[axis]} !important`, fontWeight: 800 } }
+    : null;
+
   const textFieldProps = {
     ...props,
+    label: props.label ?? axis,
     type: 'number',
     disabled,
     onChange,
     InputProps,
-    sx,
+    sx: axisSx ? { ...sx, ...axisSx } : sx,
     inputProps: {
       ...nativeInputProps,
       title: nativeInputProps.title || (canDrag ? 'Drag left/right or up/down to adjust' : undefined),
