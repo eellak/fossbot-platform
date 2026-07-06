@@ -1,5 +1,5 @@
 import React from 'react';
-import { Divider, IconButton, Paper, Stack, ToggleButton, ToggleButtonGroup, Tooltip } from '@mui/material';
+import { Divider, IconButton, Paper, Stack, ToggleButton, Tooltip } from '@mui/material';
 import MouseIcon from '@mui/icons-material/Mouse';
 import OpenWithIcon from '@mui/icons-material/OpenWith';
 import RotateRightIcon from '@mui/icons-material/RotateRight';
@@ -10,20 +10,17 @@ import RedoIcon from '@mui/icons-material/Redo';
 import DeleteIcon from '@mui/icons-material/Delete';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faMagnet } from '@fortawesome/free-solid-svg-icons';
-import type { StageBuilderMode } from './types';
 import type { StageBuilderTransformMode } from './StageBuilderScene';
 import type { StageBuilderSnapPreset } from './stageBuilderPreferences';
 import { snapPresetLabel } from './stageBuilderSnapping';
 import { editorColors } from './stageBuilderEditorTheme';
 
 export interface EditorViewportToolRailProps {
-  mode: StageBuilderMode;
   transformMode: StageBuilderTransformMode;
   snapPreset: StageBuilderSnapPreset;
   selectedCount: number;
   canUndo: boolean;
   canRedo: boolean;
-  onModeChange: (mode: StageBuilderMode) => void;
   onTransformModeChange: (mode: StageBuilderTransformMode) => void;
   onSnapPresetChange: (preset: StageBuilderSnapPreset) => void;
   onFocusSelected: () => void;
@@ -58,13 +55,11 @@ const iconButtonSx = {
 } as const;
 
 export function EditorViewportToolRail({
-  mode,
   transformMode,
   snapPreset,
   selectedCount,
   canUndo,
   canRedo,
-  onModeChange,
   onTransformModeChange,
   onSnapPresetChange,
   onFocusSelected,
@@ -78,13 +73,13 @@ export function EditorViewportToolRail({
   return (
     <Paper elevation={0} sx={{ p: 0.5, bgcolor: editorColors.panel, color: editorColors.text, border: `1px solid ${editorColors.border}`, borderRadius: 1, boxShadow: 'none' }}>
       <Stack spacing={0.5} alignItems="center">
-        <Tooltip title="Select"><ToggleButton size="small" value="select" selected={false} onClick={() => onModeChange('edit')} sx={toolButtonSx}><MouseIcon fontSize="small" /></ToggleButton></Tooltip>
+        <Tooltip title="Select"><ToggleButton size="small" value="select" selected={transformMode === 'select'} onClick={() => onTransformModeChange('select')} sx={toolButtonSx}><MouseIcon fontSize="small" /></ToggleButton></Tooltip>
         <Divider flexItem sx={{ borderColor: editorColors.border }} />
-        <ToggleButtonGroup orientation="vertical" exclusive size="small" value={mode === 'edit' ? transformMode : ''} onChange={(_, value) => value && onTransformModeChange(value)} sx={{ gap: 0.5 }}>
-          <Tooltip title="Move"><ToggleButton value="translate" sx={toolButtonSx}><OpenWithIcon fontSize="small" /></ToggleButton></Tooltip>
-          <Tooltip title="Rotate"><ToggleButton value="rotate" sx={toolButtonSx}><RotateRightIcon fontSize="small" /></ToggleButton></Tooltip>
-          <Tooltip title="Scale"><ToggleButton value="scale" sx={toolButtonSx}><AspectRatioIcon fontSize="small" /></ToggleButton></Tooltip>
-        </ToggleButtonGroup>
+        <Stack spacing={0.5} alignItems="center">
+          <Tooltip title="Move"><ToggleButton size="small" value="translate" selected={transformMode === 'translate'} onClick={() => onTransformModeChange('translate')} sx={toolButtonSx}><OpenWithIcon fontSize="small" /></ToggleButton></Tooltip>
+          <Tooltip title="Rotate"><ToggleButton size="small" value="rotate" selected={transformMode === 'rotate'} onClick={() => onTransformModeChange('rotate')} sx={toolButtonSx}><RotateRightIcon fontSize="small" /></ToggleButton></Tooltip>
+          <Tooltip title="Scale"><ToggleButton size="small" value="scale" selected={transformMode === 'scale'} onClick={() => onTransformModeChange('scale')} sx={toolButtonSx}><AspectRatioIcon fontSize="small" /></ToggleButton></Tooltip>
+        </Stack>
         <Divider flexItem sx={{ borderColor: editorColors.border }} />
         <Tooltip title={`Snap ${snappingOn ? 'on' : 'off'} · ${snapPresetLabel(normalizedSnap)}. Change snap size in Settings.`}>
           <IconButton size="small" onClick={() => onSnapPresetChange(snappingOn ? 'off' : 'medium')} sx={{ ...iconButtonSx, color: snappingOn ? editorColors.accentText : editorColors.textMuted }} aria-label="Toggle snapping">
