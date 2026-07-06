@@ -88,13 +88,14 @@ function StatusPill({ label, value, tone = editorColors.text }: { label: string;
   );
 }
 
-function PanelResizeHandle({ side, onPointerDown }: { side: PanelResizeSide; onPointerDown: React.PointerEventHandler<HTMLDivElement> }) {
+function PanelResizeHandle({ side, onPointerDown, onDoubleClick }: { side: PanelResizeSide; onPointerDown: React.PointerEventHandler<HTMLDivElement>; onDoubleClick: React.MouseEventHandler<HTMLDivElement> }) {
   return (
     <Box
       role="separator"
       aria-orientation="vertical"
-      aria-label={side === 'left' ? 'Resize left panel' : 'Resize right panel'}
+      aria-label={side === 'left' ? 'Resize left panel. Double-click to reset width.' : 'Resize right panel. Double-click to reset width.'}
       onPointerDown={onPointerDown}
+      onDoubleClick={onDoubleClick}
       sx={{
         width: stageBuilderPanelSizing.handleWidth,
         flex: `0 0 ${stageBuilderPanelSizing.handleWidth}px`,
@@ -244,6 +245,14 @@ const StageBuilderPage = () => {
       startX: event.clientX,
       startWidth: side === 'left' ? leftPanelWidth : rightPanelWidth,
     });
+  };
+
+  const resetPanelWidth = (side: PanelResizeSide) => (event: React.MouseEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setPanelResize(null);
+    if (side === 'left') setLeftPanelWidth(stageBuilderPanelSizing.leftDefaultWidth);
+    else setRightPanelWidth(stageBuilderPanelSizing.rightDefaultWidth);
   };
 
   const bumpHistory = () => setHistoryVersion((value) => value + 1);
@@ -733,7 +742,7 @@ const StageBuilderPage = () => {
             />
           </Box>
         )}
-        {leftPanelVisible && <PanelResizeHandle side="left" onPointerDown={beginPanelResize('left')} />}
+        {leftPanelVisible && <PanelResizeHandle side="left" onPointerDown={beginPanelResize('left')} onDoubleClick={resetPanelWidth('left')} />}
 
         <Box sx={{ flex: '1 1 0%', minWidth: 0, minHeight: 0, position: 'relative', bgcolor: editorColors.viewport }}>
           <StageBuilderScene
@@ -787,7 +796,7 @@ const StageBuilderPage = () => {
           </Box>
         </Box>
 
-        {rightPanelVisible && <PanelResizeHandle side="right" onPointerDown={beginPanelResize('right')} />}
+        {rightPanelVisible && <PanelResizeHandle side="right" onPointerDown={beginPanelResize('right')} onDoubleClick={resetPanelWidth('right')} />}
         {rightPanelVisible && (
           <Box sx={{ width: rightPanelWidth, flex: '0 0 auto', minHeight: 0, display: { xs: 'none', lg: 'block' }, overflow: 'hidden' }}>
             <EditorRightInspector
