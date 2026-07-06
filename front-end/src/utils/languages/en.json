@@ -72,7 +72,20 @@
     "elementary": "Elementary",
     "fossbotRepository": "FOSSBot Repository",
     "externalLinks": "External Links",
-    "tutorials": "Tutorials"
+    "tutorials": "Tutorials",
+    "stageBuilder": "Stage Builder",
+    "stageBuilderBased": "Create simulator stages"
+  },
+  "stage-builder": {
+    "title": "Stage Builder",
+    "description": "Create and preview local FOSSBot simulator stages.",
+    "localStages": "Local Stages",
+    "newStage": "New Stage",
+    "noStages": "No local stages yet.",
+    "refresh": "Refresh",
+    "viewportPlaceholder": "Editor viewport loading in MVP step 6",
+    "properties": "Properties",
+    "stageTitle": "Stage Title"
   },
   "interactive": {
     "title": "Interactive Mode",

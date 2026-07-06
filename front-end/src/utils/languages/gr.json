@@ -72,7 +72,20 @@
     "elementary": "Δημοτικό",
     "fossbotRepository": "FOSSBot Repository",
     "externalLinks": "Εξωτερικοί Σύνδεσμοι",
-    "tutorials": "Οδηγοί"
+    "tutorials": "Οδηγοί",
+    "stageBuilder": "Stage Builder",
+    "stageBuilderBased": "Δημιουργία σκηνών"
+  },
+  "stage-builder": {
+    "title": "Stage Builder",
+    "description": "Δημιουργήστε και δοκιμάστε τοπικές σκηνές προσομοίωσης FOSSBot.",
+    "localStages": "Τοπικές σκηνές",
+    "newStage": "Νέα σκηνή",
+    "noStages": "Δεν υπάρχουν τοπικές σκηνές.",
+    "refresh": "Ανανέωση",
+    "viewportPlaceholder": "Το viewport του editor θα φορτωθεί στο MVP βήμα 6",
+    "properties": "Ιδιότητες",
+    "stageTitle": "Τίτλος σκηνής"
   },
   "interactive": {
     "title": "Διαδραστική Χρήση",

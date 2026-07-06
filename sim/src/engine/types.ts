@@ -1,6 +1,6 @@
 import type * as RAPIER from '@dimforge/rapier3d-compat'
 import type { VehicleSettings, VehicleTelemetry } from '../physics/vehicle'
-import type { StageName } from '../stages'
+import type { RawStageConfig, StageName } from '../stages'
 import type { LineFollowerConfig } from '../control/lineFollower'
 
 /** Configuration passed to SimEngine at construction. */
@@ -22,6 +22,8 @@ export interface SimEngineConfig {
   /** Enable dev tooling (lil-gui, telemetry, camera/movement/position controls, gizmo).
    * Default: `true`. Set `false` when embedding as a lean simulation canvas. */
   devMode?: boolean
+  /** Optional raw stage config loaded instead of the default built-in stage. */
+  initialStageConfig?: RawStageConfig
 }
 
 /**

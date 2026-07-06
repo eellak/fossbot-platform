@@ -8,7 +8,7 @@ import { createRobotBody, type RobotPhysicsState } from '../physics/robotBody'
 import { ROBOT_COLLIDERS } from '../physics/colliders'
 import { syncMeshFromBody, syncObjectToBody } from '../physics/mesh-sync'
 import { createVehicle, syncVehicleVisual, type VehicleHandle, type VehicleSettings, type VehicleTelemetry } from '../physics/vehicle'
-import { loadStage, STAGE_NAMES, DEFAULT_STAGE, type StageHandle, type StageName } from '../stages'
+import { loadStage, loadStageEntries, STAGE_NAMES, DEFAULT_STAGE, type RawStageConfig, type StageHandle, type StageName } from '../stages'
 import { installKeyboard, type KeyboardHandle } from '../util/keyboard'
 import { log } from '../util/log'
 import {
@@ -56,6 +56,7 @@ function resolveConfig(cfg: Partial<SimEngineConfig> | undefined): Required<SimE
     telemetryDefault: cfg?.telemetryDefault ?? getTelemetryOverlayDefault(),
     turnScale: cfg?.turnScale ?? 0.35,
     devMode: cfg?.devMode ?? true,
+    initialStageConfig: cfg?.initialStageConfig,
   }
 }
 
@@ -479,6 +480,12 @@ export class SimEngine {
     await this.swapStage(stage)
   }
 
+  async setStageConfig(entries: RawStageConfig, name = 'custom_stage'): Promise<void> {
+    this.stopMotion()
+    this.drawLine(false)
+    await this.swapStageEntries(name, entries)
+  }
+
   getStageNames(): string[] {
     return [...STAGE_NAMES]
   }
@@ -698,10 +705,17 @@ export class SimEngine {
       this.positionStore?.setStage(initialStage)
       this.positionPresets?.refresh()
 
-      this.splash.setStatus(`Loading stage ${initialStage}...`)
-      this.currentStage = await loadStage(initialStage, this.sceneHandle!.scene, world, {
-        resolveAssetUrl: this.resolvePublicAssetUrl,
-      })
+      if (this.config.initialStageConfig) {
+        this.splash.setStatus('Loading custom stage...')
+        this.currentStage = await loadStageEntries('custom_stage', this.config.initialStageConfig, this.sceneHandle!.scene, world, {
+          resolveAssetUrl: this.resolvePublicAssetUrl,
+        })
+      } else {
+        this.splash.setStatus(`Loading stage ${initialStage}...`)
+        this.currentStage = await loadStage(initialStage, this.sceneHandle!.scene, world, {
+          resolveAssetUrl: this.resolvePublicAssetUrl,
+        })
+      }
 
       this.splash.setStatus('Loading robot model...')
       this.robot = await loadRobotV2(undefined, this.config.assetBaseUrl)
@@ -1246,10 +1260,9 @@ export class SimEngine {
 
   // ── Private: stage swap ──
 
-  private async swapStage(next: StageName): Promise<void> {
-    if (!this.currentStage || this.cancelled || !this.sceneHandle || !this.worldHandle) return
+  private prepareStageSwap(): StageHandle | null {
+    if (!this.currentStage || this.cancelled || !this.sceneHandle || !this.worldHandle) return null
     const previousStage = this.currentStage
-    log.world('swap stage', previousStage.name, '→', next)
 
     this.swappingStage = true
     this.accumulator = 0
@@ -1266,11 +1279,27 @@ export class SimEngine {
       this.movementPresets?.setLineFollowState(false)
     }
 
+    this.currentStage = null
+    previousStage.dispose()
+    return previousStage
+  }
+
+  private finishStageSwap(loadedStage: StageHandle): void {
+    this.currentStage = loadedStage
+    loadedStage.collidersGroup.visible = this.showColliders
+    this.applySpawnPose(loadedStage)
+    this.physicsCrashed = false
+  }
+
+  private async swapStage(next: StageName): Promise<void> {
+    if (!this.currentStage || this.cancelled || !this.sceneHandle || !this.worldHandle) return
+    const previousName = this.currentStage.name
+    log.world('swap stage', previousName, '→', next)
+
+    if (!this.prepareStageSwap()) return
     try {
       this.positionStore?.setStage(next)
       this.positionPresets?.refresh()
-      this.currentStage = null
-      previousStage.dispose()
       const loadedStage = await loadStage(next, this.sceneHandle.scene, this.worldHandle.world, {
         resolveAssetUrl: this.resolvePublicAssetUrl,
       })
@@ -1278,11 +1307,28 @@ export class SimEngine {
         loadedStage.dispose()
         return
       }
-      this.currentStage = loadedStage
+      this.finishStageSwap(loadedStage)
       if (this.config.devMode) rememberStage(next)
-      loadedStage.collidersGroup.visible = this.showColliders
-      this.applySpawnPose(loadedStage)
-      this.physicsCrashed = false
+    } finally {
+      this.accumulator = 0
+      this.swappingStage = false
+    }
+  }
+
+  private async swapStageEntries(name: StageName, entries: RawStageConfig): Promise<void> {
+    if (!this.currentStage || this.cancelled || !this.sceneHandle || !this.worldHandle) return
+    log.world('swap stage', this.currentStage.name, '→', name)
+
+    if (!this.prepareStageSwap()) return
+    try {
+      const loadedStage = await loadStageEntries(name, entries, this.sceneHandle.scene, this.worldHandle.world, {
+        resolveAssetUrl: this.resolvePublicAssetUrl,
+      })
+      if (this.cancelled) {
+        loadedStage.dispose()
+        return
+      }
+      this.finishStageSwap(loadedStage)
     } finally {
       this.accumulator = 0
       this.swappingStage = false

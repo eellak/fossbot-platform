@@ -8,7 +8,8 @@ import {
   IconMoodHappy,
   IconLayoutDashboard,
   IconAlbum,
-  IconHandGrab
+  IconHandGrab,
+  IconMap
 } from '@tabler/icons-react';
 
 interface MenuitemsType {
@@ -65,6 +66,14 @@ const Menuitems: MenuitemsType[] = [
     subtitle: 'menu.blocksBased',
     icon: IconPuzzle,
     href: '/blockly-page',
+  },
+
+  {
+    id: uniqueId(),
+    title: 'menu.stageBuilder',
+    subtitle: 'menu.stageBuilderBased',
+    icon: IconMap,
+    href: '/stage-builder',
   },
 
   {

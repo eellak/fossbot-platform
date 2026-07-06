@@ -1,6 +1,6 @@
 import * as RAPIER from '@dimforge/rapier3d-compat'
 import * as THREE from 'three'
-import { STAGES, type RawStageEntry, type StageName } from './index'
+import { STAGES, type RawStageConfig, type RawStageEntry, type StageName } from './index'
 import { buildFloorVisual, buildBaseVisual, buildCubeVisual, buildCylinderVisual, buildModelVisual, buildTextVisual, buildLineVisual, lineSegmentsFromEntry } from './visuals'
 import type { VisualBuilt, LineSegment } from './visuals'
 import { buildFloorCollider, buildCubeCollider, buildCylinderCollider, buildModelCollider } from './colliders'
@@ -109,7 +109,16 @@ export async function loadStage(
 ): Promise<StageHandle> {
   const entries = STAGES[name]
   if (!entries) throw new Error(`Stage not found: ${name}`)
+  return loadStageEntries(name, entries, scene, world, opts)
+}
 
+export async function loadStageEntries(
+  name: StageName,
+  entries: RawStageConfig,
+  scene: THREE.Scene,
+  world: RAPIER.World,
+  opts: LoadStageOptions = {},
+): Promise<StageHandle> {
   const stageBody = world.createRigidBody(RAPIER.RigidBodyDesc.fixed())
   const objects: THREE.Object3D[] = []
   const spawnPosition = DEFAULT_SPAWN.clone()
