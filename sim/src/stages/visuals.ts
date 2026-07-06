@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js'
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js'
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { parseColor } from './parseColor'
 
 /**
@@ -60,10 +61,43 @@ interface CylinderEntry {
   mass?: number
 }
 
+interface SphereEntry {
+  type: 'sphere'
+  dimensions: [number]
+  material?: { color?: string | number }
+  position: [number, number, number]
+  name?: string
+  castShadow?: boolean
+  immovable?: boolean
+  mass?: number
+}
+
+interface WedgeEntry {
+  type: 'wedge'
+  dimensions: [number, number, number]
+  material?: { color?: string | number }
+  position: [number, number, number]
+  orientation?: [number, number, number]
+  name?: string
+  castShadow?: boolean
+  immovable?: boolean
+  mass?: number
+}
+
+interface ArrowEntry {
+  type: 'arrow'
+  dimensions: [number, number, number?]
+  color?: string | number
+  position: [number, number, number]
+  rotationY?: number
+  orientation?: [number, number, number]
+  name?: string
+}
+
 interface ModelEntry {
   type: 'model'
   filename: string
-  format?: 'obj' | 'stl'
+  format?: 'obj' | 'stl' | 'glb'
   normalize?: boolean
   nativeDimensions?: [number, number, number]
   position: [number, number, number]
@@ -209,8 +243,10 @@ const LEGACY_FLOOR_SIZE_M = 10
 
 const objLoader = new OBJLoader()
 const stlLoader = new STLLoader()
+const gltfLoader = new GLTFLoader()
 const objCache = new Map<string, Promise<THREE.Group>>()
 const stlCache = new Map<string, Promise<THREE.BufferGeometry>>()
+const glbCache = new Map<string, Promise<THREE.Group>>()
 
 function loadOBJ(url: string): Promise<THREE.Group> {
   let pending = objCache.get(url)
@@ -244,12 +280,37 @@ function loadSTL(url: string): Promise<THREE.BufferGeometry> {
   return pending.then((geometry) => geometry.clone())
 }
 
+function cloneGltfScene(scene: THREE.Group): THREE.Group {
+  const clone = scene.clone(true)
+  clone.traverse((child) => {
+    const mesh = child as THREE.Mesh
+    if (!mesh.isMesh) return
+    if (mesh.geometry) mesh.geometry = mesh.geometry.clone()
+    if (Array.isArray(mesh.material)) mesh.material = mesh.material.map((material) => material.clone())
+    else if (mesh.material) mesh.material = mesh.material.clone()
+  })
+  return clone
+}
+
+function loadGLB(url: string): Promise<THREE.Group> {
+  let pending = glbCache.get(url)
+  if (!pending) {
+    pending = new Promise<THREE.Group>((resolve, reject) => {
+      gltfLoader.load(url, (gltf) => resolve(gltf.scene), undefined, reject)
+    })
+    glbCache.set(url, pending)
+  }
+  return pending.then(cloneGltfScene)
+}
+
 async function loadModel(entry: ModelEntry): Promise<THREE.Object3D> {
-  if (entry.format === 'stl' || (!entry.format && entry.filename.toLowerCase().endsWith('.stl'))) {
+  const lower = entry.filename.toLowerCase()
+  if (entry.format === 'stl' || (!entry.format && lower.endsWith('.stl'))) {
     const group = new THREE.Group()
     group.add(new THREE.Mesh(await loadSTL(entry.filename)))
     return group
   }
+  if (entry.format === 'glb' || (!entry.format && lower.endsWith('.glb'))) return loadGLB(entry.filename)
   return loadOBJ(entry.filename)
 }
 
@@ -345,11 +406,82 @@ export function buildCylinderVisual(entry: CylinderEntry): VisualBuilt {
   return { object: mesh, dynamicBody: dynamicBodyFor(entry) }
 }
 
+function makeWedgeGeometry(width: number, height: number, depth: number): THREE.BufferGeometry {
+  const w = width / 2
+  const h = height / 2
+  const d = depth / 2
+  const vertices = new Float32Array([
+    -w, -h, -d,  w, -h, -d,  -w, -h, d,  w, -h, d,  -w, h, d,  w, h, d,
+  ])
+  const indices = [0, 3, 1, 0, 2, 3, 2, 5, 3, 2, 4, 5, 0, 1, 5, 0, 5, 4, 0, 4, 2, 1, 3, 5]
+  const geometry = new THREE.BufferGeometry()
+  geometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3))
+  geometry.setIndex(indices)
+  geometry.computeVertexNormals()
+  return geometry
+}
+
+function makeArrowGeometry(width: number, depth: number, thickness: number): THREE.BufferGeometry {
+  const w = width / 2
+  const d = depth / 2
+  const t = Math.max(0.002, thickness)
+  const neckX = width * 0.14
+  const shaftD = depth * 0.42
+  const points = [
+    new THREE.Vector2(-w, -shaftD / 2),
+    new THREE.Vector2(neckX, -shaftD / 2),
+    new THREE.Vector2(neckX, -d),
+    new THREE.Vector2(w, 0),
+    new THREE.Vector2(neckX, d),
+    new THREE.Vector2(neckX, shaftD / 2),
+    new THREE.Vector2(-w, shaftD / 2),
+  ]
+  const geometry = new THREE.ExtrudeGeometry(new THREE.Shape(points), { depth: t, bevelEnabled: false })
+  geometry.translate(0, 0, -t / 2)
+  geometry.rotateX(-Math.PI / 2)
+  geometry.computeVertexNormals()
+  return geometry
+}
+
+export function buildSphereVisual(entry: SphereEntry): VisualBuilt {
+  const [diameter] = entry.dimensions
+  const geom = new THREE.SphereGeometry(diameter / 2, 32, 20)
+  const mat = new THREE.MeshStandardMaterial({ color: parseColor(entry.material?.color) })
+  const mesh = new THREE.Mesh(geom, mat)
+  mesh.position.fromArray(entry.position)
+  mesh.name = entry.name ?? 'sphere'
+  if (entry.castShadow) mesh.castShadow = true
+  return { object: mesh, dynamicBody: dynamicBodyFor(entry) }
+}
+
+export function buildWedgeVisual(entry: WedgeEntry): VisualBuilt {
+  const [w, h, d] = entry.dimensions
+  const mesh = new THREE.Mesh(makeWedgeGeometry(w, h, d), new THREE.MeshStandardMaterial({ color: parseColor(entry.material?.color) }))
+  mesh.position.fromArray(entry.position)
+  if (entry.orientation) mesh.rotation.set(entry.orientation[0], entry.orientation[1], entry.orientation[2])
+  mesh.name = entry.name ?? 'wedge'
+  if (entry.castShadow) mesh.castShadow = true
+  return { object: mesh, dynamicBody: dynamicBodyFor(entry) }
+}
+
+export function buildArrowVisual(entry: ArrowEntry): VisualBuilt {
+  const mesh = new THREE.Mesh(
+    makeArrowGeometry(entry.dimensions[0], entry.dimensions[1], entry.dimensions[2] ?? 0.04),
+    new THREE.MeshStandardMaterial({ color: parseColor(entry.color), side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 }),
+  )
+  mesh.position.fromArray(entry.position)
+  if (entry.orientation) mesh.rotation.set(entry.orientation[0], entry.orientation[1], entry.orientation[2])
+  else mesh.rotation.y = entry.rotationY ?? 0
+  mesh.name = entry.name ?? 'direction arrow'
+  mesh.renderOrder = 5
+  return { object: mesh }
+}
+
 export async function buildModelVisual(entry: ModelEntry): Promise<VisualBuilt> {
   const content = await loadModel(entry)
   if (entry.normalize) normalizeModelRoot(content)
 
-  if (entry.color != null) {
+  if (entry.color != null && entry.format !== 'glb') {
     const color = parseColor(entry.color)
     content.traverse((child) => {
       const mesh = child as THREE.Mesh

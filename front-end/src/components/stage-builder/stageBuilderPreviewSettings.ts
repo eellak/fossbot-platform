@@ -58,9 +58,9 @@ export const DEFAULT_PREVIEW_SETTINGS: PreviewSettings = {
 
 const KIND_KEYS: readonly StageSemanticKind[] = [
   'line', 'baseTile',
-  'wall', 'block', 'ramp', 'platform', 'cylinder', 'obstacle',
+  'wall', 'block', 'ramp', 'platform', 'cylinder', 'obstacle', 'sphere',
   'robotSpawn',
-  'target', 'checkpoint', 'dangerZone', 'sensorZone',
+  'target', 'checkpoint', 'dangerZone', 'sensorZone', 'directionArrow',
   'label',
   'light',
   'camera',

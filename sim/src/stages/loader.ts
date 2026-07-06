@@ -1,9 +1,9 @@
 import * as RAPIER from '@dimforge/rapier3d-compat'
 import * as THREE from 'three'
 import { STAGES, type RawStageConfig, type RawStageEntry, type StageName } from './index'
-import { applyAttachedLabelTransform, buildFloorVisual, buildBaseVisual, buildCubeVisual, buildCylinderVisual, buildModelVisual, buildTextVisual, buildLineVisual, buildLightVisual, lineSegmentsFromEntry } from './visuals'
+import { applyAttachedLabelTransform, buildFloorVisual, buildBaseVisual, buildCubeVisual, buildCylinderVisual, buildSphereVisual, buildWedgeVisual, buildArrowVisual, buildModelVisual, buildTextVisual, buildLineVisual, buildLightVisual, lineSegmentsFromEntry } from './visuals'
 import type { VisualBuilt, LineSegment } from './visuals'
-import { buildFloorCollider, buildCubeCollider, buildCylinderCollider, buildModelCollider } from './colliders'
+import { buildCubeCollider, buildCylinderCollider, buildSphereCollider, buildWedgeCollider, buildModelCollider } from './colliders'
 import type { ColliderBuilt } from './colliders'
 import { createStageAudioRuntime, type StageAudioEntry } from './audio'
 import { applyStageSkybox } from './skybox'
@@ -156,10 +156,8 @@ export async function loadStageEntries(
       }
       case 'floor': {
         const vis = buildFloorVisual(entry as any)
-        const col = buildFloorCollider(entry as any, (entry as any).dimensions)
         scene.add(vis.object)
         objects.push(vis.object)
-        attachColliders(vis, col, world, stageBody, stgCollidersGrp, dynamicObjects)
         break
       }
       case 'base': {
@@ -182,6 +180,28 @@ export async function loadStageEntries(
         scene.add(vis.object)
         objects.push(vis.object)
         attachColliders(vis, col, world, stageBody, stgCollidersGrp, dynamicObjects)
+        break
+      }
+      case 'sphere': {
+        const vis = buildSphereVisual(entry as any)
+        const col = buildSphereCollider(entry as any)
+        scene.add(vis.object)
+        objects.push(vis.object)
+        attachColliders(vis, col, world, stageBody, stgCollidersGrp, dynamicObjects)
+        break
+      }
+      case 'wedge': {
+        const vis = buildWedgeVisual(entry as any)
+        const col = buildWedgeCollider(entry as any)
+        scene.add(vis.object)
+        objects.push(vis.object)
+        attachColliders(vis, col, world, stageBody, stgCollidersGrp, dynamicObjects)
+        break
+      }
+      case 'arrow': {
+        const vis = buildArrowVisual(entry as any)
+        scene.add(vis.object)
+        objects.push(vis.object)
         break
       }
       case 'fossbot': {

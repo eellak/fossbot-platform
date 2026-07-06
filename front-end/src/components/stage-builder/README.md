@@ -105,10 +105,10 @@ The editor model is not the simulator JSON directly.
 
 - `EditorStage`
   - `floor`: editable floor settings for the builder.
-  - `objects`: editor object union (`base`, `cube`, `cylinder`, `line`, `text`, `fossbot`, `light`, `camera`, `audio`).
+  - `objects`: editor object union (`base`, `cube`, `cylinder`, `sphere`, `wedge`, `arrow`, `line`, `text`, `fossbot`, `model`, `light`, `camera`, `audio`).
   - `metadata`: editor-only sidecar (`version`, groups, validation overrides, grid/default snap settings).
 - `StageSemanticKind`
-  - Friendly roles such as `wall`, `ramp`, `robotSpawn`, `target`, `checkpoint`, `dangerZone`, `sensorZone`, `label`, `light`, `camera`, `audio`.
+  - Friendly roles such as `wall`, `ramp`, `sphere`, `wedge`, `directionArrow`, `robotSpawn`, `target`, `checkpoint`, `dangerZone`, `sensorZone`, `label`, `light`, `camera`, `audio`.
 - `LocalStageRecord`
   - Exported file shape: `{ id, title, description, createdAt, updatedAt, config, editor? }`.
   - `config` is the runnable simulator payload.
@@ -120,14 +120,18 @@ Exported simulator entries currently emitted by `serialize.ts`:
 - `base`
 - `cube`
 - `cylinder`
+- `sphere`
+- `wedge`
+- `arrow`
 - `line`
 - `text`
 - `fossbot`
+- `model`
 - `light`
 - `camera`
 - `audio`
 
-The simulator supports `model` entries too, but the current builder does not create or round-trip model objects.
+The builder imports and round-trips geometry/model objects as OBJ, STL, or GLB custom models. GLB is the preferred textured asset format; OBJ+MTL texture packages are deferred until package/ZIP import exists.
 
 ## Current product decisions
 

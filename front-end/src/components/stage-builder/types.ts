@@ -63,6 +63,41 @@ export type StageCylinderEntry = {
   collision?: StagePrimitiveCollisionMode;
 };
 
+export type StageSphereEntry = {
+  type: 'sphere';
+  dimensions: [number];
+  material?: StageEntryMaterial;
+  position: [number, number, number];
+  name?: string;
+  castShadow?: boolean;
+  immovable?: boolean;
+  mass?: number;
+  collision?: StagePrimitiveCollisionMode;
+};
+
+export type StageWedgeEntry = {
+  type: 'wedge';
+  dimensions: [number, number, number];
+  material?: StageEntryMaterial;
+  position: [number, number, number];
+  orientation?: [number, number, number];
+  name?: string;
+  castShadow?: boolean;
+  immovable?: boolean;
+  mass?: number;
+  collision?: StagePrimitiveCollisionMode;
+};
+
+export type StageArrowEntry = {
+  type: 'arrow';
+  dimensions: [number, number, number?];
+  color?: string | number;
+  position: [number, number, number];
+  rotationY?: number;
+  orientation?: [number, number, number];
+  name?: string;
+};
+
 export type StageLineEntry = {
   type: 'line';
   points: [number, number][];
@@ -117,7 +152,7 @@ export type StageFossbotEntry = {
   orientation: [number, number, number];
 };
 
-export type StageModelFormat = 'obj' | 'stl';
+export type StageModelFormat = 'obj' | 'stl' | 'glb';
 
 export type StageModelEntry = {
   type: 'model';
@@ -181,6 +216,9 @@ export type StageJsonEntry =
   | StageBaseEntry
   | StageCubeEntry
   | StageCylinderEntry
+  | StageSphereEntry
+  | StageWedgeEntry
+  | StageArrowEntry
   | StageLineEntry
   | StageTextEntry
   | StageFossbotEntry
@@ -189,7 +227,7 @@ export type StageJsonEntry =
   | StageCameraEntry
   | StageAudioEntry;
 
-export type StageObjectKind = 'base' | 'cube' | 'cylinder' | 'line' | 'text' | 'fossbot' | 'model' | 'light' | 'camera' | 'audio';
+export type StageObjectKind = 'base' | 'cube' | 'cylinder' | 'sphere' | 'wedge' | 'arrow' | 'line' | 'text' | 'fossbot' | 'model' | 'light' | 'camera' | 'audio';
 
 export type StageSemanticKind =
   | 'floor'
@@ -199,7 +237,10 @@ export type StageSemanticKind =
   | 'ramp'
   | 'platform'
   | 'cylinder'
+  | 'sphere'
+  | 'wedge'
   | 'obstacle'
+  | 'directionArrow'
   | 'robotSpawn'
   | 'target'
   | 'checkpoint'
@@ -296,6 +337,37 @@ export type EditorCylinderObject = EditorObjectCommon & {
   collision?: StagePrimitiveCollisionMode;
 };
 
+export type EditorSphereObject = EditorObjectCommon & {
+  kind: 'sphere';
+  position: Vec3;
+  dimensions: [number];
+  color: string;
+  mass: number;
+  immovable: boolean;
+  collision?: StagePrimitiveCollisionMode;
+};
+
+export type EditorWedgeObject = EditorObjectCommon & {
+  kind: 'wedge';
+  position: Vec3;
+  rotationY: number;
+  orientation?: Vec3;
+  dimensions: Vec3;
+  color: string;
+  mass: number;
+  immovable: boolean;
+  collision?: StagePrimitiveCollisionMode;
+};
+
+export type EditorArrowObject = EditorObjectCommon & {
+  kind: 'arrow';
+  position: Vec3;
+  rotationY: number;
+  orientation?: Vec3;
+  dimensions: Vec3;
+  color: string;
+};
+
 export type EditorLineObject = EditorObjectCommon & {
   kind: 'line';
   points: Vec2[];
@@ -374,6 +446,9 @@ export type EditorStageObject =
   | EditorBaseObject
   | EditorCubeObject
   | EditorCylinderObject
+  | EditorSphereObject
+  | EditorWedgeObject
+  | EditorArrowObject
   | EditorLineObject
   | EditorTextObject
   | EditorFossbotObject

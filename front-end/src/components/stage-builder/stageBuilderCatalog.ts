@@ -1,6 +1,6 @@
 import type { EditorStageObject, StageSemanticKind, Vec3 } from './types';
 
-export type StageObjectCatalogCategory = 'surface' | 'structure' | 'challenge' | 'robot' | 'marker' | 'custom';
+export type StageObjectCatalogCategory = 'mission' | 'path' | 'shape' | 'template' | 'scene' | 'annotation' | 'custom';
 
 export type StageObjectCatalogItem = {
   id: StageSemanticKind;
@@ -12,25 +12,27 @@ export type StageObjectCatalogItem = {
 };
 
 export const STAGE_OBJECT_CATALOG: StageObjectCatalogItem[] = [
-  { id: 'floor', label: 'Floor', shortLabel: 'Floor', description: 'The stage boundary and grid floor.', category: 'surface', placeable: false },
-  { id: 'baseTile', label: 'Floor tile', shortLabel: 'Tile', description: 'A colored floor marker with no collision.', category: 'surface', placeable: true },
-  { id: 'wall', label: 'Wall', shortLabel: 'Wall', description: 'A fixed wall for mazes and barriers.', category: 'structure', placeable: true },
-  { id: 'block', label: 'Block', shortLabel: 'Block', description: 'A cube obstacle. Make it pushable in the inspector.', category: 'structure', placeable: true },
-  { id: 'ramp', label: 'Ramp', shortLabel: 'Ramp', description: 'An inclined surface for climbing challenges.', category: 'structure', placeable: true },
-  { id: 'platform', label: 'Platform', shortLabel: 'Platform', description: 'A raised fixed platform.', category: 'structure', placeable: true },
-  { id: 'cylinder', label: 'Cylinder', shortLabel: 'Cylinder', description: 'A round obstacle or column.', category: 'structure', placeable: true },
-  { id: 'obstacle', label: 'Cone obstacle', shortLabel: 'Cone', description: 'A small cone-style obstacle.', category: 'structure', placeable: true },
-  { id: 'robotSpawn', label: 'Robot spawn', shortLabel: 'Spawn', description: 'Where FOSSBot starts the simulation.', category: 'robot', placeable: true },
-  { id: 'target', label: 'Target', shortLabel: 'Target', description: 'A goal marker. Stored as editor metadata with a floor visual for now.', category: 'challenge', placeable: true },
-  { id: 'checkpoint', label: 'Checkpoint', shortLabel: 'Check', description: 'A waypoint marker. Stored as editor metadata with a floor visual for now.', category: 'challenge', placeable: true },
-  { id: 'dangerZone', label: 'Danger zone', shortLabel: 'Danger', description: 'A no-go area marker. Metadata only for now.', category: 'challenge', placeable: true },
-  { id: 'sensorZone', label: 'Sensor zone', shortLabel: 'Sensor', description: 'A region for later sensor-based challenges. Metadata only for now.', category: 'challenge', placeable: true },
-  { id: 'line', label: 'Line path', shortLabel: 'Line', description: 'A floor line for line-following tests.', category: 'challenge', placeable: true },
-  { id: 'label', label: 'Text label', shortLabel: 'Label', description: 'A readable label on the stage.', category: 'marker', placeable: true },
-  { id: 'light', label: 'Light', shortLabel: 'Light', description: 'A scene light. Pick point, spot, directional, or ambient in the inspector.', category: 'marker', placeable: true },
-  { id: 'camera', label: 'Camera', shortLabel: 'Camera', description: 'A stage camera. Run Test starts from this view; optionally lock it.', category: 'marker', placeable: true },
-  { id: 'audio', label: 'Audio', shortLabel: 'Audio', description: 'A placed audio source with source, volume, loop, and spatial range metadata.', category: 'marker', placeable: true },
-  { id: 'customObject', label: 'Custom object', shortLabel: 'Custom', description: 'An imported OBJ model with transform and collision settings.', category: 'custom', placeable: false },
+  { id: 'floor', label: 'Floor', shortLabel: 'Floor', description: 'The stage boundary and grid floor.', category: 'path', placeable: false },
+  { id: 'robotSpawn', label: 'Robot spawn', shortLabel: 'Spawn', description: 'Where FOSSBot starts the simulation.', category: 'mission', placeable: true },
+  { id: 'target', label: 'Target', shortLabel: 'Target', description: 'A goal marker for the robot challenge.', category: 'mission', placeable: true },
+  { id: 'checkpoint', label: 'Checkpoint', shortLabel: 'Check', description: 'A waypoint marker for route-based challenges.', category: 'mission', placeable: true },
+  { id: 'line', label: 'Line path', shortLabel: 'Line', description: 'A floor line for line-following tests.', category: 'path', placeable: true },
+  { id: 'baseTile', label: 'Floor marker', shortLabel: 'Marker', description: 'A colored no-collision marker on the floor.', category: 'path', placeable: true },
+  { id: 'dangerZone', label: 'No-go zone', shortLabel: 'No-go', description: 'A no-go floor region for challenge rules.', category: 'path', placeable: true },
+  { id: 'sensorZone', label: 'Sensor region', shortLabel: 'Sensor', description: 'A floor region for later sensor-based challenges.', category: 'path', placeable: true },
+  { id: 'directionArrow', label: 'Direction arrow', shortLabel: 'Arrow', description: 'A floor arrow for route direction and instructions.', category: 'path', placeable: true },
+  { id: 'block', label: 'Box / block', shortLabel: 'Box', description: 'A box obstacle. Make it pushable in the inspector.', category: 'shape', placeable: true },
+  { id: 'wall', label: 'Wall', shortLabel: 'Wall', description: 'A fixed wall for mazes and barriers.', category: 'shape', placeable: true },
+  { id: 'ramp', label: 'Ramp', shortLabel: 'Ramp', description: 'An inclined surface for climbing challenges.', category: 'shape', placeable: true },
+  { id: 'platform', label: 'Platform', shortLabel: 'Platform', description: 'A raised fixed platform.', category: 'shape', placeable: true },
+  { id: 'cylinder', label: 'Cylinder', shortLabel: 'Cylinder', description: 'A round obstacle or column.', category: 'shape', placeable: true },
+  { id: 'obstacle', label: 'Cone', shortLabel: 'Cone', description: 'A cone primitive, useful as a traffic cone or obstacle.', category: 'shape', placeable: true },
+  { id: 'sphere', label: 'Sphere / ball', shortLabel: 'Sphere', description: 'A ball-shaped obstacle or pushable object.', category: 'shape', placeable: true },
+  { id: 'label', label: 'Text label', shortLabel: 'Label', description: 'A readable annotation on the stage.', category: 'annotation', placeable: true },
+  { id: 'light', label: 'Light', shortLabel: 'Light', description: 'A scene light. Pick point, spot, directional, or ambient in the inspector.', category: 'scene', placeable: true },
+  { id: 'camera', label: 'Camera', shortLabel: 'Camera', description: 'A stage camera. Run Test starts from this view; optionally lock it.', category: 'scene', placeable: true },
+  { id: 'audio', label: 'Audio', shortLabel: 'Audio', description: 'A placed audio source with source, volume, loop, and spatial range metadata.', category: 'scene', placeable: true },
+  { id: 'customObject', label: 'Imported model', shortLabel: 'Model', description: 'An imported OBJ, STL, or GLB model with transform and collision settings.', category: 'custom', placeable: false },
 ];
 
 export function catalogItem(id: StageSemanticKind): StageObjectCatalogItem | undefined {
@@ -45,9 +47,12 @@ export function semanticKindLabel(kind?: StageSemanticKind): string {
 export function displayObjectType(object: EditorStageObject): string {
   if (object.semanticKind) return semanticKindLabel(object.semanticKind);
   if (object.kind === 'fossbot') return 'Robot spawn';
-  if (object.kind === 'base') return 'Floor tile';
-  if (object.kind === 'cube') return 'Block';
+  if (object.kind === 'base') return 'Floor marker';
+  if (object.kind === 'cube') return 'Box / block';
   if (object.kind === 'cylinder') return 'Cylinder';
+  if (object.kind === 'sphere') return 'Sphere / ball';
+  if (object.kind === 'wedge') return 'Wedge';
+  if (object.kind === 'arrow') return 'Direction arrow';
   if (object.kind === 'line') return 'Line path';
   if (object.kind === 'text') return 'Text label';
   if (object.kind === 'light') return 'Light';
@@ -84,7 +89,13 @@ export function createCatalogObject(kind: StageSemanticKind, id: string, positio
     return { id, kind: 'cylinder', semanticKind: kind, name: 'cylinder', position: [p[0], 0.15, p[2]], dimensions: [0.15, 0.15, 0.3, 32], color: '#7e57c2', mass: 0, immovable: true };
   }
   if (kind === 'obstacle') {
-    return { id, kind: 'cylinder', semanticKind: kind, name: 'cone obstacle', position: [p[0], 0.1, p[2]], dimensions: [0.05, 0.1, 0.2, 32], color: 'orange', mass: 0, immovable: true };
+    return { id, kind: 'cylinder', semanticKind: kind, name: 'cone', position: [p[0], 0.1, p[2]], dimensions: [0.05, 0.1, 0.2, 32], color: 'orange', mass: 0, immovable: true };
+  }
+  if (kind === 'sphere') {
+    return { id, kind: 'sphere', semanticKind: kind, name: 'sphere', position: [p[0], 0.15, p[2]], dimensions: [0.3], color: '#26a69a', mass: 0, immovable: true };
+  }
+  if (kind === 'wedge') {
+    return { id, kind: 'wedge', semanticKind: kind, name: 'wedge', position: [p[0], 0.15, p[2]], rotationY: 0, dimensions: [0.5, 0.3, 0.6], color: '#ec407a', mass: 0, immovable: true };
   }
   if (kind === 'robotSpawn') {
     return { id, kind: 'fossbot', semanticKind: kind, name: 'robot spawn', position: [p[0], 0, p[2]], rotationY: 0 };
@@ -96,10 +107,13 @@ export function createCatalogObject(kind: StageSemanticKind, id: string, positio
     return { id, kind: 'base', semanticKind: kind, name: 'checkpoint', position: [p[0], 0, p[2]], dimensions: [0.45, 0.45], color: '#1e88e5' };
   }
   if (kind === 'dangerZone') {
-    return { id, kind: 'base', semanticKind: kind, name: 'danger zone', position: [p[0], 0, p[2]], dimensions: [0.8, 0.8], color: '#e53935' };
+    return { id, kind: 'base', semanticKind: kind, name: 'no-go zone', position: [p[0], 0, p[2]], dimensions: [0.8, 0.8], color: '#e53935' };
   }
   if (kind === 'sensorZone') {
-    return { id, kind: 'base', semanticKind: kind, name: 'sensor zone', position: [p[0], 0, p[2]], dimensions: [0.8, 0.8], color: '#00acc1' };
+    return { id, kind: 'base', semanticKind: kind, name: 'sensor region', position: [p[0], 0, p[2]], dimensions: [0.8, 0.8], color: '#00acc1' };
+  }
+  if (kind === 'directionArrow') {
+    return { id, kind: 'arrow', semanticKind: kind, name: 'direction arrow', position: [p[0], 0.03, p[2]], rotationY: 0, dimensions: [0.75, 0.42, 0.04], color: '#111827' };
   }
   if (kind === 'line') {
     return { id, kind: 'line', semanticKind: kind, name: 'line path', points: [[p[0] - 0.5, p[2]], [p[0], p[2] + 0.4], [p[0] + 0.5, p[2]]], width: 0.03, color: 'black' };
@@ -127,14 +141,20 @@ export function inferSemanticKindFromConfig(type: string, name?: string, color?:
   if (type === 'audio') return 'audio';
   if (type === 'model') return 'customObject';
   if (type === 'line') return 'line';
+  if (type === 'sphere') return 'sphere';
+  if (type === 'wedge') return 'wedge';
+  if (type === 'arrow') return 'directionArrow';
   if (type === 'text') return 'label';
   if (lower.includes('target') || lower.includes('goal')) return 'target';
   if (lower.includes('checkpoint')) return 'checkpoint';
-  if (lower.includes('danger')) return 'dangerZone';
+  if (lower.includes('danger') || lower.includes('no-go')) return 'dangerZone';
   if (lower.includes('sensor')) return 'sensorZone';
   if (lower.includes('wall')) return 'wall';
   if (lower.includes('ramp')) return 'ramp';
   if (lower.includes('platform')) return 'platform';
+  if (lower.includes('arrow')) return 'directionArrow';
+  if (lower.includes('sphere') || lower.includes('ball')) return 'sphere';
+  if (lower.includes('wedge')) return 'wedge';
   if (lower.includes('cone') || lower.includes('obstacle')) return 'obstacle';
   if (type === 'base') return 'baseTile';
   if (type === 'cube') return 'block';
