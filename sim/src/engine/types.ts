@@ -26,6 +26,8 @@ export interface SimEngineConfig {
   initialStageConfig?: RawStageConfig
   /** When true, the simulator camera is locked to the stage's start camera (no orbit/cycle). */
   lockCamera?: boolean
+  /** Show sensor ray/helper overlays without enabling the full dev UI. */
+  sensorHelpersVisible?: boolean
 }
 
 /**

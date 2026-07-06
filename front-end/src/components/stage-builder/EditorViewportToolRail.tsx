@@ -8,6 +8,7 @@ import CenterFocusStrongIcon from '@mui/icons-material/CenterFocusStrong';
 import UndoIcon from '@mui/icons-material/Undo';
 import RedoIcon from '@mui/icons-material/Redo';
 import DeleteIcon from '@mui/icons-material/Delete';
+import SensorsIcon from '@mui/icons-material/Sensors';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faMagnet } from '@fortawesome/free-solid-svg-icons';
 import type { StageBuilderTransformMode } from './StageBuilderScene';
@@ -21,8 +22,10 @@ export interface EditorViewportToolRailProps {
   selectedCount: number;
   canUndo: boolean;
   canRedo: boolean;
+  sensorHelpersVisible?: boolean;
   onTransformModeChange: (mode: StageBuilderTransformMode) => void;
   onSnapPresetChange: (preset: StageBuilderSnapPreset) => void;
+  onSensorHelpersToggle?: () => void;
   onFocusSelected: () => void;
   onUndo: () => void;
   onRedo: () => void;
@@ -60,8 +63,10 @@ export function EditorViewportToolRail({
   selectedCount,
   canUndo,
   canRedo,
+  sensorHelpersVisible = false,
   onTransformModeChange,
   onSnapPresetChange,
+  onSensorHelpersToggle,
   onFocusSelected,
   onUndo,
   onRedo,
@@ -87,6 +92,11 @@ export function EditorViewportToolRail({
           </IconButton>
         </Tooltip>
         <Divider flexItem sx={{ borderColor: editorColors.border }} />
+        <Tooltip title={`${sensorHelpersVisible ? 'Hide' : 'Show'} sensor helpers`}>
+          <IconButton size="small" onClick={onSensorHelpersToggle} sx={{ ...iconButtonSx, color: sensorHelpersVisible ? editorColors.accentText : editorColors.textMuted }} aria-label="Toggle sensor helpers">
+            <SensorsIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
         <Tooltip title="Focus selected"><span><IconButton size="small" disabled={!selectedCount} onClick={onFocusSelected} sx={iconButtonSx}><CenterFocusStrongIcon fontSize="small" /></IconButton></span></Tooltip>
         <Tooltip title="Undo"><span><IconButton size="small" disabled={!canUndo} onClick={onUndo} sx={iconButtonSx}><UndoIcon fontSize="small" /></IconButton></span></Tooltip>
         <Tooltip title="Redo"><span><IconButton size="small" disabled={!canRedo} onClick={onRedo} sx={iconButtonSx}><RedoIcon fontSize="small" /></IconButton></span></Tooltip>

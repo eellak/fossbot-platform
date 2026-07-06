@@ -6,6 +6,7 @@ import { LineSegmentsGeometry } from 'three/examples/jsm/lines/LineSegmentsGeome
 import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 import { disposeScene, initScene, renderScene, type SceneHandle } from 'src/simulator/scene/scene';
 import { loadRobotV2 } from 'src/simulator/robot/v2';
+import { SENSOR_LAYOUT } from 'src/simulator/sensors/layout';
 import type { EditorStageObject, StageBuilderGroup, StageBuilderMode, StageBuilderTransformSpace, Vec3 } from './types';
 import type { StageBuilderControlScheme, StageBuilderLockMode, StageBuilderStyleVariant } from './stageBuilderPreferences';
 import type { StageBuilderSnapSettings } from './stageBuilderSnapping';
@@ -46,6 +47,7 @@ export interface StageBuilderSceneProps {
   focusRequestNonce?: number;
   cameraViewRequest?: StageBuilderCameraViewRequest | null;
   lookThroughCameraId?: string | null;
+  sensorHelpersVisible?: boolean;
   onSelect: (id: string | null) => void;
   onSelectionChange?: (ids: string[]) => void;
   onObjectChange: (object: EditorStageObject) => void;
@@ -92,6 +94,7 @@ type ObjectVisualOptions = {
   ghost?: boolean;
   ghostValid?: boolean;
   validationSeverity?: 'error' | 'warning' | 'info';
+  sensorHelpersVisible?: boolean;
 };
 
 type ColorableMaterial = THREE.Material & { color?: THREE.Color; _color?: THREE.Color };
@@ -355,6 +358,82 @@ function robotSpawnBasicMaterial(colorValue: string, opacity: number, role: Robo
   return tagRobotSpawnMaterial(mat, role);
 }
 
+function sensorHelperColor(kind: string): string {
+  if (kind === 'ultrasonic') return '#38bdf8';
+  if (kind === 'ir-proximity') return '#f59e0b';
+  if (kind === 'ir-floor') return '#22c55e';
+  if (kind === 'ldr') return '#fde047';
+  return '#f472b6';
+}
+
+function sensorHelperLength(entry: (typeof SENSOR_LAYOUT)[number]): number {
+  if (entry.kind === 'microphone') return 0;
+  if (entry.kind === 'ultrasonic') return Math.min(1.4, entry.maxRange);
+  if (entry.kind === 'ir-floor') return 0.12;
+  if (entry.kind === 'ldr') return 0.22;
+  return entry.maxRange;
+}
+
+function makeSensorHelpersVisual(): THREE.Group {
+  const group = new THREE.Group();
+  group.name = 'sensor_helpers';
+  group.renderOrder = 20;
+
+  for (const entry of SENSOR_LAYOUT) {
+    const accent = sensorHelperColor(entry.kind);
+    const marker = new THREE.Mesh(
+      new THREE.SphereGeometry(entry.kind === 'microphone' ? 0.016 : 0.01, 10, 8),
+      new THREE.MeshBasicMaterial({ color: color(accent), transparent: true, opacity: 0.9, depthWrite: false }),
+    );
+    marker.position.set(entry.localPos[0], entry.localPos[1], entry.localPos[2]);
+    marker.renderOrder = 21;
+    group.add(marker);
+
+    // Microphone is omnidirectional — show a small ring instead of a ray.
+    if (entry.kind === 'microphone') {
+      const ring = new THREE.Mesh(
+        new THREE.TorusGeometry(0.022, 0.002, 8, 32),
+        new THREE.MeshBasicMaterial({ color: color(accent), transparent: true, opacity: 0.8, depthWrite: false }),
+      );
+      ring.position.copy(marker.position);
+      ring.rotation.x = Math.PI / 2;
+      ring.renderOrder = 21;
+      group.add(ring);
+      continue;
+    }
+
+    if (!('localDir' in entry)) continue;
+    const dir = new THREE.Vector3(entry.localDir[0], entry.localDir[1], entry.localDir[2]);
+    if (dir.lengthSq() < 1e-8) continue;
+    dir.normalize();
+    const length = sensorHelperLength(entry);
+    const end = marker.position.clone().add(dir.clone().multiplyScalar(length));
+    const ray = new THREE.Line(
+      new THREE.BufferGeometry().setFromPoints([marker.position.clone(), end]),
+      new THREE.LineBasicMaterial({ color: color(accent), transparent: true, opacity: 0.72, depthWrite: false }),
+    );
+    ray.renderOrder = 21;
+    group.add(ray);
+
+    if (entry.kind === 'ultrasonic') {
+      const half = entry.halfAngleDeg * Math.PI / 180;
+      const right = new THREE.Vector3(1, 0, 0);
+      const edges = [half, -half].map((angle) => dir.clone().applyAxisAngle(right, angle).normalize());
+      for (const edge of edges) {
+        const edgeEnd = marker.position.clone().add(edge.multiplyScalar(length));
+        const edgeLine = new THREE.Line(
+          new THREE.BufferGeometry().setFromPoints([marker.position.clone(), edgeEnd]),
+          new THREE.LineBasicMaterial({ color: color(accent), transparent: true, opacity: 0.32, depthWrite: false }),
+        );
+        edgeLine.renderOrder = 20;
+        group.add(edgeLine);
+      }
+    }
+  }
+
+  return group;
+}
+
 function applyRobotSpawnTint(root: THREE.Object3D, accentValue: string): void {
   root.userData.robotSpawnAccent = accentValue;
   const accent = color(accentValue);
@@ -587,6 +666,7 @@ function makeRobotSpawnVisual(object: Extract<EditorStageObject, { kind: 'fossbo
   directionArrow.userData.robotSpawnAnimationRole = 'directionArrow';
 
   group.add(field, halo, outerHalo, directionArrow);
+  if (options.sensorHelpersVisible) group.add(makeSensorHelpersVisual());
   pickables.push(halo, outerHalo, directionArrow);
   attachRobotSpawnModel(group, pickables, options, accent);
   group.position.set(...object.position);
@@ -1092,6 +1172,7 @@ export function StageBuilderScene({
   focusRequestNonce = 0,
   cameraViewRequest = null,
   lookThroughCameraId = null,
+  sensorHelpersVisible = false,
   onSelect,
   onSelectionChange,
   onObjectChange,
@@ -1878,14 +1959,14 @@ export function StageBuilderScene({
 
     for (const object of objects) {
       if (object.hidden) continue;
-      const record = makeObjectRoot(object, { validationSeverity: validationSeverityFor(object.id, validationResultsRef.current) });
+      const record = makeObjectRoot(object, { validationSeverity: validationSeverityFor(object.id, validationResultsRef.current), sensorHelpersVisible });
       if (object.id === lookThroughCameraId) record.root.visible = false;
       objectMapRef.current.set(object.id, record);
       scene.add(record.root);
     }
 
     syncTransformAttachment();
-  }, [objects, validationResults, lookThroughCameraId]);
+  }, [objects, validationResults, lookThroughCameraId, sensorHelpersVisible]);
 
   useEffect(() => {
     const scene = sceneRef.current?.scene;
