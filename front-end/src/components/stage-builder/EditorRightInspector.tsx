@@ -14,7 +14,7 @@ import { defaultStageBuilderPreferences, type StageBuilderRotationSnapPreset, ty
 import { rotationSnapPresetLabel, snapPresetLabel } from './stageBuilderSnapping';
 import { editorColors, editorType, inspectorPanelSx } from './stageBuilderEditorTheme';
 
-export type InspectorTab = 'object' | 'stage' | 'validation' | 'settings';
+export type InspectorTab = 'empty' | 'object' | 'stage' | 'validation' | 'settings';
 
 export interface EditorRightInspectorProps {
   tab: InspectorTab;
@@ -249,6 +249,10 @@ function SettingsContext({ prefs, onPrefsChange, onResetPrefs }: Pick<EditorRigh
   );
 }
 
+function EmptyContext() {
+  return <Box aria-label="No inspector selection" sx={{ minHeight: '100%' }} />;
+}
+
 function ValidationContext({ results, onToggleOverride, onBack }: { results: StageBuilderValidationResult[]; onToggleOverride: (id: string, enabled: boolean) => void; onBack: () => void }) {
   return (
     <Stack spacing={0} sx={{ color: editorColors.text }}>
@@ -280,7 +284,7 @@ export function EditorRightInspector({
   onResetPrefs,
   onTogglePanel,
 }: EditorRightInspectorProps) {
-  const context = tab === 'validation' ? 'validation' : tab === 'settings' ? 'settings' : selectedObject ? 'object' : 'stage';
+  const context = tab === 'validation' ? 'validation' : tab === 'settings' ? 'settings' : tab === 'stage' ? 'stage' : selectedObject ? 'object' : 'empty';
 
   return (
     <Box sx={inspectorPanelSx}>
@@ -303,6 +307,7 @@ export function EditorRightInspector({
             onLookThroughCamera={onLookThroughCamera}
           />
         )}
+        {context === 'empty' && <EmptyContext />}
         {context === 'stage' && <StageContext stage={stage} prefs={prefs} onStageChange={onStageChange} onPrefsChange={onPrefsChange} />}
         {context === 'settings' && <SettingsContext prefs={prefs} onPrefsChange={onPrefsChange} onResetPrefs={onResetPrefs} />}
         {context === 'validation' && <ValidationContext results={validationResults} onToggleOverride={onToggleValidationOverride} onBack={() => onTabChange('stage')} />}
