@@ -28,6 +28,7 @@ export const STAGE_OBJECT_CATALOG: StageObjectCatalogItem[] = [
   { id: 'cameraMarker', label: 'Camera marker', shortLabel: 'Camera', description: 'A label for camera planning. Metadata only for now.', category: 'marker', placeable: true },
   { id: 'line', label: 'Line path', shortLabel: 'Line', description: 'A floor line for line-following tests.', category: 'challenge', placeable: true },
   { id: 'label', label: 'Text label', shortLabel: 'Label', description: 'A readable label on the stage.', category: 'marker', placeable: true },
+  { id: 'light', label: 'Light', shortLabel: 'Light', description: 'A scene light. Pick point, spot, directional, or ambient in the inspector.', category: 'marker', placeable: true },
 ];
 
 export function catalogItem(id: StageSemanticKind): StageObjectCatalogItem | undefined {
@@ -47,6 +48,7 @@ export function displayObjectType(object: EditorStageObject): string {
   if (object.kind === 'cylinder') return 'Cylinder';
   if (object.kind === 'line') return 'Line path';
   if (object.kind === 'text') return 'Text label';
+  if (object.kind === 'light') return 'Light';
   return 'Object';
 }
 
@@ -103,12 +105,16 @@ export function createCatalogObject(kind: StageSemanticKind, id: string, positio
   if (kind === 'label') {
     return { id, kind: 'text', semanticKind: kind, name: 'text label', text: 'Label', position: [p[0], 0.02, p[2]], color: 'black', scale: 0.75, onFloor: true };
   }
+  if (kind === 'light') {
+    return { id, kind: 'light', semanticKind: kind, name: 'light', subtype: 'point', position: [p[0], 1, p[2]], rotationY: 0, color: '#ffd27f', intensity: 1.2, range: 4, angle: Math.PI / 6, penumbra: 0.3 };
+  }
   return null;
 }
 
 export function inferSemanticKindFromConfig(type: string, name?: string, color?: string | number): StageSemanticKind | undefined {
   const lower = (name || '').toLowerCase();
   if (type === 'fossbot') return 'robotSpawn';
+  if (type === 'light') return 'light';
   if (type === 'line') return 'line';
   if (type === 'text') return lower.includes('camera') ? 'cameraMarker' : 'label';
   if (lower.includes('target') || lower.includes('goal')) return 'target';

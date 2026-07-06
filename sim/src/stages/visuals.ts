@@ -154,6 +154,19 @@ interface TextEntry {
   name?: string
 }
 
+interface LightEntry {
+  type: 'light'
+  subtype?: 'point' | 'directional' | 'spot' | 'ambient'
+  position: [number, number, number]
+  color?: string | number
+  intensity?: number
+  range?: number
+  angle?: number
+  penumbra?: number
+  rotationY?: number
+  name?: string
+}
+
 // ── Shared helpers ──
 
 function isDynamicEntry(entry: { mass?: number; immovable?: boolean }): boolean {
@@ -334,4 +347,44 @@ export function buildTextVisual(entry: TextEntry): VisualBuilt {
   sprite.position.fromArray(entry.position)
   sprite.name = entry.name ?? 'text_label'
   return { object: sprite }
+}
+
+export function buildLightVisual(entry: LightEntry): VisualBuilt {
+  const subtype = entry.subtype ?? 'point'
+  const color = parseColor(entry.color)
+  const intensity = Math.max(0, entry.intensity ?? 1)
+  const group = new THREE.Group()
+  group.name = entry.name ?? 'light'
+
+  let light: THREE.Light
+  if (subtype === 'ambient') {
+    light = new THREE.AmbientLight(color, intensity)
+  } else if (subtype === 'directional') {
+    const dir = new THREE.DirectionalLight(color, intensity)
+    const forward = new THREE.Vector3(-Math.sin(entry.rotationY ?? 0), 0, -Math.cos(entry.rotationY ?? 0))
+    dir.position.fromArray(entry.position)
+    dir.target.position.copy(dir.position).add(forward)
+    group.add(dir.target)
+    light = dir
+  } else if (subtype === 'spot') {
+    const spot = new THREE.SpotLight(
+      color,
+      intensity,
+      Math.max(0, entry.range ?? 0),
+      Math.min(Math.PI / 2 - 0.001, Math.max(0, entry.angle ?? Math.PI / 6)),
+      Math.min(1, Math.max(0, entry.penumbra ?? 0)),
+    )
+    const forward = new THREE.Vector3(-Math.sin(entry.rotationY ?? 0), 0, -Math.cos(entry.rotationY ?? 0))
+    spot.position.fromArray(entry.position)
+    spot.target.position.copy(spot.position).add(forward)
+    group.add(spot.target)
+    light = spot
+  } else {
+    const point = new THREE.PointLight(color, intensity, Math.max(0, entry.range ?? 0))
+    point.position.fromArray(entry.position)
+    light = point
+  }
+
+  group.add(light)
+  return { object: group }
 }
