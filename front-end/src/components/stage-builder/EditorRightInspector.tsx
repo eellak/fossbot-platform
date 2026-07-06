@@ -6,6 +6,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import type { EditorStage, EditorStageObject } from './types';
 import { ColorPickerField, StageInspector } from './StageInspector';
 import { StageValidationPanel } from './StageValidationPanel';
+import { StageBuilderNumberField } from './StageBuilderNumberField';
 import type { StageBuilderValidationResult } from './stageBuilderValidation';
 import type { StageBuilderPreferences } from './stageBuilderPreferences';
 import { defaultStageBuilderPreferences, type StageBuilderRotationSnapPreset, type StageBuilderSnapPreset } from './stageBuilderPreferences';
@@ -127,8 +128,8 @@ function StageContext({ stage, prefs, onStageChange, onPrefsChange }: Pick<Edito
       <Section title="Floor">
         <FieldRow label="Size">
           <InlineFields>
-            <TextField label="Width" {...commonNumberProps} inputProps={{ step: 0.1, min: 0.5 }} value={stage.floor.dimensions[0]} onChange={(event) => onStageChange({ ...stage, floor: { ...stage.floor, dimensions: [Math.max(0.5, num(event.target.value, stage.floor.dimensions[0])), stage.floor.dimensions[1]] } })} />
-            <TextField label="Depth" {...commonNumberProps} inputProps={{ step: 0.1, min: 0.5 }} value={stage.floor.dimensions[1]} onChange={(event) => onStageChange({ ...stage, floor: { ...stage.floor, dimensions: [stage.floor.dimensions[0], Math.max(0.5, num(event.target.value, stage.floor.dimensions[1]))] } })} />
+            <StageBuilderNumberField label="Width" {...commonNumberProps} inputProps={{ step: 0.1, min: 0.5 }} value={stage.floor.dimensions[0]} onChange={(event) => onStageChange({ ...stage, floor: { ...stage.floor, dimensions: [Math.max(0.5, num(event.target.value, stage.floor.dimensions[0])), stage.floor.dimensions[1]] } })} />
+            <StageBuilderNumberField label="Depth" {...commonNumberProps} inputProps={{ step: 0.1, min: 0.5 }} value={stage.floor.dimensions[1]} onChange={(event) => onStageChange({ ...stage, floor: { ...stage.floor, dimensions: [stage.floor.dimensions[0], Math.max(0.5, num(event.target.value, stage.floor.dimensions[1]))] } })} />
           </InlineFields>
         </FieldRow>
         <FieldRow label="Color">
@@ -144,7 +145,7 @@ function StageContext({ stage, prefs, onStageChange, onPrefsChange }: Pick<Edito
       <Section title="Grid and Defaults">
         <FieldRow label="Grid"><FormControlLabel control={<Switch size="small" checked={gridVisible} onChange={(event) => patchMetadata({ gridVisible: event.target.checked })} />} label="Visible" /></FieldRow>
         <FieldRow label="Grid size">
-          <TextField {...commonNumberProps} inputProps={{ step: 0.1, min: 0.1, 'aria-label': 'Grid size' }} value={gridSize} onChange={(event) => patchMetadata({ gridSize: Math.max(0.1, num(event.target.value, gridSize)) })} />
+          <StageBuilderNumberField {...commonNumberProps} inputProps={{ step: 0.1, min: 0.1, 'aria-label': 'Grid size' }} value={gridSize} onChange={(event) => patchMetadata({ gridSize: Math.max(0.1, num(event.target.value, gridSize)) })} />
         </FieldRow>
         <FieldRow label="Move snap">
           <TextField {...commonFieldProps} select value={defaultSnapPreset} inputProps={{ 'aria-label': 'Default snap size' }} onChange={(event) => {
