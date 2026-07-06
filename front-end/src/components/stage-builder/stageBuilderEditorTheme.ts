@@ -140,4 +140,42 @@ export const inspectorPanelSx: SxProps<Theme> = {
   '& .MuiButton-root': { textTransform: 'none', borderRadius: 0.75 },
   '& .MuiButton-outlined': { borderColor: '#3a4a55', color: editorColors.accentText },
   '& .MuiButton-outlined:hover': { borderColor: '#4d6680', bgcolor: 'rgba(74, 163, 255, 0.08)' },
+  '& .MuiAlert-root': {
+    border: '1px solid',
+    borderRadius: 0.75,
+    '& .MuiAlert-icon': {
+      opacity: 0.9,
+    },
+    '& .MuiTypography-root': {
+      fontWeight: 600,
+    },
+    '&.MuiAlert-severityInfo': {
+      borderColor: 'rgba(74, 163, 255, 0.25)',
+      bgcolor: 'rgba(74, 163, 255, 0.06)',
+      color: `${editorColors.accentText} !important`,
+      '& .MuiTypography-root': { color: `${editorColors.accentText} !important` },
+      '& .MuiSvgIcon-root': { color: `${editorColors.accentText} !important` },
+    },
+    '&.MuiAlert-severityWarning': {
+      borderColor: 'rgba(243, 184, 77, 0.25)',
+      bgcolor: 'rgba(243, 184, 77, 0.06)',
+      color: `${editorColors.warning} !important`,
+      '& .MuiTypography-root': { color: `${editorColors.warning} !important` },
+      '& .MuiSvgIcon-root': { color: `${editorColors.warning} !important` },
+    },
+    '&.MuiAlert-severityError': {
+      borderColor: 'rgba(242, 139, 116, 0.25)',
+      bgcolor: 'rgba(242, 139, 116, 0.06)',
+      color: `${editorColors.danger} !important`,
+      '& .MuiTypography-root': { color: `${editorColors.danger} !important` },
+      '& .MuiSvgIcon-root': { color: `${editorColors.danger} !important` },
+    },
+    '&.MuiAlert-severitySuccess': {
+      borderColor: 'rgba(91, 220, 139, 0.25)',
+      bgcolor: 'rgba(91, 220, 139, 0.06)',
+      color: `${editorColors.success} !important`,
+      '& .MuiTypography-root': { color: `${editorColors.success} !important` },
+      '& .MuiSvgIcon-root': { color: `${editorColors.success} !important` },
+    },
+  },
 };

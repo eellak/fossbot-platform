@@ -44,7 +44,7 @@ const toolButtonSx = {
   '&.Mui-selected': {
     color: editorColors.accentText,
     bgcolor: editorColors.accentSoft,
-    '&:hover': { bgcolor: '#1c4668' },
+    '&:hover': { bgcolor: `${editorColors.accent}2b` },
   },
 } as const;
 
@@ -79,23 +79,23 @@ export function EditorViewportToolRail({
     <Paper elevation={0} sx={{ p: 0.5, bgcolor: editorColors.panel, color: editorColors.text, border: `1px solid ${editorColors.border}`, borderRadius: 1, boxShadow: 'none' }}>
       <Stack spacing={0.5} alignItems="center">
         <Tooltip title="Select"><ToggleButton size="small" value="select" selected={false} onClick={() => onModeChange('edit')} sx={toolButtonSx}><MouseIcon fontSize="small" /></ToggleButton></Tooltip>
-        <Divider flexItem sx={{ borderColor: '#344149' }} />
+        <Divider flexItem sx={{ borderColor: editorColors.border }} />
         <ToggleButtonGroup orientation="vertical" exclusive size="small" value={mode === 'edit' ? transformMode : ''} onChange={(_, value) => value && onTransformModeChange(value)} sx={{ gap: 0.5 }}>
           <Tooltip title="Move"><ToggleButton value="translate" sx={toolButtonSx}><OpenWithIcon fontSize="small" /></ToggleButton></Tooltip>
           <Tooltip title="Rotate"><ToggleButton value="rotate" sx={toolButtonSx}><RotateRightIcon fontSize="small" /></ToggleButton></Tooltip>
           <Tooltip title="Scale"><ToggleButton value="scale" sx={toolButtonSx}><AspectRatioIcon fontSize="small" /></ToggleButton></Tooltip>
         </ToggleButtonGroup>
-        <Divider flexItem sx={{ borderColor: '#344149' }} />
+        <Divider flexItem sx={{ borderColor: editorColors.border }} />
         <Tooltip title={`Snap ${snappingOn ? 'on' : 'off'} · ${snapPresetLabel(normalizedSnap)}. Change snap size in Settings.`}>
-          <IconButton size="small" onClick={() => onSnapPresetChange(snappingOn ? 'off' : 'medium')} sx={{ ...iconButtonSx, color: snappingOn ? '#7cc7ff' : '#c8d3da' }} aria-label="Toggle snapping">
+          <IconButton size="small" onClick={() => onSnapPresetChange(snappingOn ? 'off' : 'medium')} sx={{ ...iconButtonSx, color: snappingOn ? editorColors.accentText : editorColors.textMuted }} aria-label="Toggle snapping">
             <FontAwesomeIcon icon={faMagnet} style={{ width: 14, height: 14 }} />
           </IconButton>
         </Tooltip>
-        <Divider flexItem sx={{ borderColor: '#344149' }} />
+        <Divider flexItem sx={{ borderColor: editorColors.border }} />
         <Tooltip title="Focus selected"><span><IconButton size="small" disabled={!selectedCount} onClick={onFocusSelected} sx={iconButtonSx}><CenterFocusStrongIcon fontSize="small" /></IconButton></span></Tooltip>
         <Tooltip title="Undo"><span><IconButton size="small" disabled={!canUndo} onClick={onUndo} sx={iconButtonSx}><UndoIcon fontSize="small" /></IconButton></span></Tooltip>
         <Tooltip title="Redo"><span><IconButton size="small" disabled={!canRedo} onClick={onRedo} sx={iconButtonSx}><RedoIcon fontSize="small" /></IconButton></span></Tooltip>
-        <Tooltip title="Delete"><span><IconButton size="small" disabled={!selectedCount} onClick={onDelete} sx={{ ...iconButtonSx, color: '#f28b74' }}><DeleteIcon fontSize="small" /></IconButton></span></Tooltip>
+        <Tooltip title="Delete"><span><IconButton size="small" disabled={!selectedCount} onClick={onDelete} sx={{ ...iconButtonSx, color: editorColors.danger }}><DeleteIcon fontSize="small" /></IconButton></span></Tooltip>
       </Stack>
     </Paper>
   );

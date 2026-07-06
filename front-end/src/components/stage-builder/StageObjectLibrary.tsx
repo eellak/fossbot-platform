@@ -43,13 +43,13 @@ const libraryTileSx = {
   alignItems: 'stretch',
   justifyContent: 'space-between',
   gap: 0.375,
-  border: '1px solid rgba(148, 163, 184, 0.12)',
+  border: `1px solid ${editorColors.border}`,
   borderRadius: 0.75,
-  bgcolor: 'rgba(15, 23, 42, 0.18)',
+  bgcolor: editorColors.panelInset,
   color: editorColors.text,
   textAlign: 'left',
   transition: 'background-color 120ms ease, border-color 120ms ease, transform 120ms ease',
-  '&:hover': { bgcolor: 'rgba(148, 163, 184, 0.07)', borderColor: 'rgba(148, 163, 184, 0.24)' },
+  '&:hover': { bgcolor: `${editorColors.textMuted}0f`, borderColor: editorColors.borderStrong },
   '&:active': { transform: 'translateY(1px)' },
   '&:hover .library-preview': { opacity: 1, transform: 'translateY(-1px)' },
   '&:focus-visible': { outline: `2px solid ${editorColors.accent}`, outlineOffset: 1 },
@@ -110,8 +110,8 @@ function LibraryTile({ label, detail, active, tone, previewKind, onClick }: { la
         sx={{
           ...libraryTileSx,
           color: active ? tone.text : editorColors.text,
-          bgcolor: active ? tone.surface : 'rgba(15, 23, 42, 0.18)',
-          borderColor: active ? `${tone.accent}66` : 'rgba(148, 163, 184, 0.12)',
+          bgcolor: active ? tone.surface : editorColors.panelInset,
+          borderColor: active ? `${tone.accent}66` : editorColors.border,
         }}
       >
         <Box className="library-preview" sx={{ height: 36, display: 'grid', placeItems: 'center', opacity: 0.9, transition: 'opacity 120ms ease, transform 120ms ease' }}>
@@ -129,7 +129,7 @@ function SectionHeader({ label, count }: { label: string; count: number }) {
   return (
     <Box sx={{ px: 0.25, minHeight: 20, display: 'flex', alignItems: 'center', gap: 0.75 }}>
       <Typography variant="caption" sx={{ ...editorType.sectionLabel, minWidth: 0, flex: 1, color: editorColors.textMuted }}>{label}</Typography>
-      <Box sx={{ minWidth: 18, height: 18, px: 0.5, display: 'grid', placeItems: 'center', borderRadius: 0.5, bgcolor: 'rgba(148, 163, 184, 0.07)', border: '1px solid rgba(148, 163, 184, 0.1)' }}>
+      <Box sx={{ minWidth: 18, height: 18, px: 0.5, display: 'grid', placeItems: 'center', borderRadius: 0.5, bgcolor: `${editorColors.textMuted}0f`, border: `1px solid ${editorColors.border}` }}>
         <Typography variant="caption" sx={{ ...editorType.caption, color: editorColors.textMuted, lineHeight: 1 }}>{count}</Typography>
       </Box>
     </Box>

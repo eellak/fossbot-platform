@@ -38,7 +38,10 @@ export interface StageSceneHierarchyProps {
 const panelText = editorColors.text;
 const panelMuted = editorColors.textMuted;
 const panelLine = editorColors.border;
-const treeLine = `${editorColors.border}33`;
+const treeLine = editorColors.borderStrong;
+const treeLineWidth = 2;
+const treeLineHalf = treeLineWidth / 2;
+const treeBranchWidth = 14;
 const selectedBg = `${editorColors.accent}1a`;
 const hoverBg = `${editorColors.textMuted}0f`;
 const dragDataType = 'application/x-fossbot-stage-object-id';
@@ -97,19 +100,85 @@ function objectMatches(object: EditorStageObject, query: string): boolean {
 
 function treeMetrics(depth: number) {
   const x = 12 + depth * 24;
-  return { lineX: x, contentX: x + 14 };
+  return { lineX: x, contentX: x + treeBranchWidth };
 }
 
-function TreeRowShell({ depth, last, children }: { depth: number; last: boolean; children: React.ReactNode }) {
-  const { lineX } = treeMetrics(depth);
+function TreeRowShell({
+  depth,
+  last,
+  ancestorLines = [],
+  branchEndX,
+  childStem = false,
+  children,
+}: {
+  depth: number;
+  last: boolean;
+  ancestorLines?: boolean[];
+  branchEndX?: number;
+  childStem?: boolean;
+  children: React.ReactNode;
+}) {
+  const { lineX, contentX } = treeMetrics(depth);
+  const lineLeft = `${lineX - treeLineHalf}px`;
+  const lineWidth = `${treeLineWidth}px`;
+  const branchEnd = branchEndX ?? contentX;
+  const currentLineBottom = last ? `calc(50% - ${treeLineHalf}px)` : `-${treeLineHalf}px`;
+
   return (
-    <Box
-      sx={{
-        position: 'relative',
-        '&:before': { content: '""', position: 'absolute', left: `${lineX}px`, top: 0, bottom: last ? '50%' : 0, borderLeft: `1px solid ${treeLine}` },
-        '&:after': { content: '""', position: 'absolute', left: `${lineX}px`, top: '50%', width: 12, borderTop: `1px solid ${treeLine}` },
-      }}
-    >
+    <Box sx={{ position: 'relative' }}>
+      {ancestorLines.map((showLine, ancestorDepth) => showLine ? (
+        <Box
+          key={ancestorDepth}
+          aria-hidden="true"
+          sx={{
+            position: 'absolute',
+            left: `${treeMetrics(ancestorDepth).lineX - treeLineHalf}px`,
+            top: `-${treeLineHalf}px`,
+            bottom: `-${treeLineHalf}px`,
+            width: lineWidth,
+            bgcolor: treeLine,
+            pointerEvents: 'none',
+          }}
+        />
+      ) : null)}
+      <Box
+        aria-hidden="true"
+        sx={{
+          position: 'absolute',
+          left: lineLeft,
+          top: `-${treeLineHalf}px`,
+          bottom: currentLineBottom,
+          width: lineWidth,
+          bgcolor: treeLine,
+          pointerEvents: 'none',
+        }}
+      />
+      <Box
+        aria-hidden="true"
+        sx={{
+          position: 'absolute',
+          left: lineLeft,
+          top: `calc(50% - ${treeLineHalf}px)`,
+          width: `${Math.max(treeLineWidth, branchEnd - lineX + treeLineWidth)}px`,
+          height: lineWidth,
+          bgcolor: treeLine,
+          pointerEvents: 'none',
+        }}
+      />
+      {childStem && (
+        <Box
+          aria-hidden="true"
+          sx={{
+            position: 'absolute',
+            left: `${treeMetrics(depth + 1).lineX - treeLineHalf}px`,
+            top: `calc(50% - ${treeLineHalf}px)`,
+            bottom: `-${treeLineHalf}px`,
+            width: lineWidth,
+            bgcolor: treeLine,
+            pointerEvents: 'none',
+          }}
+        />
+      )}
       {children}
     </Box>
   );
@@ -155,6 +224,7 @@ function ObjectRow({
   selectedIds,
   depth,
   last,
+  ancestorLines,
   draggedObjectId,
   dropTarget,
   onSelectObject,
@@ -173,6 +243,7 @@ function ObjectRow({
   selectedIds: string[];
   depth: number;
   last: boolean;
+  ancestorLines?: boolean[];
   draggedObjectId: string | null;
   dropTarget: HierarchyDropTarget | null;
   onSelectObject: (id: string | null) => void;
@@ -205,7 +276,7 @@ function ObjectRow({
   const targetFor = (event: React.DragEvent<HTMLDivElement>): HierarchyDropTarget => ({ type: 'object', id: object.id, position: positionFromPointer(event) });
 
   return (
-    <TreeRowShell depth={depth} last={last}>
+    <TreeRowShell depth={depth} last={last} ancestorLines={ancestorLines}>
       <Box
         draggable={!editing}
         onClick={select}
@@ -276,6 +347,7 @@ function GroupBlock({
   selectedGroupId,
   depth,
   last,
+  ancestorLines = [],
   draggedObjectId,
   dropTarget,
   onSelectObject,
@@ -299,6 +371,7 @@ function GroupBlock({
   selectedGroupId: string | null;
   depth: number;
   last: boolean;
+  ancestorLines?: boolean[];
   draggedObjectId: string | null;
   dropTarget: HierarchyDropTarget | null;
   onSelectObject: (id: string | null) => void;
@@ -322,12 +395,36 @@ function GroupBlock({
   const allLocked = objects.length > 0 && objects.every((object) => object.locked);
   const selected = selectedGroupId === group.id;
   const activeDrop = dropTarget?.type === 'group' && dropTarget.id === group.id ? dropTarget.position : null;
-  const { contentX } = treeMetrics(depth);
+  const childLineX = treeMetrics(depth + 1).lineX;
+  const groupContentX = treeMetrics(depth + 1).contentX;
+  const hasExpandedChildren = expanded && objects.length > 0;
   const targetFor = (event: React.DragEvent<HTMLDivElement>): HierarchyDropTarget => ({ type: 'group', id: group.id, position: positionFromPointer(event) });
 
   return (
     <Box>
-      <TreeRowShell depth={depth} last={last}>
+      <TreeRowShell depth={depth} last={last} ancestorLines={ancestorLines} branchEndX={childLineX} childStem={hasExpandedChildren}>
+        <IconButton
+          size="small"
+          aria-label={expanded ? 'Collapse group' : 'Expand group'}
+          onClick={(event) => { stop(event); setExpanded((value) => !value); }}
+          sx={{
+            position: 'absolute',
+            left: `${childLineX - 10}px`,
+            top: '50%',
+            zIndex: 1,
+            width: 20,
+            height: 20,
+            p: 0,
+            transform: 'translateY(-50%)',
+            color: panelMuted,
+            bgcolor: editorColors.panel,
+            border: `${treeLineWidth}px solid ${treeLine}`,
+            borderRadius: 0,
+            '&:hover': { bgcolor: editorColors.panelRaised, color: editorColors.textStrong, borderColor: editorColors.accentText },
+          }}
+        >
+          {expanded ? <KeyboardArrowDownIcon sx={{ width: 18, height: 18 }} /> : <KeyboardArrowRightIcon sx={{ width: 18, height: 18 }} />}
+        </IconButton>
         <Box
           onClick={() => onSelectGroup(group.id)}
           onDoubleClick={() => setEditing(true)}
@@ -336,12 +433,12 @@ function GroupBlock({
           onDrop={(event) => onTargetDrop(targetFor(event), event)}
           sx={{
             minHeight: 36,
-            ml: `${contentX}px`,
+            ml: `${groupContentX}px`,
             mr: 0.5,
             display: 'grid',
-            gridTemplateColumns: '20px 26px minmax(0, 1fr) auto',
+            gridTemplateColumns: '26px minmax(0, 1fr) auto',
             alignItems: 'center',
-            gap: 0.5,
+            gap: 0.75,
             px: 0.625,
             color: selected ? editorColors.textStrong : panelText,
             cursor: draggedObjectId ? 'move' : 'default',
@@ -352,9 +449,6 @@ function GroupBlock({
             '&:hover .scene-row-actions': { display: 'flex' },
           }}
         >
-          <IconButton size="small" onClick={(event) => { stop(event); setExpanded((value) => !value); }} sx={{ color: panelMuted, p: 0 }}>
-            {expanded ? <KeyboardArrowDownIcon sx={{ width: 18, height: 18 }} /> : <KeyboardArrowRightIcon sx={{ width: 18, height: 18 }} />}
-          </IconButton>
           <GroupPreview selected={selected} />
           <Box minWidth={0}>
             {editing ? (
@@ -379,6 +473,7 @@ function GroupBlock({
           selectedIds={selectedIds}
           depth={depth + 1}
           last={index === objects.length - 1}
+          ancestorLines={[...ancestorLines, !last]}
           draggedObjectId={draggedObjectId}
           dropTarget={dropTarget}
           onSelectObject={onSelectObject}
@@ -516,13 +611,7 @@ export function StageSceneHierarchy({
         />
       </Box>
 
-      <Stack spacing={0} sx={{ py: 0.375, minHeight: 80 }}>
-        {hasItems && (
-          <Typography variant="caption" sx={{ ...editorType.sectionLabel, px: 0.875, py: 0.5, color: editorColors.textMuted }}>
-            Objects
-          </Typography>
-        )}
-
+      <Stack spacing={0} sx={{ pt: 0, pb: 0.375, minHeight: 80 }}>
         {rootItems.map((item, index) => item.type === 'group' ? (
           <GroupBlock
             key={item.entry.group.id}
