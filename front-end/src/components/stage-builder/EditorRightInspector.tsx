@@ -91,7 +91,7 @@ function Section({ title, children, defaultExpanded = true }: { title: string; c
 
 function ContextHeader({ title, description, action }: { title: string; description: string; action?: React.ReactNode }) {
   return (
-    <Box sx={{ px: 1.25, py: 1, borderBottom: `1px solid ${editorColors.border}`, bgcolor: editorColors.panelInset }}>
+    <Box sx={{ px: 1.25, py: 0.875, borderBottom: `1px solid ${editorColors.border}`, bgcolor: editorColors.panel }}>
       <Stack direction="row" spacing={1} alignItems="center">
         <Box sx={{ minWidth: 0, flex: 1 }}>
           <Typography variant="subtitle2" sx={{ ...editorType.panelTitle, lineHeight: 1.2 }}>{title}</Typography>
@@ -255,7 +255,7 @@ export function EditorRightInspector({
 
   return (
     <Box sx={inspectorPanelSx}>
-      <Box sx={{ flex: 1, overflow: 'auto' }}>
+      <Box sx={{ flex: 1, overflow: 'auto', scrollbarWidth: 'none', msOverflowStyle: 'none', '&::-webkit-scrollbar': { display: 'none' } }}>
         {context === 'object' && (
           <StageInspector
             object={selectedObject}

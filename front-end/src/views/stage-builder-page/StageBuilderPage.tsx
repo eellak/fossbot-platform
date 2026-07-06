@@ -24,6 +24,7 @@ import { EditorViewportToolRail } from 'src/components/stage-builder/EditorViewp
 import { EditorRightInspector, type InspectorTab } from 'src/components/stage-builder/EditorRightInspector';
 import { clearStageBuilderDraft, draftToEditorStage, readStageBuilderDraft, stageFingerprint, writeStageBuilderDraft, type StageBuilderDraft } from 'src/components/stage-builder/stageBuilderDrafts';
 import { writeStageBuilderRunHandoff } from 'src/components/stage-builder/stageBuilderRunHandoff';
+import { editorColors } from 'src/components/stage-builder/stageBuilderEditorTheme';
 
 function userScope(user: ReturnType<typeof useAuth>['user']): string {
   if (!user) return 'anonymous';
@@ -55,6 +56,15 @@ function isTypingTarget(target: EventTarget | null): boolean {
 }
 
 const leaveMessage = 'You have unsaved changes. A local recovery draft will be kept, but you should export JSON when you are ready to save.';
+
+function StatusPill({ label, value, tone = editorColors.text }: { label: string; value: string; tone?: string }) {
+  return (
+    <Box sx={{ height: 20, minWidth: 0, px: 0.75, display: 'inline-flex', alignItems: 'center', gap: 0.5, borderRadius: 0.75, bgcolor: 'rgba(148, 163, 184, 0.07)', border: '1px solid rgba(148, 163, 184, 0.14)' }}>
+      <Typography variant="caption" sx={{ color: editorColors.textSubtle, fontSize: '0.625rem', fontWeight: 800, letterSpacing: '0.06em', lineHeight: 1, textTransform: 'uppercase' }}>{label}</Typography>
+      <Typography variant="caption" noWrap sx={{ color: tone, fontWeight: 700, lineHeight: 1, minWidth: 0 }}>{value}</Typography>
+    </Box>
+  );
+}
 
 const StageBuilderPage = () => {
   const { user } = useAuth();
@@ -89,6 +99,8 @@ const StageBuilderPage = () => {
   const gridVisible = stage.metadata.gridVisible ?? true;
   const gridSize = stage.metadata.gridSize ?? 0.5;
   const studio = prefs.styleVariant === 'studio';
+  const selectedStatus = selectedObject ? selectedObject.name : selectedCount ? `${selectedCount} objects` : inspectorTab === 'stage' ? 'Stage' : 'None';
+  const selectedTone = selectedObject ? editorColors.warning : inspectorTab === 'stage' ? editorColors.accentText : editorColors.text;
 
   useEffect(() => {
     setPrefs(readStageBuilderPreferences(scope));
@@ -423,7 +435,7 @@ const StageBuilderPage = () => {
   }, [prefs.keyboardShortcutsEnabled, stage, selectedId, selectedIds, snapSettings, historyVersion]);
 
   return (
-    <Box ref={rootRef} sx={{ width: '100vw', height: '100vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', bgcolor: studio ? '#020617' : '#e5e7eb' }}>
+    <Box ref={rootRef} sx={{ '--fossbot-box-border-radius': '0px', borderRadius: 0, width: '100vw', height: '100vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', bgcolor: studio ? editorColors.viewport : '#e5e7eb' }}>
       <EditorTopBar
         stageName={stage.title}
         dirty={dirty}
@@ -449,23 +461,22 @@ const StageBuilderPage = () => {
         onAddPrefab={addPrefab}
         onOpenValidation={() => setInspectorTab('validation')}
         onOpenSettings={handleOpenSettings}
+        onOpenStageSettings={handleOpenStageSettings}
         onToggleLeftPanel={() => setLeftPanelVisible((value) => !value)}
         onToggleRightPanel={() => setRightPanelVisible((value) => !value)}
       />
       <input ref={importInputRef} type="file" accept="application/json,.json" hidden onChange={(event) => handleImportFile(event.target.files?.[0])} />
 
-      <Box sx={{ flex: 1, minHeight: 0, display: 'grid', gridTemplateColumns: { xs: '1fr', lg: `${leftPanelVisible ? 292 : 0}px minmax(0, 1fr) ${rightPanelVisible ? 348 : 0}px` }, transition: 'grid-template-columns 160ms ease' }}>
+      <Box sx={{ flex: 1, minHeight: 0, display: 'grid', gridTemplateColumns: { xs: '1fr', lg: `${leftPanelVisible ? 280 : 0}px minmax(0, 1fr) ${rightPanelVisible ? 324 : 0}px` }, transition: 'grid-template-columns 160ms ease' }}>
         {leftPanelVisible && (
           <Box sx={{ minWidth: 0, minHeight: 0, display: { xs: 'none', lg: 'block' } }}>
             <EditorLeftPanel
               stage={stage}
               selectedId={selectedId}
               selectedIds={selectedIds}
-              stageSelected={inspectorTab === 'stage' && !selectedObject}
               prefabs={prefabs}
               onAddKind={addObject}
               onAddPrefab={addPrefab}
-              onSelectStage={handleOpenStageSettings}
               onSelectObject={handleSelect}
               onSelectionChange={handleSelectionChange}
               onObjectChange={updateObject}
@@ -479,7 +490,7 @@ const StageBuilderPage = () => {
           </Box>
         )}
 
-        <Box sx={{ minWidth: 0, minHeight: 0, position: 'relative', bgcolor: '#0b1120' }}>
+        <Box sx={{ minWidth: 0, minHeight: 0, position: 'relative', bgcolor: editorColors.viewport }}>
           <StageBuilderScene
             objects={stage.objects}
             selectedId={selectedId}
@@ -502,7 +513,7 @@ const StageBuilderPage = () => {
             onObjectChange={updateObject}
             onLockedSelectionAttempt={() => setMessage('Selection is locked to the current object. Change Selection behavior in Settings to select through objects.')}
           />
-          <Box sx={{ position: 'absolute', top: 16, left: 16, zIndex: 5 }}>
+          <Box sx={{ position: 'absolute', top: 12, left: 12, zIndex: 5 }}>
             <EditorViewportToolRail
               mode={builderMode}
               transformMode={transformMode}
@@ -544,12 +555,16 @@ const StageBuilderPage = () => {
         )}
       </Box>
 
-      <Box sx={{ height: 28, px: 1.5, display: 'flex', alignItems: 'center', gap: 2, bgcolor: '#0f172a', color: '#cbd5e1', borderTop: '1px solid rgba(148,163,184,0.25)' }}>
-        <Typography variant="caption" sx={{ color: '#7cc7ff' }}>Mode: {builderMode === 'edit' ? transformMode : builderMode}</Typography>
-        <Typography variant="caption" sx={{ color: selectedObject ? '#f3b84d' : '#cbd5e1' }}>Selected: {selectedObject ? selectedObject.name : selectedCount ? `${selectedCount} objects` : 'None'}</Typography>
-        <Typography variant="caption" sx={{ color: snapSettings.move ? '#5bdc8b' : '#9cafb8' }}>{snapLabel(snapSettings)}</Typography>
-        <Typography variant="caption">Grid: {gridVisible ? `${gridSize} m` : 'Hidden'}</Typography>
-        <Typography variant="caption" sx={{ ml: 'auto', color: '#9cafb8' }}>Hint: add from Library or Add menu, then use W/E/R and inspector fields.</Typography>
+      <Box sx={{ height: 28, px: 1, display: 'flex', alignItems: 'center', gap: 1, bgcolor: editorColors.topbar, color: '#cbd5e1', borderTop: '1px solid rgba(148,163,184,0.16)' }}>
+        <Stack direction="row" spacing={0.75} alignItems="center" sx={{ minWidth: 0, flexShrink: 0 }}>
+          <StatusPill label="Mode" value={builderMode === 'edit' ? transformMode : builderMode} tone={editorColors.accentText} />
+          <StatusPill label="Selected" value={selectedStatus} tone={selectedTone} />
+          <StatusPill label="Snap" value={snapLabel(snapSettings)} tone={snapSettings.move ? editorColors.success : editorColors.textMuted} />
+          <StatusPill label="Grid" value={gridVisible ? `${gridSize} m` : 'Hidden'} tone={editorColors.text} />
+        </Stack>
+        <Typography variant="caption" noWrap sx={{ ml: 'auto', minWidth: 0, color: editorColors.textMuted, textAlign: 'right' }}>
+          Add from Library or Add menu, then use W/E/R and inspector fields.
+        </Typography>
       </Box>
 
       <Dialog open={!!pendingDraft && !draftReady} maxWidth="sm" fullWidth>
