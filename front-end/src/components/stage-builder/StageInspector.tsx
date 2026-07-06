@@ -392,7 +392,7 @@ export function StageInspector({ object, selectedCount = object ? 1 : 0, advance
         </FieldRow>
         <FieldRow label="State">
           <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', rowGap: 0.25 }}>
-            <FormControlLabel control={<EnabledSwitch checked={!object.hidden} onChange={(checked) => set({ hidden: !checked } as Partial<EditorStageObject>)} />} label="Visible" />
+            <FormControlLabel control={<EnabledSwitch checked={!object.hidden} onChange={(checked) => set({ hidden: !checked } as Partial<EditorStageObject>)} />} label="Enabled" />
             <FormControlLabel control={<EnabledSwitch checked={!!object.locked} onChange={(checked) => set({ locked: checked } as Partial<EditorStageObject>)} />} label="Locked" />
           </Stack>
         </FieldRow>
