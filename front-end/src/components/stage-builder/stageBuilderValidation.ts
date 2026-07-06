@@ -1,5 +1,5 @@
 import type { EditorStage, EditorStageObject } from './types';
-import { boundsIntersect, boundsOutsideStage, objectBounds, objectDimensionsAreValid } from './stageBuilderGeometry';
+import { boundsIntersect, objectBounds, objectDimensionsAreValid } from './stageBuilderGeometry';
 
 export type StageBuilderValidationSeverity = 'error' | 'warning' | 'info';
 
@@ -73,19 +73,9 @@ export function validateStageBuilderStage(stage: EditorStage): StageBuilderValid
     .map((object) => ({ object, bounds: objectBounds(object) }))
     .filter((entry): entry is { object: EditorStageObject; bounds: NonNullable<ReturnType<typeof objectBounds>> } => !!entry.bounds);
 
-  for (const { object, bounds: objectBox } of bounds) {
+  for (const { object } of bounds) {
     if (!objectDimensionsAreValid(object)) {
       results.push(result(stage, `object:${object.id}:invalid-dimensions`, 'error', [object.id], `${labelFor(object)} has invalid size values.`, 'Width, height, radius, line width, and scale values must be positive.', false));
-    }
-
-    if (boundsOutsideStage(objectBox, stage)) {
-      if (object.kind === 'camera') {
-        results.push(result(stage, `object:${object.id}:outside-stage`, 'warning', [object.id], `${labelFor(object)} is outside the stage.`, 'Cameras can sit outside the floor for overview shots, but check the Run Test view before exporting.'));
-      } else if (object.kind === 'audio') {
-        results.push(result(stage, `object:${object.id}:outside-stage`, 'warning', [object.id], `${labelFor(object)} is outside the stage.`, 'Audio sources can be off-stage for ambience, but check that this is intentional.'));
-      } else {
-        results.push(result(stage, `object:${object.id}:outside-stage`, 'error', [object.id], `${labelFor(object)} is outside the stage.`, 'Objects must stay inside the visible floor boundary before saving or testing.', false));
-      }
     }
 
     if (object.kind === 'cube' && object.semanticKind === 'ramp') {
@@ -100,7 +90,7 @@ export function validateStageBuilderStage(stage: EditorStage): StageBuilderValid
     }
 
     if (object.kind === 'model' && !object.filename.trim()) {
-      results.push(result(stage, `object:${object.id}:model-source`, 'error', [object.id], `${labelFor(object)} has no model file.`, 'Import or reference an OBJ file before exporting this object.', false));
+      results.push(result(stage, `object:${object.id}:model-source`, 'error', [object.id], `${labelFor(object)} has no model file.`, 'Import or reference an OBJ/STL file before exporting this object.', false));
     }
 
     if (object.kind === 'light' && object.intensity < 0) {
@@ -132,7 +122,7 @@ export function validateStageBuilderStage(stage: EditorStage): StageBuilderValid
       const b = solidBounds[j];
       if (boundsIntersect(a.bounds, b.bounds, 0.001)) {
         const ids = [a.object.id, b.object.id].sort();
-        results.push(result(stage, `objects:${ids[0]}:${ids[1]}:overlap`, 'warning', ids, `${labelFor(a.object)} overlaps ${labelFor(b.object)}.`, 'Overlapping solid objects can cause physics surprises. Move them apart unless this is intentional.'));
+        results.push(result(stage, `objects:${ids[0]}:${ids[1]}:overlap`, 'warning', [], `${labelFor(a.object)} overlaps ${labelFor(b.object)}.`, 'Overlapping solid objects can cause physics surprises. Move them apart unless this is intentional.'));
       }
     }
   }
@@ -144,6 +134,12 @@ export function validateStageBuilderStage(stage: EditorStage): StageBuilderValid
         if (solid.object.id === spawn.id) continue;
         if (boundsIntersect(spawnBounds, solid.bounds, 0.02)) {
           results.push(result(stage, `object:${spawn.id}:spawn-blocked:${solid.object.id}`, 'error', [spawn.id, solid.object.id], 'Robot spawn is blocked.', `${labelFor(solid.object)} overlaps the robot start area. Move the spawn or the obstacle before testing.`, false));
+        }
+      }
+      for (const visual of bounds.filter((entry) => !entry.bounds.solid)) {
+        if (visual.object.id === spawn.id) continue;
+        if (boundsIntersect(spawnBounds, visual.bounds, 0.02)) {
+          results.push(result(stage, `object:${spawn.id}:spawn-view-obstructed:${visual.object.id}`, 'warning', [spawn.id, visual.object.id], 'Robot spawn view may be obstructed.', `${labelFor(visual.object)} overlaps the robot start area. It will not block collision, but it may obscure the spawn view or make the start area confusing.`));
         }
       }
     }
