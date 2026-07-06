@@ -88,6 +88,7 @@ function restoreBodyDragStyles(state: NumberFieldDragState) {
 }
 
 export function StageBuilderNumberField({ inputProps, onChange, disabled, InputProps, sx, axis, ...props }: StageBuilderNumberFieldProps) {
+  const [draftValue, setDraftValue] = React.useState<string | null>(null);
   const dragRef = React.useRef<NumberFieldDragState | null>(null);
   const blockClickRef = React.useRef(false);
   const finishDragRef = React.useRef<(preventClick: boolean, exitPointerLock?: boolean) => void>(() => {});
@@ -101,6 +102,7 @@ export function StageBuilderNumberField({ inputProps, onChange, disabled, InputP
   onChangeRef.current = onChange;
 
   const emitValue = React.useCallback((value: number) => {
+    setDraftValue(String(value));
     onChangeRef.current?.(makeChangeEvent(value));
   }, []);
 
@@ -177,6 +179,7 @@ export function StageBuilderNumberField({ inputProps, onChange, disabled, InputP
     document.removeEventListener('pointerlockchange', handlePointerLockChange);
     restoreBodyDragStyles(drag);
     dragRef.current = null;
+    setDraftValue(null);
 
     if (drag.target.hasPointerCapture?.(drag.pointerId)) drag.target.releasePointerCapture(drag.pointerId);
     if (exitPointerLock && document.pointerLockElement === drag.lockElement) document.exitPointerLock();
@@ -259,6 +262,26 @@ export function StageBuilderNumberField({ inputProps, onChange, disabled, InputP
     event.stopPropagation();
   };
 
+  const handleFocus: React.FocusEventHandler<HTMLInputElement | HTMLTextAreaElement> = (event) => {
+    props.onFocus?.(event);
+    if (event.defaultPrevented) return;
+    setDraftValue(event.target.value);
+  };
+
+  const handleChange: React.ChangeEventHandler<HTMLInputElement | HTMLTextAreaElement> = (event) => {
+    const nextText = event.target.value;
+    setDraftValue(nextText);
+    const parsed = Number(nextText);
+    if (Number.isFinite(parsed)) onChange?.(event);
+  };
+
+  const handleBlur: React.FocusEventHandler<HTMLInputElement | HTMLTextAreaElement> = (event) => {
+    props.onBlur?.(event);
+    const parsed = Number(event.target.value);
+    if (Number.isFinite(parsed)) onChange?.(makeChangeEvent(parsed));
+    setDraftValue(null);
+  };
+
   const axisSx = axis
     ? { '& .MuiInputLabel-root': { color: `${axisColor[axis]} !important`, fontWeight: 800 } }
     : null;
@@ -268,7 +291,10 @@ export function StageBuilderNumberField({ inputProps, onChange, disabled, InputP
     label: props.label ?? axis,
     type: 'number',
     disabled,
-    onChange,
+    value: draftValue ?? props.value,
+    onFocus: handleFocus,
+    onChange: handleChange,
+    onBlur: handleBlur,
     InputProps,
     sx: axisSx ? { ...sx, ...axisSx } : sx,
     inputProps: {
