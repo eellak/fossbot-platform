@@ -4,7 +4,6 @@ services:
     build:
       context: .
       dockerfile: front-end/Dockerfile.dev
-    container_name: fsbt-front-local
     ports:
       - "3000:3000"
     volumes:
@@ -18,7 +17,6 @@ services:
 
   backend:
     image: fsbt-back
-    container_name: fsbt-back-local
     restart: unless-stopped
     build: ./back-end
     env_file:
@@ -42,7 +40,6 @@ services:
 
   db:
     image: postgres:16
-    container_name: fsbt-db-local
     restart: unless-stopped
     env_file:
       - .env
