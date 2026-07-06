@@ -119,7 +119,7 @@ function ContextHeader({ title, description, action }: { title: string; descript
 function StageContext({ stage, prefs, onStageChange, onPrefsChange }: Pick<EditorRightInspectorProps, 'stage' | 'prefs' | 'onStageChange' | 'onPrefsChange'>) {
   const gridVisible = stage.metadata.gridVisible ?? true;
   const gridSize = stage.metadata.gridSize ?? 0.5;
-  const defaultSnapPreset = stage.metadata.defaultSnapPreset || (prefs.snapPreset === 'free' || prefs.snapPreset === 'grid' ? 'medium' : prefs.snapPreset) as StageBuilderSnapPreset;
+  const defaultSnapPreset = stage.metadata.defaultSnapPreset || (prefs.snapPreset === 'free' || prefs.snapPreset === 'grid' ? 'fine' : prefs.snapPreset) as StageBuilderSnapPreset;
   const defaultRotationSnapPreset = stage.metadata.defaultRotationSnapPreset || prefs.rotationSnapPreset;
   const hasVisibleStageCamera = stage.objects.some((object) => object.kind === 'camera' && !object.hidden);
 
@@ -226,7 +226,7 @@ function SettingsContext({ prefs, onPrefsChange, onResetPrefs }: Pick<EditorRigh
 
       <Section title="Snapping">
         <FieldRow label="Move snap">
-          <TextField {...commonFieldProps} select value={prefs.snapPreset === 'free' || prefs.snapPreset === 'grid' ? 'medium' : prefs.snapPreset} inputProps={{ 'aria-label': 'Snapping' }} onChange={(event) => onPrefsChange({ snapPreset: event.target.value as StageBuilderSnapPreset })}>
+          <TextField {...commonFieldProps} select value={prefs.snapPreset === 'free' || prefs.snapPreset === 'grid' ? 'fine' : prefs.snapPreset} inputProps={{ 'aria-label': 'Snapping' }} onChange={(event) => onPrefsChange({ snapPreset: event.target.value as StageBuilderSnapPreset })}>
             {snapOptions().map((option) => <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>)}
           </TextField>
         </FieldRow>
