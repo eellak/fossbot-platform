@@ -10,13 +10,14 @@ import LockIcon from '@mui/icons-material/Lock';
 import LockOpenIcon from '@mui/icons-material/LockOpen';
 import DeleteIcon from '@mui/icons-material/Delete';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
-import CreateNewFolderIcon from '@mui/icons-material/CreateNewFolder';
-import FolderOffIcon from '@mui/icons-material/FolderOff';
 import SearchIcon from '@mui/icons-material/Search';
 import type { EditorStage, EditorStageObject, StageBuilderGroup } from './types';
 import { displayObjectType } from './stageBuilderCatalog';
 import { PreviewShape, type PreviewKind } from './StageObjectLibrary';
 import { editorColors, editorTones, editorType, type EditorTone } from './stageBuilderEditorTheme';
+
+export type HierarchyDropPosition = 'before' | 'after' | 'inside';
+export type HierarchyDropTarget = { type: 'object' | 'group'; id: string; position: HierarchyDropPosition };
 
 export interface StageSceneHierarchyProps {
   stage: EditorStage;
@@ -27,8 +28,7 @@ export interface StageSceneHierarchyProps {
   onObjectChange: (object: EditorStageObject) => void;
   onDuplicateObjects: (ids: string[]) => void;
   onDeleteObjects: (ids: string[]) => void;
-  onGroupSelected: () => void;
-  onUngroupSelected: () => void;
+  onHierarchyDrop: (draggedId: string, target: HierarchyDropTarget) => void;
   onGroupRename: (groupId: string, name: string) => void;
   onPatchObjects: (ids: string[], patch: Partial<EditorStageObject>) => void;
 }
@@ -39,6 +39,8 @@ const panelLine = editorColors.border;
 const treeLine = 'rgba(148, 163, 184, 0.14)';
 const selectedBg = 'rgba(74, 163, 255, 0.1)';
 const hoverBg = 'rgba(148, 163, 184, 0.06)';
+const dragDataType = 'application/x-fossbot-stage-object-id';
+
 const rowActionSx = {
   width: 22,
   height: 22,
@@ -54,6 +56,9 @@ const hierarchyTones: Record<'robot' | 'structures' | 'markers' | 'labels' | 'gr
   labels: editorTones.labels,
   groups: editorTones.prefab,
 };
+
+type GroupEntry = { group: StageBuilderGroup; objects: EditorStageObject[]; allObjects: EditorStageObject[] };
+type RootItem = { type: 'group'; entry: GroupEntry } | { type: 'object'; object: EditorStageObject };
 
 function sectionFor(object: EditorStageObject): keyof typeof hierarchyTones {
   if (object.groupId || object.prefabSourceId) return 'groups';
@@ -121,36 +126,25 @@ function ObjectPreview({ object, selected }: { object: EditorStageObject; select
 
 function GroupPreview({ selected }: { selected: boolean }) {
   return (
-    <Box sx={{ width: 26, height: 26, display: 'grid', placeItems: 'center', borderRadius: 0.5, bgcolor: selected ? hierarchyTones.groups.surface : 'transparent', color: selected ? hierarchyTones.groups.accent : panelMuted }}>
-      <CreateNewFolderIcon sx={{ width: 16, height: 16 }} />
+    <Box sx={{ width: 26, height: 26, display: 'grid', placeItems: 'center', borderRadius: 0.5, bgcolor: selected ? hierarchyTones.groups.surface : 'transparent' }}>
+      <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: selected ? hierarchyTones.groups.accent : panelMuted, opacity: selected ? 0.95 : 0.7 }} />
     </Box>
   );
 }
 
-function HeaderAction({ title, disabled, children, onClick }: { title: string; disabled?: boolean; children: React.ReactNode; onClick: () => void }) {
-  return (
-    <Tooltip title={title}>
-      <span>
-        <IconButton
-          size="small"
-          disabled={disabled}
-          onClick={onClick}
-          sx={{
-            width: 28,
-            height: 28,
-            borderRadius: 0.75,
-            color: editorColors.textMuted,
-            border: 0,
-            bgcolor: 'transparent',
-            '&:hover': { bgcolor: 'rgba(148, 163, 184, 0.1)', color: editorColors.textStrong },
-            '&.Mui-disabled': { color: editorColors.textSubtle, opacity: 0.32, bgcolor: 'transparent' },
-          }}
-        >
-          {children}
-        </IconButton>
-      </span>
-    </Tooltip>
-  );
+function positionFromPointer(event: React.DragEvent<HTMLDivElement>): HierarchyDropPosition {
+  const rect = event.currentTarget.getBoundingClientRect();
+  const y = (event.clientY - rect.top) / Math.max(1, rect.height);
+  if (y < 0.28) return 'before';
+  if (y > 0.72) return 'after';
+  return 'inside';
+}
+
+function dropSx(active?: HierarchyDropPosition | null) {
+  if (active === 'before') return { boxShadow: `inset 0 2px 0 ${editorColors.accentText}` };
+  if (active === 'after') return { boxShadow: `inset 0 -2px 0 ${editorColors.accentText}` };
+  if (active === 'inside') return { boxShadow: `inset 0 0 0 1px rgba(124, 199, 255, 0.36)`, bgcolor: 'rgba(74, 163, 255, 0.14)' };
+  return { boxShadow: 'none' };
 }
 
 function ObjectRow({
@@ -159,26 +153,42 @@ function ObjectRow({
   selectedIds,
   depth,
   last,
+  draggedObjectId,
+  dropTarget,
   onSelectObject,
   onSelectionChange,
   onObjectChange,
   onDuplicateObjects,
   onDeleteObjects,
+  onObjectDragStart,
+  onTargetDragOver,
+  onTargetDragLeave,
+  onTargetDrop,
+  onObjectDragEnd,
 }: {
   object: EditorStageObject;
   selected: boolean;
   selectedIds: string[];
   depth: number;
   last: boolean;
+  draggedObjectId: string | null;
+  dropTarget: HierarchyDropTarget | null;
   onSelectObject: (id: string | null) => void;
   onSelectionChange: (ids: string[]) => void;
   onObjectChange: (object: EditorStageObject) => void;
   onDuplicateObjects: (ids: string[]) => void;
   onDeleteObjects: (ids: string[]) => void;
+  onObjectDragStart: (id: string, event: React.DragEvent<HTMLDivElement>) => void;
+  onTargetDragOver: (target: HierarchyDropTarget, event: React.DragEvent<HTMLDivElement>) => void;
+  onTargetDragLeave: (target: HierarchyDropTarget, event: React.DragEvent<HTMLDivElement>) => void;
+  onTargetDrop: (target: HierarchyDropTarget, event: React.DragEvent<HTMLDivElement>) => void;
+  onObjectDragEnd: () => void;
 }) {
   const [editing, setEditing] = useState(false);
   const checked = selectedIds.includes(object.id);
   const rowSelected = selected || checked;
+  const dragging = draggedObjectId === object.id;
+  const activeDrop = dropTarget?.type === 'object' && dropTarget.id === object.id ? dropTarget.position : null;
   const { contentX } = treeMetrics(depth);
 
   const select = (event?: React.MouseEvent) => {
@@ -190,11 +200,19 @@ function ObjectRow({
     onSelectObject(object.id);
   };
 
+  const targetFor = (event: React.DragEvent<HTMLDivElement>): HierarchyDropTarget => ({ type: 'object', id: object.id, position: positionFromPointer(event) });
+
   return (
     <TreeRowShell depth={depth} last={last}>
       <Box
+        draggable={!editing}
         onClick={select}
         onDoubleClick={() => setEditing(true)}
+        onDragStart={(event) => onObjectDragStart(object.id, event)}
+        onDragOver={(event) => onTargetDragOver(targetFor(event), event)}
+        onDragLeave={(event) => onTargetDragLeave(targetFor(event), event)}
+        onDrop={(event) => onTargetDrop(targetFor(event), event)}
+        onDragEnd={onObjectDragEnd}
         sx={{
           minHeight: 36,
           ml: `${contentX}px`,
@@ -205,10 +223,12 @@ function ObjectRow({
           gap: 0.75,
           px: 0.625,
           color: rowSelected ? editorColors.textStrong : panelText,
-          cursor: 'default',
-          opacity: object.hidden ? 0.55 : 1,
-          bgcolor: rowSelected ? selectedBg : 'transparent',
-          '&:hover': { bgcolor: rowSelected ? selectedBg : hoverBg },
+          cursor: dragging ? 'grabbing' : 'grab',
+          opacity: dragging ? 0.45 : object.hidden ? 0.55 : 1,
+          bgcolor: activeDrop === 'inside' ? 'rgba(74, 163, 255, 0.14)' : rowSelected ? selectedBg : 'transparent',
+          transition: 'background-color 120ms ease, box-shadow 120ms ease, opacity 120ms ease',
+          ...dropSx(activeDrop),
+          '&:hover': { bgcolor: activeDrop === 'inside' ? 'rgba(74, 163, 255, 0.14)' : rowSelected ? selectedBg : hoverBg },
           '&:hover .scene-row-actions': { opacity: 1 },
         }}
       >
@@ -253,6 +273,8 @@ function GroupBlock({
   selectedIds,
   depth,
   last,
+  draggedObjectId,
+  dropTarget,
   onSelectObject,
   onSelectionChange,
   onObjectChange,
@@ -260,6 +282,11 @@ function GroupBlock({
   onDeleteObjects,
   onGroupRename,
   onPatchObjects,
+  onObjectDragStart,
+  onTargetDragOver,
+  onTargetDragLeave,
+  onTargetDrop,
+  onObjectDragEnd,
 }: {
   group: StageBuilderGroup;
   objects: EditorStageObject[];
@@ -267,6 +294,8 @@ function GroupBlock({
   selectedIds: string[];
   depth: number;
   last: boolean;
+  draggedObjectId: string | null;
+  dropTarget: HierarchyDropTarget | null;
   onSelectObject: (id: string | null) => void;
   onSelectionChange: (ids: string[]) => void;
   onObjectChange: (object: EditorStageObject) => void;
@@ -274,6 +303,11 @@ function GroupBlock({
   onDeleteObjects: (ids: string[]) => void;
   onGroupRename: (groupId: string, name: string) => void;
   onPatchObjects: (ids: string[], patch: Partial<EditorStageObject>) => void;
+  onObjectDragStart: (id: string, event: React.DragEvent<HTMLDivElement>) => void;
+  onTargetDragOver: (target: HierarchyDropTarget, event: React.DragEvent<HTMLDivElement>) => void;
+  onTargetDragLeave: (target: HierarchyDropTarget, event: React.DragEvent<HTMLDivElement>) => void;
+  onTargetDrop: (target: HierarchyDropTarget, event: React.DragEvent<HTMLDivElement>) => void;
+  onObjectDragEnd: () => void;
 }) {
   const [expanded, setExpanded] = useState(true);
   const [editing, setEditing] = useState(false);
@@ -281,7 +315,9 @@ function GroupBlock({
   const allHidden = objects.length > 0 && objects.every((object) => object.hidden);
   const allLocked = objects.length > 0 && objects.every((object) => object.locked);
   const selected = ids.length > 0 && ids.every((id) => selectedIds.includes(id));
+  const activeDrop = dropTarget?.type === 'group' && dropTarget.id === group.id ? dropTarget.position : null;
   const { contentX } = treeMetrics(depth);
+  const targetFor = (event: React.DragEvent<HTMLDivElement>): HierarchyDropTarget => ({ type: 'group', id: group.id, position: positionFromPointer(event) });
 
   return (
     <Box>
@@ -289,6 +325,9 @@ function GroupBlock({
         <Box
           onClick={() => onSelectionChange(ids)}
           onDoubleClick={() => setEditing(true)}
+          onDragOver={(event) => onTargetDragOver(targetFor(event), event)}
+          onDragLeave={(event) => onTargetDragLeave(targetFor(event), event)}
+          onDrop={(event) => onTargetDrop(targetFor(event), event)}
           sx={{
             minHeight: 36,
             ml: `${contentX}px`,
@@ -299,9 +338,11 @@ function GroupBlock({
             gap: 0.5,
             px: 0.625,
             color: selected ? editorColors.textStrong : panelText,
-            cursor: 'default',
-            bgcolor: selected ? selectedBg : 'transparent',
-            '&:hover': { bgcolor: selected ? selectedBg : hoverBg },
+            cursor: draggedObjectId ? 'move' : 'default',
+            bgcolor: activeDrop === 'inside' ? 'rgba(240, 167, 215, 0.12)' : selected ? selectedBg : 'transparent',
+            transition: 'background-color 120ms ease, box-shadow 120ms ease',
+            ...dropSx(activeDrop),
+            '&:hover': { bgcolor: activeDrop === 'inside' ? 'rgba(240, 167, 215, 0.12)' : selected ? selectedBg : hoverBg },
             '&:hover .scene-row-actions': { opacity: 1 },
           }}
         >
@@ -332,11 +373,18 @@ function GroupBlock({
           selectedIds={selectedIds}
           depth={depth + 1}
           last={index === objects.length - 1}
+          draggedObjectId={draggedObjectId}
+          dropTarget={dropTarget}
           onSelectObject={onSelectObject}
           onSelectionChange={onSelectionChange}
           onObjectChange={onObjectChange}
           onDuplicateObjects={onDuplicateObjects}
           onDeleteObjects={onDeleteObjects}
+          onObjectDragStart={onObjectDragStart}
+          onTargetDragOver={onTargetDragOver}
+          onTargetDragLeave={onTargetDragLeave}
+          onTargetDrop={onTargetDrop}
+          onObjectDragEnd={onObjectDragEnd}
         />
       ))}
     </Box>
@@ -352,28 +400,92 @@ export function StageSceneHierarchy({
   onObjectChange,
   onDuplicateObjects,
   onDeleteObjects,
-  onGroupSelected,
-  onUngroupSelected,
+  onHierarchyDrop,
   onGroupRename,
   onPatchObjects,
 }: StageSceneHierarchyProps) {
   const [query, setQuery] = useState('');
+  const [draggedObjectId, setDraggedObjectId] = useState<string | null>(null);
+  const [dropTarget, setDropTarget] = useState<HierarchyDropTarget | null>(null);
   const normalizedQuery = query.trim().toLowerCase();
 
-  const groups = useMemo(() => {
-    return stage.metadata.groups
-      .map((group) => {
-        const objects = stage.objects.filter((object) => group.objectIds.includes(object.id));
-        const groupMatches = !normalizedQuery || group.name.toLowerCase().includes(normalizedQuery);
-        const filteredObjects = groupMatches ? objects : objects.filter((object) => objectMatches(object, normalizedQuery));
-        return { group, objects: filteredObjects, allObjects: objects };
-      })
-      .filter((entry) => entry.objects.length > 0 || (!normalizedQuery && entry.allObjects.length > 0));
+  const { rootItems, objectGroupIds } = useMemo(() => {
+    const objectById = new Map(stage.objects.map((object) => [object.id, object]));
+    const nextObjectGroupIds = new Map<string, string>();
+    const groupEntries = new Map<string, GroupEntry>();
+
+    for (const group of stage.metadata.groups) {
+      const allObjects = group.objectIds
+        .map((objectId) => objectById.get(objectId))
+        .filter((object): object is EditorStageObject => !!object);
+      allObjects.forEach((object) => nextObjectGroupIds.set(object.id, group.id));
+      const groupMatches = !normalizedQuery || group.name.toLowerCase().includes(normalizedQuery);
+      const filteredObjects = groupMatches ? allObjects : allObjects.filter((object) => objectMatches(object, normalizedQuery));
+      if (filteredObjects.length > 0 || (!normalizedQuery && allObjects.length > 0)) groupEntries.set(group.id, { group, objects: filteredObjects, allObjects });
+    }
+
+    const seenGroups = new Set<string>();
+    const items: RootItem[] = [];
+    for (const object of stage.objects) {
+      const groupId = nextObjectGroupIds.get(object.id);
+      if (groupId) {
+        if (seenGroups.has(groupId)) continue;
+        seenGroups.add(groupId);
+        const entry = groupEntries.get(groupId);
+        if (entry) items.push({ type: 'group', entry });
+        continue;
+      }
+      if (objectMatches(object, normalizedQuery)) items.push({ type: 'object', object });
+    }
+
+    for (const [groupId, entry] of groupEntries) {
+      if (!seenGroups.has(groupId)) items.push({ type: 'group', entry });
+    }
+
+    return { rootItems: items, objectGroupIds: nextObjectGroupIds };
   }, [stage.metadata.groups, stage.objects, normalizedQuery]);
 
-  const groupedObjectIds = useMemo(() => new Set(stage.metadata.groups.flatMap((group) => group.objectIds)), [stage.metadata.groups]);
-  const objects = useMemo(() => stage.objects.filter((object) => !groupedObjectIds.has(object.id) && objectMatches(object, normalizedQuery)), [stage.objects, groupedObjectIds, normalizedQuery]);
-  const hasItems = groups.length > 0 || objects.length > 0;
+  const hasItems = rootItems.length > 0;
+
+  const handleObjectDragStart = (id: string, event: React.DragEvent<HTMLDivElement>) => {
+    event.stopPropagation();
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData(dragDataType, id);
+    event.dataTransfer.setData('text/plain', id);
+    setDraggedObjectId(id);
+    setDropTarget(null);
+  };
+
+  const handleTargetDragOver = (target: HierarchyDropTarget, event: React.DragEvent<HTMLDivElement>) => {
+    event.stopPropagation();
+    if (!draggedObjectId || (target.type === 'object' && draggedObjectId === target.id)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+    setDropTarget(target);
+  };
+
+  const handleTargetDragLeave = (target: HierarchyDropTarget, event: React.DragEvent<HTMLDivElement>) => {
+    event.stopPropagation();
+    if (!dropTarget || dropTarget.type !== target.type || dropTarget.id !== target.id) return;
+    const nextTarget = event.relatedTarget as Node | null;
+    if (nextTarget && event.currentTarget.contains(nextTarget)) return;
+    setDropTarget(null);
+  };
+
+  const handleTargetDrop = (target: HierarchyDropTarget, event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const sourceId = draggedObjectId || event.dataTransfer.getData(dragDataType) || event.dataTransfer.getData('text/plain');
+    setDraggedObjectId(null);
+    setDropTarget(null);
+    if (!sourceId || (target.type === 'object' && sourceId === target.id)) return;
+    onHierarchyDrop(sourceId, target);
+  };
+
+  const handleObjectDragEnd = () => {
+    setDraggedObjectId(null);
+    setDropTarget(null);
+  };
 
   return (
     <Box sx={{ color: panelText, width: '100%', overflowX: 'hidden' }}>
@@ -383,12 +495,6 @@ export function StageSceneHierarchy({
           <Typography variant="caption" noWrap sx={{ ...editorType.caption, display: 'block' }}>{stage.objects.length} object{stage.objects.length === 1 ? '' : 's'}</Typography>
         </Box>
         <Box sx={{ flex: 1 }} />
-        <Stack direction="row" spacing={0.25}>
-          <HeaderAction title="Group selected" disabled={selectedIds.length < 2} onClick={onGroupSelected}><CreateNewFolderIcon sx={{ width: 16, height: 16 }} /></HeaderAction>
-          <HeaderAction title="Ungroup selected" disabled={!selectedIds.length} onClick={onUngroupSelected}><FolderOffIcon sx={{ width: 16, height: 16 }} /></HeaderAction>
-          <HeaderAction title="Duplicate selected" disabled={!selectedIds.length} onClick={() => onDuplicateObjects(selectedIds)}><ContentCopyIcon sx={{ width: 16, height: 16 }} /></HeaderAction>
-          <HeaderAction title="Delete selected" disabled={!selectedIds.length} onClick={() => onDeleteObjects(selectedIds)}><DeleteIcon sx={{ width: 16, height: 16 }} /></HeaderAction>
-        </Stack>
       </Box>
 
       <Box sx={{ minHeight: 36, display: 'flex', alignItems: 'center', gap: 0.75, px: 0.875, bgcolor: editorColors.panel, borderTop: `1px solid ${panelLine}`, borderBottom: `1px solid ${panelLine}` }}>
@@ -402,22 +508,24 @@ export function StageSceneHierarchy({
         />
       </Box>
 
-      <Stack spacing={0} sx={{ py: 0.375 }}>
+      <Stack spacing={0} sx={{ py: 0.375, minHeight: 80 }}>
         {hasItems && (
           <Typography variant="caption" sx={{ ...editorType.sectionLabel, px: 0.875, py: 0.5, color: editorColors.textMuted }}>
             Objects
           </Typography>
         )}
 
-        {groups.map(({ group, objects: groupObjects }, index) => (
+        {rootItems.map((item, index) => item.type === 'group' ? (
           <GroupBlock
-            key={group.id}
-            group={group}
-            objects={groupObjects}
+            key={item.entry.group.id}
+            group={item.entry.group}
+            objects={item.entry.objects}
             selectedId={selectedId}
             selectedIds={selectedIds}
             depth={0}
-            last={index === groups.length - 1 && objects.length === 0}
+            last={index === rootItems.length - 1}
+            draggedObjectId={draggedObjectId}
+            dropTarget={dropTarget}
             onSelectObject={onSelectObject}
             onSelectionChange={onSelectionChange}
             onObjectChange={onObjectChange}
@@ -425,22 +533,32 @@ export function StageSceneHierarchy({
             onDeleteObjects={onDeleteObjects}
             onGroupRename={onGroupRename}
             onPatchObjects={onPatchObjects}
+            onObjectDragStart={handleObjectDragStart}
+            onTargetDragOver={handleTargetDragOver}
+            onTargetDragLeave={handleTargetDragLeave}
+            onTargetDrop={handleTargetDrop}
+            onObjectDragEnd={handleObjectDragEnd}
           />
-        ))}
-
-        {objects.map((object, index) => (
+        ) : (
           <ObjectRow
-            key={object.id}
-            object={object}
-            selected={object.id === selectedId}
+            key={item.object.id}
+            object={{ ...item.object, groupId: objectGroupIds.get(item.object.id) || item.object.groupId }}
+            selected={item.object.id === selectedId}
             selectedIds={selectedIds}
             depth={0}
-            last={index === objects.length - 1}
+            last={index === rootItems.length - 1}
+            draggedObjectId={draggedObjectId}
+            dropTarget={dropTarget}
             onSelectObject={onSelectObject}
             onSelectionChange={onSelectionChange}
             onObjectChange={onObjectChange}
             onDuplicateObjects={onDuplicateObjects}
             onDeleteObjects={onDeleteObjects}
+            onObjectDragStart={handleObjectDragStart}
+            onTargetDragOver={handleTargetDragOver}
+            onTargetDragLeave={handleTargetDragLeave}
+            onTargetDrop={handleTargetDrop}
+            onObjectDragEnd={handleObjectDragEnd}
           />
         ))}
 
