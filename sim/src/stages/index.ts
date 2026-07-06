@@ -15,6 +15,7 @@ import stageWhiteRect from './data/stage_white_rect.json'
  */
 export type StageName = string
 export type RawStageEntry = Record<string, unknown>
+export type RawStageConfig = RawStageEntry[]
 
 export const STAGES: Record<StageName, RawStageEntry[]> = {
   stage_animals: stageAnimals as RawStageEntry[],
@@ -32,5 +33,5 @@ export const STAGE_NAMES: StageName[] = Object.keys(STAGES).sort()
 
 export const DEFAULT_STAGE: StageName = 'stage_white_rect'
 
-export { loadStage, type StageHandle } from './loader'
+export { loadStage, loadStageEntries, type StageHandle } from './loader'
 export type { LineSegment } from './visuals'

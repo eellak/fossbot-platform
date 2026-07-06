@@ -1,6 +1,7 @@
 import React, { forwardRef, useEffect, useImperativeHandle, useRef } from 'react'
 import { SimEngine } from './engine/SimEngine'
 import type { SimEngineConfig } from './engine/types'
+import type { RawStageConfig } from './stages'
 
 export interface FossbotSimulatorHandle {
   moveStep(distance: number): Promise<void>
@@ -8,6 +9,7 @@ export interface FossbotSimulatorHandle {
   stopMotion(): void
   reset(): void
   setStage(stageOrUrl: string): Promise<void>
+  setStageConfig(entries: RawStageConfig, name?: string): Promise<void>
   getStageNames(): string[]
   setLightIntensity(intensity: number): void
   changeCamera(): void
@@ -30,10 +32,11 @@ export interface FossbotSimulatorProps {
   onMountChange?: (isMounted: boolean) => void
   className?: string
   style?: React.CSSProperties
+  initialStageConfig?: RawStageConfig
 }
 
 export const FossbotSimulator = forwardRef<FossbotSimulatorHandle, FossbotSimulatorProps>(
-  ({ config, onMountChange, className, style }, ref) => {
+  ({ config, onMountChange, className, style, initialStageConfig }, ref) => {
     const containerRef = useRef<HTMLDivElement | null>(null)
     const engineRef = useRef<SimEngine | null>(null)
 
@@ -43,6 +46,7 @@ export const FossbotSimulator = forwardRef<FossbotSimulatorHandle, FossbotSimula
       stopMotion: () => engineRef.current?.stopMotion(),
       reset: () => engineRef.current?.reset(),
       setStage: (stageOrUrl) => engineRef.current?.setStage(stageOrUrl) ?? Promise.resolve(),
+      setStageConfig: (entries, name) => engineRef.current?.setStageConfig(entries, name) ?? Promise.resolve(),
       getStageNames: () => engineRef.current?.getStageNames() ?? [],
       setLightIntensity: (intensity) => engineRef.current?.setLightIntensity(intensity),
       changeCamera: () => engineRef.current?.changeCamera(),
@@ -62,7 +66,7 @@ export const FossbotSimulator = forwardRef<FossbotSimulatorHandle, FossbotSimula
     useEffect(() => {
       if (!containerRef.current) return
 
-      const engine = new SimEngine(containerRef.current, config)
+      const engine = new SimEngine(containerRef.current, { ...config, initialStageConfig })
       engineRef.current = engine
       let disposed = false
 

@@ -9,7 +9,8 @@ import {
   IconLayoutDashboard,
   IconAlbum,
   IconHandGrab,
-  IconDeviceGamepad2
+  IconDeviceGamepad2,
+  IconMap,
 } from '@tabler/icons-react';
 
 interface MenuitemsType {
@@ -66,6 +67,14 @@ const Menuitems: MenuitemsType[] = [
     subtitle: 'menu.blocksBased',
     icon: IconPuzzle,
     href: '/blockly-page',
+  },
+
+  {
+    id: uniqueId(),
+    title: 'menu.stageBuilder',
+    subtitle: 'menu.stageBuilderBased',
+    icon: IconMap,
+    href: '/stage-builder',
   },
 
   {
