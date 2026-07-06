@@ -23,11 +23,12 @@ import { EditorLeftPanel } from 'src/components/stage-builder/EditorLeftPanel';
 import type { HierarchyDropTarget } from 'src/components/stage-builder/StageSceneHierarchy';
 import { EditorViewportToolRail } from 'src/components/stage-builder/EditorViewportToolRail';
 import { EditorViewportCameraGizmo } from 'src/components/stage-builder/EditorViewportCameraGizmo';
+import VideocamIcon from '@mui/icons-material/Videocam';
 import { EditorPanelTab } from 'src/components/stage-builder/EditorPanelTab';
 import { EditorRightInspector, type InspectorTab } from 'src/components/stage-builder/EditorRightInspector';
 import { clearStageBuilderDraft, draftToEditorStage, readStageBuilderDraft, stageFingerprint, writeStageBuilderDraft, type StageBuilderDraft } from 'src/components/stage-builder/stageBuilderDrafts';
 import { writeStageBuilderRunHandoff } from 'src/components/stage-builder/stageBuilderRunHandoff';
-import { editorColors } from 'src/components/stage-builder/stageBuilderEditorTheme';
+import { editorColors, editorTones } from 'src/components/stage-builder/stageBuilderEditorTheme';
 
 function userScope(user: ReturnType<typeof useAuth>['user']): string {
   if (!user) return 'anonymous';
@@ -78,6 +79,21 @@ type PanelResizeState = {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
+}
+
+function cameraPreviewName(name: string): string {
+  const trimmed = name.trim();
+  if (!trimmed || trimmed.toLowerCase() === 'camera') return 'Stage camera';
+  return trimmed;
+}
+
+function hasVisibleStageCamera(stage: EditorStage): boolean {
+  return stage.objects.some((object) => object.kind === 'camera' && !object.hidden);
+}
+
+function normalizeCameraMetadata(stage: EditorStage): EditorStage {
+  if (!stage.metadata.lockCamera || hasVisibleStageCamera(stage)) return stage;
+  return { ...stage, metadata: { ...stage.metadata, lockCamera: false } };
 }
 
 function StatusPill({ label, value, tone = editorColors.text }: { label: string; value: string; tone?: string }) {
@@ -141,6 +157,7 @@ const StageBuilderPage = () => {
   const [transformMode, setTransformMode] = useState<StageBuilderTransformMode>('translate');
   const [focusRequestNonce, setFocusRequestNonce] = useState(0);
   const [cameraViewRequest, setCameraViewRequest] = useState<{ view: StageBuilderCameraView; nonce: number } | null>(null);
+  const [lookThroughCameraId, setLookThroughCameraId] = useState<string | null>(null);
   const [prefs, setPrefs] = useState<StageBuilderPreferences>(() => readStageBuilderPreferences(scope));
   const [leftPanelVisible, setLeftPanelVisible] = useState(true);
   const [rightPanelVisible, setRightPanelVisible] = useState(true);
@@ -261,12 +278,26 @@ const StageBuilderPage = () => {
 
   const bumpHistory = () => setHistoryVersion((value) => value + 1);
   const setPref = (patch: Partial<StageBuilderPreferences>) => setPrefs((current) => ({ ...current, ...patch }));
-  const requestCameraView = (view: StageBuilderCameraView) => setCameraViewRequest((current) => ({ view, nonce: (current?.nonce || 0) + 1 }));
+  const requestCameraView = (view: StageBuilderCameraView) => {
+    setLookThroughCameraId(null);
+    setCameraViewRequest((current) => ({ view, nonce: (current?.nonce || 0) + 1 }));
+  };
+  const requestLookThroughCamera = (object: EditorStageObject) => {
+    if (object.kind !== 'camera' || object.hidden) return;
+    setLookThroughCameraId(object.id);
+  };
+  const lookThroughCamera = lookThroughCameraId ? stage.objects.find((item) => item.id === lookThroughCameraId && item.kind === 'camera' && !item.hidden) : null;
+
+  useEffect(() => {
+    if (!lookThroughCameraId) return;
+    const activeCamera = stage.objects.some((item) => item.id === lookThroughCameraId && item.kind === 'camera' && !item.hidden);
+    if (!activeCamera) setLookThroughCameraId(null);
+  }, [lookThroughCameraId, stage.objects]);
 
   const commitStage = (updater: (current: EditorStage) => EditorStage, options: { selectIds?: string[]; selectGroupId?: string | null; message?: string } = {}) => {
     setStage((current) => {
       historyRef.current = pushStageHistory(historyRef.current, current);
-      const next = updater(cloneStage(current));
+      const next = normalizeCameraMetadata(updater(cloneStage(current)));
       return { ...next, updatedAt: new Date().toISOString() };
     });
     bumpHistory();
@@ -285,15 +316,16 @@ const StageBuilderPage = () => {
   };
 
   const replaceStage = (next: EditorStage, options: { undoable?: boolean; clean?: boolean; message?: string } = {}) => {
+    const normalizedNext = normalizeCameraMetadata(cloneStage(next));
     const undoable = options.undoable ?? true;
     if (undoable) {
       setStage((current) => {
         historyRef.current = pushStageHistory(historyRef.current, current);
-        return cloneStage(next);
+        return normalizedNext;
       });
       bumpHistory();
     } else {
-      setStage(cloneStage(next));
+      setStage(normalizedNext);
       historyRef.current = createStageBuilderHistory();
       bumpHistory();
     }
@@ -302,7 +334,7 @@ const StageBuilderPage = () => {
     setSelectedGroupId(null);
     setBuilderMode('edit');
     if (options.clean) {
-      setLastExportFingerprint(stageFingerprint(next));
+      setLastExportFingerprint(stageFingerprint(normalizedNext));
       setExportedAt(null);
       clearStageBuilderDraft(scope);
     }
@@ -407,7 +439,9 @@ const StageBuilderPage = () => {
       ...current,
       objects: object.kind === 'fossbot'
         ? [...current.objects.filter((item) => item.kind !== 'fossbot'), object]
-        : [...current.objects, object],
+        : object.kind === 'camera'
+          ? [...current.objects.filter((item) => item.kind !== 'camera'), object]
+          : [...current.objects, object],
     }), { selectIds: [id], message: `${displayObjectType(object)} added at floor center.` });
   };
 
@@ -501,7 +535,7 @@ const StageBuilderPage = () => {
     const { history, stage: previous } = undoStageHistory(historyRef.current, stage);
     historyRef.current = history;
     if (previous) {
-      setStage(previous);
+      setStage(normalizeCameraMetadata(previous));
       setSelectedId(null);
       setSelectedIds([]);
       setSelectedGroupId(null);
@@ -513,7 +547,7 @@ const StageBuilderPage = () => {
     const { history, stage: next } = redoStageHistory(historyRef.current, stage);
     historyRef.current = history;
     if (next) {
-      setStage(next);
+      setStage(normalizeCameraMetadata(next));
       setSelectedId(null);
       setSelectedIds([]);
       setSelectedGroupId(null);
@@ -683,11 +717,14 @@ const StageBuilderPage = () => {
       if (key === 'r') { setBuilderMode('edit'); setTransformMode('scale'); }
       if (key === 'f') setFocusRequestNonce((value) => value + 1);
       if (key === 'g') groupSelected();
-      if (key === 'escape') handleSelect(null);
+      if (key === 'escape') {
+        if (lookThroughCameraId) setLookThroughCameraId(null);
+        else handleSelect(null);
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [prefs.keyboardShortcutsEnabled, stage, selectedId, selectedIds, selectedGroupId, snapSettings, historyVersion]);
+  }, [prefs.keyboardShortcutsEnabled, stage, selectedId, selectedIds, selectedGroupId, snapSettings, historyVersion, lookThroughCameraId]);
 
   return (
     <Box ref={rootRef} sx={{ '--fossbot-box-border-radius': '0px', borderRadius: 0, width: '100vw', height: '100vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', bgcolor: studio ? editorColors.viewport : '#e5e7eb' }}>
@@ -771,6 +808,7 @@ const StageBuilderPage = () => {
             validationResults={validationResults}
             focusRequestNonce={focusRequestNonce}
             cameraViewRequest={cameraViewRequest}
+            lookThroughCameraId={lookThroughCamera?.id || null}
             onSelect={handleSelect}
             onSelectionChange={handleSelectionChange}
             onObjectChange={updateObject}
@@ -798,6 +836,54 @@ const StageBuilderPage = () => {
           <Box sx={{ position: 'absolute', top: 12, right: 12, zIndex: 5 }}>
             <EditorViewportCameraGizmo currentView={cameraViewRequest?.view || 'perspective'} onCameraViewChange={requestCameraView} />
           </Box>
+          {lookThroughCamera && lookThroughCamera.kind === 'camera' && (
+            <Box sx={{ position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)', zIndex: 6, maxWidth: 'min(420px, calc(100% - 32px))', pointerEvents: 'none' }}>
+              <Stack
+                direction="row"
+                spacing={0.75}
+                alignItems="center"
+                sx={{
+                  maxWidth: '100%',
+                  minWidth: 0,
+                  height: 34,
+                  px: 1,
+                  bgcolor: 'rgba(11, 18, 36, 0.86)',
+                  color: editorColors.text,
+                  border: `1px solid ${editorColors.border}`,
+                  borderRadius: 0.75,
+                  backdropFilter: 'blur(10px)',
+                  pointerEvents: 'auto',
+                }}
+              >
+                <VideocamIcon fontSize="small" sx={{ color: editorTones.camera.accent, flexShrink: 0 }} />
+                <Typography variant="caption" noWrap sx={{ minWidth: 0, fontWeight: 800, color: editorColors.textStrong }}>Looking through {cameraPreviewName(lookThroughCamera.name)}</Typography>
+                <Button
+                  size="small"
+                  variant="text"
+                  onClick={() => setLookThroughCameraId(null)}
+                  sx={{
+                    flexShrink: 0,
+                    minWidth: 0,
+                    height: 24,
+                    px: 0.75,
+                    py: 0,
+                    borderRadius: 0.5,
+                    bgcolor: 'rgba(148, 163, 184, 0.08)',
+                    color: editorTones.camera.text,
+                    fontSize: '0.6875rem',
+                    fontWeight: 800,
+                    lineHeight: 1,
+                    textTransform: 'none',
+                    whiteSpace: 'nowrap',
+                    '&:hover': { bgcolor: 'rgba(148, 163, 184, 0.14)', color: editorColors.textStrong },
+                    '&:focus-visible': { outline: `2px solid ${editorTones.camera.accent}`, outlineOffset: 2 },
+                  }}
+                >
+                  Exit
+                </Button>
+              </Stack>
+            </Box>
+          )}
         </Box>
 
         {rightPanelVisible && <PanelResizeHandle side="right" onPointerDown={beginPanelResize('right')} onDoubleClick={resetPanelWidth('right')} />}
@@ -814,6 +900,7 @@ const StageBuilderPage = () => {
               prefs={prefs}
               onStageChange={handleStageChange}
               onObjectChange={updateObject}
+              onLookThroughCamera={requestLookThroughCamera}
               onToggleValidationOverride={toggleValidationOverride}
               onPrefsChange={setPref}
               onResetPrefs={() => setPrefs(defaultStageBuilderPreferences)}

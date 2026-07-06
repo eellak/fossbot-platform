@@ -33,10 +33,11 @@ export interface FossbotSimulatorProps {
   className?: string
   style?: React.CSSProperties
   initialStageConfig?: RawStageConfig
+  lockCamera?: boolean
 }
 
 export const FossbotSimulator = forwardRef<FossbotSimulatorHandle, FossbotSimulatorProps>(
-  ({ config, onMountChange, className, style, initialStageConfig }, ref) => {
+  ({ config, onMountChange, className, style, initialStageConfig, lockCamera }, ref) => {
     const containerRef = useRef<HTMLDivElement | null>(null)
     const engineRef = useRef<SimEngine | null>(null)
 
@@ -66,7 +67,7 @@ export const FossbotSimulator = forwardRef<FossbotSimulatorHandle, FossbotSimula
     useEffect(() => {
       if (!containerRef.current) return
 
-      const engine = new SimEngine(containerRef.current, { ...config, initialStageConfig })
+      const engine = new SimEngine(containerRef.current, { ...config, initialStageConfig, lockCamera })
       engineRef.current = engine
       let disposed = false
 

@@ -64,6 +64,11 @@ export function validateStageBuilderStage(stage: EditorStage): StageBuilderValid
     results.push(result(stage, 'stage:many-objects', 'warning', [], 'Obstacle count is above 50.', 'Large stages may be slow on older machines.'));
   }
 
+  const visibleCameras = stage.objects.filter((object) => object.kind === 'camera' && !object.hidden);
+  if (visibleCameras.length > 1) {
+    results.push(result(stage, 'stage:multiple-cameras', 'warning', visibleCameras.map((object) => object.id), 'Stage has multiple cameras.', 'Run Test uses the first exported camera. Hide or delete extra cameras unless this is intentional.'));
+  }
+
   const bounds = stage.objects
     .map((object) => ({ object, bounds: objectBounds(object) }))
     .filter((entry): entry is { object: EditorStageObject; bounds: NonNullable<ReturnType<typeof objectBounds>> } => !!entry.bounds);
@@ -74,7 +79,11 @@ export function validateStageBuilderStage(stage: EditorStage): StageBuilderValid
     }
 
     if (boundsOutsideStage(objectBox, stage)) {
-      results.push(result(stage, `object:${object.id}:outside-stage`, 'error', [object.id], `${labelFor(object)} is outside the stage.`, 'Objects must stay inside the visible floor boundary before saving or testing.', false));
+      if (object.kind === 'camera') {
+        results.push(result(stage, `object:${object.id}:outside-stage`, 'warning', [object.id], `${labelFor(object)} is outside the stage.`, 'Cameras can sit outside the floor for overview shots, but check the Run Test view before exporting.'));
+      } else {
+        results.push(result(stage, `object:${object.id}:outside-stage`, 'error', [object.id], `${labelFor(object)} is outside the stage.`, 'Objects must stay inside the visible floor boundary before saving or testing.', false));
+      }
     }
 
     if (object.kind === 'cube' && object.semanticKind === 'ramp') {
@@ -90,6 +99,10 @@ export function validateStageBuilderStage(stage: EditorStage): StageBuilderValid
 
     if (object.kind === 'light' && object.intensity < 0) {
       results.push(result(stage, `object:${object.id}:light-intensity`, 'error', [object.id], `${labelFor(object)} has negative intensity.`, 'Light intensity must be zero or positive.', false));
+    }
+
+    if (object.kind === 'camera' && (object.fov < 10 || object.fov > 120)) {
+      results.push(result(stage, `object:${object.id}:camera-fov`, 'error', [object.id], `${labelFor(object)} has an out-of-range field of view.`, 'Camera FOV must be between 10 and 120 degrees.', false));
     }
   }
 

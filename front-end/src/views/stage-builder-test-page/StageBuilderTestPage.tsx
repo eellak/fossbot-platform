@@ -35,6 +35,7 @@ const StageBuilderTestPage = () => {
   const navigate = useNavigate();
   const simRef = useRef<FossbotSimulatorHandle | null>(null);
   const handoff = useMemo(() => readStageBuilderRunHandoff(handoffIdFromUrl()), []);
+  const lockCamera = !!handoff?.record.editor?.lockCamera;
 
   const returnToBuilder = () => {
     if (window.opener && !window.opener.closed) window.close();
@@ -52,7 +53,7 @@ const StageBuilderTestPage = () => {
         <Chip size="small" label="Separate test route" variant="outlined" sx={{ color: '#bfdbfe', borderColor: 'rgba(191,219,254,0.45)' }} />
         <Box sx={{ flex: 1 }} />
         <Button size="small" color="inherit" startIcon={<RestartAltIcon />} onClick={() => simRef.current?.reset()} sx={{ textTransform: 'none' }}>Reset</Button>
-        <Button size="small" color="inherit" startIcon={<VideocamIcon />} onClick={() => simRef.current?.changeCamera()} sx={{ textTransform: 'none' }}>Camera</Button>
+        <Button size="small" color="inherit" startIcon={<VideocamIcon />} onClick={() => simRef.current?.changeCamera()} disabled={lockCamera} sx={{ textTransform: 'none' }}>Camera</Button>
       </Box>
 
       <Box sx={{ flex: 1, minHeight: 0, display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'minmax(0, 1fr) 320px' } }}>
@@ -65,6 +66,7 @@ const StageBuilderTestPage = () => {
                 ref={simRef}
                 initialStageConfig={handoff.record.config}
                 config={simulatorConfig}
+                lockCamera={lockCamera}
                 style={{ minHeight: '100%' }}
               />
             </Suspense>

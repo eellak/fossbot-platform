@@ -11,6 +11,7 @@ import type {
   StageFossbotEntry,
   StageJsonEntry,
   StageLightEntry,
+  StageCameraEntry,
   StageLineEntry,
   StageTextEntry,
 } from './types';
@@ -151,6 +152,15 @@ export function editorStageToConfig(stage: EditorStage): StageJsonEntry[] {
         rotationY: object.subtype === 'directional' || object.subtype === 'spot' ? object.rotationY : undefined,
         name: object.name || 'light',
       });
+    } else if (object.kind === 'camera') {
+      entries.push({
+        type: 'camera',
+        position: object.position,
+        rotationY: object.rotationY,
+        pitch: object.pitch,
+        fov: object.fov,
+        name: object.name || 'stage camera',
+      });
     }
   }
 
@@ -286,6 +296,19 @@ function configEntryToEditorObject(entry: StageJsonEntry): EditorStageObject | n
       range: light.range ?? 0,
       angle: light.angle ?? Math.PI / 6,
       penumbra: light.penumbra ?? 0.3,
+    };
+  }
+  if (entry.type === 'camera') {
+    const camera = entry as StageCameraEntry;
+    return {
+      id: makeLocalStageId(),
+      kind: 'camera',
+      semanticKind: 'camera',
+      name: camera.name || 'stage camera',
+      position: camera.position || [2.5, 2, 2.5],
+      rotationY: camera.rotationY ?? 0,
+      pitch: camera.pitch ?? 0,
+      fov: camera.fov ?? 50,
     };
   }
   return null;
