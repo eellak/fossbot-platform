@@ -10,11 +10,9 @@ export interface EditorLeftPanelProps {
   stage: EditorStage;
   selectedId: string | null;
   selectedIds: string[];
-  stageSelected?: boolean;
   prefabs: StageBuilderPrefab[];
   onAddKind: (kind: StageSemanticKind) => void;
   onAddPrefab: (prefab: StageBuilderPrefab) => void;
-  onSelectStage?: () => void;
   onSelectObject: (id: string | null) => void;
   onSelectionChange: (ids: string[]) => void;
   onObjectChange: (object: EditorStageObject) => void;
@@ -42,7 +40,7 @@ export function EditorLeftPanel(props: EditorLeftPanelProps) {
         <Tab value="scene" label="Scene" />
       </Tabs>
       <Divider sx={{ borderColor: editorColors.border }} />
-      <Box sx={{ flex: 1, overflow: 'auto', p: 1 }}>
+      <Box sx={{ flex: 1, overflow: 'auto', p: 1, scrollbarWidth: 'none', msOverflowStyle: 'none', '&::-webkit-scrollbar': { display: 'none' } }}>
         {tab === 'library' ? (
           <StageObjectLibrary prefabs={props.prefabs} onAddKind={props.onAddKind} onAddPrefab={props.onAddPrefab} />
         ) : (
@@ -50,8 +48,6 @@ export function EditorLeftPanel(props: EditorLeftPanelProps) {
             stage={props.stage}
             selectedId={props.selectedId}
             selectedIds={props.selectedIds}
-            stageSelected={props.stageSelected}
-            onSelectStage={props.onSelectStage}
             onSelectObject={props.onSelectObject}
             onSelectionChange={props.onSelectionChange}
             onObjectChange={props.onObjectChange}

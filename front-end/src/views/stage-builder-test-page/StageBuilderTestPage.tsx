@@ -11,6 +11,7 @@ import ArrowForwardIosIcon from '@mui/icons-material/ArrowForwardIos';
 import { useNavigate } from 'react-router-dom';
 import type { FossbotSimulatorHandle } from 'src/simulator/FossbotSimulator';
 import { readStageBuilderRunHandoff } from 'src/components/stage-builder/stageBuilderRunHandoff';
+import { editorColors } from 'src/components/stage-builder/stageBuilderEditorTheme';
 
 const LazyFossbotSimulator = lazy(() =>
   import('src/simulator/FossbotSimulator').then((module) => ({ default: module.FossbotSimulator })),
@@ -41,8 +42,8 @@ const StageBuilderTestPage = () => {
   };
 
   return (
-    <Box sx={{ width: '100vw', height: '100vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', bgcolor: '#020617', color: '#e2e8f0' }}>
-      <Box sx={{ height: 48, px: 1.5, display: 'flex', alignItems: 'center', gap: 1, borderBottom: '1px solid rgba(148,163,184,0.25)', bgcolor: '#0f172a' }}>
+    <Box sx={{ '--fossbot-box-border-radius': '0px', borderRadius: 0, width: '100vw', height: '100vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', bgcolor: editorColors.viewport, color: '#e2e8f0' }}>
+      <Box sx={{ height: 48, px: 1.5, display: 'flex', alignItems: 'center', gap: 1, borderBottom: '1px solid rgba(148,163,184,0.2)', bgcolor: editorColors.topbar }}>
         <Button size="small" variant="outlined" color="inherit" startIcon={<ArrowBackIcon />} onClick={returnToBuilder} sx={{ borderColor: 'rgba(226,232,240,0.35)', textTransform: 'none' }}>Return to Builder</Button>
         <Box sx={{ minWidth: 0 }}>
           <Typography variant="subtitle2" fontWeight={800} lineHeight={1}>Stage Test Simulator</Typography>

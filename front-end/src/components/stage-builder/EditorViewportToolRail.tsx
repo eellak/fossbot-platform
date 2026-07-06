@@ -14,6 +14,7 @@ import type { StageBuilderMode } from './types';
 import type { StageBuilderTransformMode } from './StageBuilderScene';
 import type { StageBuilderSnapPreset } from './stageBuilderPreferences';
 import { snapPresetLabel } from './stageBuilderSnapping';
+import { editorColors } from './stageBuilderEditorTheme';
 
 export interface EditorViewportToolRailProps {
   mode: StageBuilderMode;
@@ -36,24 +37,24 @@ const toolButtonSx = {
   height: 34,
   minWidth: 34,
   p: 0,
-  color: '#c8d3da',
+  color: editorColors.textMuted,
   border: 0,
   borderRadius: '6px !important',
-  '&:hover': { bgcolor: '#2b3941' },
+  '&:hover': { bgcolor: editorColors.panelRaised },
   '&.Mui-selected': {
-    color: '#ffffff',
-    bgcolor: '#1f6feb',
-    '&:hover': { bgcolor: '#2a7df4' },
+    color: editorColors.accentText,
+    bgcolor: editorColors.accentSoft,
+    '&:hover': { bgcolor: '#1c4668' },
   },
 } as const;
 
 const iconButtonSx = {
   width: 34,
   height: 34,
-  color: '#c8d3da',
+  color: editorColors.textMuted,
   borderRadius: 1,
-  '&:hover': { bgcolor: '#2b3941' },
-  '&.Mui-disabled': { color: '#52636d' },
+  '&:hover': { bgcolor: editorColors.panelRaised },
+  '&.Mui-disabled': { color: editorColors.textSubtle },
 } as const;
 
 export function EditorViewportToolRail({
@@ -75,7 +76,7 @@ export function EditorViewportToolRail({
   const snappingOn = normalizedSnap !== 'off';
 
   return (
-    <Paper elevation={6} sx={{ p: 0.5, bgcolor: '#202a30', color: '#d8e1e8', border: '1px solid #344149', borderRadius: 1.25 }}>
+    <Paper elevation={0} sx={{ p: 0.5, bgcolor: editorColors.panel, color: editorColors.text, border: `1px solid ${editorColors.border}`, borderRadius: 1, boxShadow: 'none' }}>
       <Stack spacing={0.5} alignItems="center">
         <Tooltip title="Select"><ToggleButton size="small" value="select" selected={false} onClick={() => onModeChange('edit')} sx={toolButtonSx}><MouseIcon fontSize="small" /></ToggleButton></Tooltip>
         <Divider flexItem sx={{ borderColor: '#344149' }} />

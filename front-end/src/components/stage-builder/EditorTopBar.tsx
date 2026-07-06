@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import {
-  Box, Button, Chip, Divider, IconButton, Menu, MenuItem, Stack, Toolbar, Tooltip, Typography,
+  Box, Button, ButtonBase, Chip, Divider, IconButton, Menu, MenuItem, Stack, Toolbar, Tooltip, Typography,
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
@@ -13,6 +13,7 @@ import type { StageSemanticKind } from './types';
 import type { StageBuilderPrefab } from './stageBuilderPrefabs';
 import { STAGE_BUILDER_LIBRARY_GROUPS, libraryLabel } from './StageObjectLibrary';
 import { activeValidationResults, validationSummary, type StageBuilderValidationResult } from './stageBuilderValidation';
+import { editorColors } from './stageBuilderEditorTheme';
 
 export interface EditorTopBarProps {
   stageName: string;
@@ -39,6 +40,7 @@ export interface EditorTopBarProps {
   onAddPrefab: (prefab: StageBuilderPrefab) => void;
   onOpenValidation: () => void;
   onOpenSettings: () => void;
+  onOpenStageSettings: () => void;
   onToggleLeftPanel: () => void;
   onToggleRightPanel: () => void;
 }
@@ -53,11 +55,48 @@ function useMenu() {
   };
 }
 
+const menuButtonSx = {
+  height: 30,
+  minWidth: 52,
+  px: 1,
+  borderRadius: 0.75,
+  color: '#cbd5e1',
+  textTransform: 'none',
+  '&:hover': { bgcolor: 'rgba(148,163,184,0.09)', color: '#f8fafc' },
+} as const;
+
+const topbarIconButtonSx = {
+  width: 32,
+  height: 32,
+  borderRadius: 0.75,
+  color: '#cbd5e1',
+  '&:hover': { bgcolor: 'rgba(148,163,184,0.1)', color: '#f8fafc' },
+} as const;
+
+const exportButtonSx = {
+  height: 34,
+  borderColor: 'rgba(226,232,240,0.28)',
+  color: '#dbeafe',
+  bgcolor: 'rgba(15,23,42,0.45)',
+  textTransform: 'none',
+  '&:hover': { borderColor: 'rgba(226,232,240,0.45)', bgcolor: 'rgba(30,41,59,0.7)' },
+} as const;
+
+const runButtonSx = {
+  height: 34,
+  px: 1.75,
+  bgcolor: '#6ee7c2',
+  color: '#06251f',
+  fontWeight: 800,
+  textTransform: 'none',
+  '&:hover': { bgcolor: '#7cf0cb' },
+} as const;
+
 function MenuButton({ label, children }: { label: string; children: (close: () => void) => React.ReactNode }) {
   const menu = useMenu();
   return (
     <>
-      <Button color="inherit" size="small" onClick={menu.openMenu} sx={{ textTransform: 'none' }}>{label}</Button>
+      <Button color="inherit" size="small" onClick={menu.openMenu} sx={menuButtonSx}>{label}</Button>
       <Menu anchorEl={menu.anchorEl} open={menu.open} onClose={menu.closeMenu}>{children(menu.closeMenu)}</Menu>
     </>
   );
@@ -88,6 +127,7 @@ export function EditorTopBar({
   onAddPrefab,
   onOpenValidation,
   onOpenSettings,
+  onOpenStageSettings,
   onToggleLeftPanel,
   onToggleRightPanel,
 }: EditorTopBarProps) {
@@ -97,17 +137,34 @@ export function EditorTopBar({
   const hasWarnings = active.some((item) => item.severity === 'warning');
 
   return (
-    <Toolbar variant="dense" sx={{ minHeight: 48, height: 48, px: 1, gap: 1, bgcolor: '#0f172a', color: '#e2e8f0', borderBottom: '1px solid rgba(148,163,184,0.25)' }}>
+    <Toolbar variant="dense" sx={{ minHeight: 48, height: 48, px: 1, gap: 1, bgcolor: editorColors.topbar, color: '#e2e8f0', borderBottom: '1px solid rgba(148,163,184,0.2)' }}>
       <Tooltip title="Back to Platform">
         <IconButton size="small" onClick={onBack} sx={{ color: 'inherit' }}><ArrowBackIcon fontSize="small" /></IconButton>
       </Tooltip>
-      <Box sx={{ minWidth: 0, mr: 1 }}>
-        <Typography variant="subtitle2" fontWeight={800} lineHeight={1}>Stage Builder</Typography>
-        <Typography variant="caption" sx={{ color: '#94a3b8' }} noWrap>{stageName || 'Untitled Stage'}</Typography>
-      </Box>
+      <Tooltip title="Open stage settings">
+        <ButtonBase
+          onClick={onOpenStageSettings}
+          sx={{
+            minWidth: 0,
+            mr: 0.5,
+            px: 0.5,
+            py: 0.25,
+            borderRadius: 0.75,
+            color: 'inherit',
+            textAlign: 'left',
+            display: 'block',
+            '&:hover': { bgcolor: 'rgba(148,163,184,0.08)' },
+            '&:focus-visible': { outline: `2px solid ${editorColors.accent}`, outlineOffset: 2 },
+          }}
+        >
+          <Typography variant="subtitle2" fontWeight={800} lineHeight={1}>Stage Builder</Typography>
+          <Typography variant="caption" sx={{ color: '#94a3b8' }} noWrap>{stageName || 'Untitled Stage'}</Typography>
+        </ButtonBase>
+      </Tooltip>
       <Divider flexItem orientation="vertical" sx={{ borderColor: 'rgba(148,163,184,0.25)' }} />
 
-      <MenuButton label="File">
+      <Stack direction="row" spacing={0.25} alignItems="center" sx={{ px: 0.25, py: 0.25, borderRadius: 1, bgcolor: 'rgba(15,23,42,0.24)', border: '1px solid rgba(148,163,184,0.08)' }}>
+        <MenuButton label="File">
         {(close) => [
           <MenuItem key="new" onClick={() => { close(); onNew(); }}>New stage</MenuItem>,
           <MenuItem key="demo" onClick={() => { close(); onDemo(); }}>Load demo</MenuItem>,
@@ -142,23 +199,51 @@ export function EditorTopBar({
           <MenuItem key="settings" onClick={() => { close(); onOpenSettings(); }}>Editor settings</MenuItem>,
         ]}
       </MenuButton>
-      <MenuButton label="Help">
-        {(close) => [
-          <MenuItem key="shortcuts" disabled>Shortcuts: W move, E rotate, R scale, F focus, Delete remove</MenuItem>,
-          <MenuItem key="workflow" onClick={close}>Workflow: add objects, inspect, validate, export JSON, run test.</MenuItem>,
-        ]}
-      </MenuButton>
+        <MenuButton label="Help">
+          {(close) => [
+            <MenuItem key="shortcuts" disabled>Shortcuts: W move, E rotate, R scale, F focus, Delete remove</MenuItem>,
+            <MenuItem key="workflow" onClick={close}>Workflow: add objects, inspect, validate, export JSON, run test.</MenuItem>,
+          ]}
+        </MenuButton>
+      </Stack>
 
       <Box sx={{ flex: 1 }} />
-      <Stack direction="row" spacing={1} alignItems="center" sx={{ display: { xs: 'none', md: 'flex' } }}>
-        <Chip size="small" label={dirty ? 'Unsaved changes' : exportedAt ? 'Exported' : 'No changes'} color={dirty ? 'warning' : 'success'} variant={dirty ? 'filled' : 'outlined'} />
-        <Chip size="small" clickable onClick={onOpenValidation} label={validationSummary(validationResults)} color={hasErrors ? 'error' : hasWarnings ? 'warning' : 'success'} />
+      <Stack direction="row" spacing={0.75} alignItems="center" sx={{ display: { xs: 'none', md: 'flex' }, minWidth: 0 }}>
+        <Chip
+          size="small"
+          label={dirty ? 'Unsaved changes' : exportedAt ? 'Exported' : 'No changes'}
+          variant="outlined"
+          sx={{
+            color: dirty ? '#ffd58a' : '#9df0b8',
+            borderColor: dirty ? 'rgba(243,184,77,0.5)' : 'rgba(91,220,139,0.45)',
+            bgcolor: dirty ? 'rgba(243,184,77,0.12)' : 'rgba(91,220,139,0.08)',
+            fontWeight: 700,
+          }}
+        />
+        <Chip
+          size="small"
+          clickable
+          onClick={onOpenValidation}
+          label={validationSummary(validationResults)}
+          variant="outlined"
+          sx={{
+            color: hasErrors ? '#ffb4a5' : hasWarnings ? '#ffd58a' : '#9df0b8',
+            borderColor: hasErrors ? 'rgba(242,139,116,0.55)' : hasWarnings ? 'rgba(243,184,77,0.5)' : 'rgba(91,220,139,0.45)',
+            bgcolor: hasErrors ? 'rgba(242,139,116,0.12)' : hasWarnings ? 'rgba(243,184,77,0.12)' : 'rgba(91,220,139,0.08)',
+            fontWeight: 700,
+            '&:hover': { bgcolor: hasErrors ? 'rgba(242,139,116,0.18)' : hasWarnings ? 'rgba(243,184,77,0.18)' : 'rgba(91,220,139,0.12)' },
+          }}
+        />
       </Stack>
-      <Tooltip title="Toggle left panel"><IconButton size="small" onClick={onToggleLeftPanel} sx={{ color: 'inherit' }}><ViewSidebarIcon fontSize="small" /></IconButton></Tooltip>
-      <Tooltip title="Editor settings"><IconButton size="small" onClick={onOpenSettings} sx={{ color: 'inherit' }}><SettingsIcon fontSize="small" /></IconButton></Tooltip>
-      <Button size="small" color="inherit" variant="outlined" startIcon={<FileDownloadIcon />} onClick={onExport} sx={{ borderColor: 'rgba(226,232,240,0.35)', textTransform: 'none' }}>Export JSON</Button>
-      <Button size="small" variant="contained" color="success" startIcon={<PlayArrowIcon />} onClick={onRunTest} sx={{ textTransform: 'none' }}>Run Test</Button>
-      <IconButton size="small" onClick={overflow.openMenu} sx={{ color: 'inherit' }}><MoreVertIcon fontSize="small" /></IconButton>
+      <Stack direction="row" spacing={0.25} alignItems="center" sx={{ px: 0.25 }}>
+        <Tooltip title="Toggle left panel"><IconButton size="small" onClick={onToggleLeftPanel} sx={topbarIconButtonSx}><ViewSidebarIcon fontSize="small" /></IconButton></Tooltip>
+        <Tooltip title="Editor settings"><IconButton size="small" onClick={onOpenSettings} sx={topbarIconButtonSx}><SettingsIcon fontSize="small" /></IconButton></Tooltip>
+      </Stack>
+      <Stack direction="row" spacing={0.75} alignItems="center" sx={{ pl: 0.75, ml: 0.25, borderLeft: '1px solid rgba(148,163,184,0.16)' }}>
+        <Button size="small" color="inherit" variant="outlined" startIcon={<FileDownloadIcon />} onClick={onExport} sx={exportButtonSx}>Export JSON</Button>
+        <Button size="small" variant="contained" disableElevation startIcon={<PlayArrowIcon />} onClick={onRunTest} sx={runButtonSx}>Run Test</Button>
+        <IconButton size="small" onClick={overflow.openMenu} sx={topbarIconButtonSx}><MoreVertIcon fontSize="small" /></IconButton>
+      </Stack>
       <Menu anchorEl={overflow.anchorEl} open={overflow.open} onClose={overflow.closeMenu}>
         <MenuItem disabled><HelpOutlineIcon fontSize="small" style={{ marginRight: 8 }} />Theme, language, and profile controls remain in the platform.</MenuItem>
       </Menu>
