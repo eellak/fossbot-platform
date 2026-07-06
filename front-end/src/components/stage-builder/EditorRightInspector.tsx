@@ -13,8 +13,9 @@ import type { StageBuilderPreferences } from './stageBuilderPreferences';
 import { defaultStageBuilderPreferences, type StageBuilderRotationSnapPreset, type StageBuilderSnapPreset } from './stageBuilderPreferences';
 import { rotationSnapPresetLabel, snapPresetLabel } from './stageBuilderSnapping';
 import { editorColors, editorType, inspectorPanelSx } from './stageBuilderEditorTheme';
+import { PreviewSettingsPanel } from './PreviewSettingsPanel';
 
-export type InspectorTab = 'empty' | 'object' | 'stage' | 'validation' | 'settings';
+export type InspectorTab = 'empty' | 'object' | 'stage' | 'validation' | 'settings' | 'previewSettings';
 
 export interface EditorRightInspectorProps {
   tab: InspectorTab;
@@ -284,7 +285,7 @@ export function EditorRightInspector({
   onResetPrefs,
   onTogglePanel,
 }: EditorRightInspectorProps) {
-  const context = tab === 'validation' ? 'validation' : tab === 'settings' ? 'settings' : tab === 'stage' ? 'stage' : selectedObject ? 'object' : 'empty';
+  const context = tab === 'validation' ? 'validation' : tab === 'settings' ? 'settings' : tab === 'previewSettings' ? 'previewSettings' : tab === 'stage' ? 'stage' : selectedObject ? 'object' : 'empty';
 
   return (
     <Box sx={inspectorPanelSx}>
@@ -311,6 +312,7 @@ export function EditorRightInspector({
         {context === 'stage' && <StageContext stage={stage} prefs={prefs} onStageChange={onStageChange} onPrefsChange={onPrefsChange} />}
         {context === 'settings' && <SettingsContext prefs={prefs} onPrefsChange={onPrefsChange} onResetPrefs={onResetPrefs} />}
         {context === 'validation' && <ValidationContext results={validationResults} onToggleOverride={onToggleValidationOverride} onBack={() => onTabChange('stage')} />}
+        {context === 'previewSettings' && <PreviewSettingsPanel />}
       </Box>
     </Box>
   );

@@ -1,9 +1,11 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Box, ButtonBase, Stack, Tooltip, Typography } from '@mui/material';
 import type { StageSemanticKind } from './types';
 import { STAGE_OBJECT_CATALOG, catalogItem } from './stageBuilderCatalog';
 import type { StageBuilderPrefab } from './stageBuilderPrefabs';
 import { editorColors, editorTones, editorType, type EditorTone } from './stageBuilderEditorTheme';
+import { PreviewImage } from './PreviewImage';
+import { fitDisplaySizeToTile, getKindSettings, getLibraryPreviewAreaSize, getPreviewAuthoringKind, setLibraryPreviewAreaSize, usePreviewSettingsVersion } from './stageBuilderPreviewSettings';
 
 export type StageBuilderLibraryGroup = {
   id: 'floorPaths' | 'structures' | 'robot' | 'challenge' | 'labels' | 'lighting' | 'camera' | 'audio';
@@ -37,9 +39,30 @@ export interface StageObjectLibraryProps {
 const tones: Record<StageBuilderLibraryGroup['id'] | 'prefab', EditorTone> = editorTones;
 export type PreviewKind = StageSemanticKind | 'prefab';
 
+const STATIC_PREVIEW_KINDS = new Set<StageSemanticKind>([
+  'baseTile',
+  'block',
+  'cylinder',
+  'line',
+  'obstacle',
+  'platform',
+  'ramp',
+  'robotSpawn',
+  'target',
+  'wall',
+]);
+
+export function hasStaticPreviewAsset(kind: StageSemanticKind): boolean {
+  return STATIC_PREVIEW_KINDS.has(kind);
+}
+
+export function staticPreviewUrl(kind: StageSemanticKind): string {
+  return `${process.env.PUBLIC_URL || ''}/stage-builder/previews/preview-${kind}.png`;
+}
+
 const libraryTileSx = {
   width: '100%',
-  minHeight: 66,
+  minHeight: 76,
   p: 0.5,
   display: 'flex',
   flexDirection: 'column',
@@ -62,58 +85,68 @@ function itemFor(kind: StageSemanticKind) {
   return STAGE_OBJECT_CATALOG.find((item) => item.id === kind);
 }
 
-export function PreviewShape({ kind, tone }: { kind: PreviewKind; tone: EditorTone }) {
+function StaticPreviewAsset({ kind, width, height }: { kind: StageSemanticKind; width: number; height: number }) {
+  return (
+    <img
+      src={staticPreviewUrl(kind)}
+      width={Math.round(width)}
+      height={Math.round(height)}
+      alt=""
+      draggable={false}
+      style={{ display: 'block', objectFit: 'contain', userSelect: 'none' }}
+    />
+  );
+}
+
+export function PreviewShape({ kind, tone, width, height }: { kind: PreviewKind; tone: EditorTone; width?: number; height?: number }) {
   const accent = tone.accent;
   const soft = `${tone.accent}33`;
 
-  if (kind === 'wall') return <Box sx={{ width: 44, height: 12, bgcolor: accent, opacity: 0.78, transform: 'rotate(-8deg)', boxShadow: `0 8px 0 ${soft}` }} />;
-  if (kind === 'block') return <Box sx={{ width: 30, height: 30, bgcolor: accent, opacity: 0.72, boxShadow: `8px 8px 0 ${soft}` }} />;
-  if (kind === 'ramp') return <Box sx={{ width: 42, height: 26, clipPath: 'polygon(0 100%, 100% 100%, 100% 20%)', bgcolor: accent, opacity: 0.76 }} />;
-  if (kind === 'platform') return <Box sx={{ width: 46, height: 10, bgcolor: accent, opacity: 0.74, boxShadow: `0 10px 0 ${soft}` }} />;
-  if (kind === 'cylinder') {
-    return (
+  let icon: React.ReactNode;
+  if (kind === 'wall') icon = <Box sx={{ width: 44, height: 12, bgcolor: accent, opacity: 0.78, transform: 'rotate(-8deg)', boxShadow: `0 8px 0 ${soft}` }} />;
+  else if (kind === 'block') icon = <Box sx={{ width: 30, height: 30, bgcolor: accent, opacity: 0.72, boxShadow: `8px 8px 0 ${soft}` }} />;
+  else if (kind === 'ramp') icon = <Box sx={{ width: 42, height: 26, clipPath: 'polygon(0 100%, 100% 100%, 100% 20%)', bgcolor: accent, opacity: 0.76 }} />;
+  else if (kind === 'platform') icon = <Box sx={{ width: 46, height: 10, bgcolor: accent, opacity: 0.74, boxShadow: `0 10px 0 ${soft}` }} />;
+  else if (kind === 'cylinder') {
+    icon = (
       <Box sx={{ position: 'relative', width: 34, height: 38 }}>
         <Box sx={{ position: 'absolute', top: 5, left: 3, width: 28, height: 13, borderRadius: '50%', border: `2px solid ${accent}`, bgcolor: soft }} />
         <Box sx={{ position: 'absolute', top: 11, left: 3, width: 28, height: 18, borderLeft: `2px solid ${accent}`, borderRight: `2px solid ${accent}`, bgcolor: soft }} />
         <Box sx={{ position: 'absolute', bottom: 3, left: 3, width: 28, height: 13, borderRadius: '50%', border: `2px solid ${accent}`, bgcolor: soft }} />
       </Box>
     );
-  }
-  if (kind === 'obstacle') return <Box sx={{ width: 0, height: 0, borderLeft: '18px solid transparent', borderRight: '18px solid transparent', borderBottom: `34px solid ${accent}`, opacity: 0.75 }} />;
-  if (kind === 'robotSpawn') return <Box sx={{ width: 34, height: 24, border: `2px solid ${accent}`, borderRadius: 1, display: 'grid', placeItems: 'center', color: accent, fontSize: 13, fontWeight: 900 }}>R</Box>;
-  if (kind === 'target') return <Box sx={{ width: 34, height: 34, borderRadius: '50%', border: `2px solid ${accent}`, boxShadow: `inset 0 0 0 7px ${soft}, inset 0 0 0 13px ${accent}` }} />;
-  if (kind === 'checkpoint') return <Box sx={{ position: 'relative', width: 34, height: 34, borderLeft: `2px solid ${accent}` }}><Box sx={{ position: 'absolute', top: 4, left: 2, width: 24, height: 15, bgcolor: soft, border: `2px solid ${accent}` }} /></Box>;
-  if (kind === 'dangerZone') return <Box sx={{ width: 30, height: 30, bgcolor: soft, border: `2px solid ${accent}`, transform: 'rotate(45deg)' }} />;
-  if (kind === 'sensorZone') return <Box sx={{ width: 40, height: 28, border: `2px dashed ${accent}`, bgcolor: soft }} />;
-  if (kind === 'camera') {
-    return (
+  } else if (kind === 'obstacle') icon = <Box sx={{ width: 0, height: 0, borderLeft: '18px solid transparent', borderRight: '18px solid transparent', borderBottom: `34px solid ${accent}`, opacity: 0.75 }} />;
+  else if (kind === 'robotSpawn') icon = <Box sx={{ width: 34, height: 24, border: `2px solid ${accent}`, borderRadius: 1, display: 'grid', placeItems: 'center', color: accent, fontSize: 13, fontWeight: 900 }}>R</Box>;
+  else if (kind === 'target') icon = <Box sx={{ width: 34, height: 34, borderRadius: '50%', border: `2px solid ${accent}`, boxShadow: `inset 0 0 0 7px ${soft}, inset 0 0 0 13px ${accent}` }} />;
+  else if (kind === 'checkpoint') icon = <Box sx={{ position: 'relative', width: 34, height: 34, borderLeft: `2px solid ${accent}` }}><Box sx={{ position: 'absolute', top: 4, left: 2, width: 24, height: 15, bgcolor: soft, border: `2px solid ${accent}` }} /></Box>;
+  else if (kind === 'dangerZone') icon = <Box sx={{ width: 30, height: 30, bgcolor: soft, border: `2px solid ${accent}`, transform: 'rotate(45deg)' }} />;
+  else if (kind === 'sensorZone') icon = <Box sx={{ width: 40, height: 28, border: `2px dashed ${accent}`, bgcolor: soft }} />;
+  else if (kind === 'camera') {
+    icon = (
       <Box component="svg" viewBox="0 0 44 34" sx={{ width: 42, height: 32 }}>
         <rect x="6" y="9" width="26" height="18" rx="3" fill={soft} stroke={accent} strokeWidth="2.4" />
         <path d="M32 14 L40 9 L40 27 L32 22 Z" fill={soft} stroke={accent} strokeWidth="2.4" strokeLinejoin="round" />
         <circle cx="17" cy="18" r="5" fill={`${accent}33`} stroke={accent} strokeWidth="2.2" />
       </Box>
     );
-  }
-  if (kind === 'audio') {
-    return (
+  } else if (kind === 'audio') {
+    icon = (
       <Box component="svg" viewBox="0 0 44 34" sx={{ width: 42, height: 32 }}>
         <path d="M7 14 H15 L25 7 V27 L15 20 H7 Z" fill={soft} stroke={accent} strokeWidth="2.4" strokeLinejoin="round" />
         <path d="M29 12 C32 15 32 19 29 22" fill="none" stroke={accent} strokeWidth="2.4" strokeLinecap="round" />
         <path d="M34 8 C40 14 40 20 34 26" fill="none" stroke={accent} strokeWidth="2.4" strokeLinecap="round" opacity="0.78" />
       </Box>
     );
-  }
-  if (kind === 'line') {
-    return (
+  } else if (kind === 'line') {
+    icon = (
       <Box component="svg" viewBox="0 0 52 34" sx={{ width: 52, height: 34 }}>
         <path d="M5 24 C15 4 30 31 47 10" fill="none" stroke={accent} strokeWidth="4" strokeLinecap="round" />
       </Box>
     );
-  }
-  if (kind === 'baseTile') return <Box sx={{ width: 38, height: 28, border: `2px solid ${accent}`, bgcolor: soft, transform: 'skewX(-12deg)' }} />;
-  if (kind === 'label') return <Box sx={{ color: accent, fontSize: 24, fontWeight: 900, lineHeight: 1 }}>T</Box>;
-  if (kind === 'light') {
-    return (
+  } else if (kind === 'baseTile') icon = <Box sx={{ width: 38, height: 28, border: `2px solid ${accent}`, bgcolor: soft, transform: 'skewX(-12deg)' }} />;
+  else if (kind === 'label') icon = <Box sx={{ color: accent, fontSize: 24, fontWeight: 900, lineHeight: 1 }}>T</Box>;
+  else if (kind === 'light') {
+    icon = (
       <Box component="svg" viewBox="0 0 40 40" sx={{ width: 38, height: 38 }}>
         <g stroke={accent} strokeWidth="2.4" strokeLinecap="round">
           <line x1="20" y1="3" x2="20" y2="9" />
@@ -128,18 +161,62 @@ export function PreviewShape({ kind, tone }: { kind: PreviewKind; tone: EditorTo
         <circle cx="20" cy="20" r="7" fill={`${accent}55`} stroke={accent} strokeWidth="2.4" />
       </Box>
     );
-  }
-  if (kind === 'prefab') {
-    return (
+  } else if (kind === 'prefab') {
+    icon = (
       <Box sx={{ width: 44, height: 34, display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 0.5 }}>
         {[0, 1, 2, 3].map((item) => <Box key={item} sx={{ bgcolor: item === 0 ? accent : soft, border: `1px solid ${accent}66` }} />)}
       </Box>
     );
-  }
-  return <Box sx={{ width: 28, height: 28, border: `2px solid ${accent}`, bgcolor: soft }} />;
+  } else icon = <Box sx={{ width: 28, height: 28, border: `2px solid ${accent}`, bgcolor: soft }} />;
+
+  if (width === undefined && height === undefined) return <>{icon}</>;
+
+  const boxWidth = width ?? 44;
+  const boxHeight = height ?? 34;
+  const scale = Math.max(0.1, Math.min(boxWidth / 52, boxHeight / 40));
+  return (
+    <Box sx={{ width: boxWidth, height: boxHeight, display: 'grid', placeItems: 'center', overflow: 'hidden' }} role="presentation" aria-hidden="true">
+      <Box sx={{ width: 52, height: 40, display: 'grid', placeItems: 'center', transform: `scale(${scale})`, transformOrigin: 'center' }}>
+        {icon}
+      </Box>
+    </Box>
+  );
 }
 
 function LibraryTile({ label, detail, active, tone, previewKind, onClick }: { label: string; detail?: string; active?: boolean; tone: EditorTone; previewKind: PreviewKind; onClick: () => void }) {
+  // Pull the current display size from the settings store. Re-renders when
+  // settings change (via the version hook below) so the user can tune the one
+  // authoring tile live without kicking off WebGL renders for every visible tile.
+  const settingsVersion = usePreviewSettingsVersion();
+  const settings = previewKind === 'prefab' ? null : getKindSettings(previewKind);
+  const measuredArea = getLibraryPreviewAreaSize();
+  const displaySize = settings && measuredArea
+    ? fitDisplaySizeToTile(measuredArea, { width: settings.width, height: settings.height }, 0)
+    : settings?.displaySize ?? { width: 52, height: 52 };
+  const livePreviewKind = previewKind !== 'prefab' && getPreviewAuthoringKind() === previewKind ? previewKind : null;
+  const previewTone = settings?.objectColorOverride ? { ...tone, accent: settings.objectColorOverride } : tone;
+  // Reference settingsVersion so the linter / future readers see this
+  // component is intentionally subscribed to settings changes.
+  void settingsVersion;
+  // Measure the image area so the settings panel's "Fit to tile" action has
+  // a real tile size to fit against, not a hardcoded constant.
+  const areaRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const element = areaRef.current;
+    if (!element || typeof ResizeObserver === 'undefined') return undefined;
+    const update = () => {
+      const rect = element.getBoundingClientRect();
+      // Guard against the (transient) zero-size measurement ResizeObserver
+      // emits right before the layout settles.
+      if (rect.width > 0 && rect.height > 0) {
+        setLibraryPreviewAreaSize({ width: rect.width, height: rect.height });
+      }
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
   return (
     <Tooltip title={detail || ''} placement="right" disableHoverListener={!detail}>
       <ButtonBase
@@ -151,8 +228,19 @@ function LibraryTile({ label, detail, active, tone, previewKind, onClick }: { la
           borderColor: active ? `${tone.accent}66` : editorColors.border,
         }}
       >
-        <Box className="library-preview" sx={{ height: 36, display: 'grid', placeItems: 'center', opacity: 0.9, transition: 'opacity 120ms ease, transform 120ms ease' }}>
-          <PreviewShape kind={previewKind} tone={tone} />
+        <Box ref={areaRef} className="library-preview" sx={{ height: 52, display: 'grid', placeItems: 'center', opacity: 0.95, transition: 'opacity 120ms ease, transform 120ms ease' }}>
+          {livePreviewKind ? (
+            <PreviewImage kind={livePreviewKind} width={displaySize.width} height={displaySize.height} />
+          ) : previewKind !== 'prefab' && hasStaticPreviewAsset(previewKind) ? (
+            <StaticPreviewAsset kind={previewKind} width={displaySize.width} height={displaySize.height} />
+          ) : (
+            <PreviewShape
+              kind={previewKind}
+              tone={previewTone}
+              width={previewKind === 'prefab' ? 48 : displaySize.width}
+              height={previewKind === 'prefab' ? 38 : displaySize.height}
+            />
+          )}
         </Box>
         <Typography variant="caption" noWrap sx={{ ...editorType.body, color: 'inherit', fontSize: '0.6875rem', fontWeight: 750, lineHeight: 1.1 }}>
           {label}
