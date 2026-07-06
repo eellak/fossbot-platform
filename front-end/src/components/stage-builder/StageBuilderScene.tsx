@@ -1742,7 +1742,7 @@ export function StageBuilderScene({
       }
       const emptyDown = emptyClickRef.current;
       emptyClickRef.current = null;
-      if (emptyDown && Math.hypot(event.clientX - emptyDown.x, event.clientY - emptyDown.y) < 5 && (selectedRef.current || selectedIdsRef.current.length)) {
+      if (emptyDown && Math.hypot(event.clientX - emptyDown.x, event.clientY - emptyDown.y) < 5) {
         onSelectRef.current(null);
         onSelectionChangeRef.current?.([]);
       }

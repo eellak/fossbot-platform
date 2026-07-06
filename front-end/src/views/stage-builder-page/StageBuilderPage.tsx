@@ -357,8 +357,14 @@ const StageBuilderPage = () => {
     setSelectedGroupId(null);
     setSelectedId(id);
     setSelectedIds(id ? [id] : []);
-    setInspectorTab(id ? 'object' : 'empty');
-    if (id) setBuilderMode('edit');
+    if (id) {
+      setInspectorTab('object');
+      setBuilderMode('edit');
+    } else {
+      // Empty-click deselect: keep deliberately-opened tabs (Validation, Settings)
+      // sticky, but dismiss viewport-coupled tabs (object/stage/empty).
+      setInspectorTab((current) => (current === 'validation' || current === 'settings' ? current : 'empty'));
+    }
   };
 
   const handleSelectGroup = (id: string | null) => {
