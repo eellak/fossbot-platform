@@ -1,18 +1,11 @@
 import React, { useState } from 'react';
 import {
-  Box, Button, ButtonBase, Chip, Divider, IconButton, Menu, MenuItem, Stack, Toolbar, Tooltip, Typography,
+  Box, Button, ButtonBase, Divider, IconButton, Menu, MenuItem, Stack, Toolbar, Tooltip, Typography,
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
-import ViewSidebarIcon from '@mui/icons-material/ViewSidebar';
-import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
-import SettingsIcon from '@mui/icons-material/Settings';
-import type { StageSemanticKind } from './types';
-import type { StageBuilderCameraView } from './StageBuilderScene';
-import type { StageBuilderPrefab } from './stageBuilderPrefabs';
-import { STAGE_BUILDER_LIBRARY_GROUPS, libraryLabel } from './StageObjectLibrary';
 import { activeValidationResults, validationSummary, type StageBuilderValidationResult } from './stageBuilderValidation';
 import { editorColors } from './stageBuilderEditorTheme';
 
@@ -26,7 +19,6 @@ export interface EditorTopBarProps {
   canRedo: boolean;
   leftPanelVisible: boolean;
   rightPanelVisible: boolean;
-  prefabs: StageBuilderPrefab[];
   onBack: () => void;
   onNew: () => void;
   onDemo: () => void;
@@ -37,14 +29,12 @@ export interface EditorTopBarProps {
   onRedo: () => void;
   onDuplicate: () => void;
   onDelete: () => void;
-  onAddKind: (kind: StageSemanticKind) => void;
-  onAddPrefab: (prefab: StageBuilderPrefab) => void;
   onOpenValidation: () => void;
   onOpenSettings: () => void;
   onOpenStageSettings: () => void;
+  onOpenPreviewSettings: () => void;
   onToggleLeftPanel: () => void;
   onToggleRightPanel: () => void;
-  onCameraViewChange: (view: StageBuilderCameraView) => void;
 }
 
 function useMenu() {
@@ -57,16 +47,6 @@ function useMenu() {
   };
 }
 
-const menuButtonSx = {
-  height: 30,
-  minWidth: 52,
-  px: 1,
-  borderRadius: 0.75,
-  color: editorColors.text,
-  textTransform: 'none',
-  '&:hover': { bgcolor: editorColors.panelRaised, color: editorColors.textStrong },
-} as const;
-
 const topbarIconButtonSx = {
   width: 32,
   height: 32,
@@ -77,11 +57,11 @@ const topbarIconButtonSx = {
 
 const exportButtonSx = {
   height: 34,
-  borderColor: 'rgba(216, 225, 232, 0.28)',
-  color: editorColors.accentText,
-  bgcolor: editorColors.viewport,
+  borderColor: 'rgba(216, 225, 232, 0.16)',
+  color: editorColors.text,
+  bgcolor: 'transparent',
   textTransform: 'none',
-  '&:hover': { borderColor: editorColors.borderStrong, bgcolor: editorColors.accentSoft },
+  '&:hover': { borderColor: 'rgba(216, 225, 232, 0.3)', bgcolor: 'rgba(216, 225, 232, 0.06)', color: editorColors.textStrong },
 } as const;
 
 const runButtonSx = {
@@ -94,13 +74,37 @@ const runButtonSx = {
   '&:hover': { bgcolor: '#72e7a0' },
 } as const;
 
-function MenuButton({ label, children }: { label: string; children: (close: () => void) => React.ReactNode }) {
-  const menu = useMenu();
+function TopStatusText({ label, tone, onClick }: { label: string; tone: string; onClick?: () => void }) {
+  if (onClick) {
+    return (
+      <ButtonBase
+        onClick={onClick}
+        sx={{
+          minWidth: 0,
+          px: 0.5,
+          py: 0.25,
+          borderRadius: 0.5,
+          color: tone,
+          fontSize: '0.75rem',
+          fontWeight: 750,
+          lineHeight: 1.2,
+          cursor: 'pointer',
+          textDecoration: 'underline',
+          textDecorationColor: 'rgba(216, 225, 232, 0.28)',
+          textUnderlineOffset: '3px',
+          '&:hover': { bgcolor: 'rgba(216, 225, 232, 0.06)', textDecorationColor: 'currentColor' },
+          '&:focus-visible': { outline: `2px solid ${editorColors.accent}`, outlineOffset: 2 },
+        }}
+      >
+        {label}
+      </ButtonBase>
+    );
+  }
+
   return (
-    <>
-      <Button color="inherit" size="small" onClick={menu.openMenu} sx={menuButtonSx}>{label}</Button>
-      <Menu anchorEl={menu.anchorEl} open={menu.open} onClose={menu.closeMenu}>{children(menu.closeMenu)}</Menu>
-    </>
+    <Typography variant="caption" noWrap sx={{ px: 0.5, color: tone, fontWeight: 750, lineHeight: 1.2 }}>
+      {label}
+    </Typography>
   );
 }
 
@@ -114,7 +118,6 @@ export function EditorTopBar({
   canRedo,
   leftPanelVisible,
   rightPanelVisible,
-  prefabs,
   onBack,
   onNew,
   onDemo,
@@ -125,14 +128,12 @@ export function EditorTopBar({
   onRedo,
   onDuplicate,
   onDelete,
-  onAddKind,
-  onAddPrefab,
   onOpenValidation,
   onOpenSettings,
   onOpenStageSettings,
+  onOpenPreviewSettings,
   onToggleLeftPanel,
   onToggleRightPanel,
-  onCameraViewChange,
 }: EditorTopBarProps) {
   const overflow = useMenu();
   const active = activeValidationResults(validationResults);
@@ -164,100 +165,34 @@ export function EditorTopBar({
           <Typography variant="caption" sx={{ color: editorColors.textSubtle }} noWrap>{stageName || 'Untitled Stage'}</Typography>
         </ButtonBase>
       </Tooltip>
-      <Divider flexItem orientation="vertical" sx={{ borderColor: editorColors.border }} />
-
-      <Stack direction="row" spacing={0.25} alignItems="center" sx={{ px: 0.25, py: 0.25, borderRadius: 1, bgcolor: editorColors.panelInset, border: `1px solid ${editorColors.border}` }}>
-        <MenuButton label="File">
-        {(close) => [
-          <MenuItem key="new" onClick={() => { close(); onNew(); }}>New stage</MenuItem>,
-          <MenuItem key="demo" onClick={() => { close(); onDemo(); }}>Load demo</MenuItem>,
-          <MenuItem key="import" onClick={() => { close(); onImport(); }}>Import JSON…</MenuItem>,
-          <MenuItem key="export" onClick={() => { close(); onExport(); }}>Export JSON</MenuItem>,
-        ]}
-      </MenuButton>
-      <MenuButton label="Edit">
-        {(close) => [
-          <MenuItem key="undo" disabled={!canUndo} onClick={() => { close(); onUndo(); }}>Undo</MenuItem>,
-          <MenuItem key="redo" disabled={!canRedo} onClick={() => { close(); onRedo(); }}>Redo</MenuItem>,
-          <MenuItem key="duplicate" disabled={!selectedCount} onClick={() => { close(); onDuplicate(); }}>Duplicate selection</MenuItem>,
-          <MenuItem key="delete" disabled={!selectedCount} onClick={() => { close(); onDelete(); }}>Delete selection</MenuItem>,
-        ]}
-      </MenuButton>
-      <MenuButton label="Add">
-        {(close) => [
-          ...STAGE_BUILDER_LIBRARY_GROUPS.flatMap((group) => [
-            <MenuItem key={`${group.id}-header`} disabled>{group.label}</MenuItem>,
-            ...group.items.map((kind) => <MenuItem key={kind} onClick={() => { close(); onAddKind(kind); }}>{libraryLabel(kind)}</MenuItem>),
-          ]),
-          <Divider key="prefab-divider" />,
-          <MenuItem key="prefab-header" disabled>Prefabs</MenuItem>,
-          ...prefabs.map((prefab) => <MenuItem key={prefab.id} onClick={() => { close(); onAddPrefab(prefab); }}>{prefab.title}</MenuItem>),
-        ]}
-      </MenuButton>
-      <MenuButton label="View">
-        {(close) => [
-          <MenuItem key="left" onClick={() => { close(); onToggleLeftPanel(); }}>{leftPanelVisible ? 'Hide' : 'Show'} left panel</MenuItem>,
-          <MenuItem key="right" onClick={() => { close(); onToggleRightPanel(); }}>{rightPanelVisible ? 'Hide' : 'Show'} inspector</MenuItem>,
-          <Divider key="camera-divider" />,
-          <MenuItem key="camera-perspective" onClick={() => { close(); onCameraViewChange('perspective'); }}>Camera: Perspective</MenuItem>,
-          <MenuItem key="camera-top" onClick={() => { close(); onCameraViewChange('top'); }}>Camera: Top</MenuItem>,
-          <MenuItem key="camera-bottom" onClick={() => { close(); onCameraViewChange('bottom'); }}>Camera: Bottom</MenuItem>,
-          <MenuItem key="camera-front" onClick={() => { close(); onCameraViewChange('front'); }}>Camera: Front</MenuItem>,
-          <MenuItem key="camera-back" onClick={() => { close(); onCameraViewChange('back'); }}>Camera: Back</MenuItem>,
-          <MenuItem key="camera-left" onClick={() => { close(); onCameraViewChange('left'); }}>Camera: Left</MenuItem>,
-          <MenuItem key="camera-right" onClick={() => { close(); onCameraViewChange('right'); }}>Camera: Right</MenuItem>,
-          <Divider key="viewport-divider" />,
-          <MenuItem key="validation" onClick={() => { close(); onOpenValidation(); }}>Open Validation</MenuItem>,
-          <MenuItem key="settings" onClick={() => { close(); onOpenSettings(); }}>Editor settings</MenuItem>,
-        ]}
-      </MenuButton>
-        <MenuButton label="Help">
-          {(close) => [
-            <MenuItem key="shortcuts" disabled>Shortcuts: W move, E rotate, R scale, F focus, Delete remove</MenuItem>,
-            <MenuItem key="workflow" onClick={close}>Workflow: add objects, inspect, validate, export JSON, run test.</MenuItem>,
-          ]}
-        </MenuButton>
-      </Stack>
 
       <Box sx={{ flex: 1 }} />
-      <Stack direction="row" spacing={0.75} alignItems="center" sx={{ display: { xs: 'none', md: 'flex' }, minWidth: 0 }}>
-        <Chip
-          size="small"
-          label={dirty ? 'Unsaved changes' : exportedAt ? 'Exported' : 'No changes'}
-          variant="outlined"
-          sx={{
-            color: dirty ? editorColors.warning : editorColors.success,
-            borderColor: dirty ? 'rgba(243, 184, 77, 0.4)' : 'rgba(91, 220, 139, 0.4)',
-            bgcolor: dirty ? 'rgba(243, 184, 77, 0.08)' : 'rgba(91, 220, 139, 0.08)',
-            fontWeight: 700,
-          }}
-        />
-        <Chip
-          size="small"
-          clickable
-          onClick={onOpenValidation}
-          label={validationSummary(validationResults)}
-          variant="outlined"
-          sx={{
-            color: hasErrors ? editorColors.danger : hasWarnings ? editorColors.warning : editorColors.success,
-            borderColor: hasErrors ? 'rgba(242, 139, 116, 0.4)' : hasWarnings ? 'rgba(243, 184, 77, 0.4)' : 'rgba(91, 220, 139, 0.4)',
-            bgcolor: hasErrors ? 'rgba(242, 139, 116, 0.08)' : hasWarnings ? 'rgba(243, 184, 77, 0.08)' : 'rgba(91, 220, 139, 0.08)',
-            fontWeight: 700,
-            '&:hover': { bgcolor: hasErrors ? 'rgba(242, 139, 116, 0.12)' : hasWarnings ? 'rgba(243, 184, 77, 0.12)' : 'rgba(91, 220, 139, 0.12)' },
-          }}
-        />
+      <Stack direction="row" spacing={0.75} alignItems="center" sx={{ display: { xs: 'none', md: 'flex' }, minWidth: 0, color: editorColors.textMuted }}>
+        <TopStatusText label={dirty ? 'Unsaved changes' : exportedAt ? 'Exported' : 'No changes'} tone={dirty ? editorColors.warning : editorColors.success} />
+        <TopStatusText label={validationSummary(validationResults)} tone={hasErrors ? editorColors.danger : hasWarnings ? editorColors.warning : editorColors.success} onClick={onOpenValidation} />
       </Stack>
-      <Stack direction="row" spacing={0.25} alignItems="center" sx={{ px: 0.25 }}>
-        <Tooltip title="Toggle left panel"><IconButton size="small" onClick={onToggleLeftPanel} sx={topbarIconButtonSx}><ViewSidebarIcon fontSize="small" /></IconButton></Tooltip>
-        <Tooltip title="Editor settings"><IconButton size="small" onClick={onOpenSettings} sx={topbarIconButtonSx}><SettingsIcon fontSize="small" /></IconButton></Tooltip>
-      </Stack>
-      <Stack direction="row" spacing={0.75} alignItems="center" sx={{ pl: 0.75, ml: 0.25, borderLeft: `1px solid ${editorColors.border}` }}>
+      <Stack direction="row" spacing={0.75} alignItems="center" sx={{ pl: 0.75, ml: 0.25 }}>
         <Button size="small" color="inherit" variant="outlined" startIcon={<FileDownloadIcon />} onClick={onExport} sx={exportButtonSx}>Export JSON</Button>
         <Button size="small" variant="contained" disableElevation startIcon={<PlayArrowIcon />} onClick={onRunTest} sx={runButtonSx}>Run Test</Button>
         <IconButton size="small" onClick={overflow.openMenu} sx={topbarIconButtonSx}><MoreVertIcon fontSize="small" /></IconButton>
       </Stack>
       <Menu anchorEl={overflow.anchorEl} open={overflow.open} onClose={overflow.closeMenu}>
-        <MenuItem disabled><HelpOutlineIcon fontSize="small" style={{ marginRight: 8 }} />Theme, language, and profile controls remain in the platform.</MenuItem>
+        <MenuItem onClick={() => { overflow.closeMenu(); onNew(); }}>New stage</MenuItem>
+        <MenuItem onClick={() => { overflow.closeMenu(); onDemo(); }}>Load demo</MenuItem>
+        <MenuItem onClick={() => { overflow.closeMenu(); onImport(); }}>Import JSON…</MenuItem>
+        <Divider />
+        <MenuItem disabled={!canUndo} onClick={() => { overflow.closeMenu(); onUndo(); }}>Undo</MenuItem>
+        <MenuItem disabled={!canRedo} onClick={() => { overflow.closeMenu(); onRedo(); }}>Redo</MenuItem>
+        <MenuItem disabled={!selectedCount} onClick={() => { overflow.closeMenu(); onDuplicate(); }}>Duplicate selection</MenuItem>
+        <MenuItem disabled={!selectedCount} onClick={() => { overflow.closeMenu(); onDelete(); }}>Delete selection</MenuItem>
+        <Divider />
+        <MenuItem onClick={() => { overflow.closeMenu(); onOpenValidation(); }}>Open validation</MenuItem>
+        <MenuItem onClick={() => { overflow.closeMenu(); onToggleLeftPanel(); }}>{leftPanelVisible ? 'Hide' : 'Show'} library panel</MenuItem>
+        <MenuItem onClick={() => { overflow.closeMenu(); onToggleRightPanel(); }}>{rightPanelVisible ? 'Hide' : 'Show'} inspector</MenuItem>
+        <MenuItem onClick={() => { overflow.closeMenu(); onOpenPreviewSettings(); }}>Preview settings</MenuItem>
+        <MenuItem onClick={() => { overflow.closeMenu(); onOpenSettings(); }}>Editor settings</MenuItem>
+        <Divider />
+        <MenuItem disabled>Shortcuts: W/E/R transform, F focus, Delete remove</MenuItem>
       </Menu>
     </Toolbar>
   );

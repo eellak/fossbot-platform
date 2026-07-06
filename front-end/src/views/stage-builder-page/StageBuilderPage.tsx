@@ -96,12 +96,60 @@ function normalizeCameraMetadata(stage: EditorStage): EditorStage {
   return { ...stage, metadata: { ...stage.metadata, lockCamera: false } };
 }
 
-function StatusPill({ label, value, tone = editorColors.text }: { label: string; value: string; tone?: string }) {
+function StatusItem({ label, value, tone = editorColors.text }: { label: string; value: string; tone?: string }) {
   return (
-    <Box sx={{ height: 20, minWidth: 0, px: 0.75, display: 'inline-flex', alignItems: 'center', gap: 0.5, borderRadius: 0.75, bgcolor: 'rgba(148, 163, 184, 0.07)', border: '1px solid rgba(148, 163, 184, 0.14)' }}>
+    <Box sx={{ minWidth: 0, display: 'inline-flex', alignItems: 'baseline', gap: 0.5 }}>
       <Typography variant="caption" sx={{ color: editorColors.textSubtle, fontSize: '0.625rem', fontWeight: 800, letterSpacing: '0.06em', lineHeight: 1, textTransform: 'uppercase' }}>{label}</Typography>
-      <Typography variant="caption" noWrap sx={{ color: tone, fontWeight: 700, lineHeight: 1, minWidth: 0 }}>{value}</Typography>
+      <Typography variant="caption" noWrap sx={{ color: tone, fontWeight: 750, lineHeight: 1, minWidth: 0 }}>{value}</Typography>
     </Box>
+  );
+}
+
+function Keycap({ children }: { children: React.ReactNode }) {
+  return (
+    <Box
+      component="kbd"
+      sx={{
+        minWidth: 16,
+        height: 16,
+        px: 0.375,
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        border: '1px solid rgba(156, 175, 184, 0.28)',
+        borderBottomColor: 'rgba(156, 175, 184, 0.42)',
+        borderRadius: 0.375,
+        bgcolor: 'rgba(216, 225, 232, 0.06)',
+        color: editorColors.text,
+        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+        fontSize: '0.625rem',
+        fontWeight: 800,
+        lineHeight: 1,
+      }}
+    >
+      {children}
+    </Box>
+  );
+}
+
+function ShortcutHint() {
+  const shortcuts = [
+    ['W', 'move'],
+    ['E', 'rotate'],
+    ['R', 'scale'],
+    ['F', 'focus'],
+    ['Del', 'remove'],
+  ] as const;
+
+  return (
+    <Stack direction="row" spacing={1.25} alignItems="center" sx={{ ml: 'auto', minWidth: 0, color: editorColors.textMuted }}>
+      {shortcuts.map(([key, label]) => (
+        <Stack key={key} direction="row" spacing={0.375} alignItems="center">
+          <Keycap>{key}</Keycap>
+          <Typography variant="caption" noWrap sx={{ color: editorColors.textMuted }}>{label}</Typography>
+        </Stack>
+      ))}
+    </Stack>
   );
 }
 
@@ -132,10 +180,11 @@ function PanelResizeHandle({ side, onPointerDown, onDoubleClick }: { side: Panel
           left: '50%',
           width: '1px',
           transform: 'translateX(-50%)',
-          bgcolor: editorColors.border,
-          opacity: 0.9,
+          bgcolor: editorColors.accentText,
+          opacity: 0,
         },
         '&:hover': { bgcolor: 'rgba(74, 163, 255, 0.08)' },
+        '&:hover:before': { opacity: 0.75 },
       }}
     />
   );
@@ -538,6 +587,14 @@ const StageBuilderPage = () => {
     setRightPanelVisible(true);
   };
 
+  const handleOpenPreviewSettings = () => {
+    setSelectedId(null);
+    setSelectedIds([]);
+    setSelectedGroupId(null);
+    setInspectorTab('previewSettings');
+    setRightPanelVisible(true);
+  };
+
   const undo = () => {
     const { history, stage: previous } = undoStageHistory(historyRef.current, stage);
     historyRef.current = history;
@@ -745,7 +802,6 @@ const StageBuilderPage = () => {
         canRedo={canRedo(historyRef.current)}
         leftPanelVisible={leftPanelVisible}
         rightPanelVisible={rightPanelVisible}
-        prefabs={prefabs}
         onBack={handleBack}
         onNew={handleNew}
         onDemo={handleDemo}
@@ -756,14 +812,12 @@ const StageBuilderPage = () => {
         onRedo={redo}
         onDuplicate={duplicateSelected}
         onDelete={deleteSelected}
-        onAddKind={addObject}
-        onAddPrefab={addPrefab}
         onOpenValidation={() => setInspectorTab('validation')}
         onOpenSettings={handleOpenSettings}
         onOpenStageSettings={handleOpenStageSettings}
+        onOpenPreviewSettings={handleOpenPreviewSettings}
         onToggleLeftPanel={toggleLeftPanel}
         onToggleRightPanel={toggleRightPanel}
-        onCameraViewChange={requestCameraView}
       />
       <input ref={importInputRef} type="file" accept="application/json,.json" hidden onChange={(event) => handleImportFile(event.target.files?.[0])} />
 
@@ -920,16 +974,14 @@ const StageBuilderPage = () => {
         )}
       </Box>
 
-      <Box sx={{ height: 28, px: 1, display: 'flex', alignItems: 'center', gap: 1, bgcolor: editorColors.topbar, color: '#cbd5e1', borderTop: '1px solid rgba(148,163,184,0.16)' }}>
-        <Stack direction="row" spacing={0.75} alignItems="center" sx={{ minWidth: 0, flexShrink: 0 }}>
-          <StatusPill label="Mode" value={builderMode === 'edit' ? transformMode : builderMode} tone={editorColors.accentText} />
-          <StatusPill label="Selected" value={selectedStatus} tone={selectedTone} />
-          <StatusPill label="Snap" value={snapLabel(snapSettings)} tone={snapSettings.move ? editorColors.success : editorColors.textMuted} />
-          <StatusPill label="Grid" value={gridVisible ? `${gridSize} m` : 'Hidden'} tone={editorColors.text} />
+      <Box sx={{ height: 28, pl: 1, pr: 1.25, display: 'flex', alignItems: 'center', gap: 2, bgcolor: editorColors.topbar, color: '#cbd5e1', borderTop: '1px solid rgba(148,163,184,0.16)' }}>
+        <Stack direction="row" spacing={1.75} alignItems="baseline" sx={{ minWidth: 0, flexShrink: 0 }}>
+          <StatusItem label="Mode" value={builderMode === 'edit' ? transformMode : builderMode} tone={editorColors.accentText} />
+          <StatusItem label="Selected" value={selectedStatus} tone={selectedTone} />
+          <StatusItem label="Snap" value={snapLabel(snapSettings)} tone={snapSettings.move ? editorColors.success : editorColors.textMuted} />
+          <StatusItem label="Grid" value={gridVisible ? `${gridSize} m` : 'Hidden'} tone={editorColors.text} />
         </Stack>
-        <Typography variant="caption" noWrap sx={{ ml: 'auto', minWidth: 0, color: editorColors.textMuted, textAlign: 'right' }}>
-          Add from Library or Add menu, then use W/E/R and inspector fields.
-        </Typography>
+        <ShortcutHint />
       </Box>
 
       <Dialog open={!!pendingDraft && !draftReady} maxWidth="sm" fullWidth>

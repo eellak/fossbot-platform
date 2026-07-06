@@ -251,7 +251,16 @@ function SettingsContext({ prefs, onPrefsChange, onResetPrefs }: Pick<EditorRigh
 }
 
 function EmptyContext() {
-  return <Box aria-label="No inspector selection" sx={{ minHeight: '100%' }} />;
+  return (
+    <Box aria-label="No inspector selection" sx={{ minHeight: '100%', px: 1.25, py: 1.25 }}>
+      <Stack spacing={0.75} sx={{ maxWidth: 260 }}>
+        <Typography variant="caption" sx={{ ...editorType.sectionLabel, color: editorColors.textStrong }}>No selection</Typography>
+        <Typography variant="caption" sx={{ ...editorType.caption, color: editorColors.textMuted }}>
+          Select an object in the viewport or hierarchy to edit its transform, appearance, collision, and behavior.
+        </Typography>
+      </Stack>
+    </Box>
+  );
 }
 
 function ValidationContext({ results, onToggleOverride, onBack }: { results: StageBuilderValidationResult[]; onToggleOverride: (id: string, enabled: boolean) => void; onBack: () => void }) {
