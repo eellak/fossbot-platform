@@ -773,13 +773,11 @@ const StageBuilderPage = () => {
           />
           <Box sx={{ position: 'absolute', top: 12, left: 12, zIndex: 5 }}>
             <EditorViewportToolRail
-              mode={builderMode}
               transformMode={transformMode}
               snapPreset={prefs.snapPreset}
               selectedCount={selectedCount}
               canUndo={canUndo(historyRef.current)}
               canRedo={canRedo(historyRef.current)}
-              onModeChange={setBuilderMode}
               onTransformModeChange={(mode) => { setBuilderMode('edit'); setTransformMode(mode); }}
               onSnapPresetChange={(snapPreset) => {
                 setPref({ snapPreset });

@@ -13,7 +13,7 @@ import { getSnapSettings, snapAngle, snapDimensions, snapPosition } from './stag
 import type { StageBuilderValidationResult } from './stageBuilderValidation';
 import { objectBounds, stageHalfExtents } from './stageBuilderGeometry';
 
-export type StageBuilderTransformMode = 'translate' | 'rotate' | 'scale';
+export type StageBuilderTransformMode = 'select' | 'translate' | 'rotate' | 'scale';
 export type StageBuilderCameraView = 'perspective' | 'top' | 'bottom' | 'front' | 'back' | 'left' | 'right';
 export type StageBuilderCameraViewRequest = { view: StageBuilderCameraView; nonce: number };
 
@@ -982,6 +982,8 @@ export function StageBuilderScene({
   const wasDraggingRef = useRef(false);
   const spaceHeldRef = useRef(false);
   const axisLockRef = useRef<AxisLock>(null);
+  const shiftHeldRef = useRef(false);
+  const altHeldRef = useRef(false);
   const placementStatusRef = useRef<string>('');
   const friendlyDragRef = useRef<FriendlyDragState | null>(null);
   const groupTransformRef = useRef<GroupTransformState | null>(null);
@@ -1048,6 +1050,14 @@ export function StageBuilderScene({
   const configureTransformControls = () => {
     const transform = transformRef.current;
     if (!transform) return;
+    if (transformModeRef.current === 'select') {
+      transform.showX = false;
+      transform.showY = false;
+      transform.showZ = false;
+      transform.enabled = false;
+      return;
+    }
+    transform.enabled = true;
     const selected = objectsRef.current.find((item) => item.id === selectedRef.current);
     const yawOnly = selected?.kind === 'fossbot' && transformModeRef.current === 'rotate';
     transform.showX = !yawOnly;
@@ -1061,6 +1071,7 @@ export function StageBuilderScene({
     configureTransformControls();
     transform.detach();
     if (builderModeRef.current !== 'edit' || controlSchemeRef.current !== 'legacyGizmo') return;
+    if (transformModeRef.current === 'select') return;
 
     const groupId = selectedGroupRef.current;
     if (groupId && updateGroupPivotFromBounds(groupId) && groupPivotRef.current) {
@@ -1207,8 +1218,11 @@ export function StageBuilderScene({
     marqueeElementRef.current = marqueeEl;
 
     const transform = new TransformControls(sceneHandle.camera, sceneHandle.renderer.domElement);
-    transform.setMode(transformMode);
+    transform.setMode(transformMode === 'select' ? 'translate' : transformMode);
     transform.setSpace(transformSpaceRef.current);
+    const initialSnap = snapSettingsRef.current;
+    transform.setTranslationSnap(initialSnap.move || null);
+    transform.setRotationSnap(initialSnap.rotate || null);
     transform.addEventListener('change', () => applyTransformGuideColors(transform));
     applyTransformGuideColors(transform);
     transform.addEventListener('dragging-changed', (event) => {
@@ -1475,14 +1489,46 @@ export function StageBuilderScene({
       }
     };
 
+    const applyGizmoSnap = () => {
+      const gizmo = transformRef.current;
+      if (!gizmo) return;
+      const snap = snapSettingsRef.current;
+      if (altHeldRef.current) {
+        gizmo.setTranslationSnap(null);
+        gizmo.setRotationSnap(null);
+      } else if (shiftHeldRef.current) {
+        gizmo.setTranslationSnap(0.1);
+        gizmo.setRotationSnap((15 * Math.PI) / 180);
+      } else {
+        gizmo.setTranslationSnap(snap.move || null);
+        gizmo.setRotationSnap(snap.rotate || null);
+      }
+    };
+
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.code === 'Space') spaceHeldRef.current = true;
+      if (event.key === 'Shift' && !shiftHeldRef.current) {
+        shiftHeldRef.current = true;
+        applyGizmoSnap();
+      }
+      if (event.key === 'Alt' && !altHeldRef.current) {
+        altHeldRef.current = true;
+        applyGizmoSnap();
+      }
       if (event.key.toLowerCase() === 'x') axisLockRef.current = 'x';
       if (event.key.toLowerCase() === 'y') axisLockRef.current = 'y';
       if (event.key.toLowerCase() === 'z') axisLockRef.current = 'z';
     };
     const handleKeyUp = (event: KeyboardEvent) => {
       if (event.code === 'Space') spaceHeldRef.current = false;
+      if (event.key === 'Shift' && shiftHeldRef.current) {
+        shiftHeldRef.current = false;
+        applyGizmoSnap();
+      }
+      if (event.key === 'Alt' && altHeldRef.current) {
+        altHeldRef.current = false;
+        applyGizmoSnap();
+      }
       if (['x', 'y', 'z'].includes(event.key.toLowerCase())) axisLockRef.current = null;
     };
 
@@ -1680,17 +1726,27 @@ export function StageBuilderScene({
 
   useEffect(() => {
     syncTransformAttachment();
-  }, [objects, groups, selectedId, selectedGroupId, controlScheme, builderMode]);
+  }, [objects, groups, selectedId, selectedGroupId, controlScheme, builderMode, transformMode]);
 
   useEffect(() => {
     transformModeRef.current = transformMode;
-    transformRef.current?.setMode(transformMode);
+    transformRef.current?.setMode(transformMode === 'select' ? 'translate' : transformMode);
     configureTransformControls();
   }, [transformMode]);
 
   useEffect(() => {
     transformRef.current?.setSpace(transformSpace);
   }, [transformSpace]);
+
+  useEffect(() => {
+    const gizmo = transformRef.current;
+    if (!gizmo) return;
+    const snap = snapSettings || getSnapSettings('medium', '15');
+    if (!shiftHeldRef.current && !altHeldRef.current) {
+      gizmo.setTranslationSnap(snap.move || null);
+      gizmo.setRotationSnap(snap.rotate || null);
+    }
+  }, [snapSettings]);
 
   useEffect(() => {
     syncTransformAttachment();
