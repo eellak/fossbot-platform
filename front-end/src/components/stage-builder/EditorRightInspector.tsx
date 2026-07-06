@@ -12,7 +12,7 @@ import type { StageBuilderValidationResult } from './stageBuilderValidation';
 import type { StageBuilderPreferences } from './stageBuilderPreferences';
 import { defaultStageBuilderPreferences, type StageBuilderRotationSnapPreset, type StageBuilderSnapPreset } from './stageBuilderPreferences';
 import { rotationSnapPresetLabel, snapPresetLabel } from './stageBuilderSnapping';
-import { editorColors, editorType, inspectorPanelSx } from './stageBuilderEditorTheme';
+import { useEditorTheme } from './stageBuilderEditorTheme';
 import { PreviewSettingsPanel } from './PreviewSettingsPanel';
 
 export type InspectorTab = 'empty' | 'object' | 'stage' | 'validation' | 'settings' | 'previewSettings';
@@ -60,16 +60,8 @@ function rotationOptions() {
 const commonNumberProps = { type: 'number', size: 'small' as const, fullWidth: true };
 const commonFieldProps = { size: 'small' as const, fullWidth: true };
 
-const panelToggleButtonSx = {
-  width: 28,
-  height: 28,
-  borderRadius: 0.75,
-  color: editorColors.textMuted,
-  '&:hover': { bgcolor: editorColors.panelRaised, color: editorColors.accentText },
-  '&:focus-visible': { outline: `2px solid ${editorColors.accent}`, outlineOffset: 2 },
-} as const;
-
 function FieldRow({ label, children, align = 'center' }: { label: string; children: React.ReactNode; align?: 'center' | 'start' }) {
+  const { colors: editorColors, type: editorType } = useEditorTheme();
   return (
     <Box sx={{ display: 'grid', gridTemplateColumns: '96px minmax(0, 1fr)', gap: 0.75, alignItems: align, px: 1.25, py: 0.5 }}>
       <Typography variant="body2" sx={{ ...editorType.body, color: editorColors.textMuted, lineHeight: 1.2 }}>{label}</Typography>
@@ -91,6 +83,7 @@ function InlineFields({ children }: { children: React.ReactNode }) {
 }
 
 function Section({ title, children, defaultExpanded = true }: { title: string; children: React.ReactNode; defaultExpanded?: boolean }) {
+  const { colors: editorColors, type: editorType } = useEditorTheme();
   return (
     <Accordion defaultExpanded={defaultExpanded} disableGutters square>
       <AccordionSummary expandIcon={<ExpandMoreIcon sx={{ width: 18, height: 18, color: editorColors.textMuted }} />}>
@@ -104,6 +97,7 @@ function Section({ title, children, defaultExpanded = true }: { title: string; c
 }
 
 function ContextHeader({ title, description, action }: { title: string; description: string; action?: React.ReactNode }) {
+  const { colors: editorColors, type: editorType } = useEditorTheme();
   return (
     <Box sx={{ px: 1.25, py: 0.875, borderBottom: `1px solid ${editorColors.border}`, bgcolor: editorColors.panel }}>
       <Stack direction="row" spacing={1} alignItems="center">
@@ -118,6 +112,7 @@ function ContextHeader({ title, description, action }: { title: string; descript
 }
 
 function StageContext({ stage, prefs, onStageChange, onPrefsChange }: Pick<EditorRightInspectorProps, 'stage' | 'prefs' | 'onStageChange' | 'onPrefsChange'>) {
+  const { colors: editorColors, type: editorType } = useEditorTheme();
   const gridVisible = stage.metadata.gridVisible ?? true;
   const gridSize = stage.metadata.gridSize ?? 0.5;
   const defaultSnapPreset = stage.metadata.defaultSnapPreset || (prefs.snapPreset === 'free' || prefs.snapPreset === 'grid' ? 'fine' : prefs.snapPreset) as StageBuilderSnapPreset;
@@ -199,6 +194,7 @@ function StageContext({ stage, prefs, onStageChange, onPrefsChange }: Pick<Edito
 }
 
 function SettingsContext({ prefs, onPrefsChange, onResetPrefs }: Pick<EditorRightInspectorProps, 'prefs' | 'onPrefsChange' | 'onResetPrefs'>) {
+  const { colors: editorColors } = useEditorTheme();
   return (
     <Stack spacing={0} sx={{ color: editorColors.text }}>
       <ContextHeader title="Editor Settings" description="Workspace preferences stored locally for this editor." />
@@ -206,8 +202,8 @@ function SettingsContext({ prefs, onPrefsChange, onResetPrefs }: Pick<EditorRigh
       <Section title="Workspace">
         <FieldRow label="Style">
           <TextField {...commonFieldProps} select value={prefs.styleVariant} inputProps={{ 'aria-label': 'Editor style' }} onChange={(event) => onPrefsChange({ styleVariant: event.target.value as StageBuilderPreferences['styleVariant'] })}>
-            <MenuItem value="playful">Playful</MenuItem>
-            <MenuItem value="studio">Technical</MenuItem>
+            <MenuItem value="fossbot">FossBot</MenuItem>
+            <MenuItem value="studio">Studio</MenuItem>
           </TextField>
         </FieldRow>
         <FieldRow label="Selection">
@@ -251,6 +247,7 @@ function SettingsContext({ prefs, onPrefsChange, onResetPrefs }: Pick<EditorRigh
 }
 
 function EmptyContext() {
+  const { colors: editorColors, type: editorType } = useEditorTheme();
   return (
     <Box aria-label="No inspector selection" sx={{ minHeight: '100%', px: 1.25, py: 1.25 }}>
       <Stack spacing={0.75} sx={{ maxWidth: 260 }}>
@@ -264,6 +261,7 @@ function EmptyContext() {
 }
 
 function ValidationContext({ results, onToggleOverride, onBack }: { results: StageBuilderValidationResult[]; onToggleOverride: (id: string, enabled: boolean) => void; onBack: () => void }) {
+  const { colors: editorColors } = useEditorTheme();
   return (
     <Stack spacing={0} sx={{ color: editorColors.text }}>
       <ContextHeader
@@ -294,10 +292,20 @@ export function EditorRightInspector({
   onResetPrefs,
   onTogglePanel,
 }: EditorRightInspectorProps) {
+  const { colors: editorColors, type: editorType, inspectorSx } = useEditorTheme();
   const context = tab === 'validation' ? 'validation' : tab === 'settings' ? 'settings' : tab === 'previewSettings' ? 'previewSettings' : tab === 'stage' ? 'stage' : selectedObject ? 'object' : 'empty';
 
+  const panelToggleButtonSx = {
+    width: 28,
+    height: 28,
+    borderRadius: 0.75,
+    color: editorColors.textMuted,
+    '&:hover': { bgcolor: editorColors.panelRaised, color: editorColors.accentText },
+    '&:focus-visible': { outline: `2px solid ${editorColors.accent}`, outlineOffset: 2 },
+  } as const;
+
   return (
-    <Box sx={inspectorPanelSx}>
+    <Box sx={inspectorSx}>
       <Box sx={{ height: 36, flex: '0 0 36px', px: 1, display: 'flex', alignItems: 'center', gap: 1, bgcolor: editorColors.panelInset, borderBottom: `1px solid ${editorColors.border}` }}>
         <Typography variant="caption" noWrap sx={{ ...editorType.sectionLabel, color: editorColors.textStrong }}>Inspector</Typography>
         <Tooltip title="Hide Inspector panel" placement="left">

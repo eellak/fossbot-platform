@@ -15,7 +15,7 @@ import React, { useEffect, useState } from 'react';
 import { Box } from '@mui/material';
 import type { EditorStageObject, StageSemanticKind } from './types';
 import type { StageBuilderPrefab } from './stageBuilderPrefabs';
-import { editorColors, editorTones } from './stageBuilderEditorTheme';
+import { useEditorTheme } from './stageBuilderEditorTheme';
 import { getKindPreview, getObjectPreview } from './stageBuilderPreviews';
 import { usePreviewSettingsVersion } from './stageBuilderPreviewSettings';
 
@@ -30,7 +30,7 @@ export interface PreviewImageProps {
   scale?: number;
 }
 
-const skeletonSx = {
+const skeletonSx = (editorColors: ReturnType<typeof useEditorTheme>['colors']) => ({
   display: 'grid',
   placeItems: 'center',
   borderRadius: 0.5,
@@ -39,7 +39,7 @@ const skeletonSx = {
   fontSize: '0.6875rem',
   fontWeight: 700,
   letterSpacing: '0.06em',
-};
+});
 
 function isPromiseLike<T>(value: T | Promise<T>): value is Promise<T> {
   return typeof (value as { then?: unknown })?.then === 'function';
@@ -52,6 +52,7 @@ function isPromiseLike<T>(value: T | Promise<T>): value is Promise<T> {
  * preview pipeline.
  */
 function PrefabPlaceholder({ width, height }: { width: number; height: number }) {
+  const { colors: editorColors, tones: editorTones } = useEditorTheme();
   const accent = editorTones.prefab.accent;
   const soft = `${accent}33`;
   return (
@@ -77,6 +78,7 @@ function PrefabPlaceholder({ width, height }: { width: number; height: number })
 }
 
 export function PreviewImage({ kind, object, prefab, width = 44, height = 33, alt, scale = 1 }: PreviewImageProps) {
+  const { colors: editorColors } = useEditorTheme();
   const [src, setSrc] = useState<string | null>(null);
   // A version counter bumped on settings changes so the effect re-fetches
   // even when `kind` is stable. Cheaper than watching the settings object.
@@ -125,7 +127,7 @@ export function PreviewImage({ kind, object, prefab, width = 44, height = 33, al
   if (!src) {
     return (
       <Box
-        sx={{ ...skeletonSx, width: renderedWidth, height: renderedHeight }}
+        sx={{ ...skeletonSx(editorColors), width: renderedWidth, height: renderedHeight }}
         aria-hidden="true"
         role="presentation"
       />

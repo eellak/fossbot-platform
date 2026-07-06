@@ -14,7 +14,7 @@ import { faMagnet } from '@fortawesome/free-solid-svg-icons';
 import type { StageBuilderTransformMode } from './StageBuilderScene';
 import type { StageBuilderSnapPreset } from './stageBuilderPreferences';
 import { snapPresetLabel } from './stageBuilderSnapping';
-import { editorColors } from './stageBuilderEditorTheme';
+import { useEditorTheme } from './stageBuilderEditorTheme';
 
 export interface EditorViewportToolRailProps {
   transformMode: StageBuilderTransformMode;
@@ -32,31 +32,6 @@ export interface EditorViewportToolRailProps {
   onDelete: () => void;
 }
 
-const toolButtonSx = {
-  width: 34,
-  height: 34,
-  minWidth: 34,
-  p: 0,
-  color: editorColors.textMuted,
-  border: 0,
-  borderRadius: '6px !important',
-  '&:hover': { bgcolor: editorColors.panelRaised },
-  '&.Mui-selected': {
-    color: editorColors.accentText,
-    bgcolor: editorColors.accentSoft,
-    '&:hover': { bgcolor: `${editorColors.accent}2b` },
-  },
-} as const;
-
-const iconButtonSx = {
-  width: 34,
-  height: 34,
-  color: editorColors.textMuted,
-  borderRadius: 1,
-  '&:hover': { bgcolor: editorColors.panelRaised },
-  '&.Mui-disabled': { color: editorColors.textSubtle },
-} as const;
-
 export function EditorViewportToolRail({
   transformMode,
   snapPreset,
@@ -72,8 +47,34 @@ export function EditorViewportToolRail({
   onRedo,
   onDelete,
 }: EditorViewportToolRailProps) {
+  const { colors: editorColors } = useEditorTheme();
   const normalizedSnap = snapPreset === 'free' || snapPreset === 'grid' ? 'medium' : snapPreset;
   const snappingOn = normalizedSnap !== 'off';
+
+  const toolButtonSx = {
+    width: 34,
+    height: 34,
+    minWidth: 34,
+    p: 0,
+    color: editorColors.textMuted,
+    border: 0,
+    borderRadius: '6px !important',
+    '&:hover': { bgcolor: editorColors.panelRaised },
+    '&.Mui-selected': {
+      color: editorColors.accentText,
+      bgcolor: editorColors.accentSoft,
+      '&:hover': { bgcolor: `${editorColors.accent}2b` },
+    },
+  } as const;
+
+  const iconButtonSx = {
+    width: 34,
+    height: 34,
+    color: editorColors.textMuted,
+    borderRadius: 1,
+    '&:hover': { bgcolor: editorColors.panelRaised },
+    '&.Mui-disabled': { color: editorColors.textSubtle },
+  } as const;
 
   return (
     <Paper elevation={0} sx={{ p: 0.5, bgcolor: editorColors.panel, color: editorColors.text, border: `1px solid ${editorColors.border}`, borderRadius: 1, boxShadow: 'none' }}>

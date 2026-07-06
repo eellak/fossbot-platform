@@ -7,7 +7,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { Sketch, Swatch } from '@uiw/react-color';
 import type { EditorCameraObject, EditorStageObject, StageAudioSourceType, StageLabelFace, StageLightSubtype, StageSemanticKind, Vec2, Vec3 } from './types';
 import { displayObjectType, STAGE_OBJECT_CATALOG } from './stageBuilderCatalog';
-import { editorColors, editorType } from './stageBuilderEditorTheme';
+import { useEditorTheme } from './stageBuilderEditorTheme';
 import { StageBuilderNumberField } from './StageBuilderNumberField';
 
 function num(value: unknown, fallback = 0): number {
@@ -158,6 +158,7 @@ const commonNumberProps = { type: 'number', size: 'small' as const, fullWidth: t
 const commonFieldProps = { size: 'small' as const, fullWidth: true };
 
 function FieldRow({ label, children, align = 'center', noPadding = false }: { label: string; children: React.ReactNode; align?: 'center' | 'start'; noPadding?: boolean }) {
+  const { colors: editorColors, type: editorType } = useEditorTheme();
   return (
     <Box sx={{ display: 'grid', gridTemplateColumns: '96px minmax(0, 1fr)', gap: 0.75, alignItems: align, px: noPadding ? 0 : 1.25, py: noPadding ? 0 : 0.5 }}>
       <Typography variant="body2" sx={{ ...editorType.body, color: editorColors.textMuted, lineHeight: 1.2 }}>{label}</Typography>
@@ -179,6 +180,7 @@ function InlineFields({ children }: { children: React.ReactNode }) {
 }
 
 function Section({ title, children, meta, defaultExpanded = true, expanded, onChange }: { title: string; children: React.ReactNode; meta?: string; defaultExpanded?: boolean; expanded?: boolean; onChange?: (open: boolean) => void }) {
+  const { colors: editorColors, type: editorType } = useEditorTheme();
   return (
     <Accordion defaultExpanded={expanded === undefined ? defaultExpanded : undefined} expanded={expanded} onChange={(_, open) => onChange?.(open)} disableGutters square>
       <AccordionSummary expandIcon={<ExpandMoreIcon sx={{ width: 18, height: 18, color: editorColors.textMuted }} />}>
@@ -211,6 +213,7 @@ export function ColorPickerField({
   pickerAriaLabel?: string;
   valueAriaLabel?: string;
 }) {
+  const { colors: editorColors, type: editorType } = useEditorTheme();
   const currentHex = colorInputValue(value);
   const [draftHex, setDraftHex] = React.useState(currentHex);
   const draftHexRef = React.useRef(currentHex);
@@ -260,7 +263,7 @@ export function ColorPickerField({
     '--sketch-box-shadow': 'none',
     '--sketch-alpha-box-shadow': 'none',
     '--editable-input-label-color': editorColors.textMuted,
-    '--editable-input-box-shadow': '#33424c 0 0 0 1px inset',
+    '--editable-input-box-shadow': `${editorColors.border} 0 0 0 1px inset`,
     '--editable-input-color': editorColors.textStrong,
     borderRadius: 6,
   } as React.CSSProperties;
@@ -268,7 +271,7 @@ export function ColorPickerField({
   return (
     <Stack ref={pickerRef} spacing={0.75}>
       <Box sx={{ display: 'grid', gridTemplateColumns: '28px minmax(0, 1fr)', gap: 0.75, alignItems: 'center' }}>
-        <Box sx={{ width: 28, height: 28, borderRadius: 0.75, bgcolor: draftHex, boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.24)' }} />
+        <Box sx={{ width: 28, height: 28, borderRadius: 0.75, bgcolor: draftHex, boxShadow: `inset 0 0 0 1px ${editorColors.keycapBorder}` }} />
         <Typography variant="caption" noWrap sx={{ ...editorType.caption, color: editorColors.textMuted }}>{draftHex}</Typography>
       </Box>
 
@@ -285,7 +288,7 @@ export function ColorPickerField({
               marginRight: 5,
               marginBottom: 5,
               borderRadius: 3,
-              boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.18), 0 0 0 1px rgba(0,0,0,0.24)',
+              boxShadow: `inset 0 0 0 1px ${editorColors.keycapBorder}, 0 0 0 1px ${editorColors.glassDeep}`,
             },
           }}
           style={{ maxWidth: pickerWidth }}
@@ -304,12 +307,12 @@ export function ColorPickerField({
           p: 0,
           border: 0,
           bgcolor: 'transparent',
-          color: '#ffffff',
+          color: editorColors.textStrong,
           font: 'inherit',
           fontSize: '0.8125rem',
           fontWeight: 650,
           cursor: 'pointer',
-          '&:hover': { color: '#ffffff' },
+          '&:hover': { color: editorColors.textStrong },
           '&:focus-visible': { outline: 'none', textDecoration: 'underline' },
         }}
       >
@@ -323,7 +326,7 @@ export function ColorPickerField({
             opacity: disabled ? 0.45 : 1,
             pointerEvents: disabled ? 'none' : 'auto',
             '& .w-color-editable-input input': {
-              bgcolor: '#111820 !important',
+              bgcolor: `${editorColors.panelInset} !important`,
               boxShadow: `0 0 0 1px ${editorColors.borderStrong} inset !important`,
               color: `${editorColors.textStrong} !important`,
               fontWeight: '700 !important',
@@ -351,6 +354,7 @@ export function ColorPickerField({
 }
 
 export function StageInspector({ object, selectedCount = object ? 1 : 0, advancedOpen = false, onAdvancedOpenChange, onChange, objects = [], onLookThroughCamera }: StageInspectorProps) {
+  const { colors: editorColors, type: editorType } = useEditorTheme();
   const audioPreviewRef = React.useRef<HTMLAudioElement | null>(null);
   const [audioPreviewError, setAudioPreviewError] = React.useState<string | null>(null);
   const stopAudioPreview = React.useCallback(() => {

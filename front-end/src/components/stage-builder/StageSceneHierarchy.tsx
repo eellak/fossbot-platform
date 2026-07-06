@@ -14,7 +14,7 @@ import SearchIcon from '@mui/icons-material/Search';
 import type { EditorStage, EditorStageObject, StageBuilderGroup, StageSemanticKind } from './types';
 import { displayObjectType } from './stageBuilderCatalog';
 import { PreviewShape, hasStaticPreviewAsset, staticPreviewUrl } from './StageObjectLibrary';
-import { editorColors, editorTones, editorType, type EditorTone } from './stageBuilderEditorTheme';
+import { useEditorTheme, type EditorTone } from './stageBuilderEditorTheme';
 
 export type HierarchyDropPosition = 'before' | 'after' | 'inside';
 export type HierarchyDropTarget = { type: 'object' | 'group'; id: string; position: HierarchyDropPosition };
@@ -35,40 +35,36 @@ export interface StageSceneHierarchyProps {
   onPatchObjects: (ids: string[], patch: Partial<EditorStageObject>) => void;
 }
 
-const panelText = editorColors.text;
-const panelMuted = editorColors.textMuted;
-const panelLine = editorColors.border;
-const treeLine = editorColors.borderStrong;
 const treeLineWidth = 1;
 const treeLineHalf = treeLineWidth / 2;
 const treeBranchWidth = 14;
-const selectedBg = `${editorColors.accent}1a`;
-const hoverBg = `${editorColors.textMuted}0f`;
 const dragDataType = 'application/x-fossbot-stage-object-id';
 
-const rowActionSx = {
+const rowActionSx = (editorColors: ReturnType<typeof useEditorTheme>['colors']) => ({
   width: 22,
   height: 22,
   p: 0,
-  color: panelMuted,
+  color: editorColors.textMuted,
   '&:hover': { bgcolor: `${editorColors.textMuted}1a`, color: editorColors.textStrong },
-} as const;
+});
 
-const hierarchyTones: Record<'robot' | 'structures' | 'markers' | 'labels' | 'lighting' | 'camera' | 'audio' | 'groups', EditorTone> = {
-  robot: editorTones.robot,
-  structures: editorTones.structures,
-  markers: editorTones.challenge,
-  labels: editorTones.labels,
-  lighting: editorTones.lighting,
-  camera: editorTones.camera,
-  audio: editorTones.audio,
-  groups: editorTones.prefab,
-};
+type HierarchyToneKey = 'robot' | 'structures' | 'markers' | 'labels' | 'lighting' | 'camera' | 'audio' | 'groups';
+
+const hierarchyTonesFor = (tones: ReturnType<typeof useEditorTheme>['tones']): Record<HierarchyToneKey, EditorTone> => ({
+  robot: tones.robot,
+  structures: tones.structures,
+  markers: tones.challenge,
+  labels: tones.labels,
+  lighting: tones.lighting,
+  camera: tones.camera,
+  audio: tones.audio,
+  groups: tones.prefab,
+});
 
 type GroupEntry = { group: StageBuilderGroup; objects: EditorStageObject[]; allObjects: EditorStageObject[] };
 type RootItem = { type: 'group'; entry: GroupEntry } | { type: 'object'; object: EditorStageObject };
 
-function sectionFor(object: EditorStageObject): keyof typeof hierarchyTones {
+function sectionFor(object: EditorStageObject): HierarchyToneKey {
   if (object.groupId || object.prefabSourceId) return 'groups';
   if (object.kind === 'fossbot' || object.semanticKind === 'robotSpawn') return 'robot';
   if (object.kind === 'light' || object.semanticKind === 'light') return 'lighting';
@@ -93,8 +89,8 @@ function previewKindForObject(object: EditorStageObject): StageSemanticKind {
   return 'block';
 }
 
-function toneForObject(object: EditorStageObject): EditorTone {
-  return hierarchyTones[sectionFor(object)];
+function toneForObject(object: EditorStageObject, tones: Record<HierarchyToneKey, EditorTone>): EditorTone {
+  return tones[sectionFor(object)];
 }
 
 function stop(event: React.MouseEvent) {
@@ -138,6 +134,8 @@ function TreeRowShell({
   childStem?: boolean;
   children: React.ReactNode;
 }) {
+  const { colors: editorColors } = useEditorTheme();
+  const treeLine = editorColors.borderStrong;
   const { lineX, contentX } = treeMetrics(depth);
   const lineLeft = `${lineX - treeLineHalf}px`;
   const lineWidth = `${treeLineWidth}px`;
@@ -205,7 +203,8 @@ function TreeRowShell({
 }
 
 function ObjectPreview({ object }: { object: EditorStageObject }) {
-  const tone = toneForObject(object);
+  const { tones: editorTones } = useEditorTheme();
+  const tone = toneForObject(object, hierarchyTonesFor(editorTones));
   const kind = previewKindForObject(object);
   if (object.kind === 'text') {
     return (
@@ -233,6 +232,9 @@ function ObjectPreview({ object }: { object: EditorStageObject }) {
 }
 
 function GroupPreview({ selected }: { selected: boolean }) {
+  const { colors: editorColors, tones: editorTones } = useEditorTheme();
+  const panelMuted = editorColors.textMuted;
+  const hierarchyTones = hierarchyTonesFor(editorTones);
   return (
     <Box sx={{ width: 32, height: 32, display: 'grid', placeItems: 'center', borderRadius: 0.5, bgcolor: 'transparent' }}>
       <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: selected ? hierarchyTones.groups.accent : panelMuted, opacity: selected ? 0.95 : 0.7 }} />
@@ -248,10 +250,10 @@ function positionFromPointer(event: React.DragEvent<HTMLDivElement>): HierarchyD
   return 'inside';
 }
 
-function dropSx(active?: HierarchyDropPosition | null) {
+function dropSx(active: HierarchyDropPosition | null | undefined, editorColors: ReturnType<typeof useEditorTheme>['colors']) {
   if (active === 'before') return { boxShadow: `inset 0 2px 0 ${editorColors.accentText}` };
   if (active === 'after') return { boxShadow: `inset 0 -2px 0 ${editorColors.accentText}` };
-  if (active === 'inside') return { boxShadow: `inset 0 0 0 1px rgba(124, 199, 255, 0.36)`, bgcolor: 'rgba(74, 163, 255, 0.14)' };
+  if (active === 'inside') return { boxShadow: `inset 0 0 0 1px ${editorColors.accent}5c`, bgcolor: `${editorColors.accent}24` };
   return { boxShadow: 'none' };
 }
 
@@ -298,6 +300,10 @@ function ObjectRow({
   onTargetDrop: (target: HierarchyDropTarget, event: React.DragEvent<HTMLDivElement>) => void;
   onObjectDragEnd: () => void;
 }) {
+  const { colors: editorColors, type: editorType } = useEditorTheme();
+  const panelText = editorColors.text;
+  const selectedBg = `${editorColors.accent}1a`;
+  const hoverBg = `${editorColors.textMuted}0f`;
   const [editing, setEditing] = useState(false);
   const checked = selectedIds.includes(object.id);
   const rowSelected = selected || checked;
@@ -341,10 +347,10 @@ function ObjectRow({
             color: rowSelected ? editorColors.textStrong : panelText,
             cursor: dragging ? 'grabbing' : 'grab',
             opacity: dragging ? 0.45 : object.hidden ? 0.55 : 1,
-            bgcolor: activeDrop === 'inside' ? 'rgba(74, 163, 255, 0.14)' : rowSelected ? selectedBg : 'transparent',
+            bgcolor: activeDrop === 'inside' ? `${editorColors.accent}24` : rowSelected ? selectedBg : 'transparent',
             transition: 'background-color 120ms ease, box-shadow 120ms ease, opacity 120ms ease',
-            ...dropSx(activeDrop),
-            '&:hover': { bgcolor: activeDrop === 'inside' ? 'rgba(74, 163, 255, 0.14)' : rowSelected ? selectedBg : hoverBg },
+            ...dropSx(activeDrop, editorColors),
+            '&:hover': { bgcolor: activeDrop === 'inside' ? `${editorColors.accent}24` : rowSelected ? selectedBg : hoverBg },
             '&:hover .scene-row-actions': { display: 'flex' },
           }}
         >
@@ -372,10 +378,10 @@ function ObjectRow({
           )}
           </Box>
           <Stack className="scene-row-actions" direction="row" spacing={0} sx={{ display: 'none', flexShrink: 0 }}>
-            <Tooltip title={object.hidden ? 'Show' : 'Hide'}><IconButton size="small" onClick={(event) => { stop(event); onObjectChange({ ...object, hidden: !object.hidden } as EditorStageObject); }} sx={rowActionSx} aria-label={object.hidden ? 'Show object' : 'Hide object'}>{object.hidden ? <VisibilityOffIcon sx={{ width: 15, height: 15 }} /> : <VisibilityIcon sx={{ width: 15, height: 15 }} />}</IconButton></Tooltip>
-            <Tooltip title={object.locked ? 'Unlock' : 'Lock'}><IconButton size="small" onClick={(event) => { stop(event); onObjectChange({ ...object, locked: !object.locked } as EditorStageObject); }} sx={rowActionSx} aria-label={object.locked ? 'Unlock object' : 'Lock object'}>{object.locked ? <LockIcon sx={{ width: 15, height: 15 }} /> : <LockOpenIcon sx={{ width: 15, height: 15 }} />}</IconButton></Tooltip>
-            <Tooltip title="Duplicate"><IconButton size="small" onClick={(event) => { stop(event); onDuplicateObjects([object.id]); }} sx={rowActionSx} aria-label="Duplicate object"><ContentCopyIcon sx={{ width: 15, height: 15 }} /></IconButton></Tooltip>
-            <Tooltip title="Delete"><IconButton size="small" onClick={(event) => { stop(event); onDeleteObjects([object.id]); }} sx={{ ...rowActionSx, color: editorColors.danger, '&:hover': { bgcolor: 'rgba(242, 139, 116, 0.12)', color: '#ffb4a5' } }} aria-label="Delete object"><DeleteIcon sx={{ width: 15, height: 15 }} /></IconButton></Tooltip>
+            <Tooltip title={object.hidden ? 'Show' : 'Hide'}><IconButton size="small" onClick={(event) => { stop(event); onObjectChange({ ...object, hidden: !object.hidden } as EditorStageObject); }} sx={rowActionSx(editorColors)} aria-label={object.hidden ? 'Show object' : 'Hide object'}>{object.hidden ? <VisibilityOffIcon sx={{ width: 15, height: 15 }} /> : <VisibilityIcon sx={{ width: 15, height: 15 }} />}</IconButton></Tooltip>
+            <Tooltip title={object.locked ? 'Unlock' : 'Lock'}><IconButton size="small" onClick={(event) => { stop(event); onObjectChange({ ...object, locked: !object.locked } as EditorStageObject); }} sx={rowActionSx(editorColors)} aria-label={object.locked ? 'Unlock object' : 'Lock object'}>{object.locked ? <LockIcon sx={{ width: 15, height: 15 }} /> : <LockOpenIcon sx={{ width: 15, height: 15 }} />}</IconButton></Tooltip>
+            <Tooltip title="Duplicate"><IconButton size="small" onClick={(event) => { stop(event); onDuplicateObjects([object.id]); }} sx={rowActionSx(editorColors)} aria-label="Duplicate object"><ContentCopyIcon sx={{ width: 15, height: 15 }} /></IconButton></Tooltip>
+            <Tooltip title="Delete"><IconButton size="small" onClick={(event) => { stop(event); onDeleteObjects([object.id]); }} sx={{ ...rowActionSx(editorColors), color: editorColors.danger, '&:hover': { bgcolor: editorColors.dangerSurface, color: editorColors.danger } }} aria-label="Delete object"><DeleteIcon sx={{ width: 15, height: 15 }} /></IconButton></Tooltip>
           </Stack>
         </Box>
       </TreeRowShell>
@@ -461,6 +467,12 @@ function GroupBlock({
   onTargetDrop: (target: HierarchyDropTarget, event: React.DragEvent<HTMLDivElement>) => void;
   onObjectDragEnd: () => void;
 }) {
+  const { colors: editorColors, type: editorType } = useEditorTheme();
+  const panelText = editorColors.text;
+  const panelMuted = editorColors.textMuted;
+  const treeLine = editorColors.borderStrong;
+  const selectedBg = `${editorColors.accent}1a`;
+  const hoverBg = `${editorColors.textMuted}0f`;
   const [expanded, setExpanded] = useState(true);
   const [editing, setEditing] = useState(false);
   const ids = objects.map((object) => object.id);
@@ -515,10 +527,10 @@ function GroupBlock({
             px: 0.625,
             color: selected ? editorColors.textStrong : panelText,
             cursor: draggedObjectId ? 'move' : 'default',
-            bgcolor: activeDrop === 'inside' ? 'rgba(240, 167, 215, 0.12)' : selected ? selectedBg : 'transparent',
+            bgcolor: activeDrop === 'inside' ? `${editorColors.prefab}1f` : selected ? selectedBg : 'transparent',
             transition: 'background-color 120ms ease, box-shadow 120ms ease',
-            ...dropSx(activeDrop),
-            '&:hover': { bgcolor: activeDrop === 'inside' ? 'rgba(240, 167, 215, 0.12)' : selected ? selectedBg : hoverBg },
+            ...dropSx(activeDrop, editorColors),
+            '&:hover': { bgcolor: activeDrop === 'inside' ? `${editorColors.prefab}1f` : selected ? selectedBg : hoverBg },
             '&:hover .scene-row-actions': { display: 'flex' },
           }}
         >
@@ -531,10 +543,10 @@ function GroupBlock({
             )}
           </Box>
           <Stack className="scene-row-actions" direction="row" spacing={0} sx={{ display: 'none', flexShrink: 0 }}>
-            <Tooltip title={allHidden ? 'Show all' : 'Hide all'}><IconButton size="small" onClick={(event) => { stop(event); onPatchObjects(ids, { hidden: !allHidden } as Partial<EditorStageObject>); }} sx={rowActionSx}>{allHidden ? <VisibilityOffIcon sx={{ width: 15, height: 15 }} /> : <VisibilityIcon sx={{ width: 15, height: 15 }} />}</IconButton></Tooltip>
-            <Tooltip title={allLocked ? 'Unlock all' : 'Lock all'}><IconButton size="small" onClick={(event) => { stop(event); onPatchObjects(ids, { locked: !allLocked } as Partial<EditorStageObject>); }} sx={rowActionSx}>{allLocked ? <LockIcon sx={{ width: 15, height: 15 }} /> : <LockOpenIcon sx={{ width: 15, height: 15 }} />}</IconButton></Tooltip>
-            <Tooltip title="Duplicate group"><IconButton size="small" onClick={(event) => { stop(event); onDuplicateObjects(ids); }} sx={rowActionSx}><ContentCopyIcon sx={{ width: 15, height: 15 }} /></IconButton></Tooltip>
-            <Tooltip title="Delete group"><IconButton size="small" onClick={(event) => { stop(event); onDeleteObjects(ids); }} sx={{ ...rowActionSx, color: editorColors.danger, '&:hover': { bgcolor: 'rgba(242, 139, 116, 0.12)', color: '#ffb4a5' } }}><DeleteIcon sx={{ width: 15, height: 15 }} /></IconButton></Tooltip>
+            <Tooltip title={allHidden ? 'Show all' : 'Hide all'}><IconButton size="small" onClick={(event) => { stop(event); onPatchObjects(ids, { hidden: !allHidden } as Partial<EditorStageObject>); }} sx={rowActionSx(editorColors)}>{allHidden ? <VisibilityOffIcon sx={{ width: 15, height: 15 }} /> : <VisibilityIcon sx={{ width: 15, height: 15 }} />}</IconButton></Tooltip>
+            <Tooltip title={allLocked ? 'Unlock all' : 'Lock all'}><IconButton size="small" onClick={(event) => { stop(event); onPatchObjects(ids, { locked: !allLocked } as Partial<EditorStageObject>); }} sx={rowActionSx(editorColors)}>{allLocked ? <LockIcon sx={{ width: 15, height: 15 }} /> : <LockOpenIcon sx={{ width: 15, height: 15 }} />}</IconButton></Tooltip>
+            <Tooltip title="Duplicate group"><IconButton size="small" onClick={(event) => { stop(event); onDuplicateObjects(ids); }} sx={rowActionSx(editorColors)}><ContentCopyIcon sx={{ width: 15, height: 15 }} /></IconButton></Tooltip>
+            <Tooltip title="Delete group"><IconButton size="small" onClick={(event) => { stop(event); onDeleteObjects(ids); }} sx={{ ...rowActionSx(editorColors), color: editorColors.danger, '&:hover': { bgcolor: editorColors.dangerSurface, color: editorColors.danger } }}><DeleteIcon sx={{ width: 15, height: 15 }} /></IconButton></Tooltip>
           </Stack>
         </Box>
       </TreeRowShell>
@@ -582,6 +594,10 @@ export function StageSceneHierarchy({
   onGroupRename,
   onPatchObjects,
 }: StageSceneHierarchyProps) {
+  const { colors: editorColors, type: editorType } = useEditorTheme();
+  const panelText = editorColors.text;
+  const panelMuted = editorColors.textMuted;
+  const panelLine = editorColors.border;
   const [query, setQuery] = useState('');
   const [draggedObjectId, setDraggedObjectId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<HierarchyDropTarget | null>(null);
