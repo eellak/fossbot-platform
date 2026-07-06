@@ -858,7 +858,6 @@ export function StageBuilderScene({
   const transformRef = useRef<TransformControls | null>(null);
   const selectionHelperRef = useRef<CornerBoundsHelper | null>(null);
   const groupSelectionHelperRef = useRef<CornerBoundsHelper | null>(null);
-  const hoverHelperRef = useRef<THREE.BoxHelper | null>(null);
   const friendlyHandlesRef = useRef<FriendlyHandleRecord | null>(null);
   const groupPivotRef = useRef<THREE.Group | null>(null);
   const objectMapRef = useRef<Map<string, MeshRecord>>(new Map());
@@ -893,7 +892,6 @@ export function StageBuilderScene({
   const onPlaceAtRef = useRef(onPlaceAt);
   const onPlacementStatusChangeRef = useRef(onPlacementStatusChange);
   const onLockedSelectionAttemptRef = useRef(onLockedSelectionAttempt);
-  const hoverIdRef = useRef<string | null>(null);
   const wasDraggingRef = useRef(false);
   const spaceHeldRef = useRef(false);
   const axisLockRef = useRef<AxisLock>(null);
@@ -1106,11 +1104,6 @@ export function StageBuilderScene({
     groupPivot.name = 'Stage builder group pivot';
     sceneHandle.scene.add(groupPivot);
     groupPivotRef.current = groupPivot;
-
-    const hoverHelper = new THREE.BoxHelper(new THREE.Object3D(), 0xffffff);
-    hoverHelper.visible = false;
-    sceneHandle.scene.add(hoverHelper);
-    hoverHelperRef.current = hoverHelper;
 
     const handles = makeFriendlyHandles(styleVariantRef.current);
     sceneHandle.scene.add(handles.root);
@@ -1349,12 +1342,7 @@ export function StageBuilderScene({
       const drag = friendlyDragRef.current;
       const selected = objectsRef.current.find((item) => item.id === selectedRef.current);
       const selectedRoot = selected ? objectMapRef.current.get(selected.id)?.root : null;
-      if (!drag || !selected || !selectedRoot || selected.kind === 'line' || selected.locked) {
-        const pickables = Array.from(objectMapRef.current.values()).flatMap((record) => record.pickables);
-        const hit = raycaster.intersectObjects(pickables, true)[0];
-        hoverIdRef.current = hit?.object.userData.stageObjectId || null;
-        return;
-      }
+      if (!drag || !selected || !selectedRoot || selected.kind === 'line' || selected.locked) return;
       if (!raycaster.ray.intersectPlane(floorPlane, floorHit)) return;
       const snap = getSnapSettings(snapSettingsRef.current.preset, snapSettingsRef.current.rotationPreset, { shiftKey: event.shiftKey });
       if (drag.kind === 'move') {
@@ -1435,13 +1423,6 @@ export function StageBuilderScene({
       } else if (groupHelper) {
         groupHelper.visible = false;
       }
-      const hoverHelper = hoverHelperRef.current;
-      const hoverRoot = hoverIdRef.current ? objectMapRef.current.get(hoverIdRef.current)?.root : null;
-      if (hoverHelper && hoverRoot && hoverIdRef.current !== selectedRef.current) {
-        hoverHelper.visible = true;
-        hoverHelper.setFromObject(hoverRoot);
-      } else if (hoverHelper) hoverHelper.visible = false;
-
       const handles = friendlyHandlesRef.current?.root;
       const selectedObject = objectsRef.current.find((item) => item.id === selectedRef.current);
       if (handles && selectedRoot && builderModeRef.current === 'edit' && controlSchemeRef.current === 'friendly' && canTransform(selectedObject)) {
@@ -1475,8 +1456,6 @@ export function StageBuilderScene({
       (selectionHelper.material as THREE.Material).dispose();
       groupSelectionHelper.geometry.dispose();
       (groupSelectionHelper.material as THREE.Material).dispose();
-      hoverHelper.geometry.dispose();
-      (hoverHelper.material as THREE.Material).dispose();
       if (friendlyHandlesRef.current) {
         sceneHandle.scene.remove(friendlyHandlesRef.current.root);
         disposeObject(friendlyHandlesRef.current.root);
@@ -1494,7 +1473,6 @@ export function StageBuilderScene({
       transformRef.current = null;
       selectionHelperRef.current = null;
       groupSelectionHelperRef.current = null;
-      hoverHelperRef.current = null;
       friendlyHandlesRef.current = null;
       groupPivotRef.current = null;
       ghostRef.current = null;
