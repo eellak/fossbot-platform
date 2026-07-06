@@ -54,13 +54,14 @@ const rowActionSx = {
   '&:hover': { bgcolor: `${editorColors.textMuted}1a`, color: editorColors.textStrong },
 } as const;
 
-const hierarchyTones: Record<'robot' | 'structures' | 'markers' | 'labels' | 'lighting' | 'camera' | 'groups', EditorTone> = {
+const hierarchyTones: Record<'robot' | 'structures' | 'markers' | 'labels' | 'lighting' | 'camera' | 'audio' | 'groups', EditorTone> = {
   robot: editorTones.robot,
   structures: editorTones.structures,
   markers: editorTones.challenge,
   labels: editorTones.labels,
   lighting: editorTones.lighting,
   camera: editorTones.camera,
+  audio: editorTones.audio,
   groups: editorTones.prefab,
 };
 
@@ -72,6 +73,7 @@ function sectionFor(object: EditorStageObject): keyof typeof hierarchyTones {
   if (object.kind === 'fossbot' || object.semanticKind === 'robotSpawn') return 'robot';
   if (object.kind === 'light' || object.semanticKind === 'light') return 'lighting';
   if (object.kind === 'camera' || object.semanticKind === 'camera') return 'camera';
+  if (object.kind === 'audio' || object.semanticKind === 'audio') return 'audio';
   if (object.kind === 'text' || object.semanticKind === 'label') return 'labels';
   if (['target', 'checkpoint', 'dangerZone', 'sensorZone', 'line', 'baseTile'].includes(object.semanticKind || '')) return 'markers';
   return 'structures';
@@ -87,6 +89,7 @@ function previewKindForObject(object: EditorStageObject): PreviewKind {
   if (object.kind === 'text') return 'label';
   if (object.kind === 'light') return 'light';
   if (object.kind === 'camera') return 'camera';
+  if (object.kind === 'audio') return 'audio';
   return 'block';
 }
 

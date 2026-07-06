@@ -500,7 +500,6 @@ const StageBuilderPage = () => {
   };
 
   const handleRunTest = () => {
-    if (dirty && !window.confirm('Run the current unsaved stage? A recovery draft will be kept until you export JSON.')) return;
     if (dirty) writeStageBuilderDraft(stage, scope);
     const blocking = blockingValidationResults(validationResults);
     if (blocking.length) {

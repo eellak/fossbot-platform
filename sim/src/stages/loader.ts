@@ -5,6 +5,7 @@ import { buildFloorVisual, buildBaseVisual, buildCubeVisual, buildCylinderVisual
 import type { VisualBuilt, LineSegment } from './visuals'
 import { buildFloorCollider, buildCubeCollider, buildCylinderCollider, buildModelCollider } from './colliders'
 import type { ColliderBuilt } from './colliders'
+import { createStageAudioRuntime, type StageAudioEntry } from './audio'
 import { log } from '../util/log'
 import { syncObjectToBody } from '../physics/mesh-sync'
 
@@ -37,6 +38,8 @@ export interface StageHandle {
 
 export interface LoadStageOptions {
   resolveAssetUrl?: (url: string) => string
+  camera?: THREE.Camera
+  gestureTarget?: HTMLElement
 }
 
 const DEFAULT_SPAWN = new THREE.Vector3(0, 0, 0)
@@ -46,6 +49,7 @@ function resolveStageEntryAssets(entry: RawStageEntry, resolveAssetUrl: (url: st
   const next: RawStageEntry = { ...entry }
   if (typeof next.filename === 'string') next.filename = resolveAssetUrl(next.filename)
   if (typeof next.texture === 'string') next.texture = resolveAssetUrl(next.texture)
+  if (typeof next.source === 'string') next.source = resolveAssetUrl(next.source)
   const collision = next.collision
   if (collision && typeof collision === 'object' && !Array.isArray(collision)) {
     const collisionObj = collision as Record<string, unknown>
@@ -128,6 +132,7 @@ export async function loadStageEntries(
   const modelLoads: Promise<void>[] = []
   const dynamicObjects: StageDynamicObject[] = []
   const lineSegments: LineSegment[] = []
+  const audioEntries: StageAudioEntry[] = []
   let startCamera: StageHandle['startCamera']
 
   const stgCollidersGrp = new THREE.Group()
@@ -226,12 +231,21 @@ export async function loadStageEntries(
         }
         break
       }
+      case 'audio': {
+        audioEntries.push(entry as unknown as StageAudioEntry)
+        break
+      }
       default:
         console.warn(`[stage] unknown entry type:`, type, entry)
     }
   }
 
   await Promise.all(modelLoads)
+  const stageAudio = createStageAudioRuntime(audioEntries, scene, {
+    camera: opts.camera,
+    gestureTarget: opts.gestureTarget,
+    resolveAssetUrl,
+  })
   log.world(`loaded stage ${name}: ${objects.length} objects, ${stgCollidersGrp.children.length} collider wireframes`)
 
   let disposed = false
@@ -276,6 +290,7 @@ export async function loadStageEntries(
           }
         })
       }
+      stageAudio.dispose()
       scene.remove(stgCollidersGrp)
       stgCollidersGrp.traverse((child) => {
         if ((child as any).isMesh || (child as any).isLineSegments) {

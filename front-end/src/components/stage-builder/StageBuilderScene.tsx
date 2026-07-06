@@ -293,6 +293,31 @@ function makeTextCanvas(text: string, colorValue: string): HTMLCanvasElement {
   return canvas;
 }
 
+function makeAudioWave(radius: number, colorValue: THREE.Color, options: ObjectVisualOptions): THREE.Line {
+  const points: THREE.Vector3[] = [];
+  for (let i = 0; i <= 20; i++) {
+    const t = -0.75 + (1.5 * i / 20);
+    points.push(new THREE.Vector3(Math.sin(t) * radius, Math.cos(t) * radius * 0.85, -0.09 - radius * 0.18));
+  }
+  return new THREE.Line(
+    new THREE.BufferGeometry().setFromPoints(points),
+    new THREE.LineBasicMaterial({ color: colorValue, transparent: true, opacity: options.ghost ? 0.42 : 0.84 }),
+  );
+}
+
+function makeAudioRangeRing(range: number, colorValue: THREE.Color, options: ObjectVisualOptions): THREE.LineLoop {
+  const points: THREE.Vector3[] = [];
+  const radius = Math.max(0.1, range);
+  for (let i = 0; i < 96; i++) {
+    const angle = (Math.PI * 2 * i) / 96;
+    points.push(new THREE.Vector3(Math.cos(angle) * radius, 0, Math.sin(angle) * radius));
+  }
+  return new THREE.LineLoop(
+    new THREE.BufferGeometry().setFromPoints(points),
+    new THREE.LineBasicMaterial({ color: colorValue, transparent: true, opacity: options.ghost ? 0.18 : 0.28, depthWrite: false }),
+  );
+}
+
 function robotSpawnAccent(options: ObjectVisualOptions = {}): string {
   if (options.ghostValid === false) return '#ef4444';
   return validationTint(options.validationSeverity) || '#38bdf8';
@@ -734,6 +759,38 @@ function makeObjectRoot(object: EditorStageObject, options: ObjectVisualOptions 
     group.position.set(...object.position);
     group.rotation.order = 'YXZ';
     group.rotation.set(-object.pitch, object.rotationY, 0);
+  } else if (object.kind === 'audio') {
+    const group = new THREE.Group();
+    const audioColor = '#f472b6';
+    const iconColor = materialColor(audioColor, options);
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.13, 0.09), standardMaterial(audioColor, options));
+    body.position.set(-0.035, 0, 0);
+    group.add(body);
+    pickables.push(body);
+
+    const horn = new THREE.Mesh(
+      new THREE.ConeGeometry(0.07, 0.12, 18),
+      new THREE.MeshStandardMaterial({ color: iconColor, emissive: iconColor, emissiveIntensity: options.ghost ? 0.24 : 0.42, transparent: !!options.ghost, opacity: options.ghost ? 0.5 : 1 }),
+    );
+    horn.rotation.x = -Math.PI / 2;
+    horn.position.set(0.04, 0, -0.035);
+    group.add(horn);
+    pickables.push(horn);
+
+    const waveNear = makeAudioWave(0.11, iconColor, options);
+    const waveFar = makeAudioWave(0.18, iconColor, options);
+    group.add(waveNear, waveFar);
+    pickables.push(waveNear, waveFar);
+
+    if (object.spatial) {
+      const ring = makeAudioRangeRing(object.range, iconColor, options);
+      ring.position.y = -object.position[1] + 0.014;
+      ring.renderOrder = 6;
+      group.add(ring);
+    }
+
+    root = group;
+    group.position.set(...object.position);
   } else {
     const spawn = makeRobotSpawnVisual(object, options);
     root = spawn.root;
@@ -824,6 +881,9 @@ function objectFromRootTransform(object: EditorStageObject, root: THREE.Object3D
       rotationY: snapAngle(yawFromObject(root, object.rotationY), snap),
       pitch: snapAngle(pitchFromForward, snap),
     };
+  }
+  if (object.kind === 'audio') {
+    return { ...object, position: snapPosition([root.position.x, root.position.y, root.position.z], snap) };
   }
   return null;
 }

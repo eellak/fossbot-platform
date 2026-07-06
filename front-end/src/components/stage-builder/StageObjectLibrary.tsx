@@ -6,7 +6,7 @@ import type { StageBuilderPrefab } from './stageBuilderPrefabs';
 import { editorColors, editorTones, editorType, type EditorTone } from './stageBuilderEditorTheme';
 
 export type StageBuilderLibraryGroup = {
-  id: 'floorPaths' | 'structures' | 'robot' | 'challenge' | 'labels' | 'lighting' | 'camera';
+  id: 'floorPaths' | 'structures' | 'robot' | 'challenge' | 'labels' | 'lighting' | 'camera' | 'audio';
   label: string;
   items: StageSemanticKind[];
 };
@@ -19,6 +19,7 @@ export const STAGE_BUILDER_LIBRARY_GROUPS: StageBuilderLibraryGroup[] = [
   { id: 'labels', label: 'Labels', items: ['label'] },
   { id: 'lighting', label: 'Lighting', items: ['light'] },
   { id: 'camera', label: 'Camera', items: ['camera'] },
+  { id: 'audio', label: 'Audio', items: ['audio'] },
 ];
 
 export interface StageObjectLibraryProps {
@@ -90,6 +91,15 @@ export function PreviewShape({ kind, tone }: { kind: PreviewKind; tone: EditorTo
         <rect x="6" y="9" width="26" height="18" rx="3" fill={soft} stroke={accent} strokeWidth="2.4" />
         <path d="M32 14 L40 9 L40 27 L32 22 Z" fill={soft} stroke={accent} strokeWidth="2.4" strokeLinejoin="round" />
         <circle cx="17" cy="18" r="5" fill={`${accent}33`} stroke={accent} strokeWidth="2.2" />
+      </Box>
+    );
+  }
+  if (kind === 'audio') {
+    return (
+      <Box component="svg" viewBox="0 0 44 34" sx={{ width: 42, height: 32 }}>
+        <path d="M7 14 H15 L25 7 V27 L15 20 H7 Z" fill={soft} stroke={accent} strokeWidth="2.4" strokeLinejoin="round" />
+        <path d="M29 12 C32 15 32 19 29 22" fill="none" stroke={accent} strokeWidth="2.4" strokeLinecap="round" />
+        <path d="M34 8 C40 14 40 20 34 26" fill="none" stroke={accent} strokeWidth="2.4" strokeLinecap="round" opacity="0.78" />
       </Box>
     );
   }

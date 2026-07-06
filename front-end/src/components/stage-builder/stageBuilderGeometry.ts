@@ -167,6 +167,20 @@ export function objectBounds(object: EditorStageObject): StageObjectBounds | nul
       soft: false,
     };
   }
+  if (object.kind === 'audio') {
+    const r = 0.12;
+    return {
+      objectId: object.id,
+      minX: object.position[0] - r,
+      maxX: object.position[0] + r,
+      minY: object.position[1] - r,
+      maxY: object.position[1] + r,
+      minZ: object.position[2] - r,
+      maxZ: object.position[2] + r,
+      solid: false,
+      soft: false,
+    };
+  }
   return null;
 }
 

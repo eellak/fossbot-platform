@@ -29,6 +29,7 @@ export const STAGE_OBJECT_CATALOG: StageObjectCatalogItem[] = [
   { id: 'label', label: 'Text label', shortLabel: 'Label', description: 'A readable label on the stage.', category: 'marker', placeable: true },
   { id: 'light', label: 'Light', shortLabel: 'Light', description: 'A scene light. Pick point, spot, directional, or ambient in the inspector.', category: 'marker', placeable: true },
   { id: 'camera', label: 'Camera', shortLabel: 'Camera', description: 'A stage camera. Run Test starts from this view; optionally lock it.', category: 'marker', placeable: true },
+  { id: 'audio', label: 'Audio', shortLabel: 'Audio', description: 'A placed audio source with source, volume, loop, and spatial range metadata.', category: 'marker', placeable: true },
 ];
 
 export function catalogItem(id: StageSemanticKind): StageObjectCatalogItem | undefined {
@@ -50,6 +51,7 @@ export function displayObjectType(object: EditorStageObject): string {
   if (object.kind === 'text') return 'Text label';
   if (object.kind === 'light') return 'Light';
   if (object.kind === 'camera') return 'Camera';
+  if (object.kind === 'audio') return 'Audio';
   return 'Object';
 }
 
@@ -109,6 +111,9 @@ export function createCatalogObject(kind: StageSemanticKind, id: string, positio
   if (kind === 'camera') {
     return { id, kind: 'camera', semanticKind: kind, name: 'stage camera', position: [2.5, 2, 2.5], rotationY: Math.PI / 4, pitch: 0.4, fov: 50 };
   }
+  if (kind === 'audio') {
+    return { id, kind: 'audio', semanticKind: kind, name: 'audio source', position: [p[0], 0.5, p[2]], sourceType: 'url', source: '', volume: 0.8, loop: false, spatial: true, range: 10, autoplay: true };
+  }
   return null;
 }
 
@@ -117,6 +122,7 @@ export function inferSemanticKindFromConfig(type: string, name?: string, color?:
   if (type === 'fossbot') return 'robotSpawn';
   if (type === 'light') return 'light';
   if (type === 'camera') return 'camera';
+  if (type === 'audio') return 'audio';
   if (type === 'line') return 'line';
   if (type === 'text') return 'label';
   if (lower.includes('target') || lower.includes('goal')) return 'target';

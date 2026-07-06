@@ -81,6 +81,8 @@ export function validateStageBuilderStage(stage: EditorStage): StageBuilderValid
     if (boundsOutsideStage(objectBox, stage)) {
       if (object.kind === 'camera') {
         results.push(result(stage, `object:${object.id}:outside-stage`, 'warning', [object.id], `${labelFor(object)} is outside the stage.`, 'Cameras can sit outside the floor for overview shots, but check the Run Test view before exporting.'));
+      } else if (object.kind === 'audio') {
+        results.push(result(stage, `object:${object.id}:outside-stage`, 'warning', [object.id], `${labelFor(object)} is outside the stage.`, 'Audio sources can be off-stage for ambience, but check that this is intentional.'));
       } else {
         results.push(result(stage, `object:${object.id}:outside-stage`, 'error', [object.id], `${labelFor(object)} is outside the stage.`, 'Objects must stay inside the visible floor boundary before saving or testing.', false));
       }
@@ -103,6 +105,19 @@ export function validateStageBuilderStage(stage: EditorStage): StageBuilderValid
 
     if (object.kind === 'camera' && (object.fov < 10 || object.fov > 120)) {
       results.push(result(stage, `object:${object.id}:camera-fov`, 'error', [object.id], `${labelFor(object)} has an out-of-range field of view.`, 'Camera FOV must be between 10 and 120 degrees.', false));
+    }
+
+    if (object.kind === 'audio') {
+      const source = typeof object.source === 'string' ? object.source.trim() : '';
+      if (!source) {
+        results.push(result(stage, `object:${object.id}:audio-source`, 'warning', [object.id], `${labelFor(object)} has no audio source.`, 'Add a URL or file reference before expecting this audio marker to be useful.'));
+      }
+      if (object.volume < 0 || object.volume > 1) {
+        results.push(result(stage, `object:${object.id}:audio-volume`, 'error', [object.id], `${labelFor(object)} has an out-of-range volume.`, 'Audio volume must be between 0 and 1.', false));
+      }
+      if (object.spatial && object.range <= 0) {
+        results.push(result(stage, `object:${object.id}:audio-range`, 'error', [object.id], `${labelFor(object)} has an invalid spatial range.`, 'Spatial audio range must be greater than zero.', false));
+      }
     }
   }
 

@@ -711,11 +711,15 @@ export class SimEngine {
         this.splash.setStatus('Loading custom stage...')
         this.currentStage = await loadStageEntries('custom_stage', this.config.initialStageConfig, this.sceneHandle!.scene, world, {
           resolveAssetUrl: this.resolvePublicAssetUrl,
+          camera: this.sceneHandle!.camera,
+          gestureTarget: this.container,
         })
       } else {
         this.splash.setStatus(`Loading stage ${initialStage}...`)
         this.currentStage = await loadStage(initialStage, this.sceneHandle!.scene, world, {
           resolveAssetUrl: this.resolvePublicAssetUrl,
+          camera: this.sceneHandle!.camera,
+          gestureTarget: this.container,
         })
       }
 
@@ -1333,6 +1337,8 @@ export class SimEngine {
       this.positionPresets?.refresh()
       const loadedStage = await loadStage(next, this.sceneHandle.scene, this.worldHandle.world, {
         resolveAssetUrl: this.resolvePublicAssetUrl,
+        camera: this.sceneHandle.camera,
+        gestureTarget: this.container,
       })
       if (this.cancelled) {
         loadedStage.dispose()
@@ -1354,6 +1360,8 @@ export class SimEngine {
     try {
       const loadedStage = await loadStageEntries(name, entries, this.sceneHandle.scene, this.worldHandle.world, {
         resolveAssetUrl: this.resolvePublicAssetUrl,
+        camera: this.sceneHandle.camera,
+        gestureTarget: this.container,
       })
       if (this.cancelled) {
         loadedStage.dispose()

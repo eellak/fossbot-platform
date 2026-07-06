@@ -93,6 +93,21 @@ export type StageCameraEntry = {
   name?: string;
 };
 
+export type StageAudioSourceType = 'url' | 'file';
+
+export type StageAudioEntry = {
+  type: 'audio';
+  position: [number, number, number];
+  sourceType?: StageAudioSourceType;
+  source?: string;
+  volume?: number;
+  loop?: boolean;
+  spatial?: boolean;
+  range?: number;
+  autoplay?: boolean;
+  name?: string;
+};
+
 export type StageJsonEntry =
   | StageFloorEntry
   | StageBaseEntry
@@ -102,9 +117,10 @@ export type StageJsonEntry =
   | StageTextEntry
   | StageFossbotEntry
   | StageLightEntry
-  | StageCameraEntry;
+  | StageCameraEntry
+  | StageAudioEntry;
 
-export type StageObjectKind = 'base' | 'cube' | 'cylinder' | 'line' | 'text' | 'fossbot' | 'light' | 'camera';
+export type StageObjectKind = 'base' | 'cube' | 'cylinder' | 'line' | 'text' | 'fossbot' | 'light' | 'camera' | 'audio';
 
 export type StageSemanticKind =
   | 'floor'
@@ -123,7 +139,8 @@ export type StageSemanticKind =
   | 'line'
   | 'label'
   | 'light'
-  | 'camera';
+  | 'camera'
+  | 'audio';
 
 export type StageBuilderMode = 'navigate' | 'place' | 'edit' | 'test';
 export type StageBuilderTool = 'select' | 'move' | 'rotate' | 'resize';
@@ -248,6 +265,18 @@ export type EditorCameraObject = EditorObjectCommon & {
   fov: number;
 };
 
+export type EditorAudioObject = EditorObjectCommon & {
+  kind: 'audio';
+  position: Vec3;
+  sourceType: StageAudioSourceType;
+  source: string;
+  volume: number;
+  loop: boolean;
+  spatial: boolean;
+  range: number;
+  autoplay: boolean;
+};
+
 export type EditorStageObject =
   | EditorBaseObject
   | EditorCubeObject
@@ -256,7 +285,8 @@ export type EditorStageObject =
   | EditorTextObject
   | EditorFossbotObject
   | EditorLightObject
-  | EditorCameraObject;
+  | EditorCameraObject
+  | EditorAudioObject;
 
 export type EditorStage = {
   id: string;
