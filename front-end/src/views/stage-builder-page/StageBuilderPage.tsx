@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from 'src/authentication/AuthProvider';
 import type { EditorStage, EditorStageObject, StageBuilderMode, StageSemanticKind, Vec3 } from 'src/components/stage-builder/types';
 import { downloadStageJson, makeLocalStageId, stageRecordFromImportedJson } from 'src/components/stage-builder/localStages';
-import { StageBuilderScene, type StageBuilderTransformMode } from 'src/components/stage-builder/StageBuilderScene';
+import { StageBuilderScene, type StageBuilderCameraView, type StageBuilderTransformMode } from 'src/components/stage-builder/StageBuilderScene';
 import { configToEditorStage, createDemoEditorStage, DEFAULT_STAGE_FLOOR, DEFAULT_STAGE_METADATA, editorStageToRecord } from 'src/components/stage-builder/serialize';
 import {
   defaultStageBuilderPreferences,
@@ -22,6 +22,7 @@ import { EditorTopBar } from 'src/components/stage-builder/EditorTopBar';
 import { EditorLeftPanel } from 'src/components/stage-builder/EditorLeftPanel';
 import type { HierarchyDropTarget } from 'src/components/stage-builder/StageSceneHierarchy';
 import { EditorViewportToolRail } from 'src/components/stage-builder/EditorViewportToolRail';
+import { EditorViewportCameraGizmo } from 'src/components/stage-builder/EditorViewportCameraGizmo';
 import { EditorRightInspector, type InspectorTab } from 'src/components/stage-builder/EditorRightInspector';
 import { clearStageBuilderDraft, draftToEditorStage, readStageBuilderDraft, stageFingerprint, writeStageBuilderDraft, type StageBuilderDraft } from 'src/components/stage-builder/stageBuilderDrafts';
 import { writeStageBuilderRunHandoff } from 'src/components/stage-builder/stageBuilderRunHandoff';
@@ -137,6 +138,7 @@ const StageBuilderPage = () => {
   const [builderMode, setBuilderMode] = useState<StageBuilderMode>('edit');
   const [transformMode, setTransformMode] = useState<StageBuilderTransformMode>('translate');
   const [focusRequestNonce, setFocusRequestNonce] = useState(0);
+  const [cameraViewRequest, setCameraViewRequest] = useState<{ view: StageBuilderCameraView; nonce: number } | null>(null);
   const [prefs, setPrefs] = useState<StageBuilderPreferences>(() => readStageBuilderPreferences(scope));
   const [leftPanelVisible, setLeftPanelVisible] = useState(true);
   const [rightPanelVisible, setRightPanelVisible] = useState(true);
@@ -246,6 +248,7 @@ const StageBuilderPage = () => {
 
   const bumpHistory = () => setHistoryVersion((value) => value + 1);
   const setPref = (patch: Partial<StageBuilderPreferences>) => setPrefs((current) => ({ ...current, ...patch }));
+  const requestCameraView = (view: StageBuilderCameraView) => setCameraViewRequest((current) => ({ view, nonce: (current?.nonce || 0) + 1 }));
 
   const commitStage = (updater: (current: EditorStage) => EditorStage, options: { selectIds?: string[]; selectGroupId?: string | null; message?: string } = {}) => {
     setStage((current) => {
@@ -703,6 +706,7 @@ const StageBuilderPage = () => {
         onOpenStageSettings={handleOpenStageSettings}
         onToggleLeftPanel={() => setLeftPanelVisible((value) => !value)}
         onToggleRightPanel={() => setRightPanelVisible((value) => !value)}
+        onCameraViewChange={requestCameraView}
       />
       <input ref={importInputRef} type="file" accept="application/json,.json" hidden onChange={(event) => handleImportFile(event.target.files?.[0])} />
 
@@ -751,6 +755,7 @@ const StageBuilderPage = () => {
             styleVariant={prefs.styleVariant}
             validationResults={validationResults}
             focusRequestNonce={focusRequestNonce}
+            cameraViewRequest={cameraViewRequest}
             onSelect={handleSelect}
             onSelectionChange={handleSelectionChange}
             onObjectChange={updateObject}
@@ -776,6 +781,9 @@ const StageBuilderPage = () => {
               onRedo={redo}
               onDelete={deleteSelected}
             />
+          </Box>
+          <Box sx={{ position: 'absolute', top: 12, right: 12, zIndex: 5 }}>
+            <EditorViewportCameraGizmo currentView={cameraViewRequest?.view || 'perspective'} onCameraViewChange={requestCameraView} />
           </Box>
         </Box>
 
