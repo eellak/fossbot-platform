@@ -32,7 +32,7 @@ Route wiring lives in `front-end/src/routes/Router.tsx`.
 - `EditorViewportToolRail.tsx` — Select/Move/Rotate/Scale, snap toggle, focus, undo/redo/delete.
 - `StageBuilderScene.tsx` — Three.js viewport, floor/grid/bounds, object rendering, picking, hover/selection helpers, transform controls, snapping, focus selected, hidden-object filtering.
 - `EditorRightInspector.tsx` — chooses Object, Stage, Validation, or Settings context.
-- `StageInspector.tsx` — object inspector sections: Entity, Transform, Appearance, Collision, Rigidbody, Behavior, Advanced.
+- `StageInspector.tsx` — object inspector sections: Entity, Transform, Appearance, Collision, Rigidbody, Light, Camera, Audio, Advanced.
 - `StageValidationPanel.tsx` — structured validation result display and warning overrides.
 - `stageBuilderEditorTheme.ts` — local editor colors/type/panel styles.
 
@@ -105,10 +105,10 @@ The editor model is not the simulator JSON directly.
 
 - `EditorStage`
   - `floor`: editable floor settings for the builder.
-  - `objects`: editor object union (`base`, `cube`, `cylinder`, `line`, `text`, `fossbot`).
+  - `objects`: editor object union (`base`, `cube`, `cylinder`, `line`, `text`, `fossbot`, `light`, `camera`, `audio`).
   - `metadata`: editor-only sidecar (`version`, groups, validation overrides, grid/default snap settings).
 - `StageSemanticKind`
-  - Friendly roles such as `wall`, `ramp`, `robotSpawn`, `target`, `checkpoint`, `dangerZone`, `sensorZone`, `label`.
+  - Friendly roles such as `wall`, `ramp`, `robotSpawn`, `target`, `checkpoint`, `dangerZone`, `sensorZone`, `label`, `light`, `camera`, `audio`.
 - `LocalStageRecord`
   - Exported file shape: `{ id, title, description, createdAt, updatedAt, config, editor? }`.
   - `config` is the runnable simulator payload.
@@ -123,6 +123,9 @@ Exported simulator entries currently emitted by `serialize.ts`:
 - `line`
 - `text`
 - `fossbot`
+- `light`
+- `camera`
+- `audio`
 
 The simulator supports `model` entries too, but the current builder does not create or round-trip model objects.
 
@@ -132,11 +135,13 @@ The simulator supports `model` entries too, but the current builder does not cre
 - Browser recovery drafts are only unsaved-work recovery, not project storage.
 - Adding from the Library/Add menu creates objects at the floor center and selects them.
 - A new robot spawn replaces any existing robot spawn.
+- A new camera replaces any existing camera; multiple visible cameras are supported only through import/duplication and produce a validation warning.
 - Hidden objects are omitted from exported simulator config.
+- Audio `file` sources resolve under the simulator public asset base (for example `sounds/start.mp3` → `/simulator/sounds/start.mp3` in the Stage Builder test route); absolute URLs and `data:`/`blob:` sources pass through.
 - Grouping is metadata-level only; groups do not act as transform containers yet.
 - Built-in prefabs are surfaced; the local prefab repository helper exists but is not primary UI.
 - `StageBuilderScene` supports friendly handles and place-mode ghosts, but the current page passes `controlScheme="legacyGizmo"` and uses center-add rather than click-to-place.
-- Run Test opens a separate route in a new tab when possible and falls back to same-tab navigation when popups are blocked.
+- Run Test writes a recovery draft for dirty stages without prompting, opens a separate route in a new tab when possible, and falls back to same-tab navigation when popups are blocked.
 - Validation blocks Run Test on active `error` results. Warnings can be overridden when marked overridable.
 
 Minimum valid stage currently requires:
@@ -146,7 +151,7 @@ Minimum valid stage currently requires:
 - visible robot spawn,
 - visible target.
 
-Other validation includes bounds, invalid dimensions, steep ramps, overlaps, blocked spawn, reachability warnings, and object-count warnings.
+Other validation includes bounds, invalid dimensions, steep ramps, overlaps, blocked spawn, reachability warnings, object-count warnings, camera warnings, and audio warnings.
 
 ## Simulator integration
 
@@ -156,7 +161,8 @@ Important simulator files:
 
 - `sim/src/FossbotSimulator.tsx` — React simulator component; accepts `initialStageConfig`.
 - `sim/src/stages/index.ts` — raw stage config registry/types.
-- `sim/src/stages/loader.ts` — loads `floor`, `base`, `cube`, `cylinder`, `fossbot`, `model`, `line`, `text` entries.
+- `sim/src/stages/loader.ts` — loads `floor`, `base`, `cube`, `cylinder`, `fossbot`, `model`, `line`, `text`, `light`, `camera`, and `audio` entries.
+- `sim/src/stages/audio.ts` — WebAudio runtime for stage audio entries; supports positional audio, loop/start-on-run, and mic source registration.
 - `sim/src/stages/visuals.ts` — Three.js visuals for stage entries.
 - `sim/src/stages/colliders.ts` — Rapier colliders for physical entries.
 

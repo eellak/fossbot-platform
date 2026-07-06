@@ -36,6 +36,7 @@ const StageBuilderTestPage = () => {
   const simRef = useRef<FossbotSimulatorHandle | null>(null);
   const handoff = useMemo(() => readStageBuilderRunHandoff(handoffIdFromUrl()), []);
   const lockCamera = !!handoff?.record.editor?.lockCamera;
+  const hasAudioEntries = !!handoff?.record.config.some((entry) => entry.type === 'audio');
 
   const returnToBuilder = () => {
     if (window.opener && !window.opener.closed) window.close();
@@ -61,15 +62,22 @@ const StageBuilderTestPage = () => {
           {!handoff ? (
             <Alert severity="error" sx={{ m: 2 }}>No Stage Builder run handoff was found. Return to the builder and press Run Test again.</Alert>
           ) : (
-            <Suspense fallback={<Box sx={{ p: 2 }}>Loading simulator...</Box>}>
-              <LazyFossbotSimulator
-                ref={simRef}
-                initialStageConfig={handoff.record.config}
-                config={simulatorConfig}
-                lockCamera={lockCamera}
-                style={{ minHeight: '100%' }}
-              />
-            </Suspense>
+            <>
+              <Suspense fallback={<Box sx={{ p: 2 }}>Loading simulator...</Box>}>
+                <LazyFossbotSimulator
+                  ref={simRef}
+                  initialStageConfig={handoff.record.config}
+                  config={simulatorConfig}
+                  lockCamera={lockCamera}
+                  style={{ minHeight: '100%' }}
+                />
+              </Suspense>
+              {hasAudioEntries && (
+                <Box sx={{ position: 'absolute', left: 12, bottom: 12, maxWidth: 360, p: 1, borderRadius: 1, bgcolor: 'rgba(15, 23, 42, 0.82)', border: '1px solid rgba(148, 163, 184, 0.28)', color: '#dbeafe', pointerEvents: 'none' }}>
+                  <Typography variant="caption" sx={{ fontWeight: 700 }}>Audio starts after the first click or key press if your browser blocks autoplay.</Typography>
+                </Box>
+              )}
+            </>
           )}
         </Box>
 
@@ -77,6 +85,7 @@ const StageBuilderTestPage = () => {
           <Stack spacing={2}>
             <Stack direction="row" spacing={1} alignItems="center"><KeyboardIcon /><Typography variant="h6">Controls Help</Typography></Stack>
             <Alert severity="info">This page loads the current builder JSON through a temporary browser handoff. Your builder draft remains in the original tab.</Alert>
+            {hasAudioEntries && <Alert severity="info">Stage audio may wait for a click or key press because browsers block autoplay until user interaction.</Alert>}
             <Box>
               <Typography variant="subtitle2" gutterBottom>Keyboard / simulator controls</Typography>
               <Typography variant="body2">Use the buttons below for a quick manual smoke test. If keyboard bindings are enabled by the simulator, Arrow Up/Down move and Arrow Left/Right rotate.</Typography>

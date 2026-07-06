@@ -5,7 +5,7 @@ import {
 } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { Sketch, Swatch } from '@uiw/react-color';
-import type { EditorCameraObject, EditorStageObject, StageLightSubtype, StageSemanticKind, Vec2, Vec3 } from './types';
+import type { EditorCameraObject, EditorStageObject, StageAudioSourceType, StageLightSubtype, StageSemanticKind, Vec2, Vec3 } from './types';
 import { displayObjectType, STAGE_OBJECT_CATALOG } from './stageBuilderCatalog';
 import { editorColors, editorType } from './stageBuilderEditorTheme';
 import { StageBuilderNumberField } from './StageBuilderNumberField';
@@ -45,6 +45,20 @@ function rad(degValue: number): number {
 
 function minPositive(value: unknown, fallback: number, minimum = 0.01): number {
   return Math.max(minimum, num(value, fallback));
+}
+
+function clamp01(value: unknown, fallback: number): number {
+  return Math.min(1, Math.max(0, num(value, fallback)));
+}
+
+function resolveAudioPreviewUrl(source: string, sourceType: StageAudioSourceType): string | null {
+  const trimmed = source.trim();
+  if (!trimmed) return null;
+  if (/^(https?:|data:|blob:)/.test(trimmed)) return trimmed;
+  if (trimmed.startsWith('/js-simulator/')) return `/simulator${trimmed.slice('/js-simulator'.length)}`;
+  if (trimmed.startsWith('js-simulator/')) return `/simulator/${trimmed.slice('js-simulator/'.length)}`;
+  if (trimmed.startsWith('/')) return trimmed;
+  return sourceType === 'file' ? `/simulator/${trimmed}` : trimmed;
 }
 
 const COLOR_PRESETS = [
@@ -315,6 +329,42 @@ export function ColorPickerField({
 }
 
 export function StageInspector({ object, selectedCount = object ? 1 : 0, advancedOpen = false, onAdvancedOpenChange, onChange, onLookThroughCamera }: StageInspectorProps) {
+  const audioPreviewRef = React.useRef<HTMLAudioElement | null>(null);
+  const [audioPreviewError, setAudioPreviewError] = React.useState<string | null>(null);
+  const stopAudioPreview = React.useCallback(() => {
+    if (!audioPreviewRef.current) return;
+    audioPreviewRef.current.pause();
+    audioPreviewRef.current.currentTime = 0;
+    audioPreviewRef.current.onended = null;
+    audioPreviewRef.current.onerror = null;
+    audioPreviewRef.current = null;
+  }, []);
+  const testAudioPreview = React.useCallback((source: string, sourceType: StageAudioSourceType, volume: number) => {
+    const url = resolveAudioPreviewUrl(source, sourceType);
+    setAudioPreviewError(null);
+    if (!url) {
+      setAudioPreviewError('Add an audio source before testing.');
+      return;
+    }
+    stopAudioPreview();
+    const preview = new Audio(url);
+    preview.volume = clamp01(volume, 0.8);
+    preview.onended = () => {
+      if (audioPreviewRef.current === preview) audioPreviewRef.current = null;
+    };
+    preview.onerror = () => {
+      if (audioPreviewRef.current === preview) audioPreviewRef.current = null;
+      setAudioPreviewError('Could not load this audio source. Check the path, file type, or CORS settings.');
+    };
+    audioPreviewRef.current = preview;
+    preview.play().catch((error) => {
+      console.warn('[stage-builder] audio preview failed', error);
+      if (audioPreviewRef.current === preview) audioPreviewRef.current = null;
+      setAudioPreviewError('Could not play this audio source. Check the path, file type, or browser audio permissions.');
+    });
+  }, [stopAudioPreview]);
+  React.useEffect(() => stopAudioPreview, [stopAudioPreview]);
+
   if (!object) {
     return <FullRow><Alert severity="info">Select an object in the viewport or Scene hierarchy to inspect it.</Alert></FullRow>;
   }
@@ -603,6 +653,70 @@ export function StageInspector({ object, selectedCount = object ? 1 : 0, advance
             <Stack spacing={0.5}>
               <Button fullWidth size="small" variant="outlined" disabled={!!object.hidden} onClick={() => onLookThroughCamera?.(object as EditorCameraObject)}>Preview from camera</Button>
               <Typography variant="caption" sx={editorType.caption}>Preview locks editor orbit controls until you exit.</Typography>
+            </Stack>
+          </FullRow>
+        </Section>
+      )}
+
+      {object.kind === 'audio' && (
+        <Section title="Audio">
+          <FieldRow label="Source type">
+            <TextField
+              {...commonFieldProps}
+              select
+              disabled={locked}
+              value={object.sourceType}
+              inputProps={{ 'aria-label': 'Audio source type' }}
+              onChange={(event) => set({ sourceType: event.target.value as StageAudioSourceType } as Partial<EditorStageObject>)}
+            >
+              <MenuItem value="url">URL</MenuItem>
+              <MenuItem value="file">File reference</MenuItem>
+            </TextField>
+          </FieldRow>
+          <FieldRow label="Source">
+            <TextField
+              {...commonFieldProps}
+              disabled={locked}
+              value={object.source}
+              placeholder={object.sourceType === 'url' ? 'https://example.com/sound.mp3' : 'sounds/start.mp3'}
+              inputProps={{ 'aria-label': 'Audio source' }}
+              onChange={(event) => set({ source: event.target.value } as Partial<EditorStageObject>)}
+            />
+          </FieldRow>
+          <FieldRow label="Volume">
+            <StageBuilderNumberField
+              {...commonNumberProps}
+              disabled={locked}
+              value={object.volume}
+              inputProps={{ step: 0.05, min: 0, max: 1, 'aria-label': 'Audio volume' }}
+              onChange={(event) => set({ volume: Math.min(1, Math.max(0, num(event.target.value, object.volume))) } as Partial<EditorStageObject>)}
+            />
+          </FieldRow>
+          <FieldRow label="Playback">
+            <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', rowGap: 0.25 }}>
+              <FormControlLabel control={<EnabledSwitch checked={object.autoplay} disabled={locked} onChange={(checked) => set({ autoplay: checked } as Partial<EditorStageObject>)} />} label="Start on run" />
+              <FormControlLabel control={<EnabledSwitch checked={object.loop} disabled={locked} onChange={(checked) => set({ loop: checked } as Partial<EditorStageObject>)} />} label="Loop" />
+            </Stack>
+          </FieldRow>
+          <FieldRow label="Spatial">
+            <FormControlLabel control={<EnabledSwitch checked={object.spatial} disabled={locked} onChange={(checked) => set({ spatial: checked } as Partial<EditorStageObject>)} />} label="Positional audio" />
+          </FieldRow>
+          {object.spatial && (
+            <FieldRow label="Range">
+              <StageBuilderNumberField
+                {...commonNumberProps}
+                disabled={locked}
+                value={object.range}
+                inputProps={{ step: 0.1, min: 0.1, 'aria-label': 'Audio range' }}
+                onChange={(event) => set({ range: Math.max(0.1, num(event.target.value, object.range)) } as Partial<EditorStageObject>)}
+              />
+            </FieldRow>
+          )}
+          <FullRow>
+            <Stack spacing={0.5}>
+              <Button fullWidth size="small" variant="outlined" disabled={!object.source.trim()} onClick={() => testAudioPreview(object.source, object.sourceType, object.volume)}>Test audio</Button>
+              <Typography variant="caption" sx={editorType.caption}>Plays this source once in the editor at the configured volume.</Typography>
+              {audioPreviewError && <Alert severity="warning" sx={{ py: 0 }}>{audioPreviewError}</Alert>}
             </Stack>
           </FullRow>
         </Section>

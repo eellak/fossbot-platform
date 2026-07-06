@@ -12,6 +12,7 @@ import type {
   StageJsonEntry,
   StageLightEntry,
   StageCameraEntry,
+  StageAudioEntry,
   StageLineEntry,
   StageTextEntry,
 } from './types';
@@ -161,6 +162,19 @@ export function editorStageToConfig(stage: EditorStage): StageJsonEntry[] {
         fov: object.fov,
         name: object.name || 'stage camera',
       });
+    } else if (object.kind === 'audio') {
+      entries.push({
+        type: 'audio',
+        position: object.position,
+        sourceType: object.sourceType,
+        source: object.source,
+        volume: object.volume,
+        loop: object.loop,
+        spatial: object.spatial,
+        range: object.spatial ? object.range : undefined,
+        autoplay: object.autoplay,
+        name: object.name || 'audio source',
+      });
     }
   }
 
@@ -309,6 +323,23 @@ function configEntryToEditorObject(entry: StageJsonEntry): EditorStageObject | n
       rotationY: camera.rotationY ?? 0,
       pitch: camera.pitch ?? 0,
       fov: camera.fov ?? 50,
+    };
+  }
+  if (entry.type === 'audio') {
+    const audio = entry as StageAudioEntry;
+    return {
+      id: makeLocalStageId(),
+      kind: 'audio',
+      semanticKind: 'audio',
+      name: audio.name || 'audio source',
+      position: audio.position || [0, 0.5, 0],
+      sourceType: audio.sourceType || 'url',
+      source: audio.source || '',
+      volume: audio.volume ?? 0.8,
+      loop: audio.loop ?? false,
+      spatial: audio.spatial ?? true,
+      range: audio.range ?? 10,
+      autoplay: audio.autoplay ?? true,
     };
   }
   return null;
