@@ -4,6 +4,7 @@ import {
   MenuItem, Stack, Switch, TextField, Typography,
 } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import { Sketch, Swatch } from '@uiw/react-color';
 import type { EditorStageObject, StageSemanticKind, Vec2, Vec3 } from './types';
 import { displayObjectType, semanticKindLabel, STAGE_OBJECT_CATALOG } from './stageBuilderCatalog';
 import { editorColors, editorType } from './stageBuilderEditorTheme';
@@ -38,29 +39,64 @@ function minPositive(value: unknown, fallback: number, minimum = 0.01): number {
   return Math.max(minimum, num(value, fallback));
 }
 
-function colorInputValue(value: string): string {
-  const trimmed = value.trim();
-  if (/^#[0-9a-fA-F]{6}$/.test(trimmed)) return trimmed;
-  if (/^#[0-9a-fA-F]{3}$/.test(trimmed)) {
-    return `#${trimmed.slice(1).split('').map((char) => char + char).join('')}`;
-  }
-  if (typeof document === 'undefined') return '#ffffff';
+const COLOR_PRESETS = [
+  '#4D4D4D', '#999999', '#FFFFFF', '#F44E3B', '#FE9200', '#FCDC00',
+  '#DBDF00', '#A4DD00', '#68CCCA', '#73D8FF', '#AEA1FF', '#FDA1FF',
+  '#333333', '#808080', '#CCCCCC', '#D33115', '#E27300', '#FCC400',
+  '#B0BC00', '#68BC00', '#16A5A5', '#009CE0', '#7B64FF', '#FA28FF',
+  '#000000', '#666666', '#B3B3B3', '#9F0500', '#C45100', '#FB9E00',
+  '#808900', '#194D33', '#0C797D', '#0062B1', '#653294', '#AB149E',
+];
 
-  const canvas = document.createElement('canvas');
+let colorParserCanvas: HTMLCanvasElement | null = null;
+
+function channelToHex(channel: number): string {
+  return channel.toString(16).padStart(2, '0');
+}
+
+function normalizeHexColor(value: string): string | null {
+  const match = value.match(/^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/);
+  if (!match) return null;
+  const hex = match[1].length === 3 ? match[1].split('').map((char) => char + char).join('') : match[1];
+  return `#${hex.toLowerCase()}`;
+}
+
+function cssColorToHex(value: string): string | null {
+  if (typeof document === 'undefined') return null;
+
+  const canvas = colorParserCanvas || (colorParserCanvas = document.createElement('canvas'));
+  canvas.width = 1;
+  canvas.height = 1;
   const ctx = canvas.getContext('2d');
-  if (!ctx) return '#ffffff';
+  if (!ctx) return null;
 
   try {
-    ctx.fillStyle = '#ffffff';
-    ctx.fillStyle = trimmed;
-  } catch {
-    return '#ffffff';
-  }
+    ctx.fillStyle = '#000001';
+    ctx.fillStyle = value;
+    const first = String(ctx.fillStyle);
+    ctx.fillStyle = '#000002';
+    ctx.fillStyle = value;
+    const second = String(ctx.fillStyle);
+    if (first === '#000001' && second === '#000002') return null;
 
-  ctx.fillRect(0, 0, 1, 1);
-  const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
-  const toHex = (channel: number) => channel.toString(16).padStart(2, '0');
-  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+    ctx.clearRect(0, 0, 1, 1);
+    ctx.fillStyle = first;
+    ctx.fillRect(0, 0, 1, 1);
+    const [red, green, blue] = ctx.getImageData(0, 0, 1, 1).data;
+    return `#${channelToHex(red)}${channelToHex(green)}${channelToHex(blue)}`;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeColorValue(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  return normalizeHexColor(trimmed) || cssColorToHex(trimmed);
+}
+
+function colorInputValue(value: string): string {
+  return normalizeColorValue(value) || '#ffffff';
 }
 
 export interface StageInspectorProps {
@@ -130,23 +166,142 @@ export function ColorPickerField({
   pickerAriaLabel?: string;
   valueAriaLabel?: string;
 }) {
+  const currentHex = colorInputValue(value);
+  const [draftHex, setDraftHex] = React.useState(currentHex);
+  const draftHexRef = React.useRef(currentHex);
+  const pickerRef = React.useRef<HTMLDivElement | null>(null);
+  const [pickerWidth, setPickerWidth] = React.useState(180);
+  const [advancedOpen, setAdvancedOpen] = React.useState(false);
+
+  const setDraftColor = React.useCallback((nextValue: string) => {
+    draftHexRef.current = nextValue;
+    setDraftHex(nextValue);
+  }, []);
+
+  React.useEffect(() => {
+    const nextHex = colorInputValue(value);
+    setDraftColor(nextHex);
+  }, [setDraftColor, value]);
+
+  React.useEffect(() => {
+    const element = pickerRef.current;
+    if (!element || typeof ResizeObserver === 'undefined') return undefined;
+
+    const updateWidth = () => {
+      const width = Math.floor(element.getBoundingClientRect().width);
+      if (width > 0) setPickerWidth(Math.max(96, Math.min(180, width)));
+    };
+
+    updateWidth();
+    const observer = new ResizeObserver(updateWidth);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
+  const commitColor = React.useCallback((nextValue: string): boolean => {
+    const normalized = normalizeColorValue(nextValue);
+    if (!normalized) return false;
+    setDraftColor(normalized);
+    if (normalized.toLowerCase() !== currentHex.toLowerCase()) onChange(normalized);
+    return true;
+  }, [currentHex, onChange, setDraftColor]);
+
+  const commitDraft = React.useCallback(() => {
+    commitColor(draftHexRef.current);
+  }, [commitColor]);
+
+  const sketchStyle = {
+    '--sketch-background': editorColors.panelInset,
+    '--sketch-box-shadow': 'none',
+    '--sketch-alpha-box-shadow': 'none',
+    '--editable-input-label-color': editorColors.textMuted,
+    '--editable-input-box-shadow': '#33424c 0 0 0 1px inset',
+    '--editable-input-color': editorColors.textStrong,
+    borderRadius: 6,
+  } as React.CSSProperties;
+
   return (
-    <Box sx={{ display: 'grid', gridTemplateColumns: '40px minmax(0, 1fr)', gap: 0.75, alignItems: 'center' }}>
-      <TextField
-        type="color"
-        size="small"
-        disabled={disabled}
-        value={colorInputValue(value)}
-        inputProps={{ 'aria-label': pickerAriaLabel }}
-        onChange={(event) => onChange(event.target.value)}
+    <Stack ref={pickerRef} spacing={0.75}>
+      <Box sx={{ display: 'grid', gridTemplateColumns: '28px minmax(0, 1fr)', gap: 0.75, alignItems: 'center' }}>
+        <Box sx={{ width: 28, height: 28, borderRadius: 0.75, bgcolor: draftHex, boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.24)' }} />
+        <Typography variant="caption" noWrap sx={{ ...editorType.caption, color: editorColors.textMuted }}>{draftHex}</Typography>
+      </Box>
+
+      <Box sx={{ opacity: disabled ? 0.45 : 1, pointerEvents: disabled ? 'none' : 'auto' }}>
+        <Swatch
+          aria-label={pickerAriaLabel}
+          colors={COLOR_PRESETS}
+          color={draftHex}
+          onChange={(_, color) => commitColor(color.hex)}
+          rectProps={{
+            style: {
+              width: 20,
+              height: 20,
+              marginRight: 5,
+              marginBottom: 5,
+              borderRadius: 3,
+              boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.18), 0 0 0 1px rgba(0,0,0,0.24)',
+            },
+          }}
+          style={{ maxWidth: pickerWidth }}
+        />
+      </Box>
+
+      <Box
+        component="button"
+        type="button"
+        onClick={() => setAdvancedOpen((open) => !open)}
         sx={{
-          width: 40,
-          '& .MuiInputBase-root': { minHeight: 32 },
-          '& input': { cursor: disabled ? 'default' : 'pointer', p: '4px' },
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          width: '100%',
+          p: 0,
+          border: 0,
+          bgcolor: 'transparent',
+          color: '#ffffff',
+          font: 'inherit',
+          fontSize: '0.8125rem',
+          fontWeight: 650,
+          cursor: 'pointer',
+          '&:hover': { color: '#ffffff' },
+          '&:focus-visible': { outline: 'none', textDecoration: 'underline' },
         }}
-      />
-      <TextField {...commonFieldProps} disabled={disabled} value={value} inputProps={{ 'aria-label': valueAriaLabel }} onChange={(event) => onChange(event.target.value)} />
-    </Box>
+      >
+        <span>Advanced color</span>
+        <ExpandMoreIcon sx={{ width: 16, height: 16, color: 'inherit', transform: advancedOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 120ms ease' }} />
+      </Box>
+
+      {advancedOpen && (
+        <Box
+          sx={{
+            opacity: disabled ? 0.45 : 1,
+            pointerEvents: disabled ? 'none' : 'auto',
+            '& .w-color-editable-input input': {
+              bgcolor: '#111820 !important',
+              boxShadow: `0 0 0 1px ${editorColors.borderStrong} inset !important`,
+              color: `${editorColors.textStrong} !important`,
+              fontWeight: '700 !important',
+            },
+            '& .w-color-editable-input label': { color: `${editorColors.textMuted} !important` },
+          }}
+        >
+          <Sketch
+            aria-label={valueAriaLabel}
+            color={draftHex}
+            width={pickerWidth}
+            disableAlpha
+            editableDisable
+            presetColors={false}
+            style={sketchStyle}
+            onChange={(color) => setDraftColor(color.hex)}
+            onMouseUp={commitDraft}
+            onTouchEnd={commitDraft}
+            onBlur={commitDraft}
+          />
+        </Box>
+      )}
+    </Stack>
   );
 }
 
