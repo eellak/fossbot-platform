@@ -6,6 +6,7 @@ import type { VisualBuilt, LineSegment } from './visuals'
 import { buildFloorCollider, buildCubeCollider, buildCylinderCollider, buildModelCollider } from './colliders'
 import type { ColliderBuilt } from './colliders'
 import { createStageAudioRuntime, type StageAudioEntry } from './audio'
+import { applyStageSkybox } from './skybox'
 import { log } from '../util/log'
 import { syncObjectToBody } from '../physics/mesh-sync'
 
@@ -149,6 +150,10 @@ export async function loadStageEntries(
       `dimensions: ${JSON.stringify((entry as any).dimensions)}, position: ${JSON.stringify((entry as any).position)}, orientation: ${JSON.stringify((entry as any).orientation)}`
     )
     switch (type) {
+      case 'skybox': {
+        applyStageSkybox(scene, entry as any)
+        break
+      }
       case 'floor': {
         const vis = buildFloorVisual(entry as any)
         const col = buildFloorCollider(entry as any, (entry as any).dimensions)

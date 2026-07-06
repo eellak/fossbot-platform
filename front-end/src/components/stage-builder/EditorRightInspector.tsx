@@ -14,6 +14,7 @@ import { defaultStageBuilderPreferences, type StageBuilderRotationSnapPreset, ty
 import { rotationSnapPresetLabel, snapPresetLabel } from './stageBuilderSnapping';
 import { useEditorTheme } from './stageBuilderEditorTheme';
 import { PreviewSettingsPanel } from './PreviewSettingsPanel';
+import { STAGE_BUILDER_SKYBOX_COLORS, normalizeStageBuilderSkybox } from './stageBuilderSkybox';
 
 export type InspectorTab = 'empty' | 'object' | 'stage' | 'validation' | 'settings' | 'previewSettings';
 
@@ -118,8 +119,11 @@ function StageContext({ stage, prefs, onStageChange, onPrefsChange }: Pick<Edito
   const defaultSnapPreset = stage.metadata.defaultSnapPreset || (prefs.snapPreset === 'free' || prefs.snapPreset === 'grid' ? 'fine' : prefs.snapPreset) as StageBuilderSnapPreset;
   const defaultRotationSnapPreset = stage.metadata.defaultRotationSnapPreset || prefs.rotationSnapPreset;
   const hasVisibleStageCamera = stage.objects.some((object) => object.kind === 'camera' && !object.hidden);
+  const skybox = normalizeStageBuilderSkybox(stage.metadata.skybox);
+  const skyboxColorPresetValue = STAGE_BUILDER_SKYBOX_COLORS.some((option) => option.value === skybox.color) ? skybox.color : '';
 
   const patchMetadata = (patch: Partial<EditorStage['metadata']>) => onStageChange({ ...stage, metadata: { ...stage.metadata, ...patch } });
+  const patchSkybox = (patch: Partial<typeof skybox>) => patchMetadata({ skybox: normalizeStageBuilderSkybox({ ...skybox, ...patch }) });
 
   return (
     <Stack spacing={0} sx={{ color: editorColors.text }}>
@@ -149,6 +153,33 @@ function StageContext({ stage, prefs, onStageChange, onPrefsChange }: Pick<Edito
             onChange={(color) => onStageChange({ ...stage, floor: { ...stage.floor, color } })}
           />
         </FieldRow>
+      </Section>
+
+      <Section title="Skybox">
+        <FieldRow label="Mode">
+          <TextField {...commonFieldProps} select value={skybox.mode} inputProps={{ 'aria-label': 'Skybox mode' }} onChange={(event) => patchSkybox({ mode: event.target.value as typeof skybox.mode })}>
+            <MenuItem value="default">Editor default</MenuItem>
+            <MenuItem value="color">Color</MenuItem>
+          </TextField>
+        </FieldRow>
+        {skybox.mode === 'color' && (
+          <>
+            <FieldRow label="Preset">
+              <TextField {...commonFieldProps} select value={skyboxColorPresetValue} inputProps={{ 'aria-label': 'Skybox color preset' }} onChange={(event) => { if (event.target.value) patchSkybox({ color: event.target.value }); }}>
+                <MenuItem value="">Custom</MenuItem>
+                {STAGE_BUILDER_SKYBOX_COLORS.map((option) => <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>)}
+              </TextField>
+            </FieldRow>
+            <FieldRow label="Color" align="start">
+              <ColorPickerField
+                value={skybox.color}
+                pickerAriaLabel="Skybox color picker"
+                valueAriaLabel="Skybox color value"
+                onChange={(color) => patchSkybox({ color })}
+              />
+            </FieldRow>
+          </>
+        )}
       </Section>
 
       <Section title="Grid and Defaults">

@@ -93,6 +93,23 @@ export function objectBounds(object: EditorStageObject): StageObjectBounds | nul
       soft,
     };
   }
+  if (object.kind === 'model') {
+    const dimensions = object.nativeDimensions || [1, 1, 1];
+    const width = Math.max(0.05, dimensions[0] * object.scale);
+    const height = Math.max(0.05, dimensions[1] * object.scale);
+    const depth = Math.max(0.05, dimensions[2] * object.scale);
+    return {
+      objectId: object.id,
+      minX: object.position[0] - width / 2,
+      maxX: object.position[0] + width / 2,
+      minY: object.position[1],
+      maxY: object.position[1] + height,
+      minZ: object.position[2] - depth / 2,
+      maxZ: object.position[2] + depth / 2,
+      solid: object.collision !== 'none',
+      soft: false,
+    };
+  }
   if (object.kind === 'fossbot') {
     const radius = 0.2;
     return {
@@ -210,6 +227,7 @@ export function objectDimensionsAreValid(object: EditorStageObject): boolean {
   if (object.kind === 'cylinder') return object.dimensions.slice(0, 3).every((value) => Number.isFinite(value) && value >= 0) && object.dimensions[2] > 0;
   if (object.kind === 'line') return object.points.length >= 2 && object.width > 0;
   if (object.kind === 'text') return object.scale > 0;
+  if (object.kind === 'model') return object.scale > 0 && !!object.filename;
   return true;
 }
 

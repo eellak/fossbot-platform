@@ -8,6 +8,7 @@ import { useEditorTheme } from './stageBuilderEditorTheme';
 export interface EditorViewportCameraGizmoProps {
   currentView: StageBuilderCameraView;
   onCameraViewChange: (view: StageBuilderCameraView) => void;
+  hasActiveCamera?: boolean;
 }
 
 const cameraViewLabels: Record<StageBuilderCameraView, string> = {
@@ -18,11 +19,12 @@ const cameraViewLabels: Record<StageBuilderCameraView, string> = {
   back: 'Back',
   left: 'Left',
   right: 'Right',
+  camera: 'Camera',
 };
 
 const cameraViewOptions: StageBuilderCameraView[] = ['perspective', 'top', 'bottom', 'front', 'back', 'left', 'right'];
 
-export function EditorViewportCameraGizmo({ currentView, onCameraViewChange }: EditorViewportCameraGizmoProps) {
+export function EditorViewportCameraGizmo({ currentView, onCameraViewChange, hasActiveCamera = false }: EditorViewportCameraGizmoProps) {
   const { colors: editorColors } = useEditorTheme();
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -94,9 +96,25 @@ export function EditorViewportCameraGizmo({ currentView, onCameraViewChange }: E
                   </ButtonBase>
                 );
               })}
-              <ButtonBase disabled sx={{ width: '100%', minHeight: 30, px: 0.25, display: 'flex', alignItems: 'center', gap: 1, justifyContent: 'flex-start', color: editorColors.textSubtle, opacity: 0.42 }}>
-                <Box sx={{ width: 18, height: 18, borderRadius: '50%', bgcolor: editorColors.keycapBg, flexShrink: 0 }} />
-                <Typography variant="body2" sx={{ color: 'inherit', fontWeight: 700 }}>Camera</Typography>
+              <ButtonBase
+                disabled={!hasActiveCamera}
+                onClick={() => hasActiveCamera && selectView('camera')}
+                sx={{
+                  width: '100%',
+                  minHeight: 30,
+                  px: 0.25,
+                  borderRadius: 0.5,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 1,
+                  justifyContent: 'flex-start',
+                  color: currentView === 'camera' ? editorColors.textStrong : editorColors.textMuted,
+                  opacity: hasActiveCamera ? 1 : 0.42,
+                  '&:hover': hasActiveCamera ? { bgcolor: editorColors.keycapBg, color: editorColors.textStrong } : undefined,
+                }}
+              >
+                <Box sx={{ width: 18, height: 18, borderRadius: '50%', border: `2px solid ${currentView === 'camera' ? editorColors.textStrong : editorColors.borderSoft}`, bgcolor: currentView === 'camera' ? editorColors.keycapBg : 'transparent', flexShrink: 0 }} />
+                <Typography variant="body2" sx={{ color: 'inherit', fontWeight: currentView === 'camera' ? 800 : 700 }}>Camera</Typography>
               </ButtonBase>
             </Stack>
           </Box>

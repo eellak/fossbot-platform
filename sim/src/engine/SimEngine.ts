@@ -59,6 +59,7 @@ function resolveConfig(cfg: Partial<SimEngineConfig> | undefined): Required<SimE
     initialStageConfig: cfg?.initialStageConfig,
     lockCamera: cfg?.lockCamera ?? false,
     sensorHelpersVisible: cfg?.sensorHelpersVisible ?? false,
+    showColliders: cfg?.showColliders ?? false,
   }
 }
 
@@ -218,7 +219,7 @@ export class SimEngine {
     this.paused = false
     this.timeScale = 1
     this.stepOnce = false
-    this.showColliders = false
+    this.showColliders = this.config.showColliders
     this.gravityY = -9.81
     this.turnScale = this.config.turnScale
     this.telemetryVisible = this.config.telemetryDefault
@@ -485,6 +486,16 @@ export class SimEngine {
 
   isSensorHelpersVisible(): boolean {
     return this.sensorHelpersVisible
+  }
+
+  setCollisionWireVisible(visible: boolean): void {
+    this.showColliders = visible
+    if (this.robot?.collidersGroup) this.robot.collidersGroup.visible = visible
+    if (this.currentStage) this.currentStage.collidersGroup.visible = visible
+  }
+
+  isCollisionWireVisible(): boolean {
+    return this.showColliders
   }
 
   async setStage(stageOrUrl: string): Promise<void> {
@@ -758,6 +769,7 @@ export class SimEngine {
         })
       }
 
+      this.currentStage.collidersGroup.visible = this.showColliders
       this.applyStartCamera()
 
       this.splash.setStatus('Loading robot model...')
@@ -774,6 +786,7 @@ export class SimEngine {
       this.robotPhysics = await createRobotBody(world, this.robot, initialSpawn, {
         skipDriveWheels: true,
       })
+      this.robotPhysics.collidersGroup.visible = this.showColliders
       this.splash.setStatus('Preparing wheel physics...')
       // Compute wheel physics positions from collider configs.
       const leftWheelCfg = ROBOT_COLLIDERS.find((c) => c.name === 'left_wheel')

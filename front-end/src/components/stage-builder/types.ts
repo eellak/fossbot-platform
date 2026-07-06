@@ -13,6 +13,20 @@ export type StageFloorEntry = {
   name?: string;
 };
 
+export type StageSkyboxMode = 'default' | 'color';
+
+export type StageBuilderSkyboxSettings = {
+  mode: StageSkyboxMode;
+  color: string;
+};
+
+export type StageSkyboxEntry = {
+  type: 'skybox';
+  mode?: StageSkyboxMode;
+  color?: string | number;
+  name?: string;
+};
+
 export type StageBaseEntry = {
   type: 'base';
   dimensions: [number, number];
@@ -98,6 +112,25 @@ export type StageFossbotEntry = {
   orientation: [number, number, number];
 };
 
+export type StageModelFormat = 'obj' | 'stl';
+
+export type StageModelEntry = {
+  type: 'model';
+  filename: string;
+  format?: StageModelFormat;
+  position: [number, number, number];
+  scale?: number;
+  normalize?: boolean;
+  nativeDimensions?: [number, number, number];
+  orientation?: [number, number, number];
+  color?: string | number;
+  name?: string;
+  castShadow?: boolean;
+  mass?: number;
+  immovable?: boolean;
+  collision?: 'auto' | 'none' | 'trimesh' | 'convexHull' | 'compoundConvex' | { mode?: 'auto' | 'none' | 'trimesh' | 'convexHull' | 'compoundConvex'; source?: string };
+};
+
 export type StageLightSubtype = 'point' | 'directional' | 'spot' | 'ambient';
 
 export type StageLightEntry = {
@@ -138,6 +171,7 @@ export type StageAudioEntry = {
 };
 
 export type StageJsonEntry =
+  | StageSkyboxEntry
   | StageFloorEntry
   | StageBaseEntry
   | StageCubeEntry
@@ -145,11 +179,12 @@ export type StageJsonEntry =
   | StageLineEntry
   | StageTextEntry
   | StageFossbotEntry
+  | StageModelEntry
   | StageLightEntry
   | StageCameraEntry
   | StageAudioEntry;
 
-export type StageObjectKind = 'base' | 'cube' | 'cylinder' | 'line' | 'text' | 'fossbot' | 'light' | 'camera' | 'audio';
+export type StageObjectKind = 'base' | 'cube' | 'cylinder' | 'line' | 'text' | 'fossbot' | 'model' | 'light' | 'camera' | 'audio';
 
 export type StageSemanticKind =
   | 'floor'
@@ -169,7 +204,8 @@ export type StageSemanticKind =
   | 'label'
   | 'light'
   | 'camera'
-  | 'audio';
+  | 'audio'
+  | 'customObject';
 
 export type StageBuilderMode = 'navigate' | 'place' | 'edit' | 'test';
 export type StageBuilderTool = 'select' | 'move' | 'rotate' | 'resize';
@@ -206,6 +242,7 @@ export type StageBuilderMetadata = {
   defaultSnapPreset?: 'off' | 'fine' | 'medium' | 'coarse';
   defaultRotationSnapPreset?: 'off' | '15' | '30' | '45';
   lockCamera?: boolean;
+  skybox?: StageBuilderSkyboxSettings;
 };
 
 export type StageBuilderEditorSnapshot = StageBuilderMetadata & {
@@ -277,6 +314,23 @@ export type EditorFossbotObject = EditorObjectCommon & {
   rotationY: number;
 };
 
+export type EditorModelObject = EditorObjectCommon & {
+  kind: 'model';
+  filename: string;
+  format: StageModelFormat;
+  originalFileName?: string;
+  position: Vec3;
+  rotationY: number;
+  orientation?: Vec3;
+  scale: number;
+  normalize: boolean;
+  nativeDimensions?: Vec3;
+  color: string;
+  mass: number;
+  immovable: boolean;
+  collision: 'auto' | 'none' | 'trimesh' | 'convexHull' | 'compoundConvex';
+};
+
 export type EditorLightObject = EditorObjectCommon & {
   kind: 'light';
   subtype: StageLightSubtype;
@@ -316,6 +370,7 @@ export type EditorStageObject =
   | EditorLineObject
   | EditorTextObject
   | EditorFossbotObject
+  | EditorModelObject
   | EditorLightObject
   | EditorCameraObject
   | EditorAudioObject;

@@ -9,10 +9,12 @@ import type {
   StageCylinderEntry,
   StageFloorEntry,
   StageFossbotEntry,
+  StageSkyboxEntry,
   StageJsonEntry,
   StageLightEntry,
   StageCameraEntry,
   StageAudioEntry,
+  StageModelEntry,
   StageLineEntry,
   StageTextEntry,
 } from './types';
@@ -20,6 +22,7 @@ import { makeLocalStageId } from './localStages';
 import { inferSemanticKindFromConfig } from './stageBuilderCatalog';
 import { cloneStage } from './stageBuilderGeometry';
 import { activeValidationResults, validateStageBuilderStage } from './stageBuilderValidation';
+import { normalizeStageBuilderSkybox } from './stageBuilderSkybox';
 
 export const DEFAULT_STAGE_FLOOR: EditorStageFloorSettings = {
   name: 'floor',
@@ -38,6 +41,7 @@ export const DEFAULT_STAGE_METADATA: StageBuilderMetadata = {
   gridSize: 0.5,
   defaultSnapPreset: 'fine',
   defaultRotationSnapPreset: '15',
+  skybox: normalizeStageBuilderSkybox(),
 };
 
 export const DEFAULT_FLOOR_ENTRY: StageJsonEntry = {
@@ -52,6 +56,16 @@ export const DEFAULT_FLOOR_ENTRY: StageJsonEntry = {
 
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value));
+}
+
+function skyboxToConfig(stage: EditorStage): StageSkyboxEntry | null {
+  const skybox = normalizeStageBuilderSkybox(stage.metadata?.skybox);
+  if (skybox.mode === 'default') return null;
+  return {
+    type: 'skybox',
+    mode: skybox.mode,
+    color: skybox.mode === 'color' ? skybox.color : undefined,
+  };
 }
 
 function floorToConfig(floor: EditorStageFloorSettings): StageFloorEntry {
@@ -82,7 +96,8 @@ function markerTextFor(object: EditorStageObject): StageTextEntry | null {
 }
 
 export function editorStageToConfig(stage: EditorStage): StageJsonEntry[] {
-  const entries: StageJsonEntry[] = [floorToConfig(stage.floor || DEFAULT_STAGE_FLOOR)];
+  const skybox = skyboxToConfig(stage);
+  const entries: StageJsonEntry[] = skybox ? [skybox, floorToConfig(stage.floor || DEFAULT_STAGE_FLOOR)] : [floorToConfig(stage.floor || DEFAULT_STAGE_FLOOR)];
 
   const hiddenObjectIds = new Set(stage.objects.filter((object) => object.hidden).map((object) => object.id));
 
@@ -152,6 +167,23 @@ export function editorStageToConfig(stage: EditorStage): StageJsonEntry[] {
         } : undefined,
         style: object.style,
         name: object.name || object.semanticKind || 'text',
+      });
+    } else if (object.kind === 'model') {
+      entries.push({
+        type: 'model',
+        filename: object.filename,
+        format: object.format,
+        position: object.position,
+        scale: object.scale,
+        normalize: object.normalize,
+        nativeDimensions: object.nativeDimensions,
+        orientation: object.orientation || [0, object.rotationY, 0],
+        color: object.color,
+        name: object.name || 'custom object',
+        castShadow: true,
+        mass: object.immovable ? 0 : object.mass,
+        immovable: object.immovable,
+        collision: object.collision,
       });
     } else if (object.kind === 'light') {
       entries.push({
@@ -311,6 +343,28 @@ function configEntryToEditorObject(entry: StageJsonEntry): EditorStageObject | n
       rotationY: spawn.orientation?.[1] || 0,
     };
   }
+  if (entry.type === 'model') {
+    const model = entry as StageModelEntry;
+    return {
+      id: makeLocalStageId(),
+      kind: 'model',
+      semanticKind: 'customObject',
+      name: model.name || 'custom object',
+      filename: model.filename,
+      format: modelFormatFrom(model.filename, model.format),
+      originalFileName: model.name,
+      position: model.position || [0, 0, 0],
+      rotationY: model.orientation?.[1] || 0,
+      orientation: model.orientation,
+      scale: model.scale ?? 1,
+      normalize: model.normalize ?? true,
+      nativeDimensions: model.nativeDimensions,
+      color: String(model.color || '#9aa8b6'),
+      mass: model.mass || 0,
+      immovable: model.immovable ?? (model.mass || 0) <= 0,
+      collision: typeof model.collision === 'string' ? model.collision : model.collision?.mode || 'auto',
+    };
+  }
   if (entry.type === 'light') {
     const light = entry as StageLightEntry;
     return {
@@ -361,6 +415,20 @@ function configEntryToEditorObject(entry: StageJsonEntry): EditorStageObject | n
   return null;
 }
 
+function modelFormatFrom(filename?: string, format?: StageModelEntry['format']): StageModelEntry['format'] {
+  if (format === 'stl' || format === 'obj') return format;
+  return filename?.toLowerCase().endsWith('.stl') ? 'stl' : 'obj';
+}
+
+function skyboxFromConfig(config: StageJsonEntry[]) {
+  const skybox = config.find((entry) => entry.type === 'skybox') as StageSkyboxEntry | undefined;
+  if (!skybox) return normalizeStageBuilderSkybox();
+  return normalizeStageBuilderSkybox({
+    mode: skybox.mode || (skybox.color ? 'color' : 'default'),
+    color: skybox.color ? String(skybox.color) : undefined,
+  });
+}
+
 function floorFromConfig(config: StageJsonEntry[]): EditorStageFloorSettings {
   const floor = config.find((entry) => entry.type === 'floor') as StageFloorEntry | undefined;
   if (!floor) return clone(DEFAULT_STAGE_FLOOR);
@@ -385,7 +453,8 @@ export function configToEditorStage(record: LocalStageRecord): EditorStage {
       gridSize: editor.gridSize,
       defaultSnapPreset: editor.defaultSnapPreset,
       defaultRotationSnapPreset: editor.defaultRotationSnapPreset,
-    } : {}),
+      skybox: normalizeStageBuilderSkybox(editor.skybox),
+    } : { skybox: skyboxFromConfig(record.config) }),
     version: 2,
   };
   const objects = Array.isArray(editor?.objects) && editor.objects.length

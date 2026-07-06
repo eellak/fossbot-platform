@@ -1,4 +1,4 @@
-import type { EditorStage, LocalStageRecord } from './types';
+import type { EditorStage, LocalStageRecord, StageJsonEntry } from './types';
 import { configToEditorStage, editorStageToRecord } from './serialize';
 
 const DRAFT_PREFIX = 'fossbot.stageBuilder.recoveryDraft.v1';
@@ -35,10 +35,28 @@ export function readStageBuilderDraft(scope?: string | number | null): StageBuil
   }
 }
 
+function compactDraftConfigEntry(entry: StageJsonEntry): StageJsonEntry {
+  if (entry.type !== 'model') return entry;
+  // Drafts already carry full editor objects. Avoid storing imported model data URLs
+  // twice (`config` + `editor.objects`), which can exceed localStorage quota.
+  return { ...entry, filename: '' };
+}
+
+function draftRecordFor(stage: EditorStage): LocalStageRecord {
+  const record = editorStageToRecord(stage);
+  return { ...record, config: record.config.map(compactDraftConfigEntry) };
+}
+
 export function writeStageBuilderDraft(stage: EditorStage, scope?: string | number | null): void {
   if (typeof window === 'undefined') return;
-  const draft: StageBuilderDraft = { savedAt: new Date().toISOString(), stageRecord: editorStageToRecord(stage) };
-  window.localStorage.setItem(stageBuilderDraftKey(scope), JSON.stringify(draft));
+  const key = stageBuilderDraftKey(scope);
+  const draft: StageBuilderDraft = { savedAt: new Date().toISOString(), stageRecord: draftRecordFor(stage) };
+  try {
+    window.localStorage.setItem(key, JSON.stringify(draft));
+  } catch (error) {
+    console.warn('[stage-builder] Failed to write recovery draft', error);
+    try { window.localStorage.removeItem(key); } catch { /* ignore cleanup errors */ }
+  }
 }
 
 export function clearStageBuilderDraft(scope?: string | number | null): void {

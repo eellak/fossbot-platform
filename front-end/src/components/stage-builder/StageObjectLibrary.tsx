@@ -1,7 +1,8 @@
 import React, { useEffect, useRef } from 'react';
-import { Box, ButtonBase, Stack, Tooltip, Typography } from '@mui/material';
+import { Box, Button, ButtonBase, Stack, Tooltip, Typography } from '@mui/material';
 import type { StageSemanticKind } from './types';
 import { STAGE_OBJECT_CATALOG, catalogItem } from './stageBuilderCatalog';
+import UploadFileIcon from '@mui/icons-material/UploadFile';
 import type { StageBuilderPrefab } from './stageBuilderPrefabs';
 import { useEditorTheme, type EditorTone } from './stageBuilderEditorTheme';
 import { PreviewImage } from './PreviewImage';
@@ -34,6 +35,7 @@ export interface StageObjectLibraryProps {
   onSelectKind?: (kind: StageSemanticKind) => void;
   onSelectPrefab?: (prefab: StageBuilderPrefab) => void;
   onDeletePrefab?: (id: string) => void;
+  onImportObject?: () => void;
 }
 
 export type PreviewKind = StageSemanticKind | 'prefab';
@@ -270,6 +272,7 @@ export function StageObjectLibrary({
   onAddPrefab,
   onSelectKind,
   onSelectPrefab,
+  onImportObject,
 }: StageObjectLibraryProps) {
   const { colors: editorColors, tones: editorTones, type: editorType } = useEditorTheme();
   const addKind = onAddKind || onSelectKind;
@@ -281,6 +284,17 @@ export function StageObjectLibrary({
         <Typography variant="subtitle2" sx={editorType.panelTitle}>Add objects</Typography>
         <Typography variant="caption" sx={editorType.caption}>Choose a tile to add it at the floor center.</Typography>
       </Box>
+
+      <Button
+        fullWidth
+        size="small"
+        variant="outlined"
+        startIcon={<UploadFileIcon fontSize="small" />}
+        onClick={onImportObject}
+        sx={{ justifyContent: 'flex-start' }}
+      >
+        Import OBJ/STL object
+      </Button>
 
       {STAGE_BUILDER_LIBRARY_GROUPS.map((group) => {
         const tone = editorTones[group.id];

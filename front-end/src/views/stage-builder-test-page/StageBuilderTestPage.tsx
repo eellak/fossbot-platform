@@ -6,6 +6,8 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import RestartAltIcon from '@mui/icons-material/RestartAlt';
 import VideocamIcon from '@mui/icons-material/Videocam';
 import SensorsIcon from '@mui/icons-material/Sensors';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faBorderAll } from '@fortawesome/free-solid-svg-icons';
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
@@ -80,7 +82,9 @@ const SENSOR_INTERVAL_MS = 300;
 const StageBuilderTestPage = () => {
   const navigate = useNavigate();
   const simRef = useRef<FossbotSimulatorHandle | null>(null);
+  const handoff = useMemo(() => readStageBuilderRunHandoff(handoffIdFromUrl()), []);
   const [sensorHelpersVisible, setSensorHelpersVisible] = useState(false);
+  const [collisionWireVisible, setCollisionWireVisible] = useState(() => !!handoff?.collisionWireVisible);
   const [sensors, setSensors] = useState<SensorSnapshot>({
     distance: 0,
     light: 0,
@@ -88,7 +92,6 @@ const StageBuilderTestPage = () => {
     accel: { x: 0, y: 0, z: 0 },
     gyro: { x: 0, y: 0, z: 0 },
   });
-  const handoff = useMemo(() => readStageBuilderRunHandoff(handoffIdFromUrl()), []);
   const lockCamera = !!handoff?.record.editor?.lockCamera;
   const hasAudioEntries = !!handoff?.record.config.some((entry) => entry.type === 'audio');
   const objectCount = handoff?.record.config.length ?? 0;
@@ -130,6 +133,12 @@ const StageBuilderTestPage = () => {
     const next = !sensorHelpersVisible;
     setSensorHelpersVisible(next);
     simRef.current?.setSensorHelpersVisible(next);
+  };
+
+  const toggleCollisionWires = () => {
+    const next = !collisionWireVisible;
+    setCollisionWireVisible(next);
+    simRef.current?.setCollisionWireVisible(next);
   };
 
   const editorColors = useMemo(() => getEditorColors('fossbot'), []);
@@ -189,6 +198,15 @@ const StageBuilderTestPage = () => {
             <SensorsIcon fontSize="small" />
           </IconButton>
         </Tooltip>
+        <Tooltip title={collisionWireVisible ? 'Hide collision wires' : 'Show collision wires'}>
+          <IconButton
+            size="small"
+            onClick={toggleCollisionWires}
+            sx={{ color: collisionWireVisible ? editorColors.warning : 'inherit' }}
+          >
+            <FontAwesomeIcon icon={faBorderAll} style={{ width: 16, height: 16 }} />
+          </IconButton>
+        </Tooltip>
         <Tooltip title="Change camera">
           <span>
             <IconButton
@@ -227,10 +245,11 @@ const StageBuilderTestPage = () => {
                 <LazyFossbotSimulator
                   ref={simRef}
                   initialStageConfig={handoff.record.config}
-                  config={simulatorConfig}
+                  config={{ ...simulatorConfig, showColliders: collisionWireVisible }}
                   lockCamera={lockCamera}
                   onMountChange={(mounted) => {
                     if (mounted && sensorHelpersVisible) simRef.current?.setSensorHelpersVisible(true);
+                    if (mounted && collisionWireVisible) simRef.current?.setCollisionWireVisible(true);
                   }}
                   style={{ minHeight: '100%' }}
                 />

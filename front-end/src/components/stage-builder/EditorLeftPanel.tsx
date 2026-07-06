@@ -15,6 +15,7 @@ export interface EditorLeftPanelProps {
   prefabs: StageBuilderPrefab[];
   onAddKind: (kind: StageSemanticKind) => void;
   onAddPrefab: (prefab: StageBuilderPrefab) => void;
+  onImportObject: () => void;
   onSelectObject: (id: string | null) => void;
   onSelectGroup: (id: string | null) => void;
   onSelectionChange: (ids: string[]) => void;
@@ -63,7 +64,7 @@ export function EditorLeftPanel(props: EditorLeftPanelProps) {
       <Divider sx={{ borderColor: editorColors.border }} />
       <Box sx={{ flex: 1, overflow: 'auto', p: 1, scrollbarWidth: 'none', msOverflowStyle: 'none', '&::-webkit-scrollbar': { display: 'none' } }}>
         {tab === 'library' ? (
-          <StageObjectLibrary prefabs={props.prefabs} onAddKind={props.onAddKind} onAddPrefab={props.onAddPrefab} />
+          <StageObjectLibrary prefabs={props.prefabs} onAddKind={props.onAddKind} onAddPrefab={props.onAddPrefab} onImportObject={props.onImportObject} />
         ) : (
           <StageSceneHierarchy
             stage={props.stage}
