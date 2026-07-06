@@ -293,8 +293,27 @@ function applyRobotSpawnTint(root: THREE.Object3D, accentValue: string): void {
   });
 }
 
-function animateRobotSpawnVisual(root: THREE.Object3D, elapsed: number): void {
+function animateRobotSpawnVisual(root: THREE.Object3D, elapsed: number, active: boolean): void {
   if (root.userData.stageBuilderVisualKind !== 'robotSpawn') return;
+  if (!active) {
+    if (!root.userData.spawnAnimationActive) return;
+    root.userData.spawnAnimationActive = false;
+    root.traverse((child) => {
+      const role = child.userData.robotSpawnAnimationRole as string | undefined;
+      if (!role) return;
+      if (role === 'pulseRing') child.scale.set(1, 1, 1);
+      const material = (child as THREE.Mesh).material as THREE.Material | THREE.Material[] | undefined;
+      const materials = Array.isArray(material) ? material : material ? [material] : [];
+      for (const mat of materials) {
+        const base = mat.userData.robotSpawnBaseOpacity;
+        if (typeof base !== 'number') continue;
+        mat.opacity = base;
+        mat.needsUpdate = true;
+      }
+    });
+    return;
+  }
+  root.userData.spawnAnimationActive = true;
   const phase = Number(root.userData.spawnAnimationPhase || 0);
   const breath = (Math.sin(elapsed * 1.35 + phase) + 1) / 2;
   root.traverse((child) => {
@@ -425,8 +444,12 @@ function attachRobotSpawnModel(host: THREE.Group, pickables: THREE.Object3D[], o
       cloneOwnedMeshResources(rim);
       styleRobotSpawnRim(rim, options, activeAccent);
       const stageObjectId = host.userData.stageObjectId;
-      if (typeof stageObjectId === 'string') setObjectUserData(model, stageObjectId);
+      if (typeof stageObjectId === 'string') {
+        setObjectUserData(model, stageObjectId);
+        setObjectUserData(rim, stageObjectId);
+      }
       host.add(rim, model);
+      collectMeshPickables(rim, pickables);
       collectMeshPickables(model, pickables);
     })
     .catch((error) => console.warn('[stage-builder] failed to load Fossbot spawn model', error));
@@ -486,7 +509,7 @@ function makeRobotSpawnVisual(object: Extract<EditorStageObject, { kind: 'fossbo
 }
 
 function makeObjectRoot(object: EditorStageObject, options: ObjectVisualOptions = {}): MeshRecord {
-  const pickables: THREE.Object3D[] = [];
+  let pickables: THREE.Object3D[] = [];
   let root: THREE.Object3D;
 
   if (object.kind === 'cube') {
@@ -567,7 +590,7 @@ function makeObjectRoot(object: EditorStageObject, options: ObjectVisualOptions 
   } else {
     const spawn = makeRobotSpawnVisual(object, options);
     root = spawn.root;
-    pickables.push(...spawn.pickables);
+    pickables = spawn.pickables;
   }
 
   root.name = object.name;
@@ -1397,8 +1420,12 @@ export function StageBuilderScene({
     let raf = 0;
     const frame = () => {
       const elapsed = performance.now() / 1000;
-      for (const record of objectMapRef.current.values()) animateRobotSpawnVisual(record.root, elapsed);
-      if (ghostRef.current) animateRobotSpawnVisual(ghostRef.current.root, elapsed);
+      const animatedObjectIds = new Set(selectedIdsRef.current);
+      if (selectedRef.current) animatedObjectIds.add(selectedRef.current);
+      const animatedGroupId = selectedGroupRef.current;
+      if (animatedGroupId) groupMemberObjects(animatedGroupId).forEach((object) => animatedObjectIds.add(object.id));
+      for (const record of objectMapRef.current.values()) animateRobotSpawnVisual(record.root, elapsed, animatedObjectIds.has(record.objectId));
+      if (ghostRef.current) animateRobotSpawnVisual(ghostRef.current.root, elapsed, false);
 
       const helper = selectionHelperRef.current;
       const selectedRoot = selectedRef.current ? objectMapRef.current.get(selectedRef.current)?.root : null;
