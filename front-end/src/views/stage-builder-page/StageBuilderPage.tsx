@@ -158,6 +158,7 @@ const StageBuilderPage = () => {
   const [focusRequestNonce, setFocusRequestNonce] = useState(0);
   const [cameraViewRequest, setCameraViewRequest] = useState<{ view: StageBuilderCameraView; nonce: number } | null>(null);
   const [lookThroughCameraId, setLookThroughCameraId] = useState<string | null>(null);
+  const [sensorHelpersVisible, setSensorHelpersVisible] = useState(false);
   const [prefs, setPrefs] = useState<StageBuilderPreferences>(() => readStageBuilderPreferences(scope));
   const [leftPanelVisible, setLeftPanelVisible] = useState(true);
   const [rightPanelVisible, setRightPanelVisible] = useState(true);
@@ -809,6 +810,7 @@ const StageBuilderPage = () => {
             focusRequestNonce={focusRequestNonce}
             cameraViewRequest={cameraViewRequest}
             lookThroughCameraId={lookThroughCamera?.id || null}
+            sensorHelpersVisible={sensorHelpersVisible}
             onSelect={handleSelect}
             onSelectionChange={handleSelectionChange}
             onObjectChange={updateObject}
@@ -821,12 +823,14 @@ const StageBuilderPage = () => {
               snapPreset={prefs.snapPreset}
               selectedCount={selectedCount}
               canUndo={canUndo(historyRef.current)}
+              sensorHelpersVisible={sensorHelpersVisible}
               canRedo={canRedo(historyRef.current)}
               onTransformModeChange={(mode) => { setBuilderMode('edit'); setTransformMode(mode); }}
               onSnapPresetChange={(snapPreset) => {
                 setPref({ snapPreset });
                 commitStage((current) => ({ ...current, metadata: { ...current.metadata, defaultSnapPreset: snapPreset === 'free' || snapPreset === 'grid' ? 'medium' : snapPreset } }));
               }}
+              onSensorHelpersToggle={() => setSensorHelpersVisible((visible) => !visible)}
               onFocusSelected={() => setFocusRequestNonce((value) => value + 1)}
               onUndo={undo}
               onRedo={redo}

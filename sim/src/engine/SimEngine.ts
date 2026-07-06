@@ -58,6 +58,7 @@ function resolveConfig(cfg: Partial<SimEngineConfig> | undefined): Required<SimE
     devMode: cfg?.devMode ?? true,
     initialStageConfig: cfg?.initialStageConfig,
     lockCamera: cfg?.lockCamera ?? false,
+    sensorHelpersVisible: cfg?.sensorHelpersVisible ?? false,
   }
 }
 
@@ -96,6 +97,7 @@ export class SimEngine {
   private vehicle: VehicleHandle | null = null
   private sensorSystem: SensorSystem | null = null
   private sensorDebugViz: SensorDebugVizHandle | null = null
+  private sensorHelpersVisible = false
   private sensorsHud: SensorsHudHandle | null = null
   private ldrProbeViz: LdrProbeVizHandle | null = null
   private micViz: MicVizHandle | null = null
@@ -200,6 +202,7 @@ export class SimEngine {
     config?: Partial<SimEngineConfig>,
   ) {
     this.config = resolveConfig(config)
+    this.sensorHelpersVisible = this.config.sensorHelpersVisible
   }
 
   /** Boot the full simulation chain. Safe to call only once. */
@@ -471,6 +474,19 @@ export class SimEngine {
     this.cycleCameraMode()
   }
 
+  setSensorHelpersVisible(visible: boolean): void {
+    this.sensorHelpersVisible = visible
+    if (visible) this.ensureSensorDebugViz()
+    this.sensorDebugViz?.setRaysVisible(true)
+    this.sensorDebugViz?.setHitsVisible(true)
+    this.sensorDebugViz?.setLabelsVisible(true)
+    this.sensorDebugViz?.setEnabled(visible)
+  }
+
+  isSensorHelpersVisible(): boolean {
+    return this.sensorHelpersVisible
+  }
+
   async setStage(stageOrUrl: string): Promise<void> {
     const stage = this.normalizeStageName(stageOrUrl)
     if (!stage) {
@@ -651,6 +667,17 @@ export class SimEngine {
     return url
   }
 
+  private ensureSensorDebugViz(): SensorDebugVizHandle | null {
+    if (this.sensorDebugViz) return this.sensorDebugViz
+    if (!this.robotRoot || !this.sensorSystem) return null
+    this.sensorDebugViz = createSensorDebugViz({
+      parent: this.robotRoot,
+      layout: SENSOR_LAYOUT,
+      getReadings: () => this.sensorSystem!.getReadings(),
+    })
+    return this.sensorDebugViz
+  }
+
   // ── Benchmark helpers ──
 
   private addFrameListener(cb: (frameMs: number) => void): () => void {
@@ -772,11 +799,7 @@ export class SimEngine {
         getStageLineSegments: () => this.currentStage?.lineSegments ?? [],
       })
       if (this.config.devMode && this.robotRoot) {
-        this.sensorDebugViz = createSensorDebugViz({
-          parent: this.robotRoot,
-          layout: SENSOR_LAYOUT,
-          getReadings: () => this.sensorSystem!.getReadings(),
-        })
+        this.ensureSensorDebugViz()
         this.sensorsHud = createSensorsHud({
           container: this.container,
           layout: SENSOR_LAYOUT,
@@ -810,6 +833,7 @@ export class SimEngine {
           gestureTarget: this.container,
         })
       }
+      if (this.config.sensorHelpersVisible) this.setSensorHelpersVisible(true)
       this.keyboard = this.config.devMode ? installKeyboard() : null
       this.applySpawnPose(this.currentStage)
       log.physics('createRobotBody returned', !!this.robotPhysics)

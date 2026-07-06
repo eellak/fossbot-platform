@@ -1,9 +1,10 @@
-import React, { lazy, Suspense, useMemo, useRef } from 'react';
+import React, { lazy, Suspense, useMemo, useRef, useState } from 'react';
 import { Alert, Box, Button, Chip, Divider, Paper, Stack, Typography } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import KeyboardIcon from '@mui/icons-material/Keyboard';
 import RestartAltIcon from '@mui/icons-material/RestartAlt';
 import VideocamIcon from '@mui/icons-material/Videocam';
+import SensorsIcon from '@mui/icons-material/Sensors';
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
@@ -34,6 +35,7 @@ const simulatorConfig = {
 const StageBuilderTestPage = () => {
   const navigate = useNavigate();
   const simRef = useRef<FossbotSimulatorHandle | null>(null);
+  const [sensorHelpersVisible, setSensorHelpersVisible] = useState(false);
   const handoff = useMemo(() => readStageBuilderRunHandoff(handoffIdFromUrl()), []);
   const lockCamera = !!handoff?.record.editor?.lockCamera;
   const hasAudioEntries = !!handoff?.record.config.some((entry) => entry.type === 'audio');
@@ -41,6 +43,12 @@ const StageBuilderTestPage = () => {
   const returnToBuilder = () => {
     if (window.opener && !window.opener.closed) window.close();
     else navigate('/stage-builder');
+  };
+
+  const toggleSensorHelpers = () => {
+    const next = !sensorHelpersVisible;
+    setSensorHelpersVisible(next);
+    simRef.current?.setSensorHelpersVisible(next);
   };
 
   return (
@@ -54,6 +62,7 @@ const StageBuilderTestPage = () => {
         <Chip size="small" label="Separate test route" variant="outlined" sx={{ color: '#bfdbfe', borderColor: 'rgba(191,219,254,0.45)' }} />
         <Box sx={{ flex: 1 }} />
         <Button size="small" color="inherit" startIcon={<RestartAltIcon />} onClick={() => simRef.current?.reset()} sx={{ textTransform: 'none' }}>Reset</Button>
+        <Button size="small" color="inherit" startIcon={<SensorsIcon />} onClick={toggleSensorHelpers} sx={{ textTransform: 'none', color: sensorHelpersVisible ? '#bfdbfe' : 'inherit' }}>{sensorHelpersVisible ? 'Sensors On' : 'Sensors'}</Button>
         <Button size="small" color="inherit" startIcon={<VideocamIcon />} onClick={() => simRef.current?.changeCamera()} disabled={lockCamera} sx={{ textTransform: 'none' }}>Camera</Button>
       </Box>
 
@@ -69,6 +78,7 @@ const StageBuilderTestPage = () => {
                   initialStageConfig={handoff.record.config}
                   config={simulatorConfig}
                   lockCamera={lockCamera}
+                  onMountChange={(mounted) => { if (mounted && sensorHelpersVisible) simRef.current?.setSensorHelpersVisible(true); }}
                   style={{ minHeight: '100%' }}
                 />
               </Suspense>

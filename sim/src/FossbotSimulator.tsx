@@ -13,6 +13,8 @@ export interface FossbotSimulatorHandle {
   getStageNames(): string[]
   setLightIntensity(intensity: number): void
   changeCamera(): void
+  setSensorHelpersVisible(visible: boolean): void
+  isSensorHelpersVisible(): boolean
   getDistance(): number
   getAcceleration(axis: 'x' | 'y' | 'z' | string): number
   getGyroscope(axis: 'x' | 'y' | 'z' | string): number
@@ -50,6 +52,8 @@ export const FossbotSimulator = forwardRef<FossbotSimulatorHandle, FossbotSimula
       getStageNames: () => engineRef.current?.getStageNames() ?? [],
       setLightIntensity: (intensity) => engineRef.current?.setLightIntensity(intensity),
       changeCamera: () => engineRef.current?.changeCamera(),
+      setSensorHelpersVisible: (visible) => engineRef.current?.setSensorHelpersVisible(visible),
+      isSensorHelpersVisible: () => engineRef.current?.isSensorHelpersVisible() ?? false,
       getDistance: () => engineRef.current?.getDistance() ?? 3,
       getAcceleration: (axis) => engineRef.current?.getAcceleration(axis) ?? 0,
       getGyroscope: (axis) => engineRef.current?.getGyroscope(axis) ?? 0,
