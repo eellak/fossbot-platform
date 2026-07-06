@@ -191,8 +191,6 @@ export function EditorTopBar({
         <MenuItem onClick={() => { overflow.closeMenu(); onToggleRightPanel(); }}>{rightPanelVisible ? 'Hide' : 'Show'} inspector</MenuItem>
         <MenuItem onClick={() => { overflow.closeMenu(); onOpenPreviewSettings(); }}>Preview settings</MenuItem>
         <MenuItem onClick={() => { overflow.closeMenu(); onOpenSettings(); }}>Editor settings</MenuItem>
-        <Divider />
-        <MenuItem disabled>Shortcuts: W/E/R transform, F focus, Delete remove</MenuItem>
       </Menu>
     </Toolbar>
   );
