@@ -23,6 +23,7 @@ import { EditorLeftPanel } from 'src/components/stage-builder/EditorLeftPanel';
 import type { HierarchyDropTarget } from 'src/components/stage-builder/StageSceneHierarchy';
 import { EditorViewportToolRail } from 'src/components/stage-builder/EditorViewportToolRail';
 import { EditorViewportCameraGizmo } from 'src/components/stage-builder/EditorViewportCameraGizmo';
+import { EditorPanelTab } from 'src/components/stage-builder/EditorPanelTab';
 import { EditorRightInspector, type InspectorTab } from 'src/components/stage-builder/EditorRightInspector';
 import { clearStageBuilderDraft, draftToEditorStage, readStageBuilderDraft, stageFingerprint, writeStageBuilderDraft, type StageBuilderDraft } from 'src/components/stage-builder/stageBuilderDrafts';
 import { writeStageBuilderRunHandoff } from 'src/components/stage-builder/stageBuilderRunHandoff';
@@ -254,6 +255,9 @@ const StageBuilderPage = () => {
     if (side === 'left') setLeftPanelWidth(stageBuilderPanelSizing.leftDefaultWidth);
     else setRightPanelWidth(stageBuilderPanelSizing.rightDefaultWidth);
   };
+
+  const toggleLeftPanel = () => setLeftPanelVisible((value) => !value);
+  const toggleRightPanel = () => setRightPanelVisible((value) => !value);
 
   const bumpHistory = () => setHistoryVersion((value) => value + 1);
   const setPref = (patch: Partial<StageBuilderPreferences>) => setPrefs((current) => ({ ...current, ...patch }));
@@ -713,8 +717,8 @@ const StageBuilderPage = () => {
         onOpenValidation={() => setInspectorTab('validation')}
         onOpenSettings={handleOpenSettings}
         onOpenStageSettings={handleOpenStageSettings}
-        onToggleLeftPanel={() => setLeftPanelVisible((value) => !value)}
-        onToggleRightPanel={() => setRightPanelVisible((value) => !value)}
+        onToggleLeftPanel={toggleLeftPanel}
+        onToggleRightPanel={toggleRightPanel}
         onCameraViewChange={requestCameraView}
       />
       <input ref={importInputRef} type="file" accept="application/json,.json" hidden onChange={(event) => handleImportFile(event.target.files?.[0])} />
@@ -739,10 +743,12 @@ const StageBuilderPage = () => {
               onHierarchyDrop={handleHierarchyDrop}
               onGroupRename={renameGroup}
               onPatchObjects={patchObjects}
+              onTogglePanel={toggleLeftPanel}
             />
           </Box>
         )}
         {leftPanelVisible && <PanelResizeHandle side="left" onPointerDown={beginPanelResize('left')} onDoubleClick={resetPanelWidth('left')} />}
+        {!leftPanelVisible && <EditorPanelTab side="left" label="Library" onClick={toggleLeftPanel} />}
 
         <Box sx={{ flex: '1 1 0%', minWidth: 0, minHeight: 0, position: 'relative', bgcolor: editorColors.viewport }}>
           <StageBuilderScene
@@ -795,6 +801,7 @@ const StageBuilderPage = () => {
         </Box>
 
         {rightPanelVisible && <PanelResizeHandle side="right" onPointerDown={beginPanelResize('right')} onDoubleClick={resetPanelWidth('right')} />}
+        {!rightPanelVisible && <EditorPanelTab side="right" label="Inspector" onClick={toggleRightPanel} />}
         {rightPanelVisible && (
           <Box sx={{ width: rightPanelWidth, flex: '0 0 auto', minHeight: 0, display: { xs: 'none', lg: 'block' }, overflow: 'hidden' }}>
             <EditorRightInspector
@@ -810,6 +817,7 @@ const StageBuilderPage = () => {
               onToggleValidationOverride={toggleValidationOverride}
               onPrefsChange={setPref}
               onResetPrefs={() => setPrefs(defaultStageBuilderPreferences)}
+              onTogglePanel={toggleRightPanel}
             />
           </Box>
         )}
