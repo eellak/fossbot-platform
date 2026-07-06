@@ -5,14 +5,22 @@ import {
 } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { Sketch, Swatch } from '@uiw/react-color';
-import type { EditorStageObject, StageLightSubtype, StageSemanticKind, Vec2, Vec3 } from './types';
-import { displayObjectType, semanticKindLabel, STAGE_OBJECT_CATALOG } from './stageBuilderCatalog';
+import type { EditorCameraObject, EditorStageObject, StageLightSubtype, StageSemanticKind, Vec2, Vec3 } from './types';
+import { displayObjectType, STAGE_OBJECT_CATALOG } from './stageBuilderCatalog';
 import { editorColors, editorType } from './stageBuilderEditorTheme';
 import { StageBuilderNumberField } from './StageBuilderNumberField';
 
 function num(value: unknown, fallback = 0): number {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function supportsColor(object: EditorStageObject): object is Extract<EditorStageObject, { color: string }> {
+  return object.kind === 'base' || object.kind === 'cube' || object.kind === 'cylinder' || object.kind === 'line' || object.kind === 'text' || object.kind === 'light';
+}
+
+function supportsAppearance(object: EditorStageObject): boolean {
+  return supportsColor(object);
 }
 
 function updateVec3(vec: Vec3, index: number, value: unknown): Vec3 {
@@ -105,6 +113,7 @@ export interface StageInspectorProps {
   advancedOpen?: boolean;
   onAdvancedOpenChange?: (open: boolean) => void;
   onChange: (object: EditorStageObject) => void;
+  onLookThroughCamera?: (camera: EditorCameraObject) => void;
   // Kept for deprecated drawer callers; deletion now lives outside the inspector body.
   onDelete?: (id: string) => void;
 }
@@ -305,7 +314,7 @@ export function ColorPickerField({
   );
 }
 
-export function StageInspector({ object, selectedCount = object ? 1 : 0, advancedOpen = false, onAdvancedOpenChange, onChange }: StageInspectorProps) {
+export function StageInspector({ object, selectedCount = object ? 1 : 0, advancedOpen = false, onAdvancedOpenChange, onChange, onLookThroughCamera }: StageInspectorProps) {
   if (!object) {
     return <FullRow><Alert severity="info">Select an object in the viewport or Scene hierarchy to inspect it.</Alert></FullRow>;
   }
@@ -346,7 +355,16 @@ export function StageInspector({ object, selectedCount = object ? 1 : 0, advance
       </Section>
 
       <Section title="Transform">
-        {'position' in object && (
+        {object.kind === 'base' && (
+          <FieldRow label="Position">
+            <InlineFields>
+              <StageBuilderNumberField axis="X" {...commonNumberProps} disabled={locked} value={object.position[0]} onChange={(event) => set({ position: updateVec3(object.position, 0, event.target.value) } as Partial<EditorStageObject>)} />
+              <StageBuilderNumberField axis="Z" {...commonNumberProps} disabled={locked} value={object.position[2]} onChange={(event) => set({ position: updateVec3(object.position, 2, event.target.value) } as Partial<EditorStageObject>)} />
+            </InlineFields>
+          </FieldRow>
+        )}
+
+        {object.kind !== 'base' && 'position' in object && (
           <FieldRow label="Position">
             <InlineFields>
               <StageBuilderNumberField axis="X" {...commonNumberProps} disabled={locked} value={object.position[0]} onChange={(event) => set({ position: updateVec3(object.position, 0, event.target.value) } as Partial<EditorStageObject>)} />
@@ -356,16 +374,23 @@ export function StageInspector({ object, selectedCount = object ? 1 : 0, advance
           </FieldRow>
         )}
 
-        {(object.kind === 'cube' || object.kind === 'fossbot') && (
+        {object.kind === 'cube' && (
           <FieldRow label="Rotation">
             <InlineFields>
-              <StageBuilderNumberField axis="X" {...commonNumberProps} disabled={locked || object.kind !== 'cube'} value={object.kind === 'cube' ? deg(object.orientation?.[0] || 0) : 0} onChange={(event) => {
-                if (object.kind !== 'cube') return;
+              <StageBuilderNumberField axis="X" {...commonNumberProps} disabled={locked} value={deg(object.orientation?.[0] || 0)} onChange={(event) => {
                 const x = rad(num(event.target.value, deg(object.orientation?.[0] || 0)));
                 onChange({ ...object, orientation: [x, object.orientation?.[1] || object.rotationY, object.orientation?.[2] || 0], rampAngle: object.semanticKind === 'ramp' ? x : object.rampAngle });
               }} />
               <StageBuilderNumberField axis="Y" {...commonNumberProps} disabled={locked} value={deg(object.rotationY)} onChange={(event) => setRotationY(num(event.target.value, deg(object.rotationY)))} />
-              <StageBuilderNumberField axis="Z" {...commonNumberProps} disabled={locked || object.kind !== 'cube'} value={object.kind === 'cube' ? deg(object.orientation?.[2] || 0) : 0} onChange={(event) => object.kind === 'cube' && onChange({ ...object, orientation: [object.orientation?.[0] || 0, object.orientation?.[1] || object.rotationY, rad(num(event.target.value, deg(object.orientation?.[2] || 0)))] })} />
+              <StageBuilderNumberField axis="Z" {...commonNumberProps} disabled={locked} value={deg(object.orientation?.[2] || 0)} onChange={(event) => onChange({ ...object, orientation: [object.orientation?.[0] || 0, object.orientation?.[1] || object.rotationY, rad(num(event.target.value, deg(object.orientation?.[2] || 0)))] })} />
+            </InlineFields>
+          </FieldRow>
+        )}
+
+        {object.kind === 'fossbot' && (
+          <FieldRow label="Rotation">
+            <InlineFields>
+              <StageBuilderNumberField axis="Y" {...commonNumberProps} disabled={locked} value={deg(object.rotationY)} onChange={(event) => setRotationY(num(event.target.value, deg(object.rotationY)))} />
             </InlineFields>
           </FieldRow>
         )}
@@ -383,7 +408,6 @@ export function StageInspector({ object, selectedCount = object ? 1 : 0, advance
             <FieldRow label="Scale">
               <InlineFields>
                 <StageBuilderNumberField axis="X" {...commonNumberProps} disabled={locked} value={object.dimensions[0]} onChange={(event) => onChange({ ...object, dimensions: [minPositive(event.target.value, object.dimensions[0]), object.dimensions[1]] })} />
-                <StageBuilderNumberField axis="Y" {...commonNumberProps} value={1} disabled />
                 <StageBuilderNumberField axis="Z" {...commonNumberProps} disabled={locked} value={object.dimensions[1]} onChange={(event) => onChange({ ...object, dimensions: [object.dimensions[0], minPositive(event.target.value, object.dimensions[1])] })} />
               </InlineFields>
             </FieldRow>
@@ -455,41 +479,28 @@ export function StageInspector({ object, selectedCount = object ? 1 : 0, advance
           </>
         )}
 
-        {object.kind === 'fossbot' && (
-          <>
-            <FieldRow label="Scale">
-              <InlineFields>
-                <StageBuilderNumberField axis="X" {...commonNumberProps} value={1} disabled />
-                <StageBuilderNumberField axis="Y" {...commonNumberProps} value={1} disabled />
-                <StageBuilderNumberField axis="Z" {...commonNumberProps} value={1} disabled />
-              </InlineFields>
-            </FieldRow>
-            <FullRow><Alert severity="info">The robot spawn uses the FOSSBot simulator model. Adjust its position and rotation in Transform.</Alert></FullRow>
-          </>
-        )}
       </Section>
 
-      <Section title="Appearance">
-        {'color' in object && (
-          <FieldRow label="Color" align="start">
-            <ColorPickerField
-              value={object.color}
-              disabled={locked}
-              pickerAriaLabel="Color picker"
-              valueAriaLabel="Object color value"
-              onChange={(color) => set({ color } as Partial<EditorStageObject>)}
-            />
-          </FieldRow>
-        )}
-        {object.kind === 'text' && (
-          <FieldRow label="Text">
-            <TextField {...commonFieldProps} disabled={locked} value={object.text} inputProps={{ 'aria-label': 'Label text' }} onChange={(event) => onChange({ ...object, text: event.target.value })} />
-          </FieldRow>
-        )}
-        <FieldRow label="Opacity">
-          <TextField {...commonFieldProps} value="Default" disabled inputProps={{ 'aria-label': 'Opacity' }} />
-        </FieldRow>
-      </Section>
+      {supportsAppearance(object) && (
+        <Section title="Appearance">
+          {supportsColor(object) && (
+            <FieldRow label="Color" align="start">
+              <ColorPickerField
+                value={object.color}
+                disabled={locked}
+                pickerAriaLabel="Color picker"
+                valueAriaLabel="Object color value"
+                onChange={(color) => set({ color } as Partial<EditorStageObject>)}
+              />
+            </FieldRow>
+          )}
+          {object.kind === 'text' && (
+            <FieldRow label="Text">
+              <TextField {...commonFieldProps} disabled={locked} value={object.text} inputProps={{ 'aria-label': 'Label text' }} onChange={(event) => onChange({ ...object, text: event.target.value })} />
+            </FieldRow>
+          )}
+        </Section>
+      )}
 
       {object.kind === 'light' && (
         <Section title="Light">
@@ -556,62 +567,72 @@ export function StageInspector({ object, selectedCount = object ? 1 : 0, advance
         </Section>
       )}
 
-      <Section title="Collision">
-        {object.kind === 'cube' || object.kind === 'cylinder' ? (
-          <>
-            <FieldRow label="Enabled"><EnabledSwitch checked disabled /></FieldRow>
-            <FieldRow label="Type">
-              <TextField {...commonFieldProps} value={object.kind === 'cube' ? 'Box' : object.dimensions[0] === 0 ? 'Cone approximation' : 'Cylinder'} disabled inputProps={{ 'aria-label': 'Collider type' }} />
-            </FieldRow>
-            <FieldRow label="Offset">
-              <InlineFields>
-                <StageBuilderNumberField axis="X" {...commonNumberProps} value={0} disabled />
-                <StageBuilderNumberField axis="Y" {...commonNumberProps} value={0} disabled />
-                <StageBuilderNumberField axis="Z" {...commonNumberProps} value={0} disabled />
-              </InlineFields>
-            </FieldRow>
-            <FieldRow label="Trigger"><EnabledSwitch checked={false} disabled /></FieldRow>
-            <FieldRow label="Helper"><EnabledSwitch checked={false} disabled /></FieldRow>
-          </>
-        ) : ['target', 'checkpoint', 'dangerZone', 'sensorZone'].includes(object.semanticKind || '') ? (
-          <FullRow><Alert severity="info">This marker behaves like a sensor/trigger region for future simulator logic. It has no solid collider.</Alert></FullRow>
-        ) : (
-          <FullRow><Alert severity="info">This object has no editable solid collider.</Alert></FullRow>
-        )}
-      </Section>
+      {object.kind === 'camera' && (
+        <Section title="Camera">
+          <FieldRow label="Yaw">
+            <StageBuilderNumberField
+              {...commonNumberProps}
+              disabled={locked}
+              value={deg(object.rotationY)}
+              inputProps={{ step: 1, 'aria-label': 'Camera yaw' }}
+              onChange={(event) => set({ rotationY: rad(num(event.target.value, deg(object.rotationY))) } as Partial<EditorStageObject>)}
+            />
+          </FieldRow>
+          <FieldRow label="Pitch" align="start">
+            <Stack spacing={0.5}>
+              <StageBuilderNumberField
+                {...commonNumberProps}
+                disabled={locked}
+                value={deg(object.pitch)}
+                inputProps={{ step: 1, min: -89, max: 89, 'aria-label': 'Camera pitch' }}
+                onChange={(event) => set({ pitch: Math.min(Math.PI / 2 - 0.01, Math.max(-(Math.PI / 2 - 0.01), rad(num(event.target.value, deg(object.pitch))))) } as Partial<EditorStageObject>)}
+              />
+              <Typography variant="caption" sx={editorType.caption}>Positive values tilt down.</Typography>
+            </Stack>
+          </FieldRow>
+          <FieldRow label="FOV °">
+            <StageBuilderNumberField
+              {...commonNumberProps}
+              disabled={locked}
+              value={object.fov}
+              inputProps={{ step: 1, min: 10, max: 120, 'aria-label': 'Camera field of view' }}
+              onChange={(event) => set({ fov: Math.min(120, Math.max(10, num(event.target.value, object.fov))) } as Partial<EditorStageObject>)}
+            />
+          </FieldRow>
+          <FullRow>
+            <Stack spacing={0.5}>
+              <Button fullWidth size="small" variant="outlined" disabled={!!object.hidden} onClick={() => onLookThroughCamera?.(object as EditorCameraObject)}>Preview from camera</Button>
+              <Typography variant="caption" sx={editorType.caption}>Preview locks editor orbit controls until you exit.</Typography>
+            </Stack>
+          </FullRow>
+        </Section>
+      )}
 
-      <Section title="Rigidbody">
-        {object.kind === 'cube' || object.kind === 'cylinder' ? (
-          <>
-            <FieldRow label="Type">
-              <TextField {...commonFieldProps} select disabled={locked} value={object.immovable ? 'fixed' : 'dynamic'} inputProps={{ 'aria-label': 'Rigidbody type' }} onChange={(event) => {
-                const dynamic = event.target.value === 'dynamic';
-                set({ immovable: !dynamic, mass: dynamic ? Math.max(0.1, object.mass || 0.4) : 0 } as Partial<EditorStageObject>);
-              }}>
-                <MenuItem value="fixed">Fixed</MenuItem>
-                <MenuItem value="dynamic">Dynamic</MenuItem>
-                <MenuItem value="kinematic" disabled>Kinematic (reserved)</MenuItem>
-              </TextField>
-            </FieldRow>
-            <FieldRow label="Mass">
-              <StageBuilderNumberField {...commonNumberProps} disabled={locked || object.immovable} value={object.mass} inputProps={{ step: 0.1, 'aria-label': 'Mass' }} onChange={(event) => set({ mass: Math.max(0, num(event.target.value, object.mass)) } as Partial<EditorStageObject>)} />
-            </FieldRow>
-            <FieldRow label="Friction"><TextField {...commonFieldProps} value="Default" disabled inputProps={{ 'aria-label': 'Friction' }} /></FieldRow>
-            <FieldRow label="Restitution"><TextField {...commonFieldProps} value="Default" disabled inputProps={{ 'aria-label': 'Restitution' }} /></FieldRow>
-            <FieldRow label="Linear damping"><TextField {...commonFieldProps} value={object.immovable ? 'N/A' : '0.2'} disabled inputProps={{ 'aria-label': 'Linear damping' }} /></FieldRow>
-            <FieldRow label="Angular damping"><TextField {...commonFieldProps} value={object.immovable ? 'N/A' : '0.2'} disabled inputProps={{ 'aria-label': 'Angular damping' }} /></FieldRow>
-            <FieldRow label="Locked movement"><TextField {...commonFieldProps} value="None" disabled inputProps={{ 'aria-label': 'Locked translation axes' }} /></FieldRow>
-            <FieldRow label="Locked rotation"><TextField {...commonFieldProps} value="None" disabled inputProps={{ 'aria-label': 'Locked rotation axes' }} /></FieldRow>
-          </>
-        ) : (
-          <FullRow><Alert severity="info">No rigidbody settings are exposed for this object type.</Alert></FullRow>
-        )}
-      </Section>
+      {(object.kind === 'cube' || object.kind === 'cylinder') && (
+        <Section title="Collision">
+          <FieldRow label="Enabled"><EnabledSwitch checked disabled /></FieldRow>
+          <FieldRow label="Type">
+            <TextField {...commonFieldProps} value={object.kind === 'cube' ? 'Box' : object.dimensions[0] === 0 ? 'Cone approximation' : 'Cylinder'} disabled inputProps={{ 'aria-label': 'Collider type' }} />
+          </FieldRow>
+        </Section>
+      )}
 
-      <Section title="Behavior">
-        <FieldRow label="Role"><TextField {...commonFieldProps} value={semanticKindLabel(role)} disabled inputProps={{ 'aria-label': 'Behavior role' }} /></FieldRow>
-        <FullRow><Typography variant="caption" sx={editorType.caption}>Behavior metadata is reserved for simulator logic.</Typography></FullRow>
-      </Section>
+      {(object.kind === 'cube' || object.kind === 'cylinder') && (
+        <Section title="Rigidbody">
+          <FieldRow label="Type">
+            <TextField {...commonFieldProps} select disabled={locked} value={object.immovable ? 'fixed' : 'dynamic'} inputProps={{ 'aria-label': 'Rigidbody type' }} onChange={(event) => {
+              const dynamic = event.target.value === 'dynamic';
+              set({ immovable: !dynamic, mass: dynamic ? Math.max(0.1, object.mass || 0.4) : 0 } as Partial<EditorStageObject>);
+            }}>
+              <MenuItem value="fixed">Fixed</MenuItem>
+              <MenuItem value="dynamic">Dynamic</MenuItem>
+            </TextField>
+          </FieldRow>
+          <FieldRow label="Mass">
+            <StageBuilderNumberField {...commonNumberProps} disabled={locked || object.immovable} value={object.mass} inputProps={{ step: 0.1, 'aria-label': 'Mass' }} onChange={(event) => set({ mass: Math.max(0, num(event.target.value, object.mass)) } as Partial<EditorStageObject>)} />
+          </FieldRow>
+        </Section>
+      )}
 
       <Section title="Advanced" expanded={advancedOpen} onChange={onAdvancedOpenChange} defaultExpanded={false}>
         <FieldRow label="Object ID"><TextField {...commonFieldProps} value={object.id} disabled inputProps={{ 'aria-label': 'Object ID' }} /></FieldRow>

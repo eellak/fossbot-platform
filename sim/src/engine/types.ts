@@ -24,6 +24,8 @@ export interface SimEngineConfig {
   devMode?: boolean
   /** Optional raw stage config loaded instead of the default built-in stage. */
   initialStageConfig?: RawStageConfig
+  /** When true, the simulator camera is locked to the stage's start camera (no orbit/cycle). */
+  lockCamera?: boolean
 }
 
 /**

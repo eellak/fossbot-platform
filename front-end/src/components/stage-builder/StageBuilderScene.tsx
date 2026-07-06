@@ -11,11 +11,12 @@ import type { StageBuilderControlScheme, StageBuilderLockMode, StageBuilderStyle
 import type { StageBuilderSnapSettings } from './stageBuilderSnapping';
 import { getSnapSettings, snapAngle, snapDimensions, snapPosition } from './stageBuilderSnapping';
 import type { StageBuilderValidationResult } from './stageBuilderValidation';
-import { objectBounds, stageHalfExtents } from './stageBuilderGeometry';
+import { objectBounds, stageHalfExtents, cameraLookDirection } from './stageBuilderGeometry';
 
 export type StageBuilderTransformMode = 'select' | 'translate' | 'rotate' | 'scale';
 export type StageBuilderCameraView = 'perspective' | 'top' | 'bottom' | 'front' | 'back' | 'left' | 'right';
 export type StageBuilderCameraViewRequest = { view: StageBuilderCameraView; nonce: number };
+
 
 export type StageBuilderPlacementStatus = {
   valid: boolean;
@@ -44,6 +45,7 @@ export interface StageBuilderSceneProps {
   validationResults?: StageBuilderValidationResult[];
   focusRequestNonce?: number;
   cameraViewRequest?: StageBuilderCameraViewRequest | null;
+  lookThroughCameraId?: string | null;
   onSelect: (id: string | null) => void;
   onSelectionChange?: (ids: string[]) => void;
   onObjectChange: (object: EditorStageObject) => void;
@@ -704,6 +706,34 @@ function makeObjectRoot(object: EditorStageObject, options: ObjectVisualOptions 
     root = group;
     group.position.set(...object.position);
     group.rotation.y = object.rotationY;
+  } else if (object.kind === 'camera') {
+    const group = new THREE.Group();
+    const cameraIconColor = '#5eead4';
+    const iconColor = materialColor(cameraIconColor, options);
+    const bodyMat = standardMaterial(cameraIconColor, options);
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.09, 0.09), bodyMat);
+    group.add(body);
+    pickables.push(body);
+    const lens = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.045, 0.045, 0.05, 20),
+      new THREE.MeshStandardMaterial({ color: iconColor, emissive: iconColor, emissiveIntensity: options.ghost ? 0.3 : 0.5, transparent: !!options.ghost, opacity: options.ghost ? 0.5 : 1 }),
+    );
+    lens.rotation.x = Math.PI / 2;
+    lens.position.set(0, 0, -0.07);
+    group.add(lens);
+    pickables.push(lens);
+    const halfAngle = Math.min(Math.PI / 2 - 0.05, Math.max(0.05, (object.fov * Math.PI / 180) / 2));
+    const frustum = new THREE.Mesh(
+      new THREE.ConeGeometry(Math.tan(halfAngle) * 0.3, 0.3, 24, 1, true),
+      new THREE.MeshBasicMaterial({ color: iconColor, transparent: true, opacity: options.ghost ? 0.18 : 0.28, depthWrite: false, side: THREE.DoubleSide }),
+    );
+    frustum.rotation.x = -Math.PI / 2;
+    frustum.position.set(0, 0, -0.25);
+    group.add(frustum);
+    root = group;
+    group.position.set(...object.position);
+    group.rotation.order = 'YXZ';
+    group.rotation.set(-object.pitch, object.rotationY, 0);
   } else {
     const spawn = makeRobotSpawnVisual(object, options);
     root = spawn.root;
@@ -783,6 +813,16 @@ function objectFromRootTransform(object: EditorStageObject, root: THREE.Object3D
       ...object,
       position: snapPosition([root.position.x, root.position.y, root.position.z], snap),
       rotationY: snapAngle(yawFromObject(root, object.rotationY), snap),
+    };
+  }
+  if (object.kind === 'camera') {
+    robotSpawnForward.set(0, 0, -1).applyQuaternion(root.quaternion);
+    const pitchFromForward = Math.asin(Math.max(-1, Math.min(1, -robotSpawnForward.y)));
+    return {
+      ...object,
+      position: snapPosition([root.position.x, root.position.y, root.position.z], snap),
+      rotationY: snapAngle(yawFromObject(root, object.rotationY), snap),
+      pitch: snapAngle(pitchFromForward, snap),
     };
   }
   return null;
@@ -992,6 +1032,7 @@ export function StageBuilderScene({
   validationResults = [],
   focusRequestNonce = 0,
   cameraViewRequest = null,
+  lookThroughCameraId = null,
   onSelect,
   onSelectionChange,
   onObjectChange,
@@ -1051,8 +1092,18 @@ export function StageBuilderScene({
   const placementStatusRef = useRef<string>('');
   const friendlyDragRef = useRef<FriendlyDragState | null>(null);
   const groupTransformRef = useRef<GroupTransformState | null>(null);
+  const lookThroughCameraIdRef = useRef<string | null>(lookThroughCameraId);
+  const savedEditorCameraRef = useRef({
+    position: new THREE.Vector3(),
+    quaternion: new THREE.Quaternion(),
+    up: new THREE.Vector3(),
+    target: new THREE.Vector3(),
+    fov: 50,
+    hasSnapshot: false,
+  });
 
   useEffect(() => { transformModeRef.current = transformMode; }, [transformMode]);
+  useEffect(() => { lookThroughCameraIdRef.current = lookThroughCameraId; }, [lookThroughCameraId]);
   useEffect(() => { objectsRef.current = objects; }, [objects]);
   useEffect(() => { groupsRef.current = groups; }, [groups]);
   useEffect(() => { selectedRef.current = selectedId; }, [selectedId]);
@@ -1123,10 +1174,12 @@ export function StageBuilderScene({
     }
     transform.enabled = true;
     const selected = objectsRef.current.find((item) => item.id === selectedRef.current);
+    const cameraRotate = selected?.kind === 'camera' && transformModeRef.current === 'rotate';
     const yawOnly = (selected?.kind === 'fossbot' || selected?.kind === 'light') && transformModeRef.current === 'rotate';
-    transform.showX = !yawOnly;
+    transform.showX = cameraRotate || !yawOnly;
     transform.showY = true;
-    transform.showZ = !yawOnly;
+    transform.showZ = !yawOnly && !cameraRotate;
+    transform.setSpace(cameraRotate ? 'local' : transformSpaceRef.current);
   };
 
   const syncTransformAttachment = () => {
@@ -1134,6 +1187,7 @@ export function StageBuilderScene({
     if (!transform) return;
     configureTransformControls();
     transform.detach();
+    if (lookThroughCameraIdRef.current) return;
     if (builderModeRef.current !== 'edit' || controlSchemeRef.current !== 'legacyGizmo') return;
     if (transformModeRef.current === 'select') return;
 
@@ -1418,6 +1472,7 @@ export function StageBuilderScene({
 
     const handlePointerDown = (event: PointerEvent) => {
       updatePointer(event);
+      if (lookThroughCameraIdRef.current) return;
       if (spaceHeldRef.current || builderModeRef.current === 'navigate' || builderModeRef.current === 'test') return;
 
       if (builderModeRef.current === 'place' && placementObjectRef.current) {
@@ -1765,12 +1820,13 @@ export function StageBuilderScene({
     for (const object of objects) {
       if (object.hidden) continue;
       const record = makeObjectRoot(object, { validationSeverity: validationSeverityFor(object.id, validationResultsRef.current) });
+      if (object.id === lookThroughCameraId) record.root.visible = false;
       objectMapRef.current.set(object.id, record);
       scene.add(record.root);
     }
 
     syncTransformAttachment();
-  }, [objects, validationResults]);
+  }, [objects, validationResults, lookThroughCameraId]);
 
   useEffect(() => {
     const scene = sceneRef.current?.scene;
@@ -1847,6 +1903,44 @@ export function StageBuilderScene({
     if (!sceneHandle || !cameraViewRequest?.nonce) return;
     applyStageBuilderCameraView(sceneHandle, cameraViewRequest.view, stageDimensionsRef.current);
   }, [cameraViewRequest]);
+
+  useEffect(() => {
+    const sceneHandle = sceneRef.current;
+    if (!sceneHandle) return;
+    const camera = lookThroughCameraId ? objects.find((item) => item.id === lookThroughCameraId && item.kind === 'camera') : null;
+    const saved = savedEditorCameraRef.current;
+    if (camera && camera.kind === 'camera') {
+      if (!saved.hasSnapshot) {
+        saved.position.copy(sceneHandle.camera.position);
+        saved.quaternion.copy(sceneHandle.camera.quaternion);
+        saved.up.copy(sceneHandle.camera.up);
+        saved.target.copy(sceneHandle.controls.target);
+        saved.fov = sceneHandle.camera.fov;
+        saved.hasSnapshot = true;
+      }
+      const dir = cameraLookDirection(camera.rotationY, camera.pitch);
+      const target = new THREE.Vector3(camera.position[0] + dir[0], camera.position[1] + dir[1], camera.position[2] + dir[2]);
+      sceneHandle.camera.position.set(camera.position[0], camera.position[1], camera.position[2]);
+      sceneHandle.camera.up.set(0, 1, 0);
+      sceneHandle.controls.target.copy(target);
+      sceneHandle.camera.lookAt(target);
+      sceneHandle.camera.fov = camera.fov;
+      sceneHandle.camera.updateProjectionMatrix();
+      sceneHandle.controls.enabled = false;
+      sceneHandle.controls.update();
+    } else if (saved.hasSnapshot) {
+      sceneHandle.camera.position.copy(saved.position);
+      sceneHandle.camera.quaternion.copy(saved.quaternion);
+      sceneHandle.camera.up.copy(saved.up);
+      sceneHandle.camera.fov = saved.fov;
+      sceneHandle.controls.target.copy(saved.target);
+      sceneHandle.camera.updateProjectionMatrix();
+      sceneHandle.controls.enabled = true;
+      sceneHandle.controls.update();
+      saved.hasSnapshot = false;
+    }
+    syncTransformAttachment();
+  }, [lookThroughCameraId, objects]);
 
   return <div ref={containerRef} style={{ width: '100%', height: '100%', minHeight: 420, position: 'relative' }} />;
 }

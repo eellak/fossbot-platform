@@ -84,6 +84,15 @@ export type StageLightEntry = {
   name?: string;
 };
 
+export type StageCameraEntry = {
+  type: 'camera';
+  position: [number, number, number];
+  rotationY?: number;
+  pitch?: number;
+  fov?: number;
+  name?: string;
+};
+
 export type StageJsonEntry =
   | StageFloorEntry
   | StageBaseEntry
@@ -92,9 +101,10 @@ export type StageJsonEntry =
   | StageLineEntry
   | StageTextEntry
   | StageFossbotEntry
-  | StageLightEntry;
+  | StageLightEntry
+  | StageCameraEntry;
 
-export type StageObjectKind = 'base' | 'cube' | 'cylinder' | 'line' | 'text' | 'fossbot' | 'light';
+export type StageObjectKind = 'base' | 'cube' | 'cylinder' | 'line' | 'text' | 'fossbot' | 'light' | 'camera';
 
 export type StageSemanticKind =
   | 'floor'
@@ -110,10 +120,10 @@ export type StageSemanticKind =
   | 'checkpoint'
   | 'dangerZone'
   | 'sensorZone'
-  | 'cameraMarker'
   | 'line'
   | 'label'
-  | 'light';
+  | 'light'
+  | 'camera';
 
 export type StageBuilderMode = 'navigate' | 'place' | 'edit' | 'test';
 export type StageBuilderTool = 'select' | 'move' | 'rotate' | 'resize';
@@ -149,6 +159,7 @@ export type StageBuilderMetadata = {
   gridSize?: number;
   defaultSnapPreset?: 'off' | 'fine' | 'medium' | 'coarse';
   defaultRotationSnapPreset?: 'off' | '15' | '30' | '45';
+  lockCamera?: boolean;
 };
 
 export type StageBuilderEditorSnapshot = StageBuilderMetadata & {
@@ -229,6 +240,14 @@ export type EditorLightObject = EditorObjectCommon & {
   penumbra: number;
 };
 
+export type EditorCameraObject = EditorObjectCommon & {
+  kind: 'camera';
+  position: Vec3;
+  rotationY: number;
+  pitch: number;
+  fov: number;
+};
+
 export type EditorStageObject =
   | EditorBaseObject
   | EditorCubeObject
@@ -236,7 +255,8 @@ export type EditorStageObject =
   | EditorLineObject
   | EditorTextObject
   | EditorFossbotObject
-  | EditorLightObject;
+  | EditorLightObject
+  | EditorCameraObject;
 
 export type EditorStage = {
   id: string;

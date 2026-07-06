@@ -57,6 +57,7 @@ function resolveConfig(cfg: Partial<SimEngineConfig> | undefined): Required<SimE
     turnScale: cfg?.turnScale ?? 0.35,
     devMode: cfg?.devMode ?? true,
     initialStageConfig: cfg?.initialStageConfig,
+    lockCamera: cfg?.lockCamera ?? false,
   }
 }
 
@@ -466,6 +467,7 @@ export class SimEngine {
   }
 
   changeCamera(): void {
+    if (this.config.lockCamera) return
     this.cycleCameraMode()
   }
 
@@ -716,6 +718,8 @@ export class SimEngine {
           resolveAssetUrl: this.resolvePublicAssetUrl,
         })
       }
+
+      this.applyStartCamera()
 
       this.splash.setStatus('Loading robot model...')
       this.robot = await loadRobotV2(undefined, this.config.assetBaseUrl)
@@ -1152,6 +1156,7 @@ export class SimEngine {
   }
 
   private setCameraMode(next: CameraMode): void {
+    if (this.config.lockCamera) return
     const h = this.sceneHandle!
     if (this.cameraMode === 'orbit') {
       this.savedOrbitCamera.position.copy(h.camera.position)
@@ -1180,6 +1185,32 @@ export class SimEngine {
         : this.cameraMode === 'follow' ? 'top'
           : 'orbit',
     )
+  }
+
+  /** Apply the stage's optional start camera, and lock the view if configured. */
+  private applyStartCamera(): void {
+    const stage = this.currentStage
+    const h = this.sceneHandle!
+    if (!stage?.startCamera) return
+    const { position, yaw, pitch, fov } = stage.startCamera
+    const cp = Math.cos(pitch)
+    const dir = new THREE.Vector3(-Math.sin(yaw) * cp, -Math.sin(pitch), -Math.cos(yaw) * cp)
+    h.camera.position.set(position[0], position[1], position[2])
+    h.camera.up.set(0, 1, 0)
+    const target = h.camera.position.clone().add(dir)
+    h.controls.target.copy(target)
+    h.camera.lookAt(target)
+    h.camera.fov = fov
+    h.camera.updateProjectionMatrix()
+    h.controls.update()
+    this.savedOrbitCamera.position.copy(h.camera.position)
+    this.savedOrbitCamera.quaternion.copy(h.camera.quaternion)
+    this.savedOrbitCamera.up.copy(h.camera.up)
+    this.savedOrbitCamera.target.copy(h.controls.target)
+    if (this.config.lockCamera) {
+      h.controls.enabled = false
+      this.cameraControls?.setModeLabel('orbit')
+    }
   }
 
   // ── Private: preset drive ──

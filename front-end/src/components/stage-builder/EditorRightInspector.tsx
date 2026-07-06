@@ -26,6 +26,7 @@ export interface EditorRightInspectorProps {
   prefs: StageBuilderPreferences;
   onStageChange: (stage: EditorStage) => void;
   onObjectChange: (object: EditorStageObject) => void;
+  onLookThroughCamera?: (camera: EditorStageObject) => void;
   onToggleValidationOverride: (id: string, enabled: boolean) => void;
   onPrefsChange: (patch: Partial<StageBuilderPreferences>) => void;
   onResetPrefs: () => void;
@@ -120,6 +121,7 @@ function StageContext({ stage, prefs, onStageChange, onPrefsChange }: Pick<Edito
   const gridSize = stage.metadata.gridSize ?? 0.5;
   const defaultSnapPreset = stage.metadata.defaultSnapPreset || (prefs.snapPreset === 'free' || prefs.snapPreset === 'grid' ? 'medium' : prefs.snapPreset) as StageBuilderSnapPreset;
   const defaultRotationSnapPreset = stage.metadata.defaultRotationSnapPreset || prefs.rotationSnapPreset;
+  const hasVisibleStageCamera = stage.objects.some((object) => object.kind === 'camera' && !object.hidden);
 
   const patchMetadata = (patch: Partial<EditorStage['metadata']>) => onStageChange({ ...stage, metadata: { ...stage.metadata, ...patch } });
 
@@ -178,6 +180,14 @@ function StageContext({ stage, prefs, onStageChange, onPrefsChange }: Pick<Edito
         </FieldRow>
       </Section>
 
+      <Section title="Run Test">
+        <FieldRow label="Camera" align="start">
+          <Stack spacing={0.5}>
+            <FormControlLabel control={<Switch size="small" checked={!!stage.metadata.lockCamera} disabled={!hasVisibleStageCamera} onChange={(event) => patchMetadata({ lockCamera: event.target.checked })} />} label="Lock to stage camera" />
+            {!hasVisibleStageCamera && <Typography variant="caption" sx={editorType.caption}>Add or show a camera object to use a fixed Run Test view.</Typography>}
+          </Stack>
+        </FieldRow>
+      </Section>
 
       <Section title="Metadata" defaultExpanded={false}>
         <FieldRow label="Version"><TextField {...commonFieldProps} value={stage.metadata.version} disabled inputProps={{ 'aria-label': 'Editor metadata version' }} /></FieldRow>
@@ -264,6 +274,7 @@ export function EditorRightInspector({
   prefs,
   onStageChange,
   onObjectChange,
+  onLookThroughCamera,
   onToggleValidationOverride,
   onPrefsChange,
   onResetPrefs,
@@ -289,6 +300,7 @@ export function EditorRightInspector({
             advancedOpen={prefs.showAdvancedInspector}
             onAdvancedOpenChange={(showAdvancedInspector) => onPrefsChange({ showAdvancedInspector })}
             onChange={onObjectChange}
+            onLookThroughCamera={onLookThroughCamera}
           />
         )}
         {context === 'stage' && <StageContext stage={stage} prefs={prefs} onStageChange={onStageChange} onPrefsChange={onPrefsChange} />}

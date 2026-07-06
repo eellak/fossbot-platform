@@ -6,7 +6,7 @@ import type { StageBuilderPrefab } from './stageBuilderPrefabs';
 import { editorColors, editorTones, editorType, type EditorTone } from './stageBuilderEditorTheme';
 
 export type StageBuilderLibraryGroup = {
-  id: 'floorPaths' | 'structures' | 'robot' | 'challenge' | 'labels' | 'lighting';
+  id: 'floorPaths' | 'structures' | 'robot' | 'challenge' | 'labels' | 'lighting' | 'camera';
   label: string;
   items: StageSemanticKind[];
 };
@@ -16,8 +16,9 @@ export const STAGE_BUILDER_LIBRARY_GROUPS: StageBuilderLibraryGroup[] = [
   { id: 'structures', label: 'Structures', items: ['wall', 'block', 'ramp', 'platform', 'cylinder', 'obstacle'] },
   { id: 'robot', label: 'Robot', items: ['robotSpawn'] },
   { id: 'challenge', label: 'Challenge Markers', items: ['target', 'checkpoint', 'dangerZone', 'sensorZone'] },
-  { id: 'labels', label: 'Labels', items: ['cameraMarker', 'label'] },
+  { id: 'labels', label: 'Labels', items: ['label'] },
   { id: 'lighting', label: 'Lighting', items: ['light'] },
+  { id: 'camera', label: 'Camera', items: ['camera'] },
 ];
 
 export interface StageObjectLibraryProps {
@@ -83,7 +84,15 @@ export function PreviewShape({ kind, tone }: { kind: PreviewKind; tone: EditorTo
   if (kind === 'checkpoint') return <Box sx={{ position: 'relative', width: 34, height: 34, borderLeft: `2px solid ${accent}` }}><Box sx={{ position: 'absolute', top: 4, left: 2, width: 24, height: 15, bgcolor: soft, border: `2px solid ${accent}` }} /></Box>;
   if (kind === 'dangerZone') return <Box sx={{ width: 30, height: 30, bgcolor: soft, border: `2px solid ${accent}`, transform: 'rotate(45deg)' }} />;
   if (kind === 'sensorZone') return <Box sx={{ width: 40, height: 28, border: `2px dashed ${accent}`, bgcolor: soft }} />;
-  if (kind === 'cameraMarker') return <Box sx={{ width: 38, height: 26, border: `2px solid ${accent}`, bgcolor: soft, position: 'relative' }}><Box sx={{ position: 'absolute', top: 6, left: 13, width: 9, height: 9, borderRadius: '50%', border: `2px solid ${accent}` }} /></Box>;
+  if (kind === 'camera') {
+    return (
+      <Box component="svg" viewBox="0 0 44 34" sx={{ width: 42, height: 32 }}>
+        <rect x="6" y="9" width="26" height="18" rx="3" fill={soft} stroke={accent} strokeWidth="2.4" />
+        <path d="M32 14 L40 9 L40 27 L32 22 Z" fill={soft} stroke={accent} strokeWidth="2.4" strokeLinejoin="round" />
+        <circle cx="17" cy="18" r="5" fill={`${accent}33`} stroke={accent} strokeWidth="2.2" />
+      </Box>
+    );
+  }
   if (kind === 'line') {
     return (
       <Box component="svg" viewBox="0 0 52 34" sx={{ width: 52, height: 34 }}>

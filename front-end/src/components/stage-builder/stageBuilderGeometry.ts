@@ -153,6 +153,20 @@ export function objectBounds(object: EditorStageObject): StageObjectBounds | nul
       soft: false,
     };
   }
+  if (object.kind === 'camera') {
+    const r = 0.12;
+    return {
+      objectId: object.id,
+      minX: object.position[0] - r,
+      maxX: object.position[0] + r,
+      minY: object.position[1] - r,
+      maxY: object.position[1] + r,
+      minZ: object.position[2] - r,
+      maxZ: object.position[2] + r,
+      solid: false,
+      soft: false,
+    };
+  }
   return null;
 }
 
@@ -183,4 +197,11 @@ export function objectDimensionsAreValid(object: EditorStageObject): boolean {
   if (object.kind === 'line') return object.points.length >= 2 && object.width > 0;
   if (object.kind === 'text') return object.scale > 0;
   return true;
+}
+
+/** Look direction for a stage camera. `yaw` rotates around Y (0 looks toward -Z);
+ * `pitch` tilts below horizontal (positive = look down, radians). */
+export function cameraLookDirection(yaw: number, pitch: number): Vec3 {
+  const cos = Math.cos(pitch);
+  return [-Math.sin(yaw) * cos, -Math.sin(pitch), -Math.cos(yaw) * cos];
 }

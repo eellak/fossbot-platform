@@ -25,10 +25,10 @@ export const STAGE_OBJECT_CATALOG: StageObjectCatalogItem[] = [
   { id: 'checkpoint', label: 'Checkpoint', shortLabel: 'Check', description: 'A waypoint marker. Stored as editor metadata with a floor visual for now.', category: 'challenge', placeable: true },
   { id: 'dangerZone', label: 'Danger zone', shortLabel: 'Danger', description: 'A no-go area marker. Metadata only for now.', category: 'challenge', placeable: true },
   { id: 'sensorZone', label: 'Sensor zone', shortLabel: 'Sensor', description: 'A region for later sensor-based challenges. Metadata only for now.', category: 'challenge', placeable: true },
-  { id: 'cameraMarker', label: 'Camera marker', shortLabel: 'Camera', description: 'A label for camera planning. Metadata only for now.', category: 'marker', placeable: true },
   { id: 'line', label: 'Line path', shortLabel: 'Line', description: 'A floor line for line-following tests.', category: 'challenge', placeable: true },
   { id: 'label', label: 'Text label', shortLabel: 'Label', description: 'A readable label on the stage.', category: 'marker', placeable: true },
   { id: 'light', label: 'Light', shortLabel: 'Light', description: 'A scene light. Pick point, spot, directional, or ambient in the inspector.', category: 'marker', placeable: true },
+  { id: 'camera', label: 'Camera', shortLabel: 'Camera', description: 'A stage camera. Run Test starts from this view; optionally lock it.', category: 'marker', placeable: true },
 ];
 
 export function catalogItem(id: StageSemanticKind): StageObjectCatalogItem | undefined {
@@ -49,6 +49,7 @@ export function displayObjectType(object: EditorStageObject): string {
   if (object.kind === 'line') return 'Line path';
   if (object.kind === 'text') return 'Text label';
   if (object.kind === 'light') return 'Light';
+  if (object.kind === 'camera') return 'Camera';
   return 'Object';
 }
 
@@ -96,9 +97,6 @@ export function createCatalogObject(kind: StageSemanticKind, id: string, positio
   if (kind === 'sensorZone') {
     return { id, kind: 'base', semanticKind: kind, name: 'sensor zone', position: [p[0], 0, p[2]], dimensions: [0.8, 0.8], color: '#00acc1' };
   }
-  if (kind === 'cameraMarker') {
-    return { id, kind: 'text', semanticKind: kind, name: 'camera marker', text: 'Camera', position: [p[0], 0.35, p[2]], color: '#6c63ff', scale: 0.55, onFloor: false };
-  }
   if (kind === 'line') {
     return { id, kind: 'line', semanticKind: kind, name: 'line path', points: [[p[0] - 0.5, p[2]], [p[0], p[2] + 0.4], [p[0] + 0.5, p[2]]], width: 0.03, color: 'black' };
   }
@@ -108,6 +106,9 @@ export function createCatalogObject(kind: StageSemanticKind, id: string, positio
   if (kind === 'light') {
     return { id, kind: 'light', semanticKind: kind, name: 'light', subtype: 'point', position: [p[0], 1, p[2]], rotationY: 0, color: '#ffd27f', intensity: 1.2, range: 4, angle: Math.PI / 6, penumbra: 0.3 };
   }
+  if (kind === 'camera') {
+    return { id, kind: 'camera', semanticKind: kind, name: 'stage camera', position: [2.5, 2, 2.5], rotationY: Math.PI / 4, pitch: 0.4, fov: 50 };
+  }
   return null;
 }
 
@@ -115,8 +116,9 @@ export function inferSemanticKindFromConfig(type: string, name?: string, color?:
   const lower = (name || '').toLowerCase();
   if (type === 'fossbot') return 'robotSpawn';
   if (type === 'light') return 'light';
+  if (type === 'camera') return 'camera';
   if (type === 'line') return 'line';
-  if (type === 'text') return lower.includes('camera') ? 'cameraMarker' : 'label';
+  if (type === 'text') return 'label';
   if (lower.includes('target') || lower.includes('goal')) return 'target';
   if (lower.includes('checkpoint')) return 'checkpoint';
   if (lower.includes('danger')) return 'dangerZone';

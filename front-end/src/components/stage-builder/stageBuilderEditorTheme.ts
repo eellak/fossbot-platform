@@ -64,6 +64,7 @@ export const editorTones = {
   challenge: { accent: editorColors.success, surface: '#153b2c', text: '#c8f7d8' },
   labels: { accent: editorColors.label, surface: '#302848', text: '#eadfff' },
   lighting: { accent: '#ffd27f', surface: '#3d351d', text: '#ffe9c2' },
+  camera: { accent: '#5eead4', surface: '#15372e', text: '#ccfbef' },
   prefab: { accent: editorColors.prefab, surface: '#3b2b3c', text: '#ffd8ef' },
 } as const;
 

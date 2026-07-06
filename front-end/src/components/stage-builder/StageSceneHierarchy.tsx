@@ -54,12 +54,13 @@ const rowActionSx = {
   '&:hover': { bgcolor: `${editorColors.textMuted}1a`, color: editorColors.textStrong },
 } as const;
 
-const hierarchyTones: Record<'robot' | 'structures' | 'markers' | 'labels' | 'lighting' | 'groups', EditorTone> = {
+const hierarchyTones: Record<'robot' | 'structures' | 'markers' | 'labels' | 'lighting' | 'camera' | 'groups', EditorTone> = {
   robot: editorTones.robot,
   structures: editorTones.structures,
   markers: editorTones.challenge,
   labels: editorTones.labels,
   lighting: editorTones.lighting,
+  camera: editorTones.camera,
   groups: editorTones.prefab,
 };
 
@@ -70,7 +71,8 @@ function sectionFor(object: EditorStageObject): keyof typeof hierarchyTones {
   if (object.groupId || object.prefabSourceId) return 'groups';
   if (object.kind === 'fossbot' || object.semanticKind === 'robotSpawn') return 'robot';
   if (object.kind === 'light' || object.semanticKind === 'light') return 'lighting';
-  if (object.kind === 'text' || object.semanticKind === 'cameraMarker' || object.semanticKind === 'label') return 'labels';
+  if (object.kind === 'camera' || object.semanticKind === 'camera') return 'camera';
+  if (object.kind === 'text' || object.semanticKind === 'label') return 'labels';
   if (['target', 'checkpoint', 'dangerZone', 'sensorZone', 'line', 'baseTile'].includes(object.semanticKind || '')) return 'markers';
   return 'structures';
 }
@@ -83,6 +85,8 @@ function previewKindForObject(object: EditorStageObject): PreviewKind {
   if (object.kind === 'cylinder') return 'cylinder';
   if (object.kind === 'line') return 'line';
   if (object.kind === 'text') return 'label';
+  if (object.kind === 'light') return 'light';
+  if (object.kind === 'camera') return 'camera';
   return 'block';
 }
 

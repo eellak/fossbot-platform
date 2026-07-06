@@ -28,6 +28,8 @@ export interface StageHandle {
   dynamicCount: number
   /** Stage-level LDR baseline (0..1). Mutable so a debug knob can adjust live. */
   ambientFloor: number
+  /** Optional start camera captured from a `camera` stage entry. */
+  startCamera?: { position: [number, number, number]; yaw: number; pitch: number; fov: number }
   syncDynamicObjects: () => void
   dispose: () => void
   disposed: boolean
@@ -126,6 +128,7 @@ export async function loadStageEntries(
   const modelLoads: Promise<void>[] = []
   const dynamicObjects: StageDynamicObject[] = []
   const lineSegments: LineSegment[] = []
+  let startCamera: StageHandle['startCamera']
 
   const stgCollidersGrp = new THREE.Group()
   stgCollidersGrp.name = 'stage_colliders'
@@ -211,6 +214,18 @@ export async function loadStageEntries(
         objects.push(vis.object)
         break
       }
+      case 'camera': {
+        const pos = entry.position as [number, number, number] | undefined
+        if (pos) {
+          startCamera = {
+            position: pos,
+            yaw: (entry as any).rotationY ?? 0,
+            pitch: (entry as any).pitch ?? 0,
+            fov: (entry as any).fov ?? 50,
+          }
+        }
+        break
+      }
       default:
         console.warn(`[stage] unknown entry type:`, type, entry)
     }
@@ -237,6 +252,7 @@ export async function loadStageEntries(
     lineSegmentCount,
     dynamicCount,
     ambientFloor: 0.05,
+    startCamera,
     get disposed() { return disposed },
     syncDynamicObjects() {
       if (disposed) return
