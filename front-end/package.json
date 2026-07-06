@@ -26,6 +26,7 @@
     "@reduxjs/toolkit": "1.8.3",
     "@svgr/rollup": "^8.1.0",
     "@tabler/icons-react": "^2.38.0",
+    "@uiw/react-color": "^2.10.3",
     "apexcharts": "^3.44.0",
     "autoprefixer": "^10.4.16",
     "axios": "0.27.2",
