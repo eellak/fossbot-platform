@@ -11,6 +11,8 @@ import type { StageBuilderValidationResult } from './stageBuilderValidation';
 import { objectBounds, stageHalfExtents } from './stageBuilderGeometry';
 
 export type StageBuilderTransformMode = 'translate' | 'rotate' | 'scale';
+export type StageBuilderCameraView = 'perspective' | 'top' | 'bottom' | 'front' | 'back' | 'left' | 'right';
+export type StageBuilderCameraViewRequest = { view: StageBuilderCameraView; nonce: number };
 
 export type StageBuilderPlacementStatus = {
   valid: boolean;
@@ -38,6 +40,7 @@ export interface StageBuilderSceneProps {
   styleVariant?: StageBuilderStyleVariant;
   validationResults?: StageBuilderValidationResult[];
   focusRequestNonce?: number;
+  cameraViewRequest?: StageBuilderCameraViewRequest | null;
   onSelect: (id: string | null) => void;
   onSelectionChange?: (ids: string[]) => void;
   onObjectChange: (object: EditorStageObject) => void;
@@ -86,6 +89,16 @@ type ObjectVisualOptions = {
   validationSeverity?: 'error' | 'warning' | 'info';
 };
 
+type ColorableMaterial = THREE.Material & { color?: THREE.Color; _color?: THREE.Color };
+type TransformGuideObject = THREE.Object3D & { tag?: string; material?: THREE.Material | THREE.Material[] };
+
+const transformAxisGuideColors = {
+  X: 0xff0000,
+  Y: 0x00ff00,
+  Z: 0x0000ff,
+};
+const transformGuideNeutralColor = 0xffffff;
+
 const tmpPointer = new THREE.Vector2();
 const raycaster = new THREE.Raycaster();
 const floorPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
@@ -100,6 +113,58 @@ function cloneObjectForTransform(object: EditorStageObject): EditorStageObject {
 
 function color(value: string): THREE.Color {
   try { return new THREE.Color(value || '#ffffff'); } catch { return new THREE.Color('#ffffff'); }
+}
+
+function transformAxisGuideColor(axis: string | null | undefined): number | null {
+  const normalized = axis?.toUpperCase();
+  if (normalized === 'X') return transformAxisGuideColors.X;
+  if (normalized === 'Y') return transformAxisGuideColors.Y;
+  if (normalized === 'Z') return transformAxisGuideColors.Z;
+  return null;
+}
+
+function usesActiveAxisGuideColor(name: string): boolean {
+  return name === 'START' || name === 'END' || name === 'DELTA' || name === 'AXIS';
+}
+
+function transformHelperGuideColor(name: string, activeAxis: string | null | undefined): number | null {
+  const axisColor = transformAxisGuideColor(name);
+  if (axisColor !== null) return axisColor;
+  if (usesActiveAxisGuideColor(name)) return transformAxisGuideColor(activeAxis) ?? transformGuideNeutralColor;
+  return null;
+}
+
+function setTransformGuideMaterialColor(material: THREE.Material | THREE.Material[] | undefined, colorHex: number): void {
+  const materials = Array.isArray(material) ? material : material ? [material] : [];
+  for (const item of materials) {
+    const colorable = item as ColorableMaterial;
+    if (!colorable.color) continue;
+    colorable.color.setHex(colorHex);
+    if (colorable._color) colorable._color.setHex(colorHex);
+    item.needsUpdate = true;
+  }
+}
+
+function applyTransformGuideColors(transform: TransformControls): void {
+  const axis = (transform as { axis?: unknown }).axis;
+  const activeAxis = typeof axis === 'string' ? axis : null;
+  transform.traverse((child) => {
+    const guide = child as TransformGuideObject;
+    if (guide.tag !== 'helper') return;
+    const guideColor = transformHelperGuideColor(guide.name, activeAxis);
+    if (guideColor === null) return;
+    setTransformGuideMaterialColor(guide.material, guideColor);
+  });
+}
+
+function isTransformControlHandleActive(transform: TransformControls | null): boolean {
+  if (!transform) return false;
+  const state = transform as { axis?: unknown; dragging?: unknown; object?: unknown };
+  return !!state.object && (state.dragging === true || typeof state.axis === 'string');
+}
+
+function isTransformControlDragging(transform: TransformControls | null): boolean {
+  return (transform as { dragging?: unknown } | null)?.dragging === true;
 }
 
 function validationTint(severity?: 'error' | 'warning' | 'info'): string | undefined {
@@ -725,6 +790,40 @@ function updateCornerBoundsHelper(helper: CornerBoundsHelper, box: THREE.Box3): 
   position.needsUpdate = true;
 }
 
+function applyStageBuilderCameraView(sceneHandle: SceneHandle, view: StageBuilderCameraView, dimensions: [number, number]): void {
+  const [width, depth] = dimensions;
+  const span = Math.max(width, depth, 4);
+  const sideDistance = Math.max(3.2, span * 0.72);
+  const homeDistance = Math.max(2.8, span * 0.52);
+  const eyeHeight = Math.max(1.8, span * 0.32);
+  const target = new THREE.Vector3(0, 0, 0);
+
+  sceneHandle.controls.target.copy(target);
+  sceneHandle.camera.up.set(0, 1, 0);
+
+  if (view === 'top') {
+    sceneHandle.camera.position.set(0, Math.max(5.5, span * 1.18), 0.001);
+    sceneHandle.camera.up.set(0, 0, -1);
+  } else if (view === 'bottom') {
+    sceneHandle.camera.position.set(0, -Math.max(5.5, span * 1.18), 0.001);
+    sceneHandle.camera.up.set(0, 0, 1);
+  } else if (view === 'front') {
+    sceneHandle.camera.position.set(0, eyeHeight, sideDistance);
+  } else if (view === 'back') {
+    sceneHandle.camera.position.set(0, eyeHeight, -sideDistance);
+  } else if (view === 'left') {
+    sceneHandle.camera.position.set(-sideDistance, eyeHeight, 0);
+  } else if (view === 'right') {
+    sceneHandle.camera.position.set(sideDistance, eyeHeight, 0);
+  } else {
+    sceneHandle.camera.position.set(homeDistance, eyeHeight + 0.55, homeDistance);
+  }
+
+  sceneHandle.camera.lookAt(target);
+  sceneHandle.camera.updateProjectionMatrix();
+  sceneHandle.controls.update();
+}
+
 export function StageBuilderScene({
   objects,
   groups = [],
@@ -745,6 +844,7 @@ export function StageBuilderScene({
   styleVariant = 'playful',
   validationResults = [],
   focusRequestNonce = 0,
+  cameraViewRequest = null,
   onSelect,
   onSelectionChange,
   onObjectChange,
@@ -1029,6 +1129,8 @@ export function StageBuilderScene({
     const transform = new TransformControls(sceneHandle.camera, sceneHandle.renderer.domElement);
     transform.setMode(transformMode);
     transform.setSpace(transformSpaceRef.current);
+    transform.addEventListener('change', () => applyTransformGuideColors(transform));
+    applyTransformGuideColors(transform);
     transform.addEventListener('dragging-changed', (event) => {
       sceneHandle.controls.enabled = !event.value;
       if (event.value) {
@@ -1166,6 +1268,13 @@ export function StageBuilderScene({
         return;
       }
 
+      // TransformControls receives this pointerdown first; if it claimed a gizmo
+      // handle, scene picking must not select objects behind the active gizmo.
+      if (controlSchemeRef.current === 'legacyGizmo' && isTransformControlHandleActive(transformRef.current)) {
+        event.preventDefault();
+        return;
+      }
+
       const selected = objectsRef.current.find((item) => item.id === selectedRef.current);
       const selectedRoot = selected ? objectMapRef.current.get(selected.id)?.root : null;
       if (controlSchemeRef.current === 'friendly' && selectedRoot && canTransform(selected)) {
@@ -1234,6 +1343,8 @@ export function StageBuilderScene({
         updateMarqueeElement(event);
         return;
       }
+
+      if (isTransformControlDragging(transformRef.current)) return;
 
       const drag = friendlyDragRef.current;
       const selected = objectsRef.current.find((item) => item.id === selectedRef.current);
@@ -1506,9 +1617,16 @@ export function StageBuilderScene({
     const size = box.getSize(new THREE.Vector3()).length();
     const offset = Math.max(1.2, size * 1.2);
     sceneHandle.controls.target.copy(center);
+    sceneHandle.camera.up.set(0, 1, 0);
     sceneHandle.camera.position.set(center.x + offset, center.y + offset * 0.7 + 0.8, center.z + offset);
     sceneHandle.controls.update();
   }, [focusRequestNonce]);
+
+  useEffect(() => {
+    const sceneHandle = sceneRef.current;
+    if (!sceneHandle || !cameraViewRequest?.nonce) return;
+    applyStageBuilderCameraView(sceneHandle, cameraViewRequest.view, stageDimensionsRef.current);
+  }, [cameraViewRequest]);
 
   return <div ref={containerRef} style={{ width: '100%', height: '100%', minHeight: 420, position: 'relative' }} />;
 }

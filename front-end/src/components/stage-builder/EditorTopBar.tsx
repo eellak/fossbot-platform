@@ -10,6 +10,7 @@ import ViewSidebarIcon from '@mui/icons-material/ViewSidebar';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import SettingsIcon from '@mui/icons-material/Settings';
 import type { StageSemanticKind } from './types';
+import type { StageBuilderCameraView } from './StageBuilderScene';
 import type { StageBuilderPrefab } from './stageBuilderPrefabs';
 import { STAGE_BUILDER_LIBRARY_GROUPS, libraryLabel } from './StageObjectLibrary';
 import { activeValidationResults, validationSummary, type StageBuilderValidationResult } from './stageBuilderValidation';
@@ -43,6 +44,7 @@ export interface EditorTopBarProps {
   onOpenStageSettings: () => void;
   onToggleLeftPanel: () => void;
   onToggleRightPanel: () => void;
+  onCameraViewChange: (view: StageBuilderCameraView) => void;
 }
 
 function useMenu() {
@@ -130,6 +132,7 @@ export function EditorTopBar({
   onOpenStageSettings,
   onToggleLeftPanel,
   onToggleRightPanel,
+  onCameraViewChange,
 }: EditorTopBarProps) {
   const overflow = useMenu();
   const active = activeValidationResults(validationResults);
@@ -195,6 +198,15 @@ export function EditorTopBar({
         {(close) => [
           <MenuItem key="left" onClick={() => { close(); onToggleLeftPanel(); }}>{leftPanelVisible ? 'Hide' : 'Show'} left panel</MenuItem>,
           <MenuItem key="right" onClick={() => { close(); onToggleRightPanel(); }}>{rightPanelVisible ? 'Hide' : 'Show'} inspector</MenuItem>,
+          <Divider key="camera-divider" />,
+          <MenuItem key="camera-perspective" onClick={() => { close(); onCameraViewChange('perspective'); }}>Camera: Perspective</MenuItem>,
+          <MenuItem key="camera-top" onClick={() => { close(); onCameraViewChange('top'); }}>Camera: Top</MenuItem>,
+          <MenuItem key="camera-bottom" onClick={() => { close(); onCameraViewChange('bottom'); }}>Camera: Bottom</MenuItem>,
+          <MenuItem key="camera-front" onClick={() => { close(); onCameraViewChange('front'); }}>Camera: Front</MenuItem>,
+          <MenuItem key="camera-back" onClick={() => { close(); onCameraViewChange('back'); }}>Camera: Back</MenuItem>,
+          <MenuItem key="camera-left" onClick={() => { close(); onCameraViewChange('left'); }}>Camera: Left</MenuItem>,
+          <MenuItem key="camera-right" onClick={() => { close(); onCameraViewChange('right'); }}>Camera: Right</MenuItem>,
+          <Divider key="viewport-divider" />,
           <MenuItem key="validation" onClick={() => { close(); onOpenValidation(); }}>Open Validation</MenuItem>,
           <MenuItem key="settings" onClick={() => { close(); onOpenSettings(); }}>Editor settings</MenuItem>,
         ]}
