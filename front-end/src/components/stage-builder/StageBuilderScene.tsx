@@ -890,6 +890,9 @@ export function StageBuilderScene({
   const boundaryRef = useRef<THREE.Line | null>(null);
   const marqueeElementRef = useRef<HTMLDivElement | null>(null);
   const marqueeRef = useRef<{ startX: number; startY: number; currentX: number; currentY: number } | null>(null);
+  // Tracks an empty-space pointerdown so the matching pointerup can deselect —
+  // but only if the pointer didn't move (a click), not an orbit/pan drag.
+  const emptyClickRef = useRef<{ x: number; y: number } | null>(null);
   const transformModeRef = useRef(transformMode);
   const objectsRef = useRef(objects);
   const groupsRef = useRef(groups);
@@ -1345,7 +1348,12 @@ export function StageBuilderScene({
         const snap = getSnapSettings(snapSettingsRef.current.preset, snapSettingsRef.current.rotationPreset, { shiftKey: event.shiftKey });
         const point = snapPosition([floorHit.x, 0, floorHit.z], snap);
         onObjectChangeRef.current({ ...selected, points: [...selected.points, [point[0], point[2]]] });
+        return;
       }
+
+      // Clicking empty space (no hit, no shift, no line edit) may deselect on release.
+      // Only the primary (left) button — middle/right are used by OrbitControls for dolly/pan.
+      if (event.button === 0) emptyClickRef.current = { x: event.clientX, y: event.clientY };
     };
 
     const handlePointerMove = (event: PointerEvent) => {
@@ -1391,12 +1399,18 @@ export function StageBuilderScene({
       }
     };
 
-    const handlePointerUp = () => {
+    const handlePointerUp = (event: PointerEvent) => {
       if (marqueeRef.current) finishMarquee();
       if (friendlyDragRef.current) {
         friendlyDragRef.current = null;
         sceneHandle.controls.enabled = true;
         commitSelectedTransform();
+      }
+      const emptyDown = emptyClickRef.current;
+      emptyClickRef.current = null;
+      if (emptyDown && Math.hypot(event.clientX - emptyDown.x, event.clientY - emptyDown.y) < 5 && (selectedRef.current || selectedIdsRef.current.length)) {
+        onSelectRef.current(null);
+        onSelectionChangeRef.current?.([]);
       }
     };
 
