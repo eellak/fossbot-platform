@@ -57,7 +57,7 @@ export interface StageBuilderSceneProps {
   onLockedSelectionAttempt?: () => void;
 }
 
-type MeshRecord = {
+export type MeshRecord = {
   objectId: string;
   root: THREE.Object3D;
   pickables: THREE.Object3D[];
@@ -90,7 +90,7 @@ type FriendlyDragState = {
 
 type AxisLock = 'x' | 'y' | 'z' | null;
 
-type ObjectVisualOptions = {
+export type ObjectVisualOptions = {
   ghost?: boolean;
   ghostValid?: boolean;
   validationSeverity?: 'error' | 'warning' | 'info';
@@ -503,7 +503,7 @@ function animateRobotSpawnVisual(root: THREE.Object3D, elapsed: number, active: 
 
 let robotSpawnModelTemplatePromise: Promise<THREE.Group> | null = null;
 
-function loadRobotSpawnModelTemplate(): Promise<THREE.Group> {
+export function loadRobotSpawnModelTemplate(): Promise<THREE.Group> {
   if (!robotSpawnModelTemplatePromise) {
     robotSpawnModelTemplatePromise = loadRobotV2()
       .then((robot) => robot.root)
@@ -675,7 +675,7 @@ function makeRobotSpawnVisual(object: Extract<EditorStageObject, { kind: 'fossbo
   return { root: group, pickables };
 }
 
-function makeObjectRoot(object: EditorStageObject, options: ObjectVisualOptions = {}): MeshRecord {
+export function makeObjectRoot(object: EditorStageObject, options: ObjectVisualOptions = {}): MeshRecord {
   let pickables: THREE.Object3D[] = [];
   let root: THREE.Object3D;
 
@@ -881,7 +881,7 @@ function makeObjectRoot(object: EditorStageObject, options: ObjectVisualOptions 
   return { objectId: object.id, root, pickables };
 }
 
-function disposeObject(root: THREE.Object3D): void {
+export function disposeObject(root: THREE.Object3D): void {
   root.userData.stageBuilderDisposed = true;
   root.traverse((child) => {
     const mesh = child as THREE.Mesh;

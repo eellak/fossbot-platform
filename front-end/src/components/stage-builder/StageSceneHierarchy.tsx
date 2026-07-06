@@ -11,9 +11,9 @@ import LockOpenIcon from '@mui/icons-material/LockOpen';
 import DeleteIcon from '@mui/icons-material/Delete';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import SearchIcon from '@mui/icons-material/Search';
-import type { EditorStage, EditorStageObject, StageBuilderGroup } from './types';
+import type { EditorStage, EditorStageObject, StageBuilderGroup, StageSemanticKind } from './types';
 import { displayObjectType } from './stageBuilderCatalog';
-import { PreviewShape, type PreviewKind } from './StageObjectLibrary';
+import { PreviewShape, hasStaticPreviewAsset, staticPreviewUrl } from './StageObjectLibrary';
 import { editorColors, editorTones, editorType, type EditorTone } from './stageBuilderEditorTheme';
 
 export type HierarchyDropPosition = 'before' | 'after' | 'inside';
@@ -79,7 +79,7 @@ function sectionFor(object: EditorStageObject): keyof typeof hierarchyTones {
   return 'structures';
 }
 
-function previewKindForObject(object: EditorStageObject): PreviewKind {
+function previewKindForObject(object: EditorStageObject): StageSemanticKind {
   if (object.semanticKind) return object.semanticKind;
   if (object.kind === 'fossbot') return 'robotSpawn';
   if (object.kind === 'base') return 'baseTile';
@@ -193,20 +193,30 @@ function TreeRowShell({
   );
 }
 
-function ObjectPreview({ object, selected }: { object: EditorStageObject; selected: boolean }) {
+function ObjectPreview({ object }: { object: EditorStageObject }) {
   const tone = toneForObject(object);
+  const kind = previewKindForObject(object);
   return (
-    <Box sx={{ width: 26, height: 26, display: 'grid', placeItems: 'center', overflow: 'hidden', borderRadius: 0.5, bgcolor: selected ? tone.surface : 'transparent' }}>
-      <Box sx={{ transform: 'scale(0.58)', transformOrigin: 'center', display: 'grid', placeItems: 'center' }}>
-        <PreviewShape kind={previewKindForObject(object)} tone={tone} />
-      </Box>
+    <Box sx={{ width: 32, height: 32, display: 'grid', placeItems: 'center', overflow: 'hidden', borderRadius: 0.5, bgcolor: 'transparent' }}>
+      {hasStaticPreviewAsset(kind) ? (
+        <img
+          src={staticPreviewUrl(kind)}
+          width={30}
+          height={30}
+          alt=""
+          draggable={false}
+          style={{ display: 'block', objectFit: 'contain', userSelect: 'none' }}
+        />
+      ) : (
+        <PreviewShape kind={kind} tone={tone} width={28} height={24} />
+      )}
     </Box>
   );
 }
 
 function GroupPreview({ selected }: { selected: boolean }) {
   return (
-    <Box sx={{ width: 26, height: 26, display: 'grid', placeItems: 'center', borderRadius: 0.5, bgcolor: selected ? hierarchyTones.groups.surface : 'transparent' }}>
+    <Box sx={{ width: 32, height: 32, display: 'grid', placeItems: 'center', borderRadius: 0.5, bgcolor: 'transparent' }}>
       <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: selected ? hierarchyTones.groups.accent : panelMuted, opacity: selected ? 0.95 : 0.7 }} />
     </Box>
   );
@@ -296,11 +306,11 @@ function ObjectRow({
         onDrop={(event) => onTargetDrop(targetFor(event), event)}
         onDragEnd={onObjectDragEnd}
         sx={{
-          minHeight: 36,
+          minHeight: 40,
           ml: `${contentX}px`,
           mr: 0.5,
           display: 'grid',
-          gridTemplateColumns: '26px minmax(0, 1fr) auto',
+          gridTemplateColumns: '32px minmax(0, 1fr) auto',
           alignItems: 'center',
           gap: 0.75,
           px: 0.625,
@@ -314,7 +324,7 @@ function ObjectRow({
           '&:hover .scene-row-actions': { display: 'flex' },
         }}
       >
-        <ObjectPreview object={object} selected={rowSelected} />
+        <ObjectPreview object={object} />
         <Box minWidth={0}>
         {editing ? (
           <TextField
@@ -441,11 +451,11 @@ function GroupBlock({
           onDragLeave={(event) => onTargetDragLeave(targetFor(event), event)}
           onDrop={(event) => onTargetDrop(targetFor(event), event)}
           sx={{
-            minHeight: 36,
+            minHeight: 40,
             ml: `${groupContentX}px`,
             mr: 0.5,
             display: 'grid',
-            gridTemplateColumns: '26px minmax(0, 1fr) auto',
+            gridTemplateColumns: '32px minmax(0, 1fr) auto',
             alignItems: 'center',
             gap: 0.75,
             px: 0.625,
