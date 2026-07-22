@@ -40,11 +40,23 @@ export interface RegisterData {
     lastname: string;
 }
 
+export interface ProjectStageReference {
+    sourceType: 'default' | 'github' | 'marketplace' | string;
+    repoOwner?: string | null;
+    repoName?: string | null;
+    visibility?: string | null;
+    marketplaceEntryPath?: string | null;
+    title?: string | null;
+    url?: string | null;
+    commitSha?: string | null;
+}
+
 export interface NewProjectData {
     name: string;
     description: string;
     project_type: string;
     code: string;
+    stageReference?: ProjectStageReference | null;
 }
 
 export interface Project {
@@ -53,6 +65,7 @@ export interface Project {
     description: string;
     project_type: string;
     code: string;
+    stageReference?: ProjectStageReference | null;
 }
 
 export interface ProjectResponse {

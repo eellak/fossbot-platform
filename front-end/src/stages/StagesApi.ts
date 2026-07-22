@@ -2,6 +2,8 @@ import type { LocalStageRecord } from 'src/components/stage-builder/types';
 
 const backendUrl: string = process.env.REACT_APP_BACKEND_URL;
 
+export type ProviderRepoVisibility = 'public' | 'private';
+
 export interface ProviderStageRef {
   repoOwner: string;
   repoName: string;
@@ -9,13 +11,20 @@ export interface ProviderStageRef {
   commitSha?: string | null;
   stageJsonSha?: string | null;
   rawBaseUrl?: string | null;
+  private?: boolean;
+  visibility?: ProviderRepoVisibility | string | null;
 }
 
 export interface ProviderStageListItem {
   repoOwner: string;
   repoName: string;
   repoUrl: string;
+  title?: string | null;
+  description?: string | null;
+  defaultBranch?: string | null;
   updatedAt?: string | null;
+  private?: boolean;
+  visibility?: 'public' | 'private' | 'internal' | string | null;
 }
 
 export interface SaveStageToProviderRequest {
@@ -25,6 +34,7 @@ export interface SaveStageToProviderRequest {
   repoName?: string;
   baseStageJsonSha?: string | null;
   commitMessage?: string;
+  visibility?: ProviderRepoVisibility;
 }
 
 export interface LoadStageFromProviderResponse extends ProviderStageRef {

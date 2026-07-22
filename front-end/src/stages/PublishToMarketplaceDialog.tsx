@@ -94,7 +94,8 @@ export function PublishToMarketplaceDialog({
   }, [open, stageDescription, stageTitle]);
 
   const tags = useMemo(() => splitTags(tagText), [tagText]);
-  const canPublish = !!remoteStage && !!title.trim() && !busy;
+  const isPrivateStage = !!remoteStage?.private;
+  const canPublish = !!remoteStage && !isPrivateStage && !!title.trim() && !busy;
 
   const handlePreviewFile = async (file?: File | null) => {
     setPreviewError('');
@@ -140,11 +141,26 @@ export function PublishToMarketplaceDialog({
             </Box>
           )}
 
+          {isPrivateStage && (
+            <Alert severity="warning">
+              Marketplace stages must be public. Change the repository visibility on GitHub or save a public copy before publishing.
+            </Alert>
+          )}
+
           {error && <Alert severity="error">{error}</Alert>}
           {result?.pullRequestUrl && (
-            <Alert severity="success">
-              Review pull request created:{' '}
-              <Link href={result.pullRequestUrl} target="_blank" rel="noreferrer">#{result.pullRequestNumber || 'PR'}</Link>
+            <Alert
+              severity="success"
+              action={(
+                <Button component="a" href={result.pullRequestUrl} target="_blank" rel="noreferrer" color="inherit" size="small" sx={{ whiteSpace: 'nowrap' }}>
+                  Open PR
+                </Button>
+              )}
+            >
+              <Typography variant="body2" fontWeight={800}>Marketplace review PR created: #{result.pullRequestNumber || 'PR'}</Typography>
+              <Typography variant="body2">
+                Open the PR to follow review status. GitHub shows the FOSSBot app as the author; the PR details credit the connected GitHub account and include the stage title, description, and tags.
+              </Typography>
             </Alert>
           )}
 

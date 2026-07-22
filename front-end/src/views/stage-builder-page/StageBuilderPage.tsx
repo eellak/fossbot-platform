@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { Alert, Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, Snackbar, Stack, Typography } from '@mui/material';
+import { Alert, Box, Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Snackbar, Stack, Typography } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from 'src/authentication/AuthProvider';
 import type { EditorStage, EditorStageObject, StageBuilderMode, StageLabelAttachment, StageSemanticKind, Vec3 } from 'src/components/stage-builder/types';
@@ -38,7 +38,7 @@ import { getGitHubBootstrapLinks, getGitHubLoginUrl, getGitHubProviderStatus, ty
 import { createStageOnProvider, listProviderStages, loadStageFromProvider, ProviderRequestError, updateStageOnProvider, type ProviderStageListItem, type ProviderStageRef } from 'src/stages/StagesApi';
 import { SaveToProviderDialog, type SaveToProviderValues } from 'src/stages/SaveToProviderDialog';
 import { OpenFromProviderDialog } from 'src/stages/OpenFromProviderDialog';
-import { publishStageToMarketplace, MarketplaceRequestError, type PublishMarketplaceResponse } from 'src/stages/MarketplaceApi';
+import { getMarketplaceStageStatus, publishStageToMarketplace, MarketplaceRequestError, type MarketplaceStageStatusResponse, type PublishMarketplaceResponse } from 'src/stages/MarketplaceApi';
 import { PublishToMarketplaceDialog, type PublishMarketplaceValues } from 'src/stages/PublishToMarketplaceDialog';
 
 function userScope(user: ReturnType<typeof useAuth>['user']): string {
@@ -71,6 +71,36 @@ function isTypingTarget(target: EventTarget | null): boolean {
 }
 
 const leaveMessage = 'You have unsaved changes. A local recovery draft will be kept, but you should export JSON when you are ready to save.';
+
+type GitHubDeepLinkTarget = {
+  repoOwner: string;
+  repoName: string;
+  label: string;
+};
+
+type GitHubDeepLinkLoadState = {
+  status: 'idle' | 'loading' | 'error';
+  repoLabel?: string;
+  step?: string;
+  error?: string;
+};
+
+function githubDeepLinkTargetFromLocation(): GitHubDeepLinkTarget | null {
+  if (typeof window === 'undefined') return null;
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('open') !== 'github') return null;
+  const repoParam = params.get('repo') || '';
+  const [ownerFromRepo, nameFromRepo] = repoParam.includes('/') ? repoParam.split('/', 2) : ['', ''];
+  const repoOwner = ownerFromRepo || params.get('owner') || '';
+  const repoName = nameFromRepo || params.get('name') || '';
+  if (!repoOwner || !repoName) return null;
+  return { repoOwner, repoName, label: `${repoOwner}/${repoName}` };
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 const customObjectObjLoader = new OBJLoader();
 const customObjectStlLoader = new STLLoader();
 const customObjectGltfLoader = new GLTFLoader();
@@ -82,6 +112,12 @@ const stageBuilderPanelSizing = {
   rightDefaultWidth: 324,
   handleWidth: 10,
 } as const;
+
+const GITHUB_PROVIDER_STATUS_CACHE_MS = 30_000;
+const GITHUB_STAGE_LIST_CACHE_MS = 45_000;
+const MARKETPLACE_STATUS_CACHE_MS = 45_000;
+
+type RefreshCacheOptions = { force?: boolean };
 
 type PanelResizeSide = 'left' | 'right';
 
@@ -268,6 +304,47 @@ function PanelResizeHandle({ side, onPointerDown, onDoubleClick }: { side: Panel
   );
 }
 
+function GitHubStageLoadScreen({ state, onRetry, onBack, onOpenPicker }: { state: GitHubDeepLinkLoadState; onRetry: () => void; onBack: () => void; onOpenPicker: () => void }) {
+  const { colors: editorColors } = useEditorTheme();
+  const loading = state.status === 'loading';
+  return (
+    <Box sx={{ width: '100vw', height: '100vh', display: 'grid', placeItems: 'center', bgcolor: editorColors.viewport, color: editorColors.text, p: 3 }}>
+      <Stack spacing={2.25} sx={{ width: 'min(520px, 100%)', p: 3, border: `1px solid ${editorColors.border}`, borderRadius: 2, bgcolor: editorColors.panel }}>
+        <Stack direction="row" spacing={1.5} alignItems="center">
+          {loading ? <CircularProgress size={30} /> : null}
+          <Box sx={{ minWidth: 0 }}>
+            <Typography variant="h6" fontWeight={850}>{loading ? 'Opening stage from GitHub' : 'Could not open GitHub stage'}</Typography>
+            <Typography variant="body2" sx={{ color: editorColors.textMuted, wordBreak: 'break-all' }}>{state.repoLabel || 'GitHub stage'}</Typography>
+          </Box>
+        </Stack>
+        {loading ? (
+          <Stack spacing={1}>
+            {['Checking GitHub connection…', 'Loading stage.json…', 'Preparing editor…'].map((step) => {
+              const active = state.step === step;
+              return (
+                <Stack key={step} direction="row" spacing={1} alignItems="center" sx={{ color: active ? editorColors.textStrong : editorColors.textMuted }}>
+                  <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: active ? editorColors.accentText : editorColors.border }} />
+                  <Typography variant="body2" fontWeight={active ? 800 : 500}>{step}</Typography>
+                </Stack>
+              );
+            })}
+            <Typography variant="caption" sx={{ color: editorColors.textMuted }}>Large assets may continue loading after the editor opens.</Typography>
+          </Stack>
+        ) : (
+          <Alert severity="error">{state.error || 'The stage could not be loaded from GitHub.'}</Alert>
+        )}
+        {!loading && (
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
+            <Button variant="contained" onClick={onRetry}>Try again</Button>
+            <Button variant="outlined" onClick={onOpenPicker}>Open from GitHub…</Button>
+            <Button variant="text" onClick={onBack}>Back to dashboard</Button>
+          </Stack>
+        )}
+      </Stack>
+    </Box>
+  );
+}
+
 const StageBuilderPage = () => {
   const { user, token } = useAuth();
   const navigate = useNavigate();
@@ -278,6 +355,9 @@ const StageBuilderPage = () => {
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const customObjectInputRef = useRef<HTMLInputElement | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const providerStatusCacheRef = useRef(0);
+  const providerStageListCacheRef = useRef(0);
+  const marketplaceStatusCacheRef = useRef<{ key: string; checkedAt: number }>({ key: '', checkedAt: 0 });
   const historyRef = useRef<StageBuilderHistory>(createStageBuilderHistory());
   const [historyVersion, setHistoryVersion] = useState(0);
   const [stage, setStage] = useState<EditorStage>(() => emptyEditorStage());
@@ -318,6 +398,14 @@ const StageBuilderPage = () => {
   const [marketplacePublishing, setMarketplacePublishing] = useState(false);
   const [marketplaceError, setMarketplaceError] = useState('');
   const [marketplaceResult, setMarketplaceResult] = useState<PublishMarketplaceResponse | null>(null);
+  const [marketplaceStatus, setMarketplaceStatus] = useState<MarketplaceStageStatusResponse | null>(null);
+  const [marketplaceStatusLoading, setMarketplaceStatusLoading] = useState(false);
+  const [githubDeepLinkTarget] = useState<GitHubDeepLinkTarget | null>(() => githubDeepLinkTargetFromLocation());
+  const [githubDeepLinkRetry, setGithubDeepLinkRetry] = useState(0);
+  const [githubDeepLinkLoad, setGithubDeepLinkLoad] = useState<GitHubDeepLinkLoadState>(() => {
+    const target = githubDeepLinkTargetFromLocation();
+    return target ? { status: 'loading', repoLabel: target.label, step: 'Checking GitHub connection…' } : { status: 'idle' };
+  });
 
   const prefabs = useMemo(() => builtInStageBuilderPrefabs(), []);
   const snapSettings = useMemo(() => getSnapSettings(prefs.snapPreset, prefs.rotationSnapPreset), [prefs.snapPreset, prefs.rotationSnapPreset]);
@@ -340,16 +428,28 @@ const StageBuilderPage = () => {
       : 'Connect GitHub to save stages';
   const providerStatusValue = remoteStage?.repoName || (providerStatus?.connected ? (providerStatus.selectedInstallationReady ? 'Ready' : 'Setup') : 'Off');
   const providerStatusTone = remoteStage || providerStatus?.selectedInstallationReady ? editorColors.success : providerStatus?.connected ? editorColors.warning : editorColors.textMuted;
+  const marketplaceResultForCurrentStage = marketplaceResult && remoteStage && marketplaceResult.entry.repoOwner === remoteStage.repoOwner && marketplaceResult.entry.repoName === remoteStage.repoName ? marketplaceResult : null;
+  const marketplacePullRequest = marketplaceResultForCurrentStage?.pullRequest || (marketplaceResultForCurrentStage?.pullRequestUrl ? {
+    number: marketplaceResultForCurrentStage.pullRequestNumber,
+    url: marketplaceResultForCurrentStage.pullRequestUrl,
+    state: marketplaceResultForCurrentStage.pullRequestState || 'open',
+  } : null) || marketplaceStatus?.pullRequest || null;
 
-  const refreshProviderStatus = async () => {
+  const refreshProviderStatus = async ({ force = false }: RefreshCacheOptions = {}) => {
     if (!token) {
+      providerStatusCacheRef.current = 0;
       setProviderStatus(null);
       return;
     }
+    const now = Date.now();
+    if (!force && providerStatusCacheRef.current && now - providerStatusCacheRef.current < GITHUB_PROVIDER_STATUS_CACHE_MS) return;
     setProviderStatusLoading(true);
     try {
-      setProviderStatus(await getGitHubProviderStatus(token));
+      const status = await getGitHubProviderStatus(token);
+      providerStatusCacheRef.current = Date.now();
+      setProviderStatus(status);
     } catch (error) {
+      providerStatusCacheRef.current = 0;
       console.warn('[stage-builder] failed to read GitHub provider status', error);
       setProviderStatus(null);
     } finally {
@@ -357,7 +457,33 @@ const StageBuilderPage = () => {
     }
   };
 
+  const refreshMarketplaceStatus = async ({ force = false }: RefreshCacheOptions = {}) => {
+    if (!token || !remoteStage || remoteStage.private) {
+      marketplaceStatusCacheRef.current = { key: '', checkedAt: 0 };
+      setMarketplaceStatus(null);
+      setMarketplaceStatusLoading(false);
+      return;
+    }
+    const cacheKey = `${remoteStage.repoOwner}/${remoteStage.repoName}`;
+    const cached = marketplaceStatusCacheRef.current;
+    const now = Date.now();
+    if (!force && cached.key === cacheKey && cached.checkedAt && now - cached.checkedAt < MARKETPLACE_STATUS_CACHE_MS) return;
+    setMarketplaceStatusLoading(true);
+    try {
+      const status = await getMarketplaceStageStatus(token, remoteStage.repoOwner, remoteStage.repoName);
+      marketplaceStatusCacheRef.current = { key: cacheKey, checkedAt: Date.now() };
+      setMarketplaceStatus(status);
+    } catch (error) {
+      marketplaceStatusCacheRef.current = { key: '', checkedAt: 0 };
+      console.warn('[stage-builder] failed to read marketplace status', error);
+      setMarketplaceStatus(null);
+    } finally {
+      setMarketplaceStatusLoading(false);
+    }
+  };
+
   useEffect(() => { refreshProviderStatus(); }, [token]);
+  useEffect(() => { refreshMarketplaceStatus(); }, [token, remoteStage?.repoOwner, remoteStage?.repoName, remoteStage?.private]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -367,16 +493,73 @@ const StageBuilderPage = () => {
       setProviderError(params.get('github_error') || 'GitHub connection failed.');
       setProviderErrorCode('provider_error');
       window.history.replaceState(null, '', window.location.pathname);
-      refreshProviderStatus();
+      refreshProviderStatus({ force: true });
     } else if (params.get('github_connected') || params.get('github_installed')) {
       const repo = params.get('repo');
       if (repo) setBootstrapRepoName(repo);
       setSaveProviderOpen(true);
       setMessage(params.get('github_connected') ? 'GitHub connected. Continue saving when ready.' : 'GitHub App installation updated. Continue saving when ready.');
       window.history.replaceState(null, '', window.location.pathname);
-      refreshProviderStatus();
+      refreshProviderStatus({ force: true });
     }
   }, []);
+
+  useEffect(() => {
+    if (!githubDeepLinkTarget) return undefined;
+    if (!token) {
+      setGithubDeepLinkLoad({
+        status: 'error',
+        repoLabel: githubDeepLinkTarget.label,
+        error: 'Sign in before opening a GitHub stage in the editor.',
+      });
+      return undefined;
+    }
+
+    let cancelled = false;
+    setGithubDeepLinkLoad({ status: 'loading', repoLabel: githubDeepLinkTarget.label, step: 'Checking GitHub connection…' });
+    setProviderListLoading(true);
+    setProviderListError('');
+
+    const openDeepLinkedStage = async () => {
+      try {
+        await getGitHubProviderStatus(token);
+        if (cancelled) return;
+        setGithubDeepLinkLoad({ status: 'loading', repoLabel: githubDeepLinkTarget.label, step: 'Loading stage.json…' });
+        await delay(220);
+        const loaded = await loadStageFromProvider(token, githubDeepLinkTarget.repoOwner, githubDeepLinkTarget.repoName);
+        if (cancelled) return;
+        setGithubDeepLinkLoad({ status: 'loading', repoLabel: githubDeepLinkTarget.label, step: 'Preparing editor…' });
+        await delay(320);
+        if (cancelled) return;
+        replaceStage(configToEditorStage(loaded.record), { undoable: true, clean: true, message: 'Opened stage from GitHub.' });
+        setRemoteStage({
+          repoOwner: loaded.repoOwner,
+          repoName: loaded.repoName,
+          repoUrl: loaded.repoUrl,
+          commitSha: loaded.commitSha,
+          stageJsonSha: loaded.stageJsonSha,
+          rawBaseUrl: loaded.rawBaseUrl,
+          private: loaded.private,
+          visibility: loaded.visibility,
+        });
+        window.history.replaceState(null, '', window.location.pathname);
+        setGithubDeepLinkLoad({ status: 'idle' });
+      } catch (error) {
+        if (!cancelled) {
+          setGithubDeepLinkLoad({
+            status: 'error',
+            repoLabel: githubDeepLinkTarget.label,
+            error: error instanceof Error ? error.message : 'Could not open GitHub stage.',
+          });
+        }
+      } finally {
+        if (!cancelled) setProviderListLoading(false);
+      }
+    };
+
+    openDeepLinkedStage();
+    return () => { cancelled = true; };
+  }, [githubDeepLinkRetry, githubDeepLinkTarget, token]);
 
   useEffect(() => {
     setPrefs(readStageBuilderPreferences(scope));
@@ -789,12 +972,12 @@ const StageBuilderPage = () => {
     }
   };
 
-  const handleCreateBootstrapLinks = async (slug: string) => {
+  const handleCreateBootstrapLinks = async (slug: string, visibility: 'public' | 'private') => {
     if (!token) throw new Error('Sign in before creating GitHub setup links.');
-    return getGitHubBootstrapLinks(token, slug);
+    return getGitHubBootstrapLinks(token, slug, visibility);
   };
 
-  const handleProviderSave = async ({ slug, commitMessage }: SaveToProviderValues) => {
+  const handleProviderSave = async ({ slug, commitMessage, visibility }: SaveToProviderValues) => {
     if (!token) {
       setProviderError('Sign in before saving to GitHub.');
       setProviderErrorCode('not_connected');
@@ -813,8 +996,9 @@ const StageBuilderPage = () => {
           baseStageJsonSha: remoteStage.stageJsonSha,
           commitMessage,
         })
-        : await createStageOnProvider(token, { record, slug, commitMessage });
+        : await createStageOnProvider(token, { record, slug, commitMessage, visibility });
       setRemoteStage(saved);
+      providerStageListCacheRef.current = 0;
       setBootstrapRepoName(null);
       setLastExportFingerprint(stageFingerprint(stage));
       setExportedAt(new Date().toISOString());
@@ -822,7 +1006,7 @@ const StageBuilderPage = () => {
       setSaveProviderOpen(false);
       setProviderErrorCode(null);
       setMessage(`Saved to GitHub: ${saved.repoOwner}/${saved.repoName}`);
-      refreshProviderStatus();
+      refreshProviderStatus({ force: true });
     } catch (error) {
       if (error instanceof ProviderRequestError) {
         setProviderErrorCode(error.code || null);
@@ -835,10 +1019,10 @@ const StageBuilderPage = () => {
           setProviderError(`${error.message} If this is your stage repo, install the FOSSBot GitHub App on it and save again.`);
         } else if (error.code === 'token_expired' || error.code === 'not_connected') {
           setProviderError(`${error.message} Use Connect GitHub to refresh authorization.`);
-          refreshProviderStatus();
+          refreshProviderStatus({ force: true });
         } else if (error.code === 'installation_scope_invalid') {
           setProviderError(`${error.message} Reinstall with selected repositories, then refresh status.`);
-          refreshProviderStatus();
+          refreshProviderStatus({ force: true });
         } else {
           setProviderError(error.message);
         }
@@ -874,6 +1058,19 @@ const StageBuilderPage = () => {
         commitMessage,
       });
       setMarketplaceResult(result);
+      setMarketplaceStatus({
+        repoOwner: remoteStage.repoOwner,
+        repoName: remoteStage.repoName,
+        entryPath: result.entryPath,
+        entry: result.entry,
+        pullRequest: result.pullRequest || (result.pullRequestUrl ? {
+          number: result.pullRequestNumber,
+          url: result.pullRequestUrl,
+          state: result.pullRequestState || 'open',
+        } : null),
+        rawBaseUrl: result.rawBaseUrl,
+      });
+      marketplaceStatusCacheRef.current = { key: `${remoteStage.repoOwner}/${remoteStage.repoName}`, checkedAt: Date.now() };
       setMessage(`Marketplace PR created for ${remoteStage.repoOwner}/${remoteStage.repoName}.`);
     } catch (error) {
       if (error instanceof MarketplaceRequestError) {
@@ -892,17 +1089,22 @@ const StageBuilderPage = () => {
     setPublishMarketplaceOpen(true);
   };
 
-  const refreshProviderStageList = async () => {
+  const refreshProviderStageList = async ({ force = false }: RefreshCacheOptions = {}) => {
     if (!token) {
+      providerStageListCacheRef.current = 0;
       setProviderListError('Sign in before opening from GitHub.');
       setProviderStages([]);
       return;
     }
+    const now = Date.now();
+    if (!force && providerStageListCacheRef.current && now - providerStageListCacheRef.current < GITHUB_STAGE_LIST_CACHE_MS) return;
     setProviderListLoading(true);
     setProviderListError('');
     try {
       setProviderStages(await listProviderStages(token));
+      providerStageListCacheRef.current = Date.now();
     } catch (error) {
+      providerStageListCacheRef.current = 0;
       setProviderStages([]);
       setProviderListError(error instanceof Error ? error.message : 'Could not list GitHub stages.');
     } finally {
@@ -930,6 +1132,8 @@ const StageBuilderPage = () => {
         commitSha: loaded.commitSha,
         stageJsonSha: loaded.stageJsonSha,
         rawBaseUrl: loaded.rawBaseUrl,
+        private: loaded.private,
+        visibility: loaded.visibility,
       });
       setOpenProviderOpen(false);
     } catch (error) {
@@ -1212,6 +1416,23 @@ const StageBuilderPage = () => {
         inspectorSx: getInspectorPanelSx(variant),
       };
     }, [prefs.styleVariant])}>
+      {githubDeepLinkLoad.status !== 'idle' ? (
+        <GitHubStageLoadScreen
+          state={githubDeepLinkLoad}
+          onRetry={() => {
+            if (!githubDeepLinkTarget) return;
+            setGithubDeepLinkLoad({ status: 'loading', repoLabel: githubDeepLinkTarget.label, step: 'Checking GitHub connection…' });
+            setGithubDeepLinkRetry((value) => value + 1);
+          }}
+          onBack={() => navigate('/dashboard')}
+          onOpenPicker={() => {
+            window.history.replaceState(null, '', window.location.pathname);
+            setGithubDeepLinkLoad({ status: 'idle' });
+            setOpenProviderOpen(true);
+            refreshProviderStageList();
+          }}
+        />
+      ) : (
     <Box ref={rootRef} sx={{ '--fossbot-box-border-radius': '0px', borderRadius: 0, width: '100vw', height: '100vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', bgcolor: editorColors.viewport }}>
       <EditorTopBar
         stageName={stage.title}
@@ -1227,10 +1448,15 @@ const StageBuilderPage = () => {
         onNew={handleNew}
         onDemo={handleDemo}
         providerLabel={providerLabel}
+        providerConnected={!!providerStatus?.connected}
         providerBusy={providerSaving || providerStatusLoading}
         marketplaceBusy={marketplacePublishing}
+        marketplaceStatusLoading={marketplaceStatusLoading}
+        marketplacePullRequest={marketplacePullRequest}
         onImport={() => importInputRef.current?.click()}
         onExport={handleExport}
+        onRefreshGitHubStatus={() => { refreshProviderStatus(); refreshMarketplaceStatus(); }}
+        onConnectProvider={handleProviderConnect}
         onSaveProvider={() => { setProviderError(''); setProviderErrorCode(null); setSaveProviderOpen(true); }}
         onOpenProvider={handleProviderOpenDialog}
         onPublishMarketplace={handleOpenMarketplaceDialog}
@@ -1446,7 +1672,7 @@ const StageBuilderPage = () => {
         errorCode={providerErrorCode}
         onClose={() => setSaveProviderOpen(false)}
         onConnect={handleProviderConnect}
-        onRefreshStatus={refreshProviderStatus}
+        onRefreshStatus={() => refreshProviderStatus({ force: true })}
         onBeforeInstall={() => writeStageBuilderDraft(stage, scope)}
         onOpenFromGitHub={() => { setSaveProviderOpen(false); handleProviderOpenDialog(); }}
         onCreateBootstrapLinks={handleCreateBootstrapLinks}
@@ -1459,7 +1685,7 @@ const StageBuilderPage = () => {
         busy={providerListLoading}
         error={providerListError}
         onClose={() => setOpenProviderOpen(false)}
-        onRefresh={refreshProviderStageList}
+        onRefresh={() => refreshProviderStageList({ force: true })}
         onOpenStage={handleOpenProviderStage}
       />
 
@@ -1478,6 +1704,7 @@ const StageBuilderPage = () => {
 
       <Snackbar open={!!message} autoHideDuration={3600} onClose={() => setMessage('')} message={message} />
     </Box>
+      )}
     </EditorThemeProvider>
   );
 };

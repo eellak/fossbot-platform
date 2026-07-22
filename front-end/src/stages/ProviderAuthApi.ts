@@ -71,14 +71,14 @@ export async function getGitHubLoginUrl(token: string): Promise<string> {
   return payload.url;
 }
 
-export async function getGitHubBootstrapLinks(token: string, slug: string): Promise<GitHubBootstrapLinks> {
+export async function getGitHubBootstrapLinks(token: string, slug: string, visibility: 'public' | 'private' = 'public'): Promise<GitHubBootstrapLinks> {
   const response = await fetch(`${backendUrl}/api/stages/bootstrap-links`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
     },
-    body: JSON.stringify({ slug }),
+    body: JSON.stringify({ slug, visibility }),
   });
   return parseJsonResponse<GitHubBootstrapLinks>(response);
 }

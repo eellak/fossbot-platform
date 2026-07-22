@@ -43,12 +43,14 @@ import ReactPlayer from 'react-player';
 
 import SuccessAlert from 'src/components/alerts/SuccessAlert';
 import ErrorAlert from 'src/components/alerts/ErrorAlert';
-import { Project } from 'src/authentication/AuthInterfaces';
+import { Project, type ProjectStageReference } from 'src/authentication/AuthInterfaces';
+import { loadStageFromProvider } from 'src/stages/StagesApi';
+import type { RawStageConfig } from 'src/simulator/stages';
 
-const textart = ` 
-# __   __   __   __   __   __  ___     __      ___       __       
-#|__  /  \\ /__\` /__\` |__) /  \\  |     |__) \\ /  |  |__| /  \\ |\\ | 
-#|    \\__/ .__/ .__/ |__) \\__/  |     |     |   |  |  | \\__/ | \\| 
+const textart = `
+# __   __   __   __   __   __  ___     __      ___       __
+#|__  /  \\ /__\` /__\` |__) /  \\  |     |__) \\ /  |  |__| /  \\ |\\ |
+#|    \\__/ .__/ .__/ |__) \\__/  |     |     |   |  |  | \\__/ | \\|
 
 print("hello world")`;
 
@@ -58,6 +60,8 @@ const MonacoPage: React.FC = () => {
   const [editorValue, setEditorValue] = useState('');
   const [projectTitle, setProjectTitle] = useState(t('newProject'));
   const [projectDescription, setProjectDescription] = useState(t('newProjectDescription'));
+  const [selectedStage, setSelectedStage] = useState<ProjectStageReference | null>(null);
+  const [initialStageConfig, setInitialStageConfig] = useState<RawStageConfig | null | undefined>(undefined);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [isEditingDescription, setIsEditingDescription] = useState(false);
   const [sessionId, setSessionId] = useState('');
@@ -68,6 +72,7 @@ const MonacoPage: React.FC = () => {
   const runScriptRef = useRef<() => Promise<void>>();
   const stopScriptRef = useRef<() => void>();
   const auth = useAuth();
+  const { token } = auth;
   const navigate = useNavigate();
   const { projectId } = useParams<{ projectId: string }>();
   const [isInPIP, setIsInPIP] = useState(false);
@@ -133,6 +138,8 @@ const MonacoPage: React.FC = () => {
             setEditorValue(fetchedProject.code);
             setProjectTitle(fetchedProject.name);
             setProjectDescription(fetchedProject.description);
+            const stageRef = fetchedProject.stageReference || null;
+            setSelectedStage(stageRef);
           }
         } else {
           setEditorValue(textart);
@@ -148,6 +155,36 @@ const MonacoPage: React.FC = () => {
 
     fetchProject();
   }, [auth, projectId, navigate]);
+
+  // Load stage config from backend for GitHub stages (handles private repos)
+  useEffect(() => {
+    if (!token || !selectedStage?.repoOwner || !selectedStage?.repoName) {
+      setInitialStageConfig(undefined);
+      return;
+    }
+    if (selectedStage.sourceType !== 'github' && selectedStage.sourceType !== 'marketplace') {
+      setInitialStageConfig(undefined);
+      return;
+    }
+    setInitialStageConfig(undefined);
+    let cancelled = false;
+    loadStageFromProvider(token, selectedStage.repoOwner, selectedStage.repoName)
+      .then((loaded) => {
+        if (!cancelled) setInitialStageConfig(loaded.record.config);
+      })
+      .catch(() => {
+        if (!cancelled) setInitialStageConfig(undefined);
+      });
+    return () => { cancelled = true; };
+  }, [token, selectedStage?.repoOwner, selectedStage?.repoName, selectedStage?.sourceType]);
+
+  useEffect(() => {
+    const handleStageSelected = (event: Event) => {
+      setSelectedStage((event as CustomEvent<ProjectStageReference>).detail || null);
+    };
+    window.addEventListener('fossbot:stage-selected', handleStageSelected);
+    return () => window.removeEventListener('fossbot:stage-selected', handleStageSelected);
+  }, []);
 
   useEffect(() => {
     if (location.pathname.endsWith('/monaco-tutorial-page')) {
@@ -178,6 +215,7 @@ const MonacoPage: React.FC = () => {
           description: projectDescription,
           project_type: 'blockly',
           code: editorValue,
+          stageReference: selectedStage,
         });
         if (project) {
           handleShowSuccessAlert(t('alertMessages.projectUpdated'));
@@ -238,6 +276,7 @@ const MonacoPage: React.FC = () => {
         isDescriptionDisabled={true}
         editorInitialValue="python"
         code={editorValue}
+        stageReference={selectedStage}
       />
       <Box id="monaco-container" flexGrow={1}>
         <Grid
@@ -376,7 +415,12 @@ const MonacoPage: React.FC = () => {
               )}
 
               <Box height="50vh">
-                <WebGLApp appsessionId={sessionId} onMountChange={handleMountChange} />
+                <WebGLApp
+                  appsessionId={sessionId}
+                  onMountChange={handleMountChange}
+                  initialStageUrl={selectedStage?.url || null}
+                  initialStageConfig={initialStageConfig}
+                />
               </Box>
 
               <Box

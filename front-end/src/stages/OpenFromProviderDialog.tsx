@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-  Alert, Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, List, ListItemButton, ListItemText, Stack, Typography,
+  Alert, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, List, ListItemButton, ListItemText, Stack, Typography,
 } from '@mui/material';
 import GitHubIcon from '@mui/icons-material/GitHub';
 import type { ProviderStageListItem } from './StagesApi';
@@ -30,7 +30,7 @@ export function OpenFromProviderDialog({
       <DialogContent>
         <Stack spacing={1.5} sx={{ pt: 0.5 }}>
           <Typography variant="body2" color="text.secondary">
-            Choose an installed public <Box component="code">fossbot-*</Box> repository to load into the editor.
+            Choose an installed <Box component="code">fossbot-*</Box> repository to load into the editor. Private repos can be edited here, but browser test links and marketplace publishing require public repos in v1.
           </Typography>
           {error && <Alert severity="error">{error}</Alert>}
           {!busy && !stages.length && !error && (
@@ -45,9 +45,13 @@ export function OpenFromProviderDialog({
               {stages.map((stage) => (
                 <ListItemButton key={`${stage.repoOwner}/${stage.repoName}`} onClick={() => onOpenStage(stage)} divider>
                   <ListItemText
-                    primary={`${stage.repoOwner}/${stage.repoName}`}
-                    secondary={stage.updatedAt ? `Updated ${new Date(stage.updatedAt).toLocaleString()}` : stage.repoUrl}
-                    primaryTypographyProps={{ fontWeight: 800 }}
+                    primary={(
+                      <Stack direction="row" spacing={1} alignItems="center">
+                        <Typography component="span" fontWeight={800}>{stage.repoOwner}/{stage.repoName}</Typography>
+                        <Chip size="small" label={stage.private ? 'Private' : 'Public'} color={stage.private ? 'warning' : 'success'} variant="outlined" />
+                      </Stack>
+                    )}
+                    secondary={stage.private ? 'Private stage. Editor access uses your GitHub App connection.' : stage.updatedAt ? `Updated ${new Date(stage.updatedAt).toLocaleString()}` : stage.repoUrl}
                   />
                 </ListItemButton>
               ))}

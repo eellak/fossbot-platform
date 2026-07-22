@@ -1,15 +1,16 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  Alert, Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, Link, Stack, TextField, Typography,
+  Alert, Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel, Link, Radio, RadioGroup, Stack, TextField, Typography,
 } from '@mui/material';
 import GitHubIcon from '@mui/icons-material/GitHub';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import type { GitHubBootstrapLinks, GitHubProviderStatus } from './ProviderAuthApi';
-import type { ProviderStageRef } from './StagesApi';
+import type { ProviderRepoVisibility, ProviderStageRef } from './StagesApi';
 
 export interface SaveToProviderValues {
   slug: string;
   commitMessage: string;
+  visibility: ProviderRepoVisibility;
 }
 
 interface SaveToProviderDialogProps {
@@ -26,7 +27,7 @@ interface SaveToProviderDialogProps {
   onRefreshStatus: () => void;
   onBeforeInstall?: () => void;
   onOpenFromGitHub?: () => void;
-  onCreateBootstrapLinks: (slug: string) => Promise<GitHubBootstrapLinks>;
+  onCreateBootstrapLinks: (slug: string, visibility: ProviderRepoVisibility) => Promise<GitHubBootstrapLinks>;
   onSave: (values: SaveToProviderValues) => void;
 }
 
@@ -61,6 +62,7 @@ export function SaveToProviderDialog({
   const defaultSlug = useMemo(() => slugify((bootstrapRepoName || '').replace(/^fossbot-/, '') || stageTitle || 'Untitled Stage'), [bootstrapRepoName, stageTitle]);
   const [slug, setSlug] = useState(defaultSlug);
   const [commitMessage, setCommitMessage] = useState('');
+  const [visibility, setVisibility] = useState<ProviderRepoVisibility>('public');
   const [links, setLinks] = useState<GitHubBootstrapLinks | null>(null);
   const [linkError, setLinkError] = useState('');
   const [linkBusy, setLinkBusy] = useState(false);
@@ -69,6 +71,7 @@ export function SaveToProviderDialog({
     if (!open) return;
     setSlug(defaultSlug);
     setCommitMessage('');
+    setVisibility('public');
     setLinks(null);
     setLinkError('');
     setLinkBusy(false);
@@ -87,7 +90,7 @@ export function SaveToProviderDialog({
     setLinkBusy(true);
     setLinkError('');
     try {
-      setLinks(await onCreateBootstrapLinks(slug));
+      setLinks(await onCreateBootstrapLinks(slug, visibility));
     } catch (err) {
       setLinkError(err instanceof Error ? err.message : 'Could not prepare GitHub setup links.');
     } finally {
@@ -103,6 +106,10 @@ export function SaveToProviderDialog({
           <Typography variant="body2" color="text.secondary">
             Save writes this stage to a public GitHub repository that you own. Uploaded OBJ/STL/GLB files are stored under <Box component="code">assets/</Box>.
           </Typography>
+
+          <Alert severity="info">
+            Working locally first? Keep editing in Stage Builder and use <strong>Import JSON</strong> / <strong>Export JSON</strong> from the top bar. Browser drafts are only for recovery; export a JSON file when you want a local copy.
+          </Alert>
 
           {error && (
             <Alert
@@ -122,7 +129,10 @@ export function SaveToProviderDialog({
 
           {!connected && (
             <Alert severity="info" icon={<GitHubIcon fontSize="inherit" />}>
-              Connect GitHub first. FOSSBot uses a GitHub App so access can be limited to selected <Box component="code">fossbot-*</Box> repositories.
+              <Typography variant="body2" fontWeight={700}>Connect the GitHub App when you are ready to sync.</Typography>
+              <Typography variant="body2" component="div" sx={{ mt: 0.5 }}>
+                1. Connect your GitHub account. 2. Create or choose a public <Box component="code">fossbot-*</Box> repo. 3. Install the FOSSBot App on selected repositories only. 4. Return here and save.
+              </Typography>
             </Alert>
           )}
 
@@ -143,16 +153,28 @@ export function SaveToProviderDialog({
           )}
 
           {!remoteStage && connected && (
-            <TextField
-              label="Repository name"
-              size="small"
-              value={slug}
-              onChange={(event) => { setSlug(slugify(event.target.value)); setLinks(null); }}
-              InputProps={{ startAdornment: <Typography variant="body2" color="text.secondary" sx={{ mr: 0.25 }}>fossbot-</Typography> }}
-              helperText={`GitHub repository: fossbot-${slug || defaultSlug}`}
-              disabled={busy}
-              fullWidth
-            />
+            <Stack spacing={1.25}>
+              <TextField
+                label="Repository name"
+                size="small"
+                value={slug}
+                onChange={(event) => { setSlug(slugify(event.target.value)); setLinks(null); }}
+                InputProps={{ startAdornment: <Typography variant="body2" color="text.secondary" sx={{ mr: 0.25 }}>fossbot-</Typography> }}
+                helperText={`GitHub repository: fossbot-${slug || defaultSlug}`}
+                disabled={busy}
+                fullWidth
+              />
+              <Box sx={{ p: 1.25, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
+                <Typography variant="subtitle2" fontWeight={800}>Repository visibility</Typography>
+                <RadioGroup row value={visibility} onChange={(event) => setVisibility(event.target.value as ProviderRepoVisibility)}>
+                  <FormControlLabel value="public" control={<Radio size="small" />} label="Public" disabled={busy} />
+                  <FormControlLabel value="private" control={<Radio size="small" />} label="Private" disabled={busy} />
+                </RadioGroup>
+                <Typography variant="body2" color="text.secondary">
+                  Public stages can be opened by anyone with the link, tested from GitHub raw URLs, and published to the marketplace. Private stages stay in your GitHub account and can be reopened through your FOSSBot GitHub App connection; browser test links and marketplace publishing require public repos in v1.
+                </Typography>
+              </Box>
+            </Stack>
           )}
 
           {remoteStage && (
@@ -181,7 +203,7 @@ export function SaveToProviderDialog({
                 <Typography variant="body2" color="text.secondary">
                   {allReposSelected
                     ? 'GitHub currently grants this app access to all repositories. Use the install link below to switch to selected repositories and choose only this fossbot-* repo.'
-                    : 'Use these steps once. Future stage repos can be created from the editor automatically.'}
+                    : 'Use these steps once for the first repo. After the selected-repository installation is ready, future public stage repos can be created from the editor automatically.'}
                 </Typography>
                 {!links ? (
                   <Button variant="outlined" onClick={prepareBootstrap} disabled={linkBusy || !slug.trim()}>
@@ -216,7 +238,7 @@ export function SaveToProviderDialog({
         {!connected ? (
           <Button variant="contained" startIcon={<GitHubIcon />} onClick={onConnect}>Connect GitHub</Button>
         ) : (
-          <Button variant="contained" disabled={!canSave} onClick={() => onSave({ slug, commitMessage })}>
+          <Button variant="contained" disabled={!canSave} onClick={() => onSave({ slug, commitMessage, visibility })}>
             {busy ? 'Saving…' : remoteStage ? 'Save' : ready ? 'Create repo & save' : allReposSelected ? 'Reinstall with selected repos first' : 'Complete GitHub setup first'}
           </Button>
         )}

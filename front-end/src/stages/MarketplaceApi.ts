@@ -48,11 +48,35 @@ export interface MarketplaceStageEntry {
   updatedAt: string;
 }
 
+export interface MarketplaceIndexPagination {
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+  hasNext: boolean;
+  hasPrevious: boolean;
+}
+
+export interface MarketplaceTagCount {
+  tag: string;
+  count: number;
+}
+
 export interface MarketplaceIndexResponse {
   generatedAt: string;
   schemaVersion: number;
   stages: MarketplaceStageEntry[];
   warning?: string;
+  pagination?: MarketplaceIndexPagination;
+  tags?: MarketplaceTagCount[];
+}
+
+export interface MarketplaceIndexRequest {
+  page?: number;
+  pageSize?: number;
+  q?: string;
+  tag?: string;
+  sort?: 'updated' | 'published' | 'verified';
 }
 
 export interface PublishMarketplaceRequest {
@@ -65,11 +89,34 @@ export interface PublishMarketplaceRequest {
   commitMessage?: string;
 }
 
+export type MarketplacePullRequestState = 'open' | 'merged' | 'closed' | string;
+
+export interface MarketplacePullRequestSummary {
+  number?: number | null;
+  url?: string | null;
+  state?: MarketplacePullRequestState | null;
+  title?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  mergedAt?: string | null;
+}
+
+export interface MarketplaceStageStatusResponse {
+  repoOwner: string;
+  repoName: string;
+  entryPath: string;
+  entry?: MarketplaceStageEntry | null;
+  pullRequest?: MarketplacePullRequestSummary | null;
+  rawBaseUrl?: string | null;
+}
+
 export interface PublishMarketplaceResponse {
   entry: MarketplaceStageEntry;
   entryPath: string;
+  pullRequest?: MarketplacePullRequestSummary | null;
   pullRequestUrl?: string | null;
   pullRequestNumber?: number | null;
+  pullRequestState?: MarketplacePullRequestState | null;
   rawBaseUrl?: string | null;
 }
 
@@ -103,9 +150,27 @@ async function parseJsonResponse<T>(response: Response): Promise<T> {
   return payload as T;
 }
 
-export async function getMarketplaceIndex(): Promise<MarketplaceIndexResponse> {
-  const response = await fetch(`${backendUrl}/api/marketplace/index`, { method: 'GET' });
+export async function getMarketplaceIndex(request: MarketplaceIndexRequest = {}): Promise<MarketplaceIndexResponse> {
+  const params = new URLSearchParams();
+  if (request.page) params.set('page', String(request.page));
+  if (request.pageSize) params.set('pageSize', String(request.pageSize));
+  if (request.q) params.set('q', request.q);
+  if (request.tag) params.set('tag', request.tag);
+  if (request.sort) params.set('sort', request.sort);
+  const suffix = params.toString() ? `?${params.toString()}` : '';
+  const response = await fetch(`${backendUrl}/api/marketplace/index${suffix}`, { method: 'GET' });
   return parseJsonResponse<MarketplaceIndexResponse>(response);
+}
+
+export async function getMarketplaceStageStatus(token: string, owner: string, repo: string): Promise<MarketplaceStageStatusResponse> {
+  const response = await fetch(`${backendUrl}/api/marketplace/status/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+  });
+  return parseJsonResponse<MarketplaceStageStatusResponse>(response);
 }
 
 export async function publishStageToMarketplace(token: string, request: PublishMarketplaceRequest): Promise<PublishMarketplaceResponse> {
