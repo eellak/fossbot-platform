@@ -33,7 +33,9 @@ import { faPuzzlePiece } from '@fortawesome/free-solid-svg-icons';
 import ReactPlayer from 'react-player';
 import SuccessAlert from 'src/components/alerts/SuccessAlert';
 import ErrorAlert from 'src/components/alerts/ErrorAlert';
-import { Project } from 'src/authentication/AuthInterfaces';
+import { Project, type ProjectStageReference } from 'src/authentication/AuthInterfaces';
+import { loadStageFromProvider } from 'src/stages/StagesApi';
+import type { RawStageConfig } from 'src/simulator/stages';
 import { useMediaQuery } from '@mui/material';
 import ExecutionTargetPanel from 'src/components/robot/ExecutionTargetPanel';
 import PhysicalRobotTerminal from 'src/components/robot/PhysicalRobotTerminal';
@@ -50,6 +52,8 @@ const BlocklyPage = () => {
 
   const [projectTitle, setProjectTitle] = useState(t('newProject'));
   const [projectDescription, setProjectDescription] = useState(t('newProjectDescription'));
+  const [selectedStage, setSelectedStage] = useState<ProjectStageReference | null>(null);
+  const [initialStageConfig, setInitialStageConfig] = useState<RawStageConfig | null | undefined>(undefined);
   const [loading, setLoading] = useState(true); // Loading state of Blockly project
   const [isSimulatorLoading, setIsSimulatorLoading] = useState(true); // Loading state of Simulator
   const [showVideoPlayer, setShowVideoPlayer] = useState(false);
@@ -57,6 +61,7 @@ const BlocklyPage = () => {
 
   const runScriptRef = useRef<() => Promise<void>>();
   const auth = useAuth();
+  const { token } = auth;
   const authRef = useRef(auth);
   const translationRef = useRef(t);
   authRef.current = auth;
@@ -140,6 +145,7 @@ const BlocklyPage = () => {
               setEditorValue(fetchedProject.code);
             }
             setProjectTitle(fetchedProject.name);
+            setSelectedStage(fetchedProject.stageReference || null);
           }
         } else {
           //setEditorValue( '<xml xmlns="https://developers.google.com/blockly/xml"></xml>');
@@ -155,6 +161,36 @@ const BlocklyPage = () => {
 
     fetchProject();
   }, [projectId, navigate]);
+
+  useEffect(() => {
+    if (!token || !selectedStage?.repoOwner || !selectedStage?.repoName) {
+      setInitialStageConfig(undefined);
+      return;
+    }
+    if (selectedStage.sourceType !== 'github' && selectedStage.sourceType !== 'marketplace') {
+      setInitialStageConfig(undefined);
+      return;
+    }
+
+    setInitialStageConfig(undefined);
+    let cancelled = false;
+    loadStageFromProvider(token, selectedStage.repoOwner, selectedStage.repoName)
+      .then((loaded) => {
+        if (!cancelled) setInitialStageConfig(loaded.record.config);
+      })
+      .catch(() => {
+        if (!cancelled) setInitialStageConfig(undefined);
+      });
+    return () => { cancelled = true; };
+  }, [token, selectedStage?.repoOwner, selectedStage?.repoName, selectedStage?.sourceType]);
+
+  useEffect(() => {
+    const handleStageSelected = (event: Event) => {
+      setSelectedStage((event as CustomEvent<ProjectStageReference>).detail || null);
+    };
+    window.addEventListener('fossbot:stage-selected', handleStageSelected);
+    return () => window.removeEventListener('fossbot:stage-selected', handleStageSelected);
+  }, []);
 
   useEffect(() => {
     if (location.pathname.endsWith('/blockly-tutorial-page')) {
@@ -210,6 +246,7 @@ const BlocklyPage = () => {
           description: projectDescription,
           project_type: 'blockly',
           code: editorValue,
+          stageReference: selectedStage,
         });
         if (project) {
           handleShowSuccessAlert(t('alertMessages.projectUpdated'));
@@ -289,6 +326,7 @@ const BlocklyPage = () => {
         isDescriptionDisabled={true}
         editorInitialValue="blockly"
         code={editorValue}
+        stageReference={selectedStage}
       />
       <Box flexGrow={1}>
         <Grid
@@ -416,7 +454,12 @@ const BlocklyPage = () => {
               {target === 'robot' && terminalPanel}
 
               <ExecutionTargetPanel height="50vh">
-                <WebGLApp appsessionId={sessionId} onMountChange={handleMountChange} />
+                <WebGLApp
+                  appsessionId={sessionId}
+                  onMountChange={handleMountChange}
+                  initialStageUrl={selectedStage?.url || null}
+                  initialStageConfig={initialStageConfig}
+                />
               </ExecutionTargetPanel>
 
               {target === 'simulation' && terminalPanel}

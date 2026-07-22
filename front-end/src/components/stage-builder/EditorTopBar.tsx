@@ -7,6 +7,7 @@ import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import GitHubIcon from '@mui/icons-material/GitHub';
+import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import { activeValidationResults, validationSummary, type StageBuilderValidationResult } from './stageBuilderValidation';
 import { useEditorTheme } from './stageBuilderEditorTheme';
 
@@ -24,10 +25,15 @@ export interface EditorTopBarProps {
   onNew: () => void;
   onDemo: () => void;
   providerLabel?: string;
+  providerConnected?: boolean;
   providerBusy?: boolean;
   marketplaceBusy?: boolean;
+  marketplaceStatusLoading?: boolean;
+  marketplacePullRequest?: { number?: number | null; url?: string | null; state?: string | null } | null;
   onImport: () => void;
   onExport: () => void;
+  onRefreshGitHubStatus?: () => void;
+  onConnectProvider: () => void;
   onSaveProvider: () => void;
   onOpenProvider: () => void;
   onPublishMarketplace: () => void;
@@ -52,6 +58,13 @@ function useMenu() {
     openMenu: (event: React.MouseEvent<HTMLElement>) => setAnchorEl(event.currentTarget),
     closeMenu: () => setAnchorEl(null),
   };
+}
+
+function marketplacePrStateLabel(state?: string | null): string {
+  if (state === 'merged') return 'Merged';
+  if (state === 'closed') return 'Closed';
+  if (state === 'open') return 'Open';
+  return state ? state.charAt(0).toUpperCase() + state.slice(1) : 'Unknown';
 }
 
 function TopStatusText({ label, tone, onClick }: { label: string; tone: string; onClick?: () => void; }) {
@@ -103,10 +116,15 @@ export function EditorTopBar({
   onNew,
   onDemo,
   providerLabel,
+  providerConnected,
   providerBusy,
   marketplaceBusy,
+  marketplaceStatusLoading,
+  marketplacePullRequest,
   onImport,
   onExport,
+  onRefreshGitHubStatus,
+  onConnectProvider,
   onSaveProvider,
   onOpenProvider,
   onPublishMarketplace,
@@ -124,6 +142,7 @@ export function EditorTopBar({
 }: EditorTopBarProps) {
   const { colors: editorColors } = useEditorTheme();
   const overflow = useMenu();
+  const github = useMenu();
 
   const topbarIconButtonSx = {
     width: 32,
@@ -189,21 +208,51 @@ export function EditorTopBar({
       </Stack>
       <Stack direction="row" spacing={0.75} alignItems="center" sx={{ pl: 0.75, ml: 0.25 }}>
         <Button size="small" color="inherit" variant="outlined" startIcon={<FileDownloadIcon />} onClick={onExport} sx={exportButtonSx}>Export JSON</Button>
-        <Tooltip title={providerLabel || 'Save this stage to a fossbot-* GitHub repo'}>
+        <Tooltip title={providerLabel || 'GitHub actions'}>
           <span>
-            <Button size="small" color="inherit" variant="outlined" startIcon={<GitHubIcon />} onClick={onSaveProvider} disabled={providerBusy} sx={exportButtonSx}>{providerBusy ? 'GitHub…' : 'GitHub'}</Button>
+            <Button
+              size="small"
+              color="inherit"
+              variant="outlined"
+              startIcon={<GitHubIcon />}
+              endIcon={<KeyboardArrowDownIcon />}
+              onClick={(event) => { onRefreshGitHubStatus?.(); github.openMenu(event); }}
+              sx={exportButtonSx}
+            >
+              {providerBusy || marketplaceBusy || marketplaceStatusLoading ? 'GitHub…' : 'GitHub'}
+            </Button>
           </span>
         </Tooltip>
         <Button size="small" variant="contained" disableElevation startIcon={<PlayArrowIcon />} onClick={onRunTest} sx={runButtonSx}>Run Test</Button>
         <IconButton size="small" onClick={overflow.openMenu} sx={topbarIconButtonSx}><MoreVertIcon fontSize="small" /></IconButton>
       </Stack>
+      <Menu anchorEl={github.anchorEl} open={github.open} onClose={github.closeMenu}>
+        <Box sx={{ px: 2, py: 1.25, maxWidth: 360 }}>
+          <Typography variant="subtitle2" fontWeight={850}>GitHub</Typography>
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', wordBreak: 'break-word' }}>
+            {providerLabel || 'Connect GitHub to save and publish stages.'}
+          </Typography>
+        </Box>
+        <Divider />
+        {!providerConnected && <MenuItem disabled={providerBusy} onClick={() => { github.closeMenu(); onConnectProvider(); }}>{providerBusy ? 'Connecting…' : 'Connect GitHub…'}</MenuItem>}
+        <MenuItem disabled={providerBusy} onClick={() => { github.closeMenu(); onSaveProvider(); }}>{providerBusy ? 'Saving…' : 'Save to GitHub…'}</MenuItem>
+        <MenuItem disabled={providerBusy} onClick={() => { github.closeMenu(); onOpenProvider(); }}>Open from GitHub…</MenuItem>
+        <MenuItem disabled={marketplaceBusy} onClick={() => { github.closeMenu(); onPublishMarketplace(); }}>{marketplaceBusy ? 'Publishing…' : 'Publish to Marketplace…'}</MenuItem>
+        <Divider />
+        {marketplaceStatusLoading ? (
+          <MenuItem disabled>Checking marketplace PR…</MenuItem>
+        ) : marketplacePullRequest?.url ? (
+          <MenuItem component="a" href={marketplacePullRequest.url} target="_blank" rel="noreferrer" onClick={github.closeMenu}>
+            Marketplace PR #{marketplacePullRequest.number || '—'} · {marketplacePrStateLabel(marketplacePullRequest.state)}
+          </MenuItem>
+        ) : (
+          <MenuItem disabled>No marketplace PR for this stage</MenuItem>
+        )}
+      </Menu>
       <Menu anchorEl={overflow.anchorEl} open={overflow.open} onClose={overflow.closeMenu}>
         <MenuItem onClick={() => { overflow.closeMenu(); onNew(); }}>New stage</MenuItem>
         <MenuItem onClick={() => { overflow.closeMenu(); onDemo(); }}>Load demo</MenuItem>
         <MenuItem onClick={() => { overflow.closeMenu(); onImport(); }}>Import JSON…</MenuItem>
-        <MenuItem onClick={() => { overflow.closeMenu(); onOpenProvider(); }}>Open from GitHub…</MenuItem>
-        <MenuItem onClick={() => { overflow.closeMenu(); onSaveProvider(); }}>Save to GitHub…</MenuItem>
-        <MenuItem disabled={marketplaceBusy} onClick={() => { overflow.closeMenu(); onPublishMarketplace(); }}>{marketplaceBusy ? 'Publishing…' : 'Publish to Marketplace…'}</MenuItem>
         <Divider />
         <MenuItem disabled={!canUndo} onClick={() => { overflow.closeMenu(); onUndo(); }}>Undo</MenuItem>
         <MenuItem disabled={!canRedo} onClick={() => { overflow.closeMenu(); onRedo(); }}>Redo</MenuItem>
