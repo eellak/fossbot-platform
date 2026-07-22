@@ -17,11 +17,14 @@ from sqlalchemy.orm import Session
 from routers.stage_sources import (
     FOSSBOT_REPO_PREFIX,
     current_branch_commit_sha,
+    canonical_repo_identity,
+    ensure_repo_in_installation,
     ensure_public_repo,
     get_current_user,
     get_db,
     github_raw_base_url,
     github_stage_error,
+    installed_repo_for,
     probe_installation_repo_access,
     require_connection,
     stage_error,
@@ -57,6 +60,62 @@ class MarketplacePublishRequest(BaseModel):
 
 class MarketplaceUnpublishRequest(BaseModel):
     reason: Optional[str] = None
+
+
+class MarketplaceForkRequest(BaseModel):
+    repoOwner: str
+    repoName: str
+
+
+def marketplace_fork_status(provider, user_token: str, connection, entry: dict[str, Any]) -> dict[str, Any]:
+    fork = provider.get_repo(user_token, connection.provider_account_login, entry["repoName"], allowed_statuses=(404,))
+    if not fork:
+        return {"exists": False, "valid": False}
+
+    fork_owner, fork_name = canonical_repo_identity(fork)
+    parent = fork.get("parent") or {}
+    expected_parent = f"{entry['repoOwner']}/{entry['repoName']}"
+    valid = bool(fork.get("fork")) and parent.get("full_name") == expected_parent
+    status = {
+        "exists": True,
+        "valid": valid,
+        "repoOwner": fork_owner,
+        "repoName": fork_name,
+        "message": None if valid else f"{fork_owner}/{fork_name} already exists, but it is not a fork of {expected_parent}.",
+    }
+    if not valid:
+        return status
+
+    installed_fork = installed_repo_for(provider, user_token, connection, fork)
+    if not installed_fork:
+        return status | {
+            "appAccess": False,
+            "installationUrl": f"https://github.com/settings/installations/{connection.installation_id}",
+        }
+
+    installation_token = provider.create_installation_token(create_github_app_jwt(), connection.installation_id, installed_fork.get("id"))
+    status["appAccess"] = bool(provider.get_repo(installation_token, fork_owner, fork_name, allowed_statuses=(403, 404)))
+    if not status["appAccess"]:
+        status["installationUrl"] = f"https://github.com/settings/installations/{connection.installation_id}"
+        return status
+
+    status["setupComplete"] = False
+    branch = provider.get_branch(installation_token, fork_owner, fork_name, "fossbot-stage", allowed_statuses=(404,))
+    if not branch:
+        return status
+    try:
+        manifest, _ = provider.read_json_file(installation_token, fork_owner, fork_name, "fossbot.json", ref="fossbot-stage")
+    except GitHubApiError as error:
+        if error.status_code != 404:
+            raise
+        return status
+    forked_from = manifest.get("forkedFrom") or {}
+    status["setupComplete"] = (
+        forked_from.get("repoOwner") == entry["repoOwner"]
+        and forked_from.get("repoName") == entry["repoName"]
+        and forked_from.get("commitSha") == entry.get("commitSha")
+    )
+    return status
 
 
 def marketplace_owner() -> str:
@@ -168,6 +227,13 @@ def marketplace_entry_matches(entry: dict[str, Any], query: str, tag: Optional[s
         )
     ).lower()
     return query.lower() in haystack
+
+
+def published_marketplace_entry(owner: str, repo_name: str) -> dict[str, Any]:
+    for entry in cached_public_marketplace_index().get("stages") or []:
+        if entry.get("repoOwner") == owner and entry.get("repoName") == repo_name:
+            return entry
+    raise stage_error(404, "marketplace_stage_not_found", "That stage is no longer published in the marketplace.")
 
 
 def sort_marketplace_entries(entries: list[dict[str, Any]], sort: str) -> list[dict[str, Any]]:
@@ -464,6 +530,138 @@ async def marketplace_stage_status(owner: str, repo_name: str, current_user: Use
         raise stage_error(400, "validation_failed", str(error)) from error
     except GitHubApiError as error:
         raise github_stage_error(error) from error
+    except RuntimeError as error:
+        raise stage_error(503, "provider_unconfigured", str(error)) from error
+
+
+@router.get("/api/marketplace/fork/status/{owner}/{repo_name}")
+async def get_marketplace_fork_status(owner: str, repo_name: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    provider = get_provider("github_app")
+    try:
+        entry = published_marketplace_entry(owner, repo_name)
+        connection, user_token = require_connection(db, current_user)
+        return marketplace_fork_status(provider, user_token, connection, entry)
+    except HTTPException:
+        raise
+    except GitHubApiError as error:
+        raise github_stage_error(error) from error
+    except RuntimeError as error:
+        raise stage_error(503, "provider_unconfigured", str(error)) from error
+
+
+@router.post("/api/marketplace/fork/complete")
+async def complete_marketplace_fork(request: MarketplaceForkRequest, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    provider = get_provider("github_app")
+    try:
+        entry = published_marketplace_entry(request.repoOwner, request.repoName)
+        commit_sha = entry.get("commitSha")
+        if not commit_sha:
+            raise stage_error(400, "validation_failed", "This marketplace stage has no published revision to fork.")
+
+        connection, user_token = require_connection(db, current_user)
+        fork_status = marketplace_fork_status(provider, user_token, connection, entry)
+        if not fork_status["exists"]:
+            raise stage_error(404, "fork_not_found", "Create the fork on GitHub, then return here to finish setting it up.")
+        if not fork_status["valid"]:
+            raise stage_error(400, "validation_failed", fork_status["message"])
+        fork_owner = fork_status["repoOwner"]
+        fork_name = fork_status["repoName"]
+        if not fork_name.startswith(FOSSBOT_REPO_PREFIX):
+            raise stage_error(400, "validation_failed", "Marketplace forks must use a fossbot-* repository name.")
+        fork = provider.get_repo(user_token, fork_owner, fork_name, allowed_statuses=(404,))
+        if not fork:
+            raise stage_error(404, "fork_not_found", "The fork was removed before FOSSBot could finish setup.")
+        try:
+            installed_fork = ensure_repo_in_installation(provider, user_token, connection, fork, allow_add=True)
+        except HTTPException as error:
+            detail = error.detail if isinstance(error.detail, dict) else {}
+            if detail.get("error") == "repo_not_installed":
+                raise stage_error(
+                    403,
+                    "repo_not_installed",
+                    "Select the new fork in your FOSSBot GitHub App installation, then return here and try again.",
+                    extra={"installationUrl": f"https://github.com/settings/installations/{connection.installation_id}"},
+                ) from error
+            raise
+        fork_owner, fork_name = canonical_repo_identity(installed_fork)
+        installation_token = provider.create_installation_token(create_github_app_jwt(), connection.installation_id, installed_fork.get("id"))
+        probe_installation_repo_access(provider, installation_token, fork_owner, fork_name)
+
+        branch_name = "fossbot-stage"
+        existing_branch = provider.get_branch(installation_token, fork_owner, fork_name, branch_name, allowed_statuses=(404,))
+        if existing_branch:
+            manifest, _ = provider.read_json_file(installation_token, fork_owner, fork_name, "fossbot.json", ref=branch_name)
+            forked_from = manifest.get("forkedFrom") or {}
+            if (
+                forked_from.get("repoOwner") != entry["repoOwner"]
+                or forked_from.get("repoName") != entry["repoName"]
+                or forked_from.get("commitSha") != commit_sha
+            ):
+                raise stage_error(
+                    409,
+                    "fork_branch_conflict",
+                    "This fork already has a fossbot-stage branch for different stage content. Use a new fork or rename that branch before finishing setup.",
+                )
+            provider.update_repo(installation_token, fork_owner, fork_name, default_branch=branch_name)
+            return {
+                "repoOwner": fork_owner,
+                "repoName": fork_name,
+                "repoUrl": f"https://github.com/{fork_owner}/{fork_name}",
+                "commitSha": ((existing_branch.get("commit") or {}).get("sha")),
+                "rawBaseUrl": github_raw_base_url(fork_owner, fork_name, branch_name),
+                "private": False,
+                "visibility": "public",
+                "forkedFrom": forked_from,
+                "forkedBy": manifest.get("forkedBy") or {},
+            }
+
+        provider.create_ref(installation_token, fork_owner, fork_name, f"refs/heads/{branch_name}", commit_sha)
+        manifest, manifest_sha = provider.read_json_file(installation_token, fork_owner, fork_name, "fossbot.json", ref=branch_name)
+        manifest["storage"] = {
+            "provider": "github_app",
+            "repoOwner": fork_owner,
+            "repoName": fork_name,
+        }
+        manifest.pop("marketplace", None)
+        manifest["forkedFrom"] = {
+            "repoOwner": entry["repoOwner"],
+            "repoName": entry["repoName"],
+            "commitSha": commit_sha,
+            "forkedAt": utc_now_iso(),
+        }
+        manifest["forkedBy"] = {
+            "githubUsername": connection.provider_account_login,
+            "platformUsername": current_user.username,
+        }
+        fork_commit = provider.put_file(
+            installation_token,
+            fork_owner,
+            fork_name,
+            "fossbot.json",
+            json.dumps(manifest, indent=2).encode("utf-8"),
+            "chore(stage): record marketplace fork",
+            sha=manifest_sha,
+            branch=branch_name,
+        )
+        provider.update_repo(installation_token, fork_owner, fork_name, default_branch=branch_name)
+
+        return {
+            "repoOwner": fork_owner,
+            "repoName": fork_name,
+            "repoUrl": f"https://github.com/{fork_owner}/{fork_name}",
+            "commitSha": (fork_commit.get("commit") or {}).get("sha"),
+            "rawBaseUrl": github_raw_base_url(fork_owner, fork_name, branch_name),
+            "private": False,
+            "visibility": "public",
+            "forkedFrom": manifest["forkedFrom"],
+            "forkedBy": manifest["forkedBy"],
+        }
+    except HTTPException:
+        raise
+    except GitHubApiError as error:
+        raise github_stage_error(error) from error
+    except (ValueError, json.JSONDecodeError) as error:
+        raise stage_error(400, "validation_failed", str(error)) from error
     except RuntimeError as error:
         raise stage_error(503, "provider_unconfigured", str(error)) from error
 

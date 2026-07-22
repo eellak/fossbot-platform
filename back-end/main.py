@@ -41,6 +41,7 @@ from models.models import (
 from sqlalchemy.exc import IntegrityError, OperationalError
 from routers.stage_sources import (
     FOSSBOT_REPO_PREFIX,
+    github_raw_base_url,
     github_stage_error,
     require_connection,
     router as stage_sources_router,
@@ -847,7 +848,7 @@ def normalize_stage_reference(reference: Any, current_user: User, db: SessionLoc
             "visibility": "public",
             "marketplaceEntryPath": marketplace_entry_path(entry["repoOwner"], entry["repoName"]),
             "title": entry.get("title") or entry["repoName"],
-            "url": reference.url or entry.get("repoUrl"),
+            "url": f"{github_raw_base_url(entry['repoOwner'], entry['repoName'], entry['commitSha'])}/stage.json",
             "commitSha": entry.get("commitSha"),
         }
     raise stage_error(400, "validation_failed", "stageReference.sourceType must be default, github, or marketplace.")

@@ -77,7 +77,10 @@ def github_request(
     try:
         with urllib.request.urlopen(request, timeout=20) as response:
             raw = response.read().decode("utf-8")
-            parsed = json.loads(raw) if raw else None
+            try:
+                parsed = json.loads(raw) if raw else None
+            except json.JSONDecodeError as error:
+                raise GitHubApiError(response.status, "GitHub returned an unexpected response. Try again later.") from error
             return parsed, dict(response.headers), response.status
     except urllib.error.HTTPError as error:
         raw = error.read().decode("utf-8")
@@ -88,7 +91,7 @@ def github_request(
         headers = dict(error.headers)
         if error.code in allowed_statuses:
             return parsed, headers, error.code
-        message = parsed.get("message") if isinstance(parsed, dict) else str(parsed or error)
+        message = parsed.get("message") if isinstance(parsed, dict) else "GitHub returned an unexpected response. Try again later."
         rate_limit_code = github_rate_limit_code(error.code, message, headers)
         if rate_limit_code:
             retry_after = github_rate_limit_retry_after(headers)
@@ -157,6 +160,10 @@ class GitHubAppProvider:
         })
         return data
 
+    def update_repo(self, token: str, owner: str, repo: str, **changes: Any) -> dict[str, Any]:
+        data, _, _ = github_request("PATCH", f"/repos/{owner}/{repo}", token=token, body=changes)
+        return data
+
     def get_repo(self, token: str, owner: str, repo: str, allowed_statuses: tuple[int, ...] = ()) -> Optional[dict[str, Any]]:
         data, _, status = github_request("GET", f"/repos/{owner}/{repo}", token=token, allowed_statuses=allowed_statuses)
         if status in (403, 404):
@@ -189,10 +196,19 @@ class GitHubAppProvider:
         )
         return data["token"]
 
-    def get_file(self, token: str, owner: str, repo: str, path: str, allowed_statuses: tuple[int, ...] = (404,)) -> Optional[dict[str, Any]]:
+    def get_file(
+        self,
+        token: Optional[str],
+        owner: str,
+        repo: str,
+        path: str,
+        allowed_statuses: tuple[int, ...] = (404,),
+        ref: Optional[str] = None,
+    ) -> Optional[dict[str, Any]]:
+        query = f"?ref={urllib.parse.quote(ref, safe='')}" if ref else ""
         data, _, status = github_request(
             "GET",
-            f"/repos/{owner}/{repo}/contents/{encode_path(path)}",
+            f"/repos/{owner}/{repo}/contents/{encode_path(path)}{query}",
             token=token,
             allowed_statuses=allowed_statuses,
         )
@@ -200,8 +216,8 @@ class GitHubAppProvider:
             return None
         return data
 
-    def read_json_file(self, token: str, owner: str, repo: str, path: str) -> tuple[dict[str, Any], str]:
-        file_data = self.get_file(token, owner, repo, path, allowed_statuses=())
+    def read_json_file(self, token: Optional[str], owner: str, repo: str, path: str, ref: Optional[str] = None) -> tuple[dict[str, Any], str]:
+        file_data = self.get_file(token, owner, repo, path, allowed_statuses=(), ref=ref)
         if not file_data or file_data.get("encoding") != "base64":
             raise GitHubApiError(404, f"{path} not found or not base64 content")
         raw = base64.b64decode(file_data.get("content", "")).decode("utf-8")
