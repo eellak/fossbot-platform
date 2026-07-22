@@ -104,6 +104,14 @@ export function setSensorsMicRadius(v: boolean) {
   localStorage.setItem(SENSORS_MIC_RADIUS_KEY, String(v))
 }
 
+const SENSORS_MIC_HELPER_KEY = 'sim-v2.sensors.micHelper'
+export function getSensorsMicHelperDefault(): boolean {
+  return localStorage.getItem(SENSORS_MIC_HELPER_KEY) !== 'false'
+}
+export function setSensorsMicHelper(v: boolean) {
+  localStorage.setItem(SENSORS_MIC_HELPER_KEY, String(v))
+}
+
 const SENSORS_MIC_OVERRIDE_KEY = 'sim-v2.sensors.micOverride'
 /** 0 = no override. */
 export function getSensorsMicOverrideDefault(): number {
