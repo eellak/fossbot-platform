@@ -1,6 +1,7 @@
-from sqlalchemy import create_engine, Column, Integer, String,ForeignKey,DateTime,Enum,Boolean
+from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, DateTime, Enum, Boolean, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
+from sqlalchemy import inspect
 from models.models import UserRole
 import datetime
 import os
@@ -18,6 +19,25 @@ def getSessionLocal():
     return SessionLocal
 
 # Function to create the database tables
+def migrate_schema():
+    """Apply the additive auth schema required by this integration branch."""
+    inspector = inspect(engine)
+    table_columns = {t: {c['name'] for c in inspector.get_columns(t)} for t in inspector.get_table_names()}
+
+    if 'users' in table_columns:
+        cols = table_columns['users']
+        with engine.begin() as conn:
+            if 'firebase_uid' not in cols:
+                conn.execute(text("ALTER TABLE users ADD COLUMN firebase_uid VARCHAR"))
+            if 'provider' not in cols:
+                conn.execute(text("ALTER TABLE users ADD COLUMN provider VARCHAR NOT NULL DEFAULT 'local'"))
+            if 'access_revoked' not in cols:
+                conn.execute(text("ALTER TABLE users ADD COLUMN access_revoked BOOLEAN NOT NULL DEFAULT false"))
+            conn.execute(text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS ix_users_firebase_uid_unique "
+                "ON users (firebase_uid) WHERE firebase_uid IS NOT NULL"
+            ))
+
 def create_db_tables():
     Base.metadata.create_all(bind=engine)
 
@@ -34,6 +54,9 @@ class User(Base):
     beta_tester = Column(Boolean, default=False, nullable=False)
     image_url = Column(String)  # Added field for user's profile image URL
     activated = Column(Boolean, default=False, nullable=False)  # New activated column
+    firebase_uid = Column(String, unique=True, nullable=True)  # Firebase Auth UID for social-login users
+    provider = Column(String, nullable=False, default='local')  # Auth provider(s): 'local', 'google', 'github', or comma-separated
+    access_revoked = Column(Boolean, default=False, nullable=False)  # Blocks user login/access without deleting account
 
 class Projects(Base):
     __tablename__ = "projects"

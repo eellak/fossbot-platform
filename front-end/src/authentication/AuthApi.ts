@@ -1,4 +1,4 @@
-import { ActivatedData, BetaTesterData, LoginData, NewProjectData, PassswordData, RegisterData, RoleData, User, UserData } from './AuthInterfaces';
+import { AccessRevokedData, ActivatedData, BetaTesterData, FirebaseTokenData, LoginData, NewProjectData, PassswordData, RegisterData, RoleData, User, UserData } from './AuthInterfaces';
 
 const resolveBackendUrl = (): string => {
     const configuredUrl = process.env.REACT_APP_BACKEND_URL || '/api';
@@ -29,6 +29,18 @@ export const backendUrl = resolveBackendUrl();
 
 export async function login(data: LoginData) {
     const response = await fetch(`${backendUrl}/token`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data),
+    });
+
+    return response;
+}
+
+export async function loginWithFirebaseToken(data: FirebaseTokenData) {
+    const response = await fetch(`${backendUrl}/firebase-token`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -193,6 +205,17 @@ export async function updateUserBetaTesterStatusById(userId: number, data: BetaT
 
 export async function updateUserActivatedStatusById(userId: number, data: ActivatedData, token: string) {
     const response = await fetch(`${backendUrl}/users/${userId}/activated`, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(data),
+    });
+    return response;
+}
+export async function updateUserAccessRevokedStatusById(userId: number, data: AccessRevokedData, token: string) {
+    const response = await fetch(`${backendUrl}/users/${userId}/access_revoked`, {
         method: 'PUT',
         headers: {
             'Content-Type': 'application/json',

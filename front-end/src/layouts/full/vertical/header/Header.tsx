@@ -1,3 +1,4 @@
+import React from 'react';
 import { IconButton, Box, AppBar, useMediaQuery, Toolbar, styled, Stack } from '@mui/material';
 
 import { useSelector, useDispatch } from 'src/store/Store';

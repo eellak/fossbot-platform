@@ -58,13 +58,16 @@ const AuthRegister = ({ title, subtitle, subtext, onShowSuccessAlert, onShowErro
 
     try {
       // Call the Register function
-      auth.registerAction({
+      const result = await auth.registerAction({
         username: username,
         password: password,
         firstname: firstname,
         lastname: lasname,
         email: email,
       });
+      if (!result.success) {
+        onShowErrorAlert(result.detail);
+      }
     } catch (error) {
       // Handle errors (e.g., show an error message to the user)
       console.error('Register error:', error);

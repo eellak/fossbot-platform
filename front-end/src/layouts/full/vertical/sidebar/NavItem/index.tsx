@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { NavLink } from 'react-router-dom';
 
 // mui imports
@@ -49,30 +49,33 @@ const NavItem = ({ item, level, pathDirect, hideMenu, onClick }: ItemType) => {
   const itemIcon =
     level > 1 ? <Icon stroke={1.5} size="1rem" /> : <Icon stroke={1.5} size="1.3rem" />;
 
-  const ListItemStyled = styled(ListItemButton)(() => ({
-    whiteSpace: 'nowrap',
-    marginBottom: '2px',
-    padding: '8px 10px',
-    borderRadius: `${customizer.borderRadius}px`,
-    backgroundColor: level > 1 ? 'transparent !important' : 'inherit',
-    color:
-      level > 1 && pathDirect === item?.href
-        ? `${theme.palette.primary.main}!important`
-        : theme.palette.text.secondary,
-    paddingLeft: hideMenu ? '10px' : level > 2 ? `${level * 15}px` : '10px',
-    '&:hover': {
-      backgroundColor: theme.palette.primary.light,
-      color: theme.palette.primary.main,
-    },
-    '&.Mui-selected': {
-      color: 'white',
-      backgroundColor: theme.palette.primary.main,
+  const ListItemStyled = useMemo(
+    () => styled(ListItemButton)(() => ({
+      whiteSpace: 'nowrap',
+      marginBottom: '2px',
+      padding: '8px 10px',
+      borderRadius: `${customizer.borderRadius}px`,
+      backgroundColor: level > 1 ? 'transparent !important' : 'inherit',
+      color:
+        level > 1 && pathDirect === item?.href
+          ? `${theme.palette.primary.main}!important`
+          : theme.palette.text.secondary,
+      paddingLeft: hideMenu ? '10px' : level > 2 ? `${level * 15}px` : '10px',
       '&:hover': {
-        backgroundColor: theme.palette.primary.main,
-        color: 'white',
+        backgroundColor: theme.palette.primary.light,
+        color: theme.palette.primary.main,
       },
-    },
-  }));
+      '&.Mui-selected': {
+        color: 'white',
+        backgroundColor: theme.palette.primary.main,
+        '&:hover': {
+          backgroundColor: theme.palette.primary.main,
+          color: 'white',
+        },
+      },
+    })),
+    [customizer.borderRadius, level, pathDirect, item?.href, hideMenu, theme]
+  );
 
   const itemSubtitle = item?.subtitle ? t(item?.subtitle) : '';
 

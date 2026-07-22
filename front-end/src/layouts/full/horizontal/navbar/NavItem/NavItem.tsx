@@ -1,5 +1,5 @@
  
-import React from 'react';
+import React, { useMemo } from 'react';
 import { NavLink } from 'react-router-dom';
 
 // mui imports
@@ -38,26 +38,29 @@ const NavItem = ({ item, level, pathDirect, onClick }: ItemType) => {
   const itemIcon =
     level > 1 ? <Icon stroke={1.5} size="1rem" /> : <Icon stroke={1.5} size="1.1rem" />;
 
-  const ListItemStyled2 = styled(ListItem)(() => ({
-    padding: '5px 10px',
-    gap: '10px',
-    borderRadius: `${customizer.borderRadius}px`,
-    marginBottom: level > 1 ? '3px' : '0px',
-    color:
-      level > 1 && pathDirect === item.href ? `${theme.palette.primary.main}!important` : theme.palette.text.secondary,
+  const ListItemStyled2 = useMemo(
+    () => styled(ListItem)(() => ({
+      padding: '5px 10px',
+      gap: '10px',
+      borderRadius: `${customizer.borderRadius}px`,
+      marginBottom: level > 1 ? '3px' : '0px',
+      color:
+        level > 1 && pathDirect === item.href ? `${theme.palette.primary.main}!important` : theme.palette.text.secondary,
 
-    '&:hover': {
-      backgroundColor: theme.palette.primary.light,
-    },
-    '&.Mui-selected': {
-      color: level > 1 ? theme.palette.primary.main : 'white!important',
-      backgroundColor: level > 1 ? 'transparent' : theme.palette.primary.main,
       '&:hover': {
-        backgroundColor: level > 1 ? '' : theme.palette.primary.main,
-        color: 'white',
+        backgroundColor: theme.palette.primary.light,
       },
-    },
-  }));
+      '&.Mui-selected': {
+        color: level > 1 ? theme.palette.primary.main : 'white!important',
+        backgroundColor: level > 1 ? 'transparent' : theme.palette.primary.main,
+        '&:hover': {
+          backgroundColor: level > 1 ? '' : theme.palette.primary.main,
+          color: 'white',
+        },
+      },
+    })),
+    [customizer.borderRadius, level, pathDirect, item.href, theme]
+  );
 
   const listItemProps: {
     component: any;
