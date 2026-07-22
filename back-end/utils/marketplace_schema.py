@@ -1,4 +1,6 @@
 import datetime
+import hashlib
+import json
 import re
 from typing import Any, Optional
 
@@ -44,8 +46,26 @@ def marketplace_entry_path(repo_owner: str, repo_name: str) -> str:
     return path
 
 
-def raw_github_url(owner: str, repo: str, branch: str, path: str) -> str:
-    return f"https://raw.githubusercontent.com/{owner}/{repo}/{branch}/{path}"
+def raw_github_url(owner: str, repo: str, ref: str, path: str) -> str:
+    return f"https://raw.githubusercontent.com/{owner}/{repo}/{ref}/{path}"
+
+
+def canonical_marketplace_entry_hash(entry: dict[str, Any]) -> str:
+    reviewed_payload = {
+        "marketplaceVersion": entry.get("marketplaceVersion"),
+        "repoOwner": entry.get("repoOwner"),
+        "repoName": entry.get("repoName"),
+        "defaultBranch": entry.get("defaultBranch"),
+        "commitSha": entry.get("commitSha"),
+        "title": entry.get("title"),
+        "description": entry.get("description"),
+        "tags": entry.get("tags") or [],
+        "previewPath": entry.get("previewPath"),
+        "author": entry.get("author") or {},
+        "forkedFrom": entry.get("forkedFrom"),
+    }
+    canonical_json = json.dumps(reviewed_payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return f"sha256:{hashlib.sha256(canonical_json.encode('utf-8')).hexdigest()}"
 
 
 def build_marketplace_entry(
@@ -75,7 +95,7 @@ def build_marketplace_entry(
         raise MarketplaceSchemaError("Marketplace validation state is invalid")
 
     first_published_at = published_at or (previous_entry or {}).get("publishedAt") or utc_now_iso()
-    preview_url = raw_github_url(repo_owner, repo_name, default_branch, preview_path) if preview_path else None
+    preview_url = raw_github_url(repo_owner, repo_name, commit_sha, preview_path) if preview_path else None
     validation_metadata = validation or {
         "state": validation_state,
         "commitSha": commit_sha,
@@ -83,11 +103,12 @@ def build_marketplace_entry(
         "checkRunUrl": None,
         "message": "Pending marketplace CI validation.",
     }
-    verification_metadata = verification or (previous_entry or {}).get("verification") or {
+    verification_metadata = verification or {
         "verified": bool(verified),
         "reviewedAt": None,
         "reviewedBy": None,
         "reviewPullRequest": None,
+        "reviewedEntryHash": None,
     }
     verification_metadata["verified"] = bool(verified)
     source_status_metadata = source_status or {
@@ -151,6 +172,8 @@ def validate_marketplace_entry(entry: dict[str, Any]) -> None:
     verification = entry.get("verification") or {}
     if verification and verification.get("verified") != badges.get("verified"):
         raise MarketplaceSchemaError("Marketplace verification metadata must match badge state")
+    if badges.get("verified") and verification.get("reviewedEntryHash") != canonical_marketplace_entry_hash(entry):
+        raise MarketplaceSchemaError("Marketplace verified badge must match the reviewed entry hash")
     source_status = entry.get("sourceStatus") or {}
     if source_status and source_status.get("state") not in SOURCE_STATUS_STATES:
         raise MarketplaceSchemaError("Marketplace source status is invalid")

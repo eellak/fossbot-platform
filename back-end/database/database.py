@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, DateTime, Enum, Boolean, text, UniqueConstraint
+from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, DateTime, Enum, Boolean, Text, text, UniqueConstraint
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 from sqlalchemy import inspect
@@ -113,6 +113,81 @@ class SourceProviderConnection(Base):
     created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow, nullable=False)
     user = relationship("User")
+
+
+class MarketplaceRoleAssignment(Base):
+    __tablename__ = "marketplace_role_assignments"
+    __table_args__ = (UniqueConstraint('user_id', 'role', name='uq_marketplace_role_assignment'),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    role = Column(String, nullable=False)
+    assigned_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+    user = relationship("User")
+
+
+class MarketplaceReport(Base):
+    __tablename__ = "marketplace_reports"
+
+    id = Column(Integer, primary_key=True, index=True)
+    repo_owner = Column(String, nullable=False)
+    repo_name = Column(String, nullable=False)
+    commit_sha = Column(String, nullable=False)
+    category = Column(String, nullable=False)
+    explanation = Column(Text, nullable=False)
+    reporter_contact = Column(String)
+    reporter_user_id = Column(Integer, ForeignKey('users.id'))
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+    resolved_at = Column(DateTime)
+    reporter = relationship("User")
+
+
+class MarketplaceModerationOverride(Base):
+    __tablename__ = "marketplace_moderation_overrides"
+    __table_args__ = (UniqueConstraint('repo_owner', 'repo_name', name='uq_marketplace_moderation_override'),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    repo_owner = Column(String, nullable=False)
+    repo_name = Column(String, nullable=False)
+    state = Column(String, nullable=False)
+    active = Column(Boolean, default=True, nullable=False)
+    reason = Column(Text, nullable=False)
+    moderator_user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow, nullable=False)
+    moderator = relationship("User")
+
+
+class MarketplaceModerationAction(Base):
+    __tablename__ = "marketplace_moderation_actions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    repo_owner = Column(String, nullable=False)
+    repo_name = Column(String, nullable=False)
+    action = Column(String, nullable=False)
+    reason = Column(Text, nullable=False)
+    moderator_user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    report_id = Column(Integer, ForeignKey('marketplace_reports.id'))
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+    moderator = relationship("User")
+    report = relationship("MarketplaceReport")
+
+
+class MarketplaceVerificationRequest(Base):
+    __tablename__ = "marketplace_verification_requests"
+    __table_args__ = (UniqueConstraint('repo_owner', 'repo_name', 'commit_sha', name='uq_marketplace_verification_request'),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    repo_owner = Column(String, nullable=False)
+    repo_name = Column(String, nullable=False)
+    commit_sha = Column(String, nullable=False)
+    status = Column(String, nullable=False, default="requested")
+    requested_by_user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    requested_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+    review_pr_number = Column(Integer)
+    review_pr_url = Column(String)
+    reviewed_at = Column(DateTime)
+    requested_by = relationship("User")
 
 class Projects(Base):
     __tablename__ = "projects"

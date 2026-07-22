@@ -9,7 +9,8 @@ import {
   IconLayoutDashboard,
   IconAlbum,
   IconHandGrab,
-  IconMap
+  IconMap,
+  IconWorld
 } from '@tabler/icons-react';
 
 interface MenuitemsType {
@@ -46,6 +47,12 @@ const Menuitems: MenuitemsType[] = [
     icon: IconLayoutDashboard,
     href: '/dashboard',
     chipColor: 'secondary',
+  },
+  {
+    id: uniqueId(),
+    title: 'Stages',
+    icon: IconWorld,
+    href: '/stages',
   },
   {
     navlabel: true,

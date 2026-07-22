@@ -9,6 +9,7 @@ import {
   DialogContent,
   DialogTitle,
   Link,
+  MenuItem,
   Stack,
   TextField,
   Typography,
@@ -22,6 +23,7 @@ export interface PublishMarketplaceValues {
   description: string;
   tags: string[];
   previewDataUrl?: string | null;
+  sharingLicense: 'CC-BY-4.0' | 'CC0-1.0';
   commitMessage?: string;
 }
 
@@ -83,6 +85,7 @@ export function PublishToMarketplaceDialog({
   const [tagText, setTagText] = useState('');
   const [previewDataUrl, setPreviewDataUrl] = useState<string | null>(null);
   const [previewError, setPreviewError] = useState('');
+  const [sharingLicense, setSharingLicense] = useState<'CC-BY-4.0' | 'CC0-1.0'>('CC-BY-4.0');
   const [commitMessage, setCommitMessage] = useState('');
 
   useEffect(() => {
@@ -92,12 +95,13 @@ export function PublishToMarketplaceDialog({
     setTagText('');
     setPreviewDataUrl(null);
     setPreviewError('');
+    setSharingLicense('CC-BY-4.0');
     setCommitMessage('');
   }, [open, stageDescription, stageTitle]);
 
   const tags = useMemo(() => splitTags(tagText), [tagText]);
   const isPrivateStage = !!remoteStage?.private;
-  const canPublish = !!remoteStage && !isPrivateStage && !!title.trim() && !busy;
+  const canPublish = !!remoteStage && !isPrivateStage && !!title.trim() && !busy && !result?.pullRequestUrl;
 
   const handlePreviewFile = async (file?: File | null) => {
     setPreviewError('');
@@ -190,6 +194,20 @@ export function PublishToMarketplaceDialog({
             </Stack>
           )}
 
+          <TextField
+            select
+            label="Marketplace sharing license"
+            size="small"
+            value={sharingLicense}
+            onChange={(event) => setSharingLicense(event.target.value as 'CC-BY-4.0' | 'CC0-1.0')}
+            helperText="Publishing writes this choice to LICENSE so the pinned revision can be validated."
+            disabled={busy || !remoteStage}
+            fullWidth
+          >
+            <MenuItem value="CC-BY-4.0">CC BY 4.0 — reuse with credit</MenuItem>
+            <MenuItem value="CC0-1.0">CC0 1.0 — reuse without required credit</MenuItem>
+          </TextField>
+
           <Box sx={{ p: 1.25, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
             <Stack spacing={1}>
               <Typography variant="subtitle2" fontWeight={800}>Preview PNG</Typography>
@@ -220,9 +238,9 @@ export function PublishToMarketplaceDialog({
           variant="contained"
           startIcon={<StorefrontIcon />}
           disabled={!canPublish}
-          onClick={() => onPublish({ title, description, tags, previewDataUrl, commitMessage })}
+          onClick={() => onPublish({ title, description, tags, previewDataUrl, sharingLicense, commitMessage })}
         >
-          {busy ? 'Publishing…' : lifecycle?.state === 'changes_ready_to_publish' ? 'Publish changes' : 'Open review PR'}
+          {busy ? 'Publishing…' : result?.pullRequestUrl ? 'Review PR open' : lifecycle?.state === 'changes_ready_to_publish' ? 'Publish changes' : 'Open review PR'}
         </Button>
       </DialogActions>
     </Dialog>

@@ -1,4 +1,4 @@
-import React, { useContext, createContext, useEffect, useState, useMemo, useRef, ReactNode } from 'react';
+import React, { useContext, createContext, useEffect, useState, useMemo, ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   LoginData,
@@ -13,9 +13,9 @@ import {
   BetaTesterData,
   ActivatedData,
   AccessRevokedData,
+  MarketplaceRole,
   FirebaseProviderName,
   LoginResponse,
-  AuthStatus,
 } from './AuthInterfaces';
 import {
   createProject,
@@ -34,16 +34,11 @@ import {
   updateUserRoleById,
   updateUserBetaTesterStatusById,
   updateUserActivatedStatusById,
-  updateUserAccessRevokedStatusById
+  updateUserAccessRevokedStatusById,
+  updateUserMarketplaceRolesById
 } from './AuthApi';
-import {
-  getEmailFromFirebaseError,
-  getPendingCredentialFromError,
-  linkFirebaseProviderCollision,
-  signInWithFirebaseProvider,
-  signOutFromFirebase,
-  subscribeToFirebaseAuthState,
-} from './firebase';
+import { signInWithFirebaseProvider, signOutFromFirebase, subscribeToFirebaseAuthState } from './firebase';
+import { clearUserStageCaches } from 'src/stages/stageListCache';
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const revokedAccessMessage = 'Your access to the platform has been revoked.';
@@ -87,8 +82,6 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
   const localStorageName = 'fossbot-platform';
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string>(localStorage.getItem(localStorageName) || '');
-  const [authStatus, setAuthStatus] = useState<AuthStatus>('loading');
-  const firebaseLoginInProgress = useRef(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -98,30 +91,6 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
       localStorage.removeItem(localStorageName);
     }
   }, [token]);
-
-  const clearSession = () => {
-    setUser(null);
-    setToken('');
-    setAuthStatus('unauthenticated');
-    localStorage.removeItem(localStorageName);
-  };
-
-  const loadAuthenticatedUser = async (accessToken: string) => {
-    const response = await getUserData(accessToken);
-    const userData = await response.json();
-
-    if (!response.ok) {
-      if (userData.detail === revokedAccessMessage) {
-        clearSession();
-        signOutFromFirebase().catch(console.error);
-      }
-      throw new Error(userData.detail || 'Failed to fetch user data');
-    }
-
-    setUser(userData);
-    setAuthStatus('authenticated');
-    return userData;
-  };
 
   const exchangeFirebaseToken = async (idToken: string, firebaseUser) => {
     const response = await loginWithFirebaseToken({
@@ -143,14 +112,14 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
 
   useEffect(() => {
     const unsubscribe = subscribeToFirebaseAuthState(async (firebaseUser) => {
-      if (!firebaseUser || firebaseLoginInProgress.current) {
+      if (!firebaseUser) {
         return;
       }
 
       try {
         const idToken = await firebaseUser.getIdToken();
-        const accessToken = await exchangeFirebaseToken(idToken, firebaseUser);
-        await loadAuthenticatedUser(accessToken);
+        await exchangeFirebaseToken(idToken, firebaseUser);
+        setUser(firebaseUserToUser(firebaseUser));
       } catch (err) {
         console.error(err);
         signOutFromFirebase().catch(console.error);
@@ -163,18 +132,28 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
   useEffect(() => {
     const fetchUserData = async () => {
       try {
-        await loadAuthenticatedUser(token);
+        const response = await getUserData(token);
+        const userData = await response.json(); // Extract the user data from the response
+
+        if (!response.ok) {
+          if (userData.detail === revokedAccessMessage) {
+            setUser(null);
+            setToken('');
+            localStorage.removeItem(localStorageName);
+            clearUserStageCaches();
+            signOutFromFirebase().catch(console.error);
+          }
+          throw new Error(userData.detail || 'Failed to fetch user data');
+        }
+
+        setUser(userData); // Set the user data in the state
       } catch (error) {
         console.error('Error fetching user data:', error);
-        clearSession();
       }
     };
 
     if (token) {
-      setAuthStatus('loading');
       fetchUserData();
-    } else {
-      setAuthStatus('unauthenticated');
     }
   }, [token]);
 
@@ -206,12 +185,11 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
         return { success: true, detail: '' };
       }
 
-      firebaseLoginInProgress.current = true;
       const credential = await signInWithFirebaseProvider(provider);
       const idToken = await credential.user.getIdToken();
 
-      const accessToken = await exchangeFirebaseToken(idToken, credential.user);
-      await loadAuthenticatedUser(accessToken);
+      await exchangeFirebaseToken(idToken, credential.user);
+      setUser(firebaseUserToUser(credential.user));
       navigate('/dashboard');
 
       return { success: true, detail: '' };
@@ -219,29 +197,7 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
       console.error(err);
 
       if (err?.code === 'auth/account-exists-with-different-credential') {
-        try {
-          const pendingCredential = getPendingCredentialFromError(err);
-          const email = getEmailFromFirebaseError(err);
-
-          if (!pendingCredential || !email) {
-            throw new Error('Could not prepare provider linking for this email.');
-          }
-
-          const linkedCredential = await linkFirebaseProviderCollision(email, pendingCredential);
-          const idToken = await linkedCredential.user.getIdToken(true);
-          const accessToken = await exchangeFirebaseToken(idToken, linkedCredential.user);
-          await loadAuthenticatedUser(accessToken);
-          navigate('/dashboard');
-
-          return { success: true, detail: '' };
-        } catch (linkError) {
-          console.error(linkError);
-          signOutFromFirebase().catch(console.error);
-          return {
-            success: false,
-            detail: linkError instanceof Error ? linkError.message : 'Could not link this sign-in provider.',
-          };
-        }
+        return { success: false, detail: 'An account with this email already exists.' };
       }
 
       signOutFromFirebase().catch(console.error);
@@ -252,7 +208,10 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
 
   const logOutAction = () => {
     signOutFromFirebase().catch(console.error);
-    clearSession();
+    setUser(null);
+    setToken('');
+    localStorage.removeItem(localStorageName);
+    clearUserStageCaches();
     navigate('/');
   };
 
@@ -420,6 +379,17 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
     }
   };
 
+  const updateUserMarketplaceRoles = async (userId: number, roles: MarketplaceRole[]): Promise<User | undefined> => {
+    try {
+      const response = await updateUserMarketplaceRolesById(userId, roles, token);
+      if (response.status === 200) return await response.json();
+      throw new Error('Marketplace role update failed');
+    } catch (error) {
+      console.error(error);
+      return undefined;
+    }
+  };
+
   const updateUserPassword = async (data: PassswordData): Promise<User | undefined> => {
     try {
       const response = await updateUserPasswordData(data, token);
@@ -504,8 +474,6 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
     () => ({
       token,
       user,
-      authStatus,
-      isAuthenticated: authStatus === 'authenticated',
       loginAction,
       loginWithFirebaseAction,
       registerAction,
@@ -522,13 +490,14 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
       deleteUserByIdAction,
       updateUserBetaTesterStatus,
       updateUserRole,
+      updateUserMarketplaceRoles,
       updateUserActivatedStatus,
       updateUserAccessRevokedStatus,
     }),
-    [token, user, authStatus, loginAction, loginWithFirebaseAction, registerAction, createProjectAction, getProjectsAction,
+    [token, user, loginAction, loginWithFirebaseAction, registerAction, createProjectAction, getProjectsAction,
       deleteProjectByIdAction, getProjectByIdAction, updateProjectByIdAction, logOutAction,
       getUserDataAction, updateUser, updateUserPassword, getAllUsers, deleteUserByIdAction,
-      updateUserBetaTesterStatus, updateUserRole, updateUserActivatedStatus, updateUserAccessRevokedStatus]
+      updateUserBetaTesterStatus, updateUserRole, updateUserMarketplaceRoles, updateUserActivatedStatus, updateUserAccessRevokedStatus]
   );
 
   return (

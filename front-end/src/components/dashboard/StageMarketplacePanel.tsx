@@ -149,7 +149,7 @@ function MarketplaceStageCard({ entry, onSelect }: { entry: MarketplaceStageEntr
       }}
     >
       <StagePreview entry={entry} />
-      <Stack spacing={1.25} sx={{ p: 2, flex: 1 }}>
+      <Stack spacing={1.5} sx={{ p: 2, flex: 1 }}>
         <Stack direction="row" alignItems="flex-start" justifyContent="space-between" spacing={1}>
           <Box sx={{ minWidth: 0 }}>
             <Typography variant="subtitle1" fontWeight={800} noWrap title={entry.title}>{entry.title}</Typography>
@@ -371,7 +371,7 @@ function MarketplaceDetailDrawer({
   );
 }
 
-export default function StageMarketplacePanel() {
+export default function StageMarketplacePanel({ embedded = false }: { embedded?: boolean }) {
   const { token, user } = useAuth();
   const userKey = stageListUserKey(user);
   const navigate = useNavigate();
@@ -520,7 +520,7 @@ export default function StageMarketplacePanel() {
     : null;
 
   return (
-    <Box sx={{ mt: 3 }}>
+    <Box sx={embedded ? undefined : { mt: 3 }}>
       <Stack direction={{ xs: 'column', md: 'row' }} justifyContent="space-between" spacing={2} sx={{ mb: 2 }}>
         <Box>
           <Typography variant="h5" fontWeight={850}>Stage library</Typography>

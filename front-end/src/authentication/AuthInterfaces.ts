@@ -17,6 +17,7 @@ export interface AuthContextType {
     getAllUsers: () => Promise<User[] | undefined>;
     deleteUserByIdAction: (projectId: number) => Promise<boolean>;
     updateUserRole: (userId: number, data: RoleData) => Promise<User | undefined>;
+    updateUserMarketplaceRoles: (userId: number, roles: MarketplaceRole[]) => Promise<User | undefined>;
     updateUserBetaTesterStatus: (userId: number, beta_tester: BetaTesterData) => Promise<boolean>;
     updateUserActivatedStatus: (userId: number, activated: ActivatedData) => Promise<boolean>;
     updateUserAccessRevokedStatus: (userId: number, access_revoked: AccessRevokedData) => Promise<boolean>;
@@ -100,6 +101,7 @@ export interface User {
     firebase_uid?: string;
     provider: string;
     access_revoked: boolean;
+    marketplace_roles?: MarketplaceRole[];
 }
 
 export interface UserData {
@@ -122,6 +124,8 @@ export enum UserRole {
 export interface RoleData {
     role: UserRole;
 }
+
+export type MarketplaceRole = 'verifier' | 'moderator';
 
 export interface BetaTesterData {
     beta_tester: boolean;

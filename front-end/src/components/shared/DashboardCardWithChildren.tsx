@@ -14,6 +14,7 @@ type Props = {
   headsubtitle?: string | JSX.Element;
   children?: React.ReactNode;
   middlecontent?: string | JSX.Element;
+  compact?: boolean;
 };
 
 const DashboardCard = ({
@@ -26,6 +27,7 @@ const DashboardCard = ({
   headtitle,
   headsubtitle,
   middlecontent,
+  compact = false,
 }: Props) => {
   const customizer = useSelector((state: AppState) => state.customizer);
 
@@ -46,14 +48,14 @@ const DashboardCard = ({
           </Typography>
         </CardContent>
       ) : (
-        <CardContent sx={{ p: '30px' }}>
+        <CardContent sx={{ p: compact ? 3 : '30px' }}>
           {title ? (
             <Stack
               direction="row"
               spacing={2}
               justifyContent="space-between"
               alignItems={'center'}
-              mb={3}
+              mb={compact ? 2 : 3}
             >
               <Box>
                 {title ? <Typography variant="h5">{title}</Typography> : ''}

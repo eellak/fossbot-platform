@@ -20,7 +20,7 @@ import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import CancelOutlinedIcon from '@mui/icons-material/CancelOutlined';
 import DashboardCard from '../shared/DashboardCardWithChildren';
 import { useAuth } from 'src/authentication/AuthProvider';
-import { cancelUnpublishStageRequest, unpublishStageFromMarketplace, type MyMarketplaceStage } from 'src/stages/MarketplaceApi';
+import { cancelMarketplaceVerificationRequest, cancelUnpublishStageRequest, requestMarketplaceVerification, unpublishStageFromMarketplace, type MyMarketplaceStage } from 'src/stages/MarketplaceApi';
 import {
   invalidateMarketplaceFirstPage,
   invalidateMyMarketplaceStages,
@@ -44,7 +44,7 @@ function lifecycleChip(stage: MyMarketplaceStage): { label: string; color: 'succ
   }
 }
 
-export default function PublishedMarketplaceStagesPanel() {
+export default function PublishedMarketplaceStagesPanel({ embedded = false }: { embedded?: boolean }) {
   const { token, user } = useAuth();
   const userKey = stageListUserKey(user);
   const [stages, setStages] = useState<MyMarketplaceStage[]>([]);
@@ -56,6 +56,7 @@ export default function PublishedMarketplaceStagesPanel() {
   const [unpublishReason, setUnpublishReason] = useState('');
   const [cancellingStage, setCancellingStage] = useState<MyMarketplaceStage | null>(null);
   const [cancelling, setCancelling] = useState(false);
+  const [verifyingStage, setVerifyingStage] = useState<string | null>(null);
 
   useEffect(() => {
     if (!userKey) {
@@ -124,19 +125,52 @@ export default function PublishedMarketplaceStagesPanel() {
     }
   };
 
+  const requestVerification = async (stage: MyMarketplaceStage) => {
+    if (!token || !userKey) return;
+    const label = `${stage.entry.repoOwner}/${stage.entry.repoName}`;
+    setVerifyingStage(label);
+    setError('');
+    try {
+      await requestMarketplaceVerification(token, stage.entry.repoOwner, stage.entry.repoName);
+      invalidateMyMarketplaceStages(userKey);
+      await refreshMyMarketplaceStages(userKey, token, { force: true });
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'Could not request verification.');
+    } finally {
+      setVerifyingStage(null);
+    }
+  };
+
+  const cancelVerification = async (stage: MyMarketplaceStage) => {
+    if (!token || !userKey) return;
+    const label = `${stage.entry.repoOwner}/${stage.entry.repoName}`;
+    setVerifyingStage(label);
+    setError('');
+    try {
+      await cancelMarketplaceVerificationRequest(token, stage.entry.repoOwner, stage.entry.repoName);
+      invalidateMyMarketplaceStages(userKey);
+      await refreshMyMarketplaceStages(userKey, token, { force: true });
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'Could not cancel the verification request.');
+    } finally {
+      setVerifyingStage(null);
+    }
+  };
+
   return (
-    <Box sx={{ mt: 3 }}>
+    <Box sx={embedded ? undefined : { mt: 3 }}>
       <DashboardCard
         title="Published marketplace stages"
         subtitle="Stages you have published to the marketplace. Source changes stay private until you publish them through review."
         action={<Button size="small" startIcon={refreshing ? <CircularProgress size={16} color="inherit" /> : <RefreshIcon />} onClick={refresh} disabled={refreshing}>Refresh stages</Button>}
+        compact={embedded}
       >
-        {error && <Alert severity="error" sx={{ mb: 1.25 }}>{error}</Alert>}
-        {warning && <Alert severity={stages.length ? 'warning' : 'info'} sx={{ mb: 1.25 }}>{warning}</Alert>}
+        {error && <Alert severity="error" sx={{ mb: 1.5 }}>{error}</Alert>}
+        {warning && <Alert severity={stages.length ? 'warning' : 'info'} sx={{ mb: 1.5 }}>{warning}</Alert>}
         {!stages.length && !refreshing ? (
           <Typography variant="body2" color="text.secondary">You have not published a stage yet. Publish a saved public stage from Stage Builder.</Typography>
         ) : (
-          <Stack spacing={1.25}>
+          <Stack spacing={1.5}>
             {refreshing && <Typography variant="caption" color="text.secondary">Refreshing…</Typography>}
             {stages.map((stage) => {
               const status = lifecycleChip(stage);
@@ -163,6 +197,9 @@ export default function PublishedMarketplaceStagesPanel() {
                       <Button size="small" color="error" variant="text" startIcon={<DeleteOutlineIcon />} disabled={unpublishing === label || unpublishRequested} onClick={() => { setUnpublishReason(''); setUnpublishStage(stage); }}>
                         {unpublishing === label ? 'Requesting…' : unpublishRequested ? 'Unpublish requested' : 'Unpublish'}
                       </Button>
+                      {!stage.entry.badges.verified && <Button size="small" variant="text" disabled={verifyingStage === label} onClick={() => stage.verificationRequest ? cancelVerification(stage) : requestVerification(stage)}>
+                        {verifyingStage === label ? (stage.verificationRequest ? 'Cancelling…' : 'Requesting…') : stage.verificationRequest ? 'Cancel verification request' : 'Request verification'}
+                      </Button>}
                       {unpublishRequested && (
                         <Button size="small" variant="text" startIcon={<CancelOutlinedIcon />} disabled={cancelling} onClick={() => setCancellingStage(stage)}>
                           Cancel request

@@ -166,6 +166,17 @@ export async function updateUserRoleById(userId: number, data: RoleData, token: 
     return response;
 }
 
+export async function updateUserMarketplaceRolesById(userId: number, roles: string[], token: string) {
+    return fetch(`${backendUrl}/users/${userId}/marketplace-roles`, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ roles }),
+    });
+}
+
 export async function updateUserBetaTesterStatusById(userId: number, data: BetaTesterData, token: string) {
     const response = await fetch(`${backendUrl}/users/${userId}/beta_tester`, {
         method: 'PUT',

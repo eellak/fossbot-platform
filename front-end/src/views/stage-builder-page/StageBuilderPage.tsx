@@ -1060,7 +1060,7 @@ const StageBuilderPage = () => {
     }
   };
 
-  const handlePublishMarketplace = async ({ title, description, tags, previewDataUrl, commitMessage }: PublishMarketplaceValues) => {
+  const handlePublishMarketplace = async ({ title, description, tags, previewDataUrl, sharingLicense, commitMessage }: PublishMarketplaceValues) => {
     if (!token) {
       setMarketplaceError('Sign in before publishing to the marketplace.');
       return;
@@ -1080,6 +1080,7 @@ const StageBuilderPage = () => {
         description,
         tags,
         previewDataUrl,
+        sharingLicense,
         commitMessage,
       });
       setMarketplaceResult(result);
