@@ -6,6 +6,7 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
+import GitHubIcon from '@mui/icons-material/GitHub';
 import { activeValidationResults, validationSummary, type StageBuilderValidationResult } from './stageBuilderValidation';
 import { useEditorTheme } from './stageBuilderEditorTheme';
 
@@ -22,8 +23,12 @@ export interface EditorTopBarProps {
   onBack: () => void;
   onNew: () => void;
   onDemo: () => void;
+  providerLabel?: string;
+  providerBusy?: boolean;
   onImport: () => void;
   onExport: () => void;
+  onSaveProvider: () => void;
+  onOpenProvider: () => void;
   onRunTest: () => void;
   onUndo: () => void;
   onRedo: () => void;
@@ -95,8 +100,12 @@ export function EditorTopBar({
   onBack,
   onNew,
   onDemo,
+  providerLabel,
+  providerBusy,
   onImport,
   onExport,
+  onSaveProvider,
+  onOpenProvider,
   onRunTest,
   onUndo,
   onRedo,
@@ -176,6 +185,11 @@ export function EditorTopBar({
       </Stack>
       <Stack direction="row" spacing={0.75} alignItems="center" sx={{ pl: 0.75, ml: 0.25 }}>
         <Button size="small" color="inherit" variant="outlined" startIcon={<FileDownloadIcon />} onClick={onExport} sx={exportButtonSx}>Export JSON</Button>
+        <Tooltip title={providerLabel || 'Save this stage to a fossbot-* GitHub repo'}>
+          <span>
+            <Button size="small" color="inherit" variant="outlined" startIcon={<GitHubIcon />} onClick={onSaveProvider} disabled={providerBusy} sx={exportButtonSx}>{providerBusy ? 'GitHub…' : 'GitHub'}</Button>
+          </span>
+        </Tooltip>
         <Button size="small" variant="contained" disableElevation startIcon={<PlayArrowIcon />} onClick={onRunTest} sx={runButtonSx}>Run Test</Button>
         <IconButton size="small" onClick={overflow.openMenu} sx={topbarIconButtonSx}><MoreVertIcon fontSize="small" /></IconButton>
       </Stack>
@@ -183,6 +197,8 @@ export function EditorTopBar({
         <MenuItem onClick={() => { overflow.closeMenu(); onNew(); }}>New stage</MenuItem>
         <MenuItem onClick={() => { overflow.closeMenu(); onDemo(); }}>Load demo</MenuItem>
         <MenuItem onClick={() => { overflow.closeMenu(); onImport(); }}>Import JSON…</MenuItem>
+        <MenuItem onClick={() => { overflow.closeMenu(); onOpenProvider(); }}>Open from GitHub…</MenuItem>
+        <MenuItem onClick={() => { overflow.closeMenu(); onSaveProvider(); }}>Save to GitHub…</MenuItem>
         <Divider />
         <MenuItem disabled={!canUndo} onClick={() => { overflow.closeMenu(); onUndo(); }}>Undo</MenuItem>
         <MenuItem disabled={!canRedo} onClick={() => { overflow.closeMenu(); onRedo(); }}>Redo</MenuItem>

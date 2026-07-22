@@ -2,8 +2,21 @@ import * as React from 'react';
 import { Snackbar, Alert, AlertTitle } from '@mui/material';
 import { AlertDetails } from './AlertDetails';
 
+const alertText = (value: unknown): string => {
+  if (typeof value === 'string') return value;
+  if (value instanceof Error) return value.message;
+  if (value == null) return '';
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+};
+
 const ErrorAlert = ({title, description}: AlertDetails) => {
   const [open, setOpen] = React.useState(false);
+  const safeTitle = alertText(title);
+  const safeDescription = alertText(description);
 
   const handleClick = () => {
     setOpen(true);
@@ -38,8 +51,8 @@ const ErrorAlert = ({title, description}: AlertDetails) => {
           variant="filled"
           sx={{ width: '100%', color: 'white' }}
         >
-          <AlertTitle>{title}</AlertTitle>
-          {description}
+          <AlertTitle>{safeTitle}</AlertTitle>
+          {safeDescription}
         </Alert>
       </Snackbar>
     </React.Fragment>

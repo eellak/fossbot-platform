@@ -34,6 +34,10 @@ import { clearStageBuilderDraft, draftToEditorStage, readStageBuilderDraft, stag
 import { writeStageBuilderRunHandoff } from 'src/components/stage-builder/stageBuilderRunHandoff';
 import { EditorThemeProvider, getEditorColors, getEditorPanelSx, getEditorTabsSx, getEditorTones, getEditorType, getInspectorPanelSx, useEditorTheme } from 'src/components/stage-builder/stageBuilderEditorTheme';
 import { CUSTOM_OBJECT_DEFAULT_FIT_METERS, CUSTOM_OBJECT_DIMENSION_EPSILON, CUSTOM_OBJECT_MAX_FILE_SIZE_BYTES } from 'src/components/stage-builder/stageBuilderCustomObjects';
+import { getGitHubBootstrapLinks, getGitHubLoginUrl, getGitHubProviderStatus, type GitHubProviderStatus } from 'src/stages/ProviderAuthApi';
+import { createStageOnProvider, listProviderStages, loadStageFromProvider, updateStageOnProvider, type ProviderStageListItem, type ProviderStageRef } from 'src/stages/StagesApi';
+import { SaveToProviderDialog, type SaveToProviderValues } from 'src/stages/SaveToProviderDialog';
+import { OpenFromProviderDialog } from 'src/stages/OpenFromProviderDialog';
 
 function userScope(user: ReturnType<typeof useAuth>['user']): string {
   if (!user) return 'anonymous';
@@ -263,7 +267,7 @@ function PanelResizeHandle({ side, onPointerDown, onDoubleClick }: { side: Panel
 }
 
 const StageBuilderPage = () => {
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const navigate = useNavigate();
   const scope = useMemo(() => userScope(user), [user]);
   const [prefs, setPrefs] = useState<StageBuilderPreferences>(() => readStageBuilderPreferences(scope));
@@ -296,6 +300,17 @@ const StageBuilderPage = () => {
   const [exportedAt, setExportedAt] = useState<string | null>(null);
   const [pendingDraft, setPendingDraft] = useState<StageBuilderDraft | null>(null);
   const [draftReady, setDraftReady] = useState(false);
+  const [providerStatus, setProviderStatus] = useState<GitHubProviderStatus | null>(null);
+  const [providerStatusLoading, setProviderStatusLoading] = useState(false);
+  const [saveProviderOpen, setSaveProviderOpen] = useState(false);
+  const [providerSaving, setProviderSaving] = useState(false);
+  const [providerError, setProviderError] = useState('');
+  const [remoteStage, setRemoteStage] = useState<ProviderStageRef | null>(null);
+  const [bootstrapRepoName, setBootstrapRepoName] = useState<string | null>(null);
+  const [openProviderOpen, setOpenProviderOpen] = useState(false);
+  const [providerStages, setProviderStages] = useState<ProviderStageListItem[]>([]);
+  const [providerListLoading, setProviderListLoading] = useState(false);
+  const [providerListError, setProviderListError] = useState('');
 
   const prefabs = useMemo(() => builtInStageBuilderPrefabs(), []);
   const snapSettings = useMemo(() => getSnapSettings(prefs.snapPreset, prefs.rotationSnapPreset), [prefs.snapPreset, prefs.rotationSnapPreset]);
@@ -309,6 +324,46 @@ const StageBuilderPage = () => {
   const gridSize = stage.metadata.gridSize ?? 0.5;
   const selectedStatus = selectedGroup ? selectedGroup.name : selectedObject ? selectedObject.name : selectedCount ? `${selectedCount} objects` : inspectorTab === 'stage' ? 'Stage' : 'None';
   const selectedTone = selectedGroup ? editorColors.accentText : selectedObject ? editorColors.warning : inspectorTab === 'stage' ? editorColors.accentText : editorColors.text;
+  const providerLabel = remoteStage
+    ? `GitHub: ${remoteStage.repoOwner}/${remoteStage.repoName}`
+    : providerStatus?.connected
+      ? providerStatus.selectedInstallationReady
+        ? `GitHub ready as @${providerStatus.providerUsername || 'connected'}`
+        : 'GitHub connected · install app on a fossbot-* repo'
+      : 'Connect GitHub to save stages';
+  const providerStatusValue = remoteStage?.repoName || (providerStatus?.connected ? (providerStatus.selectedInstallationReady ? 'Ready' : 'Setup') : 'Off');
+  const providerStatusTone = remoteStage || providerStatus?.selectedInstallationReady ? editorColors.success : providerStatus?.connected ? editorColors.warning : editorColors.textMuted;
+
+  const refreshProviderStatus = async () => {
+    if (!token) {
+      setProviderStatus(null);
+      return;
+    }
+    setProviderStatusLoading(true);
+    try {
+      setProviderStatus(await getGitHubProviderStatus(token));
+    } catch (error) {
+      console.warn('[stage-builder] failed to read GitHub provider status', error);
+      setProviderStatus(null);
+    } finally {
+      setProviderStatusLoading(false);
+    }
+  };
+
+  useEffect(() => { refreshProviderStatus(); }, [token]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('github_connected') || params.get('github_installed')) {
+      const repo = params.get('repo');
+      if (repo) setBootstrapRepoName(repo);
+      setSaveProviderOpen(true);
+      setMessage(params.get('github_connected') ? 'GitHub connected. Continue saving when ready.' : 'GitHub App installation updated. Continue saving when ready.');
+      window.history.replaceState(null, '', window.location.pathname);
+      refreshProviderStatus();
+    }
+  }, []);
 
   useEffect(() => {
     setPrefs(readStageBuilderPreferences(scope));
@@ -706,6 +761,103 @@ const StageBuilderPage = () => {
     }
   };
 
+  const handleProviderConnect = async () => {
+    if (!token) {
+      setProviderError('Sign in before connecting GitHub.');
+      return;
+    }
+    try {
+      const url = await getGitHubLoginUrl(token);
+      window.location.assign(url);
+    } catch (error) {
+      setProviderError(error instanceof Error ? error.message : 'Could not start GitHub connection.');
+    }
+  };
+
+  const handleCreateBootstrapLinks = async (slug: string) => {
+    if (!token) throw new Error('Sign in before creating GitHub setup links.');
+    return getGitHubBootstrapLinks(token, slug);
+  };
+
+  const handleProviderSave = async ({ slug, commitMessage }: SaveToProviderValues) => {
+    if (!token) {
+      setProviderError('Sign in before saving to GitHub.');
+      return;
+    }
+    setProviderSaving(true);
+    setProviderError('');
+    try {
+      const record = editorStageToRecord(stage);
+      const saved = remoteStage
+        ? await updateStageOnProvider(token, {
+          record,
+          repoOwner: remoteStage.repoOwner,
+          repoName: remoteStage.repoName,
+          baseStageJsonSha: remoteStage.stageJsonSha,
+          commitMessage,
+        })
+        : await createStageOnProvider(token, { record, slug, commitMessage });
+      setRemoteStage(saved);
+      setBootstrapRepoName(null);
+      setLastExportFingerprint(stageFingerprint(stage));
+      setExportedAt(new Date().toISOString());
+      clearStageBuilderDraft(scope);
+      setSaveProviderOpen(false);
+      setMessage(`Saved to GitHub: ${saved.repoOwner}/${saved.repoName}`);
+      refreshProviderStatus();
+    } catch (error) {
+      setProviderError(error instanceof Error ? error.message : 'Save to GitHub failed.');
+    } finally {
+      setProviderSaving(false);
+    }
+  };
+
+  const refreshProviderStageList = async () => {
+    if (!token) {
+      setProviderListError('Sign in before opening from GitHub.');
+      setProviderStages([]);
+      return;
+    }
+    setProviderListLoading(true);
+    setProviderListError('');
+    try {
+      setProviderStages(await listProviderStages(token));
+    } catch (error) {
+      setProviderStages([]);
+      setProviderListError(error instanceof Error ? error.message : 'Could not list GitHub stages.');
+    } finally {
+      setProviderListLoading(false);
+    }
+  };
+
+  const handleProviderOpenDialog = () => {
+    setOpenProviderOpen(true);
+    refreshProviderStageList();
+  };
+
+  const handleOpenProviderStage = async (item: ProviderStageListItem) => {
+    if (!token) return;
+    if (!confirmIfDirty('Open this GitHub stage and replace the current editor stage? Unsaved changes will remain only as a recovery draft.')) return;
+    setProviderListLoading(true);
+    setProviderListError('');
+    try {
+      const loaded = await loadStageFromProvider(token, item.repoOwner, item.repoName);
+      replaceStage(configToEditorStage(loaded.record), { undoable: true, clean: true, message: 'Opened stage from GitHub.' });
+      setRemoteStage({
+        repoOwner: loaded.repoOwner,
+        repoName: loaded.repoName,
+        repoUrl: loaded.repoUrl,
+        commitSha: loaded.commitSha,
+        stageJsonSha: loaded.stageJsonSha,
+      });
+      setOpenProviderOpen(false);
+    } catch (error) {
+      setProviderListError(error instanceof Error ? error.message : 'Could not open GitHub stage.');
+    } finally {
+      setProviderListLoading(false);
+    }
+  };
+
   const handleExport = () => {
     downloadStageJson(editorStageToRecord(stage));
     setLastExportFingerprint(stageFingerprint(stage));
@@ -993,8 +1145,12 @@ const StageBuilderPage = () => {
         onBack={handleBack}
         onNew={handleNew}
         onDemo={handleDemo}
+        providerLabel={providerLabel}
+        providerBusy={providerSaving || providerStatusLoading}
         onImport={() => importInputRef.current?.click()}
         onExport={handleExport}
+        onSaveProvider={() => { setProviderError(''); setSaveProviderOpen(true); }}
+        onOpenProvider={handleProviderOpenDialog}
         onRunTest={handleRunTest}
         onUndo={undo}
         onRedo={redo}
@@ -1174,6 +1330,7 @@ const StageBuilderPage = () => {
           <StatusItem label="Selected" value={selectedStatus} tone={selectedTone} />
           <StatusItem label="Snap" value={snapLabel(snapSettings)} tone={snapSettings.move ? editorColors.success : editorColors.textMuted} />
           <StatusItem label="Grid" value={gridVisible ? `${gridSize} m` : 'Hidden'} tone={editorColors.text} />
+          <StatusItem label="GitHub" value={providerStatusValue} tone={providerStatusTone} />
           <StatusItem label="Collision" value={collisionWireVisible ? 'Wire' : 'Hidden'} tone={collisionWireVisible ? editorColors.warning : editorColors.textMuted} />
         </Stack>
         <ShortcutHint />
@@ -1193,6 +1350,32 @@ const StageBuilderPage = () => {
           <Button variant="contained" onClick={restoreDraft}>Restore Draft</Button>
         </DialogActions>
       </Dialog>
+
+      <SaveToProviderDialog
+        open={saveProviderOpen}
+        stageTitle={stage.title}
+        status={providerStatus}
+        remoteStage={remoteStage}
+        bootstrapRepoName={bootstrapRepoName}
+        busy={providerSaving}
+        error={providerError}
+        onClose={() => setSaveProviderOpen(false)}
+        onConnect={handleProviderConnect}
+        onRefreshStatus={refreshProviderStatus}
+        onBeforeInstall={() => writeStageBuilderDraft(stage, scope)}
+        onCreateBootstrapLinks={handleCreateBootstrapLinks}
+        onSave={handleProviderSave}
+      />
+
+      <OpenFromProviderDialog
+        open={openProviderOpen}
+        stages={providerStages}
+        busy={providerListLoading}
+        error={providerListError}
+        onClose={() => setOpenProviderOpen(false)}
+        onRefresh={refreshProviderStageList}
+        onOpenStage={handleOpenProviderStage}
+      />
 
       <Snackbar open={!!message} autoHideDuration={3600} onClose={() => setMessage('')} message={message} />
     </Box>

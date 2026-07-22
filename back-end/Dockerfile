@@ -10,6 +10,7 @@ COPY main.py .
 COPY requirements.txt .
 COPY database/ ./database/
 COPY models/ ./models/
+COPY routers/ ./routers/
 COPY utils/ ./utils/
 
 
