@@ -4,7 +4,6 @@ import PageContainer from 'src/components/container/PageContainer';
 import ProjectsCard from 'src/components/dashboard/ProjectsCard';
 import StageMarketplacePanel from 'src/components/dashboard/StageMarketplacePanel';
 import UserGitHubStagesPanel from 'src/components/dashboard/UserGitHubStagesPanel';
-import PublishedMarketplaceStagesPanel from 'src/components/dashboard/PublishedMarketplaceStagesPanel';
 import { Box, Grid } from '@mui/material';
 import SlideShow from 'src/components/cards-slide-show/SlideShow';
 import { useTranslation } from 'react-i18next';
@@ -21,10 +20,9 @@ const Modern = () => {
         </Grid> */}
           <Grid item xs={12} lg={12} >
             <ProjectsCard />
-            <UserGitHubStagesPanel />
-            <PublishedMarketplaceStagesPanel />
-            <StageMarketplacePanel />
           </Grid>
+          <Grid item xs={12} xl={5}><UserGitHubStagesPanel embedded preview /></Grid>
+          <Grid item xs={12} xl={7}><StageMarketplacePanel embedded preview /></Grid>
         </Grid>
       </Box>
     </PageContainer>

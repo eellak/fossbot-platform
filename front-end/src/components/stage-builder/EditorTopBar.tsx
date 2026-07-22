@@ -11,6 +11,7 @@ import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import PublishIcon from '@mui/icons-material/Publish';
 import { activeValidationResults, validationSummary, type StageBuilderValidationResult } from './stageBuilderValidation';
 import { useEditorTheme } from './stageBuilderEditorTheme';
+import { MARKETPLACE_COPY } from 'src/stages/marketplaceCopy';
 
 export interface EditorTopBarProps {
   stageName: string;
@@ -124,7 +125,7 @@ export function EditorTopBar({
   marketplaceBusy,
   marketplaceStatusLoading,
   marketplacePullRequest,
-  marketplacePublishLabel = 'Publish stage',
+  marketplacePublishLabel = MARKETPLACE_COPY.publishStage,
   marketplacePublishReady = false,
   onImport,
   onExport,
@@ -176,16 +177,6 @@ export function EditorTopBar({
     '&:hover': { bgcolor: editorColors.success },
   } as const;
 
-  const publishButtonSx = {
-    height: 34,
-    px: 1.5,
-    bgcolor: editorColors.accentText,
-    color: '#FFFFFF',
-    fontWeight: 800,
-    textTransform: 'none',
-    '&:hover': { bgcolor: editorColors.accentText },
-  } as const;
-
   const active = activeValidationResults(validationResults);
   const hasErrors = active.some((item) => item.severity === 'error');
   const hasWarnings = active.some((item) => item.severity === 'warning');
@@ -193,20 +184,20 @@ export function EditorTopBar({
   return (
     <Toolbar variant="dense" sx={{ minHeight: 48, height: 48, px: 1, gap: 1, bgcolor: editorColors.topbar, color: editorColors.keycapInk, borderBottom: `1px solid ${editorColors.divider}` }}>
       <Tooltip title="Back to Platform">
-        <IconButton size="small" onClick={onBack} sx={{ color: 'inherit' }}><ArrowBackIcon fontSize="small" /></IconButton>
+        <IconButton size="small" onClick={onBack} sx={{ color: 'inherit' }} aria-label="Back to dashboard"><ArrowBackIcon fontSize="small" /></IconButton>
       </Tooltip>
       <Tooltip title="Open stage settings">
         <ButtonBase
           onClick={onOpenStageSettings}
           sx={{
             minWidth: 0,
+            display: { xs: 'none', sm: 'block' },
             mr: 0.5,
             px: 0.5,
             py: 0.25,
             borderRadius: 0.75,
             color: 'inherit',
             textAlign: 'left',
-            display: 'block',
             '&:hover': { bgcolor: editorColors.keycapBg },
             '&:focus-visible': { outline: `2px solid ${editorColors.accent}`, outlineOffset: 2 },
           }}
@@ -222,7 +213,7 @@ export function EditorTopBar({
         <TopStatusText label={validationSummary(validationResults)} tone={hasErrors ? editorColors.danger : hasWarnings ? editorColors.warning : editorColors.success} onClick={onOpenValidation} />
       </Stack>
       <Stack direction="row" spacing={0.75} alignItems="center" sx={{ pl: 0.75, ml: 0.25 }}>
-        <Button size="small" color="inherit" variant="outlined" startIcon={<FileDownloadIcon />} onClick={onExport} sx={exportButtonSx}>Export JSON</Button>
+        <Button size="small" color="inherit" variant="outlined" startIcon={<FileDownloadIcon />} onClick={onExport} sx={{ ...exportButtonSx, display: { xs: 'none', sm: 'inline-flex' } }}>Export JSON</Button>
         <Tooltip title={providerLabel || 'GitHub actions'}>
           <span>
             <Button
@@ -232,38 +223,27 @@ export function EditorTopBar({
               startIcon={<GitHubIcon />}
               endIcon={<KeyboardArrowDownIcon />}
               onClick={(event) => { onRefreshGitHubStatus?.(); github.openMenu(event); }}
-              sx={exportButtonSx}
+              aria-label="GitHub stage actions"
+              sx={{ ...exportButtonSx, minWidth: { xs: 34, sm: 64 }, px: { xs: 0.75, sm: 1.25 }, '& .MuiButton-startIcon': { mr: { xs: 0, sm: 1 }, ml: 0 }, '& .MuiButton-endIcon': { display: { xs: 'none', sm: 'inherit' } } }}
             >
-              {providerBusy || marketplaceBusy || marketplaceStatusLoading ? 'GitHub…' : 'GitHub'}
+              <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>{providerBusy || marketplaceBusy || marketplaceStatusLoading ? 'GitHub…' : 'GitHub'}</Box>
             </Button>
           </span>
         </Tooltip>
-        {marketplacePublishReady && (
-          <Button
-            size="small"
-            variant="contained"
-            disableElevation
-            startIcon={<PublishIcon />}
-            onClick={onPublishMarketplace}
-            sx={{ ...publishButtonSx, display: { xs: 'none', md: 'inline-flex' } }}
-          >
-            Publish changes
-          </Button>
-        )}
-        <Button size="small" variant="contained" disableElevation startIcon={<PlayArrowIcon />} onClick={onRunTest} sx={runButtonSx}>Run Test</Button>
-        <IconButton size="small" onClick={overflow.openMenu} sx={topbarIconButtonSx}><MoreVertIcon fontSize="small" /></IconButton>
+        <Button size="small" variant="contained" disableElevation startIcon={<PlayArrowIcon />} onClick={onRunTest} aria-label="Run test" sx={{ ...runButtonSx, minWidth: { xs: 34, sm: 96 }, px: { xs: 0.75, sm: 1.75 }, '& .MuiButton-startIcon': { mr: { xs: 0, sm: 1 }, ml: 0 } }}><Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>Run test</Box></Button>
+        <IconButton size="small" onClick={overflow.openMenu} aria-label="More editor actions" sx={topbarIconButtonSx}><MoreVertIcon fontSize="small" /></IconButton>
       </Stack>
       <Menu anchorEl={github.anchorEl} open={github.open} onClose={github.closeMenu}>
         <Box sx={{ px: 2, py: 1.25, maxWidth: 360 }}>
           <Typography variant="subtitle2" fontWeight={850}>GitHub</Typography>
           <Typography variant="caption" color="text.secondary" sx={{ display: 'block', wordBreak: 'break-word' }}>
-            {providerLabel || 'Connect GitHub to save and publish stages.'}
+            {providerConnected ? providerLabel : 'Connect GitHub to save stages'}
           </Typography>
         </Box>
         <Divider />
-        {!providerConnected && <MenuItem disabled={providerBusy} onClick={() => { github.closeMenu(); onConnectProvider(); }}>{providerBusy ? 'Connecting…' : 'Connect GitHub…'}</MenuItem>}
-        <MenuItem disabled={providerBusy} onClick={() => { github.closeMenu(); onSaveProvider(); }}>{providerBusy ? 'Saving…' : 'Save to GitHub…'}</MenuItem>
-        <MenuItem disabled={providerBusy} onClick={() => { github.closeMenu(); onOpenProvider(); }}>Open from GitHub…</MenuItem>
+        {!providerConnected && <MenuItem disabled={providerBusy} onClick={() => { github.closeMenu(); onConnectProvider(); }}>{providerBusy ? 'Connecting…' : MARKETPLACE_COPY.connectGitHub}</MenuItem>}
+        <MenuItem disabled={providerBusy} onClick={() => { github.closeMenu(); onSaveProvider(); }}>{providerBusy ? 'Saving…' : MARKETPLACE_COPY.saveToGitHub}</MenuItem>
+        <MenuItem disabled={providerBusy} onClick={() => { github.closeMenu(); onOpenProvider(); }}>{MARKETPLACE_COPY.openFromGitHub}</MenuItem>
         <MenuItem
           disabled={marketplaceBusy}
           onClick={() => { github.closeMenu(); onPublishMarketplace(); }}
@@ -280,15 +260,11 @@ export function EditorTopBar({
           {marketplacePublishReady && <PublishIcon fontSize="small" sx={{ mr: 1 }} />}
           {marketplaceBusy ? 'Publishing…' : marketplacePublishLabel}
         </MenuItem>
-        <Divider />
-        {marketplaceStatusLoading ? (
-          <MenuItem disabled>Checking marketplace PR…</MenuItem>
-        ) : marketplacePullRequest?.url ? (
+        {marketplacePullRequest?.url && <Divider />}
+        {marketplacePullRequest?.url && (
           <MenuItem component="a" href={marketplacePullRequest.url} target="_blank" rel="noreferrer" onClick={github.closeMenu}>
             Marketplace PR #{marketplacePullRequest.number || '—'} · {marketplacePrStateLabel(marketplacePullRequest.state)}
           </MenuItem>
-        ) : (
-          <MenuItem disabled>No marketplace PR for this stage</MenuItem>
         )}
       </Menu>
       <Menu anchorEl={overflow.anchorEl} open={overflow.open} onClose={overflow.closeMenu}>

@@ -6,6 +6,7 @@ import GitHubIcon from '@mui/icons-material/GitHub';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import type { GitHubBootstrapLinks, GitHubProviderStatus } from './ProviderAuthApi';
 import type { ProviderRepoVisibility, ProviderStageRef } from './StagesApi';
+import { MARKETPLACE_COPY } from './marketplaceCopy';
 
 export interface SaveToProviderValues {
   slug: string;
@@ -68,14 +69,13 @@ export function SaveToProviderDialog({
   const [linkBusy, setLinkBusy] = useState(false);
 
   useEffect(() => {
-    if (!open) return;
     setSlug(defaultSlug);
     setCommitMessage('');
     setVisibility('public');
     setLinks(null);
     setLinkError('');
     setLinkBusy(false);
-  }, [defaultSlug, open]);
+  }, [defaultSlug]);
 
   const statusCode = status?.statusError || status?.errorCode || null;
   const statusDetail = status?.statusDetail || status?.errorDetail || null;
@@ -100,22 +100,18 @@ export function SaveToProviderDialog({
 
   return (
     <Dialog open={open} onClose={busy ? undefined : onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>{remoteStage ? 'Save stage to GitHub' : 'Save to GitHub'}</DialogTitle>
+      <DialogTitle>{MARKETPLACE_COPY.saveToGitHub}</DialogTitle>
       <DialogContent>
-        <Stack spacing={1.75} sx={{ pt: 0.5 }}>
+        <Stack spacing={2} sx={{ pt: 0.5 }}>
           <Typography variant="body2" color="text.secondary">
-            Save writes this stage to a public GitHub repository that you own. Uploaded OBJ/STL/GLB files are stored under <Box component="code">assets/</Box>.
+            Public stages can be shared and published. Private stages stay in your GitHub account.
           </Typography>
-
-          <Alert severity="info">
-            Working locally first? Keep editing in Stage Builder and use <strong>Import JSON</strong> / <strong>Export JSON</strong> from the top bar. Browser drafts are only for recovery; export a JSON file when you want a local copy.
-          </Alert>
 
           {error && (
             <Alert
               severity="error"
               action={errorCode === 'sha_conflict' && onOpenFromGitHub ? (
-                <Button color="inherit" size="small" onClick={onOpenFromGitHub}>Open from GitHub</Button>
+                <Button color="inherit" size="small" onClick={onOpenFromGitHub}>{MARKETPLACE_COPY.openFromGitHub}</Button>
               ) : undefined}
             >
               {error}
@@ -129,10 +125,7 @@ export function SaveToProviderDialog({
 
           {!connected && (
             <Alert severity="info" icon={<GitHubIcon fontSize="inherit" />}>
-              <Typography variant="body2" fontWeight={700}>Connect the GitHub App when you are ready to sync.</Typography>
-              <Typography variant="body2" component="div" sx={{ mt: 0.5 }}>
-                1. Connect your GitHub account. 2. Create or choose a public <Box component="code">fossbot-*</Box> repo. 3. Install the FOSSBot App on selected repositories only. 4. Return here and save.
-              </Typography>
+              Connect GitHub to save this stage.
             </Alert>
           )}
 
@@ -153,7 +146,7 @@ export function SaveToProviderDialog({
           )}
 
           {!remoteStage && connected && (
-            <Stack spacing={1.25}>
+            <Stack spacing={1.5}>
               <TextField
                 label="Repository name"
                 size="small"
@@ -164,21 +157,21 @@ export function SaveToProviderDialog({
                 disabled={busy}
                 fullWidth
               />
-              <Box sx={{ p: 1.25, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
+              <Box sx={{ p: 1.5, bgcolor: 'action.hover', borderRadius: 1 }}>
                 <Typography variant="subtitle2" fontWeight={800}>Repository visibility</Typography>
                 <RadioGroup row value={visibility} onChange={(event) => setVisibility(event.target.value as ProviderRepoVisibility)}>
                   <FormControlLabel value="public" control={<Radio size="small" />} label="Public" disabled={busy} />
                   <FormControlLabel value="private" control={<Radio size="small" />} label="Private" disabled={busy} />
                 </RadioGroup>
                 <Typography variant="body2" color="text.secondary">
-                  Public stages can be opened by anyone with the link, tested from GitHub raw URLs, and published to the marketplace. Private stages stay in your GitHub account and can be reopened through your FOSSBot GitHub App connection; browser test links and marketplace publishing require public repos in v1.
+                  {visibility === 'public' ? 'Anyone with the link can test it, and you can publish it to the Stage library.' : 'Only your GitHub account and connected FOSSBot instance can open it.'}
                 </Typography>
               </Box>
             </Stack>
           )}
 
           {remoteStage && (
-            <Box sx={{ p: 1.25, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
+            <Box sx={{ p: 1.5, bgcolor: 'action.hover', borderRadius: 1 }}>
               <Typography variant="caption" color="text.secondary" display="block">Remote repository</Typography>
               <Link href={remoteStage.repoUrl} target="_blank" rel="noreferrer" underline="hover" sx={{ fontWeight: 700 }}>
                 {remoteStage.repoOwner}/{remoteStage.repoName}
@@ -197,8 +190,8 @@ export function SaveToProviderDialog({
           />
 
           {connected && !ready && !remoteStage && (
-            <Box sx={{ p: 1.25, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
-              <Stack spacing={1.25}>
+            <Box sx={{ p: 1.5, bgcolor: 'action.hover', borderRadius: 1 }}>
+              <Stack spacing={1.5}>
                 <Typography variant="subtitle2" fontWeight={800}>{allReposSelected ? 'Fix GitHub App access' : 'First-time GitHub setup'}</Typography>
                 <Typography variant="body2" color="text.secondary">
                   {allReposSelected
@@ -229,14 +222,14 @@ export function SaveToProviderDialog({
           )}
 
           {connected && ready && !remoteStage && (
-            <Alert severity="info">FOSSBot will save to <Box component="code">{repoName}</Box>. If you renamed the repository on GitHub, edit the repository name above before saving.</Alert>
+            <Typography variant="body2" color="text.secondary">Saves to <Box component="code">{repoName}</Box>.</Typography>
           )}
         </Stack>
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose} disabled={busy}>Cancel</Button>
         {!connected ? (
-          <Button variant="contained" startIcon={<GitHubIcon />} onClick={onConnect}>Connect GitHub</Button>
+          <Button variant="contained" startIcon={<GitHubIcon />} onClick={onConnect}>{MARKETPLACE_COPY.connectGitHub}</Button>
         ) : (
           <Button variant="contained" disabled={!canSave} onClick={() => onSave({ slug, commitMessage, visibility })}>
             {busy ? 'Saving…' : remoteStage ? 'Save' : ready ? 'Create repo & save' : allReposSelected ? 'Reinstall with selected repos first' : 'Complete GitHub setup first'}

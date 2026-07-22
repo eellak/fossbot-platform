@@ -17,6 +17,7 @@ import {
 import StorefrontIcon from '@mui/icons-material/Storefront';
 import type { ProviderStageRef } from './StagesApi';
 import type { MarketplaceLifecycle, PublishMarketplaceResponse } from './MarketplaceApi';
+import { MARKETPLACE_COPY } from './marketplaceCopy';
 
 export interface PublishMarketplaceValues {
   title: string;
@@ -89,7 +90,6 @@ export function PublishToMarketplaceDialog({
   const [commitMessage, setCommitMessage] = useState('');
 
   useEffect(() => {
-    if (!open) return;
     setTitle(stageTitle || 'Untitled Stage');
     setDescription(stageDescription || '');
     setTagText('');
@@ -97,7 +97,7 @@ export function PublishToMarketplaceDialog({
     setPreviewError('');
     setSharingLicense('CC-BY-4.0');
     setCommitMessage('');
-  }, [open, stageDescription, stageTitle]);
+  }, [stageDescription, stageTitle]);
 
   const tags = useMemo(() => splitTags(tagText), [tagText]);
   const isPrivateStage = !!remoteStage?.private;
@@ -124,13 +124,13 @@ export function PublishToMarketplaceDialog({
 
   return (
     <Dialog open={open} onClose={busy ? undefined : onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>{lifecycle?.state === 'changes_ready_to_publish' ? 'Publish changes' : 'Publish to Marketplace'}</DialogTitle>
+      <DialogTitle>{lifecycle?.state === 'changes_ready_to_publish' ? 'Publish changes' : MARKETPLACE_COPY.publishStage}</DialogTitle>
       <DialogContent>
-        <Stack spacing={1.75} sx={{ pt: 0.5 }}>
+        <Stack spacing={2} sx={{ pt: 0.5 }}>
           <Typography variant="body2" color="text.secondary">
             {lifecycle?.state === 'changes_ready_to_publish'
-              ? "You've made changes since this stage was published. Publishing them opens a new review request; your existing marketplace revision stays available until that request is merged."
-              : 'Publishing opens a review pull request for the Git-hosted stage library. After merge, marketplace CI validates the stage and updates its badge.'}
+              ? 'Creates a review request. The current published revision stays available until the update is approved.'
+              : 'Creates a review request for the Stage library.'}
           </Typography>
 
           {lifecycle && lifecycle.state !== 'unpublished' && lifecycle.state !== 'published_current' && lifecycle.state !== 'changes_ready_to_publish' && (
@@ -145,7 +145,7 @@ export function PublishToMarketplaceDialog({
               Save this stage to a public GitHub <Box component="code">fossbot-*</Box> repo before publishing.
             </Alert>
           ) : (
-            <Box sx={{ p: 1.25, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
+            <Box sx={{ p: 1.5, bgcolor: 'action.hover', borderRadius: 1 }}>
               <Typography variant="caption" color="text.secondary" display="block">Source repository</Typography>
               <Link href={remoteStage.repoUrl} target="_blank" rel="noreferrer" underline="hover" sx={{ fontWeight: 700 }}>
                 {remoteStage.repoOwner}/{remoteStage.repoName}
@@ -170,13 +170,11 @@ export function PublishToMarketplaceDialog({
               )}
             >
               <Typography variant="body2" fontWeight={800}>Marketplace review PR created: #{result.pullRequestNumber || 'PR'}</Typography>
-              <Typography variant="body2">
-                Open the PR to follow review status. GitHub shows the FOSSBot app as the author; the PR details credit the connected GitHub account and include the stage title, description, and tags.
-              </Typography>
+              <Typography variant="body2">Open the request to follow its review status.</Typography>
             </Alert>
           )}
 
-          <TextField label="Library title" size="small" value={title} onChange={(event) => setTitle(event.target.value)} disabled={busy || !remoteStage} fullWidth />
+          <TextField label="Stage library title" size="small" value={title} onChange={(event) => setTitle(event.target.value)} disabled={busy || !remoteStage} error={!!remoteStage && !title.trim()} helperText={remoteStage && !title.trim() ? 'Add a title before publishing.' : undefined} required fullWidth />
           <TextField label="Description" size="small" value={description} onChange={(event) => setDescription(event.target.value)} disabled={busy || !remoteStage} multiline minRows={3} fullWidth />
           <TextField
             label="Tags"
@@ -189,7 +187,7 @@ export function PublishToMarketplaceDialog({
             fullWidth
           />
           {!!tags.length && (
-            <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 0.75 }}>
+            <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 1 }}>
               {tags.map((tag) => <Chip key={tag} size="small" label={tag} />)}
             </Stack>
           )}
@@ -208,7 +206,7 @@ export function PublishToMarketplaceDialog({
             <MenuItem value="CC0-1.0">CC0 1.0 — reuse without required credit</MenuItem>
           </TextField>
 
-          <Box sx={{ p: 1.25, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
+          <Box sx={{ py: 0.5 }}>
             <Stack spacing={1}>
               <Typography variant="subtitle2" fontWeight={800}>Preview PNG</Typography>
               <Typography variant="body2" color="text.secondary">Optional. A preview helps reviewers and appears on the stage card after the PR is merged.</Typography>
