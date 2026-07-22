@@ -36,15 +36,13 @@ from models.models import (
     UserResponse,
     UserRole,
 )
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, OperationalError
+from routers.stage_sources import router as stage_sources_router
 from utils.utils_hash import get_hashed, verify_hashed
 from utils.utils_jwt import create_access_token, verify_access_token
 
 logger = logging.getLogger("uvicorn")
 SessionLocal = getSessionLocal()
-
-# Database creation
-create_db_tables()
 
 # FastAPI app
 app = FastAPI()
@@ -61,6 +59,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.include_router(stage_sources_router)
 
 # Security
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
@@ -146,10 +145,23 @@ def create_admin_user():
         logger.info("Admin user already exists")
     db.close()
 
+def initialize_database(max_attempts: int = 30, delay_seconds: float = 1.0):
+    for attempt in range(1, max_attempts + 1):
+        try:
+            create_db_tables()
+            migrate_schema()
+            create_admin_user()
+            return
+        except OperationalError as error:
+            if attempt == max_attempts:
+                raise
+            logger.warning("Database is not ready yet (%s/%s): %s", attempt, max_attempts, error)
+            time.sleep(delay_seconds)
+
+
 @app.on_event("startup")
 def on_startup():
-    migrate_schema()
-    create_admin_user()
+    initialize_database()
 
 
 def get_user(db, username: str):

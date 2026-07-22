@@ -19,6 +19,17 @@ import { useAuth } from '../../authentication/AuthProvider';
 import googleIcon from 'src/assets/images/svgs/google-icon.svg';
 import githubIcon from 'src/assets/images/svgs/github-icon.svg';
 
+const errorMessage = (error: unknown, fallback: string): string => {
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'string') return error;
+  if (error == null) return fallback;
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return String(error);
+  }
+};
+
 const AuthLogin = ({ title, subtitle, subtext, handleShowErrorAlert }: loginType) => {
   const theme = useTheme();
 
@@ -85,7 +96,7 @@ const AuthLogin = ({ title, subtitle, subtext, handleShowErrorAlert }: loginType
       }
     } catch (error) {
       console.error('Login error:', error);
-      handleShowErrorAlert(error || 'Login failed.');
+      handleShowErrorAlert(errorMessage(error, 'Login failed.'));
     }
   };
 

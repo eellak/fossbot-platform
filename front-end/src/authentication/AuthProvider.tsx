@@ -48,6 +48,37 @@ import {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const revokedAccessMessage = 'Your access to the platform has been revoked.';
 
+const errorMessage = (error: unknown, fallback: string): string => {
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'string') return error;
+  if (error == null) return fallback;
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return String(error);
+  }
+};
+
+const firebaseUserToUser = (firebaseUser): User => {
+  const email = firebaseUser.email || '';
+  const displayName = firebaseUser.displayName || email.split('@')[0] || 'Firebase user';
+  const [firstname = displayName, ...lastnameParts] = displayName.split(' ');
+
+  return {
+    id: 0,
+    username: email || firebaseUser.uid,
+    firstname,
+    lastname: lastnameParts.join(' '),
+    email,
+    role: 'user',
+    image_url: firebaseUser.photoURL || undefined,
+    beta_tester: false,
+    activated: true,
+    provider: 'local',
+    access_revoked: false,
+  };
+};
+
 interface AuthProviderProps {
   children: ReactNode;
 }
@@ -154,16 +185,16 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
 
       console.log(res)
       if (res.access_token) {
+        setUser(res.user);
         setToken(res.access_token);
         localStorage.setItem(localStorageName, res.access_token);
-        await loadAuthenticatedUser(res.access_token);
         navigate('/dashboard');
         return { success: true, detail: '' };
       }
       return { success: false, detail: res.detail || 'Login failed' };
     } catch (err) {
       console.error(err);
-      return { success: false, detail: err || 'Login failed' };
+      return { success: false, detail: errorMessage(err, 'Login failed') };
 
     }
   };
@@ -214,9 +245,7 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
       }
 
       signOutFromFirebase().catch(console.error);
-      return { success: false, detail: err instanceof Error ? err.message : 'Firebase login failed' };
-    } finally {
-      firebaseLoginInProgress.current = false;
+      return { success: false, detail: errorMessage(err, 'Firebase login failed') };
     }
   };
 

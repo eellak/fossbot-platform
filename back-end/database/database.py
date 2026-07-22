@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, DateTime, Enum, Boolean, text
+from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, DateTime, Enum, Boolean, text, UniqueConstraint
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 from sqlalchemy import inspect
@@ -58,6 +58,25 @@ class User(Base):
     firebase_uid = Column(String, nullable=True)  # Firebase Auth UID for social-login users
     provider = Column(String, nullable=False, default='local')  # Auth provider(s): 'local', 'google', 'github', or comma-separated
     access_revoked = Column(Boolean, default=False, nullable=False)  # Blocks user login/access without deleting account
+
+class SourceProviderConnection(Base):
+    __tablename__ = "source_provider_connections"
+    __table_args__ = (UniqueConstraint('user_id', 'provider_name', 'provider_account_login', name='uq_source_provider_connection'),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    provider_name = Column(String, nullable=False)
+    provider_account_login = Column(String, nullable=False)
+    provider_account_id = Column(String)
+    installation_id = Column(String)
+    repository_selection = Column(String)
+    user_token_encrypted = Column(String)
+    user_token_expires_at = Column(DateTime)
+    user_refresh_token_encrypted = Column(String)
+    user_refresh_token_expires_at = Column(DateTime)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow, nullable=False)
+    user = relationship("User")
 
 class Projects(Base):
     __tablename__ = "projects"
