@@ -173,11 +173,11 @@ def github_install_url(state: str) -> str:
     return f"{GITHUB_WEB_URL}/apps/{github_app_slug()}/installations/new?{query}"
 
 
-def github_new_repo_url(repo_name: str, description: str = "FOSSBot stage") -> str:
+def github_new_repo_url(repo_name: str, description: str = "FOSSBot stage", visibility: str = "public") -> str:
     query = urlencode({
         "name": repo_name,
         "description": description,
-        "visibility": "public",
+        "visibility": "private" if visibility == "private" else "public",
     })
     return f"{GITHUB_WEB_URL}/new?{query}"
 

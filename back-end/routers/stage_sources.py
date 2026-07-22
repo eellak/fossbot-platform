@@ -49,10 +49,12 @@ class StageSaveRequest(BaseModel):
     repoName: Optional[str] = None
     baseStageJsonSha: Optional[str] = None
     commitMessage: Optional[str] = None
+    visibility: Optional[str] = None
 
 
 class BootstrapLinksRequest(BaseModel):
     slug: str
+    visibility: Optional[str] = None
 
 
 def get_db():
@@ -122,6 +124,36 @@ def github_stage_error(error: GitHubApiError) -> HTTPException:
     if github_repo_name_taken(error):
         return stage_error(409, "repo_name_taken", "A repository with that name already exists. Select it in the GitHub App installation or choose another fossbot-* name.")
     return stage_error(error.status_code, "provider_error", str(error))
+
+
+def stage_repo_list_item(provider, installation_token: str, repo: dict[str, Any]) -> Optional[dict[str, Any]]:
+    repo_name = repo.get("name") or ""
+    repo_owner = (repo.get("owner") or {}).get("login")
+    if not repo_name.startswith(FOSSBOT_REPO_PREFIX) or not repo_owner:
+        return None
+    try:
+        stage_record, _ = provider.read_json_file(installation_token, repo_owner, repo_name, "stage.json")
+        manifest, _ = provider.read_json_file(installation_token, repo_owner, repo_name, "fossbot.json")
+        verify_stage_manifest(manifest, repo_owner, repo_name)
+    except GitHubApiError as error:
+        if error.status_code in (403, 404):
+            return None
+        raise
+    except (ValueError, json.JSONDecodeError, TypeError):
+        return None
+    if not isinstance(stage_record, dict) or not stage_record.get("config"):
+        return None
+    return {
+        "repoOwner": repo_owner,
+        "repoName": repo_name,
+        "repoUrl": repo.get("html_url"),
+        "title": stage_record.get("title") or repo_name,
+        "description": stage_record.get("description"),
+        "defaultBranch": repo.get("default_branch") or "main",
+        "updatedAt": repo.get("updated_at"),
+        "private": bool(repo.get("private")),
+        "visibility": repo.get("visibility") or ("private" if repo.get("private") else "public"),
+    }
 
 
 def status_payload(connection: Optional[SourceProviderConnection], **overrides: Any) -> dict[str, Any]:
@@ -445,7 +477,7 @@ async def stage_bootstrap_links(
         raise stage_error(503, "provider_unconfigured", str(error)) from error
     return {
         "repoName": repo_name,
-        "newRepoUrl": github_new_repo_url(repo_name, "FOSSBot stage"),
+        "newRepoUrl": github_new_repo_url(repo_name, "FOSSBot stage", requested_repo_visibility(request.visibility)),
         "installUrl": install_url,
     }
 
@@ -465,7 +497,15 @@ def canonical_repo_identity(repo: dict[str, Any]) -> tuple[str, str]:
 
 def ensure_public_repo(repo: dict[str, Any]) -> None:
     if repo.get("private"):
-        raise stage_error(403, "repo_not_allowed", "FOSSBot stages must be saved to public fossbot-* repositories.")
+        raise stage_error(403, "repo_not_allowed", "This action requires a public fossbot-* repository.")
+
+
+def repo_visibility(repo: dict[str, Any]) -> str:
+    return repo.get("visibility") or ("private" if repo.get("private") else "public")
+
+
+def requested_repo_visibility(value: Optional[str]) -> str:
+    return "private" if value == "private" else "public"
 
 
 def installed_repo_for(provider, user_token: str, connection: SourceProviderConnection, repo: dict[str, Any]) -> Optional[dict[str, Any]]:
@@ -558,14 +598,12 @@ def save_stage_to_repo(
     if not repo:
         if not create_if_missing:
             raise stage_error(404, "repo_not_allowed", "Stage repository does not exist.")
-        repo = provider.create_user_repo(user_token, repo_name, description)
+        repo = provider.create_user_repo(user_token, repo_name, description, private=requested_repo_visibility(request.visibility) == "private")
         created_repo = True
 
-    ensure_public_repo(repo)
     owner, repo_name = canonical_repo_identity(repo)
     ensure_repo_allowed(repo_name)
     installed_repo = ensure_repo_in_installation(provider, user_token, connection, repo, allow_add=created_repo)
-    ensure_public_repo(installed_repo)
     owner, repo_name = canonical_repo_identity(installed_repo)
     ensure_repo_allowed(repo_name)
 
@@ -652,7 +690,9 @@ def save_stage_to_repo(
         "repoUrl": f"https://github.com/{owner}/{repo_name}",
         "commitSha": (stage_result.get("commit") or {}).get("sha"),
         "stageJsonSha": (stage_result.get("content") or {}).get("sha"),
-        "rawBaseUrl": github_raw_base_url(owner, repo_name, default_branch),
+        "rawBaseUrl": None if installed_repo.get("private") else github_raw_base_url(owner, repo_name, default_branch),
+        "private": bool(installed_repo.get("private")),
+        "visibility": repo_visibility(installed_repo),
         "assetCount": len(packaged.assets),
     }
 
@@ -687,18 +727,14 @@ async def list_stages(current_user: User = Depends(get_current_user), db: Sessio
         connection, user_token = require_connection(db, current_user)
         provider = get_provider("github_app")
         repos = provider.list_installation_repositories(user_token, connection.installation_id)
-        return {
-            "stages": [
-                {
-                    "repoOwner": (repo.get("owner") or {}).get("login"),
-                    "repoName": repo.get("name"),
-                    "repoUrl": repo.get("html_url"),
-                    "updatedAt": repo.get("updated_at"),
-                }
-                for repo in repos
-                if repo.get("name", "").startswith(FOSSBOT_REPO_PREFIX) and not repo.get("private")
-            ]
-        }
+        installation_token = provider.create_installation_token(create_github_app_jwt(), connection.installation_id)
+        stages = [
+            item
+            for repo in repos
+            for item in [stage_repo_list_item(provider, installation_token, repo)]
+            if item is not None
+        ]
+        return {"stages": stages}
     except GitHubApiError as error:
         raise github_stage_error(error) from error
     except RuntimeError as error:
@@ -738,5 +774,7 @@ async def load_stage(owner: str, repo_name: str, current_user: User = Depends(ge
         "repoUrl": f"https://github.com/{owner}/{repo_name}",
         "stageJsonSha": stage_sha,
         "manifestSha": manifest_sha,
-        "rawBaseUrl": github_raw_base_url(owner, repo_name, repo.get("default_branch")),
+        "rawBaseUrl": None if repo.get("private") else github_raw_base_url(owner, repo_name, repo.get("default_branch")),
+        "private": bool(repo.get("private")),
+        "visibility": repo_visibility(repo),
     }

@@ -1,8 +1,12 @@
 #!/usr/bin/env node
 
 import { Buffer } from 'node:buffer'
+import { execFile } from 'node:child_process'
 import { readdir, readFile, writeFile } from 'node:fs/promises'
 import { join, relative } from 'node:path'
+import { promisify } from 'node:util'
+
+const execFileAsync = promisify(execFile)
 
 const validationStates = new Set(['validated', 'unvalidated', 'error'])
 const requiredFields = ['repoOwner', 'repoName', 'repoUrl', 'defaultBranch', 'commitSha', 'title', 'author', 'badges', 'publishedAt', 'updatedAt']
@@ -15,6 +19,7 @@ function parseArgs(argv) {
     writeEntryValidation: false,
     checkRun: false,
     failOnError: false,
+    changedStageFiles: false,
   }
   let positionalRoot = false
   for (let index = 0; index < argv.length; index += 1) {
@@ -23,10 +28,11 @@ function parseArgs(argv) {
     else if (arg === '--write-entry-validation') options.writeEntryValidation = true
     else if (arg === '--check-run') options.checkRun = true
     else if (arg === '--fail-on-error') options.failOnError = true
+    else if (arg === '--changed-stage-files') options.changedStageFiles = true
     else if (arg === '--root') options.root = argv[++index] || options.root
     else if (arg === '--index') options.indexPath = argv[++index] || options.indexPath
     else if (arg === '--help' || arg === '-h') {
-      console.log(`Usage: node scripts/build-marketplace-index.mjs [root] [options]\n\nOptions:\n  --validate-stage-repos    Validate each entry against its public GitHub stage repo\n  --write-entry-validation  Write badges.validation + validation metadata back to entries\n  --check-run               Create a GitHub check run when GitHub Actions env is present\n  --fail-on-error           Exit non-zero when validation errors are found\n  --index <path>            Output index path relative to root (default: index.json)`)
+      console.log(`Usage: node scripts/build-marketplace-index.mjs [root] [options]\n\nOptions:\n  --validate-stage-repos    Validate each entry against its public GitHub stage repo\n  --write-entry-validation  Write badges.validation + validation metadata back to entries\n  --check-run               Create a GitHub check run when GitHub Actions env is present\n  --fail-on-error           Exit non-zero when validation errors are found\n  --changed-stage-files     Validate only stage entry JSON files changed against the PR base branch\n  --index <path>            Output index path relative to root (default: index.json)`)
       process.exit(0)
     } else if (!arg.startsWith('--') && !positionalRoot) {
       options.root = arg
@@ -50,6 +56,21 @@ async function* walk(dir) {
     const path = join(dir, entry.name)
     if (entry.isDirectory()) yield* walk(path)
     else if (entry.isFile() && entry.name.endsWith('.json')) yield path
+  }
+}
+
+async function changedStageEntryPaths(root) {
+  const baseRef = process.env.GITHUB_BASE_REF
+  if (!baseRef) return null
+  try {
+    const { stdout } = await execFileAsync('git', ['diff', '--name-only', `origin/${baseRef}...HEAD`], { cwd: root })
+    return new Set(stdout
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line.startsWith('stages/') && line.endsWith('.json')))
+  } catch (error) {
+    console.warn(`Could not determine changed stage files; validating all entries. ${error instanceof Error ? error.message : String(error)}`)
+    return null
   }
 }
 
@@ -239,9 +260,17 @@ async function main() {
   const outPath = join(options.root, options.indexPath)
   const checkedAt = new Date().toISOString()
 
-  const stageFiles = []
+  let stageFiles = []
   for await (const file of walk(stagesDir)) stageFiles.push(file)
   stageFiles.sort()
+
+  if (options.changedStageFiles) {
+    const changed = await changedStageEntryPaths(options.root)
+    if (changed) {
+      stageFiles = stageFiles.filter((file) => changed.has(relative(options.root, file)))
+      console.log(`Validating ${stageFiles.length} changed stage entr${stageFiles.length === 1 ? 'y' : 'ies'}.`)
+    }
+  }
 
   const entries = []
   const entryFiles = []

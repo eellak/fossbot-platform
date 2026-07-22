@@ -39,6 +39,42 @@ def migrate_schema():
                 conn.execute(text("ALTER TABLE users ADD COLUMN access_revoked BOOLEAN NOT NULL DEFAULT false"))
                 conn.commit()
 
+    if 'projects' in table_columns:
+        project_cols = table_columns['projects']
+        project_stage_columns = {
+            'stage_source_type': 'VARCHAR',
+            'stage_repo_owner': 'VARCHAR',
+            'stage_repo_name': 'VARCHAR',
+            'stage_repo_visibility': 'VARCHAR',
+            'stage_marketplace_entry_path': 'VARCHAR',
+            'stage_title': 'VARCHAR',
+            'stage_url': 'VARCHAR',
+            'stage_commit_sha': 'VARCHAR',
+        }
+        for column, column_type in project_stage_columns.items():
+            if column not in project_cols:
+                with engine.connect() as conn:
+                    conn.execute(text(f"ALTER TABLE projects ADD COLUMN {column} {column_type}"))
+                    conn.commit()
+
+    if 'lessons' in table_columns:
+        lesson_cols = table_columns['lessons']
+        lesson_stage_columns = {
+            'stage_source_type': 'VARCHAR',
+            'stage_repo_owner': 'VARCHAR',
+            'stage_repo_name': 'VARCHAR',
+            'stage_repo_visibility': 'VARCHAR',
+            'stage_marketplace_entry_path': 'VARCHAR',
+            'stage_title': 'VARCHAR',
+            'stage_url': 'VARCHAR',
+            'stage_commit_sha': 'VARCHAR',
+        }
+        for column, column_type in lesson_stage_columns.items():
+            if column not in lesson_cols:
+                with engine.connect() as conn:
+                    conn.execute(text(f"ALTER TABLE lessons ADD COLUMN {column} {column_type}"))
+                    conn.commit()
+
 def create_db_tables():
     Base.metadata.create_all(bind=engine)
 
@@ -86,6 +122,14 @@ class Projects(Base):
     project_type = Column(String, default="python")
     date_created = Column(DateTime, default=datetime.datetime.utcnow)
     code = Column(String)
+    stage_source_type = Column(String)
+    stage_repo_owner = Column(String)
+    stage_repo_name = Column(String)
+    stage_repo_visibility = Column(String)
+    stage_marketplace_entry_path = Column(String)
+    stage_title = Column(String)
+    stage_url = Column(String)
+    stage_commit_sha = Column(String)
     user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
     user = relationship("User")
     
@@ -106,5 +150,13 @@ class Lesson(Base):
     description = Column(String)
     image_url = Column(String)
     video_url = Column(String)
+    stage_source_type = Column(String)
+    stage_repo_owner = Column(String)
+    stage_repo_name = Column(String)
+    stage_repo_visibility = Column(String)
+    stage_marketplace_entry_path = Column(String)
+    stage_title = Column(String)
+    stage_url = Column(String)
+    stage_commit_sha = Column(String)
     curriculum_id = Column(Integer, ForeignKey('curriculums.id'), nullable=False)
     curriculum = relationship("Curriculum", back_populates="lessons")

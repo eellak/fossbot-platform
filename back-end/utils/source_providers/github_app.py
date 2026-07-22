@@ -145,11 +145,11 @@ class GitHubAppProvider:
             page += 1
         return repos
 
-    def create_user_repo(self, user_token: str, name: str, description: str) -> dict[str, Any]:
+    def create_user_repo(self, user_token: str, name: str, description: str, private: bool = False) -> dict[str, Any]:
         data, _, _ = github_request("POST", "/user/repos", token=user_token, body={
             "name": name,
             "description": description,
-            "private": False,
+            "private": private,
             "auto_init": True,
             "has_issues": True,
             "has_projects": False,
@@ -291,6 +291,22 @@ class GitHubAppProvider:
             body={"title": title, "head": head, "base": base, "body": body},
         )
         return data
+
+    def list_pull_requests(self, token: str, owner: str, repo: str, state: str = "all") -> list[dict[str, Any]]:
+        pulls: list[dict[str, Any]] = []
+        page = 1
+        while True:
+            data, _, _ = github_request(
+                "GET",
+                f"/repos/{owner}/{repo}/pulls?state={urllib.parse.quote(state, safe='')}&per_page=100&page={page}",
+                token=token,
+            )
+            batch = data if isinstance(data, list) else []
+            pulls.extend(batch)
+            if len(batch) < 100:
+                break
+            page += 1
+        return pulls
 
     def set_topics(self, token: str, owner: str, repo: str, topics: list[str]) -> None:
         github_request("PUT", f"/repos/{owner}/{repo}/topics", token=token, body={"names": topics})
