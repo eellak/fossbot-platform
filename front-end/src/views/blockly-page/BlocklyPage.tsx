@@ -37,6 +37,17 @@ import { Project, type ProjectStageReference } from 'src/authentication/AuthInte
 import { loadStageFromProvider } from 'src/stages/StagesApi';
 import type { RawStageConfig } from 'src/simulator/stages';
 import { useMediaQuery } from '@mui/material';
+import StageLoadScreen from 'src/components/stage-select-popup/StageLoadScreen';
+
+function stageNeedsProviderLoad(
+  stage: ProjectStageReference | null,
+): stage is ProjectStageReference & { repoOwner: string; repoName: string } {
+  return (
+    (stage?.sourceType === 'github' || stage?.sourceType === 'marketplace') &&
+    !!stage.repoOwner &&
+    !!stage.repoName
+  );
+}
 
 const BlocklyPage = () => {
   const { t } = useTranslation();
@@ -51,8 +62,8 @@ const BlocklyPage = () => {
   const [projectDescription, setProjectDescription] = useState(t('newProjectDescription'));
   const [selectedStage, setSelectedStage] = useState<ProjectStageReference | null>(null);
   const [initialStageConfig, setInitialStageConfig] = useState<RawStageConfig | null | undefined>(undefined);
+  const [initialStageAssetBaseUrl, setInitialStageAssetBaseUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true); // Loading state of Blockly project
-  const [isSimulatorLoading, setIsSimulatorLoading] = useState(true); // Loading state of Simulator
   const [showVideoPlayer, setShowVideoPlayer] = useState(false);
   const [showDrawer, setShowDrawer] = useState(false);
 
@@ -122,11 +133,15 @@ const BlocklyPage = () => {
             }
             setProjectTitle(fetchedProject.name);
             const stageRef = fetchedProject.stageReference || null;
+            setInitialStageConfig(stageNeedsProviderLoad(stageRef) ? undefined : null);
+            setInitialStageAssetBaseUrl(null);
             setSelectedStage(stageRef);
           }
         } else {
           //setEditorValue( '<xml xmlns="https://developers.google.com/blockly/xml"></xml>');
           setProjectTitle(t('newProject'));
+          setInitialStageConfig(null);
+          setInitialStageAssetBaseUrl(null);
         }
       } catch (error) {
         console.error('Error fetching project:', error);
@@ -141,29 +156,37 @@ const BlocklyPage = () => {
 
   // Load stage config from backend for GitHub stages (handles private repos)
   useEffect(() => {
-    if (!token || !selectedStage?.repoOwner || !selectedStage?.repoName) {
-      setInitialStageConfig(undefined);
+    if (!stageNeedsProviderLoad(selectedStage)) {
+      setInitialStageConfig(null);
+      setInitialStageAssetBaseUrl(null);
       return;
     }
-    if (selectedStage.sourceType !== 'github' && selectedStage.sourceType !== 'marketplace') {
-      setInitialStageConfig(undefined);
-      return;
-    }
+    if (!token) return;
     setInitialStageConfig(undefined);
+    setInitialStageAssetBaseUrl(null);
     let cancelled = false;
     loadStageFromProvider(token, selectedStage.repoOwner, selectedStage.repoName)
       .then((loaded) => {
-        if (!cancelled) setInitialStageConfig(loaded.record.config);
+        if (!cancelled) {
+          setInitialStageAssetBaseUrl(loaded.rawBaseUrl || null);
+          setInitialStageConfig(loaded.record.config);
+        }
       })
       .catch(() => {
-        if (!cancelled) setInitialStageConfig(undefined);
+        if (!cancelled) {
+          setInitialStageAssetBaseUrl(null);
+          setInitialStageConfig(null);
+        }
       });
     return () => { cancelled = true; };
   }, [token, selectedStage?.repoOwner, selectedStage?.repoName, selectedStage?.sourceType]);
 
   useEffect(() => {
     const handleStageSelected = (event: Event) => {
-      setSelectedStage((event as CustomEvent<ProjectStageReference>).detail || null);
+      const stageRef = (event as CustomEvent<ProjectStageReference>).detail || null;
+      setInitialStageConfig(stageNeedsProviderLoad(stageRef) ? undefined : null);
+      setInitialStageAssetBaseUrl(null);
+      setSelectedStage(stageRef);
     };
     window.addEventListener('fossbot:stage-selected', handleStageSelected);
     return () => window.removeEventListener('fossbot:stage-selected', handleStageSelected);
@@ -229,10 +252,7 @@ const BlocklyPage = () => {
     }
   };
 
-  const handleMountChange = (isMounted: boolean) => {
-    // Updated value of isMounted is set to show if simulator is loading
-    setIsSimulatorLoading(false);
-  };
+  const handleMountChange = () => {};
 
   const handleDrawerClose = () => {
     setShowDrawer(false);
@@ -247,6 +267,9 @@ const BlocklyPage = () => {
   };
 
   const isResponsive = useMediaQuery('(max-width:1024px)');
+  const isStageConfigLoading =
+    stageNeedsProviderLoad(selectedStage) && initialStageConfig === undefined;
+  const selectedStageLabel = selectedStage?.title || [selectedStage?.repoOwner, selectedStage?.repoName].filter(Boolean).join('/');
 
   return (
     <PageContainer title={t('blockly-page.title')} description={t('blockly-page.description')}>
@@ -299,8 +322,10 @@ const BlocklyPage = () => {
           </Grid>
         </Grid>
 
-        {loading && isSimulatorLoading ? (
+        {loading ? (
           <Spinner />
+        ) : isStageConfigLoading ? (
+          <StageLoadScreen stageLabel={selectedStageLabel} />
         ) : (
           <Grid
             container
@@ -381,6 +406,7 @@ const BlocklyPage = () => {
                   onMountChange={handleMountChange}
                   initialStageUrl={selectedStage?.url || null}
                   initialStageConfig={initialStageConfig}
+                  initialStageAssetBaseUrl={initialStageAssetBaseUrl}
                 />
               </Box>
               <br />

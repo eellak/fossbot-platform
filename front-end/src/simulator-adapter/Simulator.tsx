@@ -38,6 +38,8 @@ type WebGLAppProps = {
   initialStageUrl?: string | null;
   /** Pre-fetched stage config entries; takes priority over initialStageUrl. */
   initialStageConfig?: RawStageConfig | null;
+  /** Base URL for assets referenced by initialStageConfig, such as GitHub stage assets. */
+  initialStageAssetBaseUrl?: string | null;
 };
 
 const SIMULATOR_VERSION_KEY = 'fossbot.simulatorVersion';
@@ -136,6 +138,13 @@ function setForwardedRef<T>(ref: React.ForwardedRef<T>, value: T | null): void {
 
 const V2WebGLApp = forwardRef<unknown, WebGLAppProps>((props, ref) => {
   const v2Config = useV2Config();
+  const effectiveV2Config = useMemo(
+    () => ({
+      ...v2Config,
+      stageAssetBaseUrl: props.initialStageAssetBaseUrl || undefined,
+    }),
+    [v2Config, props.initialStageAssetBaseUrl],
+  );
   const handleRef = useRef<FossbotSimulatorHandle | null>(null);
   const [lightIntensity, setLightIntensity] = useState(100);
   const [currentURL, setCurrentURL] = useState(DEFAULT_STAGE_URL);
@@ -180,7 +189,7 @@ const V2WebGLApp = forwardRef<unknown, WebGLAppProps>((props, ref) => {
         setStageLoadError(err instanceof Error ? err.message : String(err));
       });
     return () => { cancelled = true; };
-  }, [props.initialStageUrl, props.initialStageConfig]);
+  }, [props.initialStageUrl, props.initialStageConfig, props.initialStageAssetBaseUrl]);
 
   const setV2Handle = useCallback(
     (handle: FossbotSimulatorHandle | null) => {
@@ -209,8 +218,11 @@ const V2WebGLApp = forwardRef<unknown, WebGLAppProps>((props, ref) => {
   // Listen for subsequent stage changes (dialog, reload button)
   useEffect(() => {
     if (!handleRef.current) return;
+    if (props.initialStageConfig && currentURL === (props.initialStageUrl || DEFAULT_STAGE_URL)) {
+      return;
+    }
     void handleRef.current.setStage(currentURL);
-  }, [currentURL]);
+  }, [currentURL, props.initialStageConfig, props.initialStageUrl]);
 
   const handleForward = async () => {
     await handleRef.current?.moveStep(-0.4);
@@ -279,7 +291,7 @@ const V2WebGLApp = forwardRef<unknown, WebGLAppProps>((props, ref) => {
           <LazyFossbotSimulator
             appsessionId={props.appsessionId}
             onMountChange={handleMountChange}
-            config={v2Config}
+            config={effectiveV2Config}
             ref={setV2Handle}
             initialStageConfig={initialStageConfig || undefined}
           />
