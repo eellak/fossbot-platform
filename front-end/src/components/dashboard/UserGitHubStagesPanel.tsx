@@ -15,7 +15,8 @@ import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import DashboardCard from '../shared/DashboardCardWithChildren';
 import { useAuth } from 'src/authentication/AuthProvider';
 import { getGitHubLoginUrl, getGitHubProviderStatus, type GitHubProviderStatus } from 'src/stages/ProviderAuthApi';
-import { listProviderStages, type ProviderStageListItem } from 'src/stages/StagesApi';
+import type { ProviderStageListItem } from 'src/stages/StagesApi';
+import { refreshUserStages, stageListUserKey, subscribeUserStages, userStagesSnapshot } from 'src/stages/stageListCache';
 
 function formatDate(value?: string | null): string {
   if (!value) return 'Unknown';
@@ -37,11 +38,14 @@ function visibilityLabel(stage: ProviderStageListItem): string {
 }
 
 export default function UserGitHubStagesPanel() {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
+  const userKey = stageListUserKey(user);
   const [status, setStatus] = useState<GitHubProviderStatus | null>(null);
   const [stages, setStages] = useState<ProviderStageListItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [refreshingStages, setRefreshingStages] = useState(false);
+  const [stageListWarning, setStageListWarning] = useState('');
   const [connecting, setConnecting] = useState(false);
 
   const handleConnect = useCallback(async () => {
@@ -62,6 +66,23 @@ export default function UserGitHubStagesPanel() {
   const shouldShowConnectAction = !loading && (!status?.connected || status?.needsReconnect);
 
   useEffect(() => {
+    if (!userKey) {
+      setStages([]);
+      setRefreshingStages(false);
+      setStageListWarning('');
+      return undefined;
+    }
+    const sync = () => {
+      const snapshot = userStagesSnapshot(userKey);
+      setStages(snapshot.data || []);
+      setRefreshingStages(snapshot.refreshing);
+      setStageListWarning(snapshot.refreshError || '');
+    };
+    sync();
+    return subscribeUserStages(userKey, sync);
+  }, [userKey]);
+
+  useEffect(() => {
     if (!token) return undefined;
     const controller = new AbortController();
     setLoading(true);
@@ -72,8 +93,7 @@ export default function UserGitHubStagesPanel() {
         if (controller.signal.aborted) return;
         setStatus(payload);
         if (!payload.connected || payload.needsReconnect) return;
-        const providerStages = await listProviderStages(token);
-        if (!controller.signal.aborted) setStages(providerStages);
+        if (userKey) await refreshUserStages(userKey, token);
       })
       .catch((loadError) => {
         if (!controller.signal.aborted) setError(loadError instanceof Error ? loadError.message : 'Could not load GitHub stages.');
@@ -83,7 +103,7 @@ export default function UserGitHubStagesPanel() {
       });
 
     return () => controller.abort();
-  }, [token]);
+  }, [token, userKey]);
 
   return (
     <Box sx={{ mt: 3 }}>
@@ -102,14 +122,16 @@ export default function UserGitHubStagesPanel() {
           </Button>
         ) : undefined}
       >
-        {loading ? (
+        {loading && !stages.length ? (
           <Stack sx={{ py: 4, alignItems: 'center' }} spacing={1.5}>
             <CircularProgress size={26} />
             <Typography variant="body2" color="text.secondary">Loading GitHub stages…</Typography>
           </Stack>
         ) : error ? (
           <Alert severity="error">{error}</Alert>
-        ) : !status?.connected || status?.needsReconnect ? (
+        ) : stageListWarning && !stages.length ? (
+          <Alert severity="warning">{stageListWarning}</Alert>
+        ) : (!status?.connected || status?.needsReconnect) && !stages.length ? (
           <Alert severity="info">
             Connect the FOSSBot GitHub App to save, edit, and manage your stage repositories right from the dashboard.
           </Alert>
@@ -119,6 +141,8 @@ export default function UserGitHubStagesPanel() {
           </Alert>
         ) : (
           <Stack spacing={1.25}>
+            {stageListWarning && <Alert severity="warning">{stageListWarning}</Alert>}
+            {refreshingStages && <Typography variant="caption" color="text.secondary">Refreshing…</Typography>}
             {stages.map((stage) => (
               <Box
                 key={`${stage.repoOwner}/${stage.repoName}`}

@@ -28,12 +28,22 @@ import VerifiedIcon from '@mui/icons-material/Verified';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from 'src/authentication/AuthProvider';
 import { completeMarketplaceFork, getMarketplaceForkStatus, getMarketplaceIndex, MarketplaceRequestError, type MarketplaceIndexResponse, type MarketplaceStageEntry, type MarketplaceValidationState } from 'src/stages/MarketplaceApi';
+import { invalidateMarketplaceFirstPage, invalidateUserStages, marketplaceFirstPageSnapshot, refreshMarketplaceFirstPage, refreshStageLists, stageListUserKey, subscribeMarketplaceFirstPage } from 'src/stages/stageListCache';
 
 function formatDate(value?: string | null): string {
   if (!value) return 'Unknown';
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function formatRefreshTime(value: number | null): string {
+  if (!value) return '';
+  const minutes = Math.max(0, Math.floor((Date.now() - value) / 60_000));
+  if (minutes < 1) return 'Updated just now';
+  if (minutes === 1) return 'Updated a minute ago';
+  if (minutes < 60) return `Updated ${minutes} minutes ago`;
+  return `Updated ${Math.floor(minutes / 60)} hours ago`;
 }
 
 const validationBadges: Record<MarketplaceValidationState, { label: string; color: 'success' | 'warning' | 'error'; description: string }> = {
@@ -362,7 +372,8 @@ function MarketplaceDetailDrawer({
 }
 
 export default function StageMarketplacePanel() {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
+  const userKey = stageListUserKey(user);
   const navigate = useNavigate();
   const [index, setIndex] = useState<MarketplaceIndexResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -375,6 +386,8 @@ export default function StageMarketplacePanel() {
   const [forkFlow, setForkFlow] = useState<ForkFlow | null>(readForkFlow);
   const [forkBusy, setForkBusy] = useState(false);
   const [forkError, setForkError] = useState('');
+  const [cacheRefreshing, setCacheRefreshing] = useState(false);
+  const [cacheUpdatedAt, setCacheUpdatedAt] = useState<number | null>(null);
 
   const setActiveForkFlow = (flow: ForkFlow | null) => {
     setForkFlow(flow);
@@ -417,6 +430,9 @@ export default function StageMarketplacePanel() {
     setForkError('');
     try {
       const fork = await completeMarketplaceFork(token, entry.repoOwner, entry.repoName);
+      invalidateMarketplaceFirstPage();
+      if (userKey) invalidateUserStages(userKey);
+      await refreshStageLists(userKey, token, { force: true });
       setActiveForkFlow(null);
       navigate(`/stage-builder?open=github&repo=${encodeURIComponent(`${fork.repoOwner}/${fork.repoName}`)}`);
     } catch (error) {
@@ -453,10 +469,31 @@ export default function StageMarketplacePanel() {
     return () => { active = false; };
   }, [forkFlow, token]);
 
+  const canonicalRequest = !query.trim() && !activeTag && sort === 'updated' && page === 1;
+
   useEffect(() => {
+    if (!canonicalRequest) return undefined;
+    const sync = () => {
+      const snapshot = marketplaceFirstPageSnapshot();
+      setIndex(snapshot.data);
+      setLoading(!snapshot.data);
+      setError(snapshot.refreshError || '');
+      setCacheRefreshing(snapshot.refreshing);
+      setCacheUpdatedAt(snapshot.updatedAt);
+    };
+    sync();
+    const unsubscribe = subscribeMarketplaceFirstPage(sync);
+    void refreshMarketplaceFirstPage();
+    return unsubscribe;
+  }, [canonicalRequest]);
+
+  useEffect(() => {
+    if (canonicalRequest) return undefined;
     const controller = new AbortController();
     setLoading(true);
     setError('');
+    setIndex(null);
+    setCacheRefreshing(false);
     const timer = window.setTimeout(() => {
       getMarketplaceIndex({ page, pageSize: PAGE_SIZE, q: query.trim(), tag: activeTag, sort })
         .then((payload) => {
@@ -473,7 +510,7 @@ export default function StageMarketplacePanel() {
       controller.abort();
       window.clearTimeout(timer);
     };
-  }, [activeTag, page, query, sort]);
+  }, [activeTag, canonicalRequest, page, query, sort]);
 
   const stages = index?.stages || [];
   const pagination = index?.pagination;
@@ -492,6 +529,10 @@ export default function StageMarketplacePanel() {
           </Typography>
         </Box>
         <Stack direction="row" spacing={1} alignItems="center">
+          {canonicalRequest && cacheUpdatedAt && <Typography variant="caption" color="text.secondary">{cacheRefreshing ? 'Refreshing…' : formatRefreshTime(cacheUpdatedAt)}</Typography>}
+          <Button variant="outlined" size="small" onClick={() => { void refreshStageLists(userKey, token, { force: true }); }} disabled={cacheRefreshing}>
+            {cacheRefreshing ? 'Refreshing…' : 'Refresh stages'}
+          </Button>
           <Select size="small" value={sort} onChange={(event) => { setSort(event.target.value as typeof sort); setPage(1); }} sx={{ minWidth: 140 }}>
             <MenuItem value="updated">Recently updated</MenuItem>
             <MenuItem value="published">Recently published</MenuItem>
@@ -529,18 +570,18 @@ export default function StageMarketplacePanel() {
           )}
         </Box>
 
-        {loading ? (
+        {loading && !index ? (
           <Stack sx={{ py: 6, alignItems: 'center' }} spacing={1.5}>
             <CircularProgress size={28} />
             <Typography variant="body2" color="text.secondary">Loading marketplace index…</Typography>
           </Stack>
         ) : error ? (
-          <Alert severity="error" sx={{ m: 2 }}>{error}</Alert>
+          <Alert severity={index ? "warning" : "error"} sx={{ m: 2 }}>{error}</Alert>
         ) : index?.warning ? (
           <Alert severity="info" sx={{ m: 2 }}>{index.warning}</Alert>
         ) : null}
 
-        {!loading && !error && (
+        {!loading && (
           stages.length ? (
             <>
               <Grid container spacing={2} sx={{ p: 2 }}>

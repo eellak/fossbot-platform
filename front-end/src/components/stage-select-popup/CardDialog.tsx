@@ -22,8 +22,9 @@ import GitHubIcon from '@mui/icons-material/GitHub';
 import PublicIcon from '@mui/icons-material/Public';
 import { useAuth } from 'src/authentication/AuthProvider';
 import { resolveStageAssetUrl, stageAssetBaseUrlFromStageUrl } from 'src/simulator/stages/assets';
-import { getMarketplaceIndex, type MarketplaceStageEntry } from 'src/stages/MarketplaceApi';
-import { listProviderStages, loadStageFromProvider, type ProviderStageListItem } from 'src/stages/StagesApi';
+import type { MarketplaceStageEntry } from 'src/stages/MarketplaceApi';
+import { loadStageFromProvider, type ProviderStageListItem } from 'src/stages/StagesApi';
+import { marketplaceFirstPageSnapshot, refreshMarketplaceFirstPage, refreshUserStages, stageListUserKey, subscribeMarketplaceFirstPage, subscribeUserStages, userStagesSnapshot } from 'src/stages/stageListCache';
 
 export type StageSelectionSource = 'default' | 'github' | 'marketplace';
 
@@ -190,7 +191,8 @@ function StageCard({
 }
 
 const CardDialog: React.FC<CardDialogProps> = ({ open, onClose, onSelect, onSelectStage }) => {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
+  const userKey = stageListUserKey(user);
   const [tab, setTab] = useState<StageSelectionSource>('default');
   const [userStages, setUserStages] = useState<ProviderStageListItem[]>([]);
   const [marketplaceStages, setMarketplaceStages] = useState<MarketplaceStageEntry[]>([]);
@@ -206,27 +208,31 @@ const CardDialog: React.FC<CardDialogProps> = ({ open, onClose, onSelect, onSele
   }, [open]);
 
   useEffect(() => {
-    if (!open || !token) return;
-    let cancelled = false;
-    setUserLoading(true);
-    setUserError('');
-    listProviderStages(token)
-      .then((stages) => { if (!cancelled) setUserStages(stages); })
-      .catch((error) => { if (!cancelled) setUserError(error instanceof Error ? error.message : 'Could not load your GitHub stages.'); })
-      .finally(() => { if (!cancelled) setUserLoading(false); });
-    return () => { cancelled = true; };
-  }, [open, token]);
+    if (!open || !token || !userKey) return undefined;
+    const sync = () => {
+      const snapshot = userStagesSnapshot(userKey);
+      setUserStages(snapshot.data || []);
+      setUserLoading(snapshot.refreshing && !snapshot.data);
+      setUserError(snapshot.refreshError || '');
+    };
+    sync();
+    const unsubscribe = subscribeUserStages(userKey, sync);
+    void refreshUserStages(userKey, token);
+    return unsubscribe;
+  }, [open, token, userKey]);
 
   useEffect(() => {
-    if (!open) return;
-    let cancelled = false;
-    setMarketplaceLoading(true);
-    setMarketplaceError('');
-    getMarketplaceIndex({ page: 1, pageSize: 48, sort: 'verified' })
-      .then((payload) => { if (!cancelled) setMarketplaceStages(payload.stages || []); })
-      .catch((error) => { if (!cancelled) setMarketplaceError(error instanceof Error ? error.message : 'Could not load marketplace stages.'); })
-      .finally(() => { if (!cancelled) setMarketplaceLoading(false); });
-    return () => { cancelled = true; };
+    if (!open) return undefined;
+    const sync = () => {
+      const snapshot = marketplaceFirstPageSnapshot();
+      setMarketplaceStages(snapshot.data?.stages || []);
+      setMarketplaceLoading(snapshot.refreshing && !snapshot.data);
+      setMarketplaceError(snapshot.refreshError || '');
+    };
+    sync();
+    const unsubscribe = subscribeMarketplaceFirstPage(sync);
+    void refreshMarketplaceFirstPage();
+    return unsubscribe;
   }, [open]);
 
   const tabCounts = useMemo(() => ({
@@ -327,7 +333,7 @@ const CardDialog: React.FC<CardDialogProps> = ({ open, onClose, onSelect, onSele
                 Sign in and connect GitHub to choose one of your FOSSBot stage repositories. Lectures may use public or private GitHub stages.
               </Alert>
             )}
-            {userError && <Alert severity="error">{userError}</Alert>}
+            {userError && <Alert severity={userStages.length ? "warning" : "error"}>{userError}</Alert>}
             {userLoading ? (
               <Stack direction="row" spacing={1} alignItems="center"><CircularProgress size={20} /><Typography>Loading your GitHub stages…</Typography></Stack>
             ) : userStages.length ? (
@@ -351,7 +357,7 @@ const CardDialog: React.FC<CardDialogProps> = ({ open, onClose, onSelect, onSele
 
         {tab === 'marketplace' && (
           <Stack spacing={2}>
-            {marketplaceError && <Alert severity="error">{marketplaceError}</Alert>}
+            {marketplaceError && <Alert severity={marketplaceStages.length ? "warning" : "error"}>{marketplaceError}</Alert>}
             {marketplaceLoading ? (
               <Stack direction="row" spacing={1} alignItems="center"><CircularProgress size={20} /><Typography>Loading marketplace stages…</Typography></Stack>
             ) : marketplaceStages.length ? (
