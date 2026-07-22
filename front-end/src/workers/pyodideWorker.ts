@@ -44,6 +44,10 @@ onmessage = async function (event: MessageEvent) {
 };
 
 let pendingActionResolve: ((value: WorkerResponse | PromiseLike<WorkerResponse>) => void) | null = null;
+const CENTIMETERS_PER_SIMULATOR_UNIT = 100;
+
+const centimetersToSimulatorUnits = (distance: number): number =>
+  Math.abs(Number(distance)) / CENTIMETERS_PER_SIMULATOR_UNIT;
 
 const waitForAction = (): Promise<WorkerResponse> => {
   return new Promise((resolve) => {
@@ -67,7 +71,9 @@ const setUpPyodide = async () => {
 
   loadedPyodide.globals.set('move_forward_distance', async (distance: number) => {
     if (isStopped) return;
-    postMessage(JSON.stringify({ command: 'move', distance: Math.abs(distance) * -1 }));
+    postMessage(
+      JSON.stringify({ command: 'move', distance: -centimetersToSimulatorUnits(distance) }),
+    );
     await waitForAction();
   });
 
@@ -84,7 +90,9 @@ const setUpPyodide = async () => {
 
   loadedPyodide.globals.set('move_reverse_distance', async (distance: number) => {
     if (isStopped) return;
-    postMessage(JSON.stringify({ command: 'move', distance: Math.abs(distance) }));
+    postMessage(
+      JSON.stringify({ command: 'move', distance: centimetersToSimulatorUnits(distance) }),
+    );
     await waitForAction();
   });
 
