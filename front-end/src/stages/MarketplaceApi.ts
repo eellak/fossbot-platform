@@ -17,6 +17,23 @@ export interface MarketplaceVerificationDetails {
   reviewPullRequest?: string | null;
 }
 
+export type MarketplaceLifecycleState = 'unpublished' | 'published_current' | 'changes_ready_to_publish' | 'source_unavailable' | 'published_revision_invalid';
+
+export interface MarketplaceLifecycle {
+  state: MarketplaceLifecycleState;
+  message: string;
+  publishedCommitSha?: string | null;
+  sourceCommitSha?: string | null;
+  checkedAt?: string | null;
+}
+
+export interface MarketplaceSourceStatus {
+  state: 'current' | 'changes_ready_to_publish' | 'unavailable' | 'invalid';
+  sourceCommitSha?: string | null;
+  checkedAt?: string | null;
+  message?: string | null;
+}
+
 export interface MarketplaceStageEntry {
   marketplaceVersion: number;
   repoOwner: string;
@@ -44,6 +61,7 @@ export interface MarketplaceStageEntry {
   };
   validation?: MarketplaceValidationDetails | null;
   verification?: MarketplaceVerificationDetails | null;
+  sourceStatus?: MarketplaceSourceStatus | null;
   publishedAt: string;
   updatedAt: string;
 }
@@ -77,6 +95,7 @@ export interface MarketplaceIndexRequest {
   q?: string;
   tag?: string;
   sort?: 'updated' | 'published' | 'verified';
+  refresh?: boolean;
 }
 
 export interface PublishMarketplaceRequest {
@@ -96,6 +115,7 @@ export interface MarketplacePullRequestSummary {
   url?: string | null;
   state?: MarketplacePullRequestState | null;
   title?: string | null;
+  kind?: 'publish' | 'unpublish' | null;
   createdAt?: string | null;
   updatedAt?: string | null;
   mergedAt?: string | null;
@@ -106,8 +126,21 @@ export interface MarketplaceStageStatusResponse {
   repoName: string;
   entryPath: string;
   entry?: MarketplaceStageEntry | null;
+  lifecycle: MarketplaceLifecycle;
   pullRequest?: MarketplacePullRequestSummary | null;
   rawBaseUrl?: string | null;
+}
+
+export interface MyMarketplaceStage {
+  entry: MarketplaceStageEntry;
+  entryPath: string;
+  lifecycle: MarketplaceLifecycle;
+  pullRequest?: MarketplacePullRequestSummary | null;
+  unpublishPullRequest?: MarketplacePullRequestSummary | null;
+}
+
+export interface MyMarketplaceStagesResponse {
+  stages: MyMarketplaceStage[];
 }
 
 export interface PublishMarketplaceResponse {
@@ -190,6 +223,7 @@ export async function getMarketplaceIndex(request: MarketplaceIndexRequest = {})
   if (request.q) params.set('q', request.q);
   if (request.tag) params.set('tag', request.tag);
   if (request.sort) params.set('sort', request.sort);
+  if (request.refresh) params.set('refresh', 'true');
   const suffix = params.toString() ? `?${params.toString()}` : '';
   const response = await fetch(`${backendUrl}/api/marketplace/index${suffix}`, { method: 'GET' });
   return parseJsonResponse<MarketplaceIndexResponse>(response);
@@ -204,6 +238,14 @@ export async function getMarketplaceStageStatus(token: string, owner: string, re
     },
   });
   return parseJsonResponse<MarketplaceStageStatusResponse>(response);
+}
+
+export async function getMyMarketplaceStages(token: string): Promise<MyMarketplaceStagesResponse> {
+  const response = await fetch(`${backendUrl}/api/marketplace/mine`, {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return parseJsonResponse<MyMarketplaceStagesResponse>(response);
 }
 
 export async function completeMarketplaceFork(token: string, repoOwner: string, repoName: string): Promise<ForkMarketplaceStageResponse> {
@@ -246,6 +288,17 @@ export async function unpublishStageFromMarketplace(token: string, owner: string
       Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify({ reason }),
+  });
+  return parseJsonResponse(response);
+}
+
+export async function cancelUnpublishStageRequest(token: string, owner: string, repo: string): Promise<{ pullRequest: MarketplacePullRequestSummary }> {
+  const response = await fetch(`${backendUrl}/api/marketplace/unpublish/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/cancel`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
   });
   return parseJsonResponse(response);
 }

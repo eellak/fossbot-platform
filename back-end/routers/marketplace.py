@@ -199,10 +199,10 @@ def marketplace_index_cache_ttl() -> int:
         return 60
 
 
-def cached_public_marketplace_index() -> dict[str, Any]:
+def cached_public_marketplace_index(*, force_refresh: bool = False) -> dict[str, Any]:
     now = time.time()
     cached = MARKETPLACE_INDEX_CACHE.get("payload")
-    if cached is not None and now < float(MARKETPLACE_INDEX_CACHE.get("expiresAt") or 0):
+    if not force_refresh and cached is not None and now < float(MARKETPLACE_INDEX_CACHE.get("expiresAt") or 0):
         return cached
     payload = read_public_marketplace_index()
     MARKETPLACE_INDEX_CACHE["payload"] = payload
@@ -410,18 +410,74 @@ def marketplace_pull_request_payload(pr: Optional[dict[str, Any]]) -> Optional[d
     if not pr:
         return None
     state = "merged" if pr.get("merged_at") else pr.get("state") or "unknown"
+    title = pr.get("title")
     return {
         "number": pr.get("number"),
         "url": pr.get("html_url"),
         "state": state,
-        "title": pr.get("title"),
+        "title": title,
+        "kind": "unpublish" if str(title or "").startswith("Unpublish ") else "publish",
         "createdAt": pr.get("created_at"),
         "updatedAt": pr.get("updated_at"),
         "mergedAt": pr.get("merged_at"),
     }
 
 
+def lifecycle_payload(entry: Optional[dict[str, Any]], source_status: Optional[dict[str, Any]] = None) -> dict[str, Any]:
+    if not entry:
+        return {
+            "state": "unpublished",
+            "message": "This stage has not been published to the marketplace.",
+            "publishedCommitSha": None,
+            "sourceCommitSha": None,
+            "checkedAt": None,
+        }
+
+    status = source_status or entry.get("sourceStatus") or {}
+    if (entry.get("badges") or {}).get("validation") == "error":
+        status = {**status, "state": "invalid"}
+    source_state = status.get("state") or "current"
+    state = {
+        "current": "published_current",
+        "changes_ready_to_publish": "changes_ready_to_publish",
+        "unavailable": "source_unavailable",
+        "invalid": "published_revision_invalid",
+    }.get(source_state, "published_current")
+    messages = {
+        "published_current": "Your published stage is up to date.",
+        "changes_ready_to_publish": "You've made changes since this stage was published. Publish these changes to the marketplace?",
+        "source_unavailable": "We could not check this stage's source repository. The published revision remains available.",
+        "published_revision_invalid": "The published source could not be validated. The listing needs attention.",
+    }
+    return {
+        "state": state,
+        "message": messages.get(state, messages["published_current"]),
+        "publishedCommitSha": entry.get("commitSha"),
+        "sourceCommitSha": status.get("sourceCommitSha"),
+        "checkedAt": status.get("checkedAt"),
+    }
+
+
+def source_status_for_stage(provider, stage_token: str, stage_repo: dict[str, Any], entry: Optional[dict[str, Any]]) -> dict[str, Any]:
+    default_branch = stage_repo.get("default_branch") or (entry or {}).get("defaultBranch") or "main"
+    owner = (stage_repo.get("owner") or {}).get("login") or (entry or {}).get("repoOwner")
+    repo_name = stage_repo.get("name") or (entry or {}).get("repoName")
+    if not owner or not repo_name:
+        return {"state": "unavailable", "sourceCommitSha": None, "checkedAt": utc_now_iso()}
+    source_sha = current_branch_commit_sha(provider, stage_token, owner, repo_name, default_branch)
+    if not source_sha:
+        return {"state": "unavailable", "sourceCommitSha": None, "checkedAt": utc_now_iso()}
+    if not entry or source_sha == entry.get("commitSha"):
+        return {"state": "current", "sourceCommitSha": source_sha, "checkedAt": utc_now_iso()}
+    return {"state": "changes_ready_to_publish", "sourceCommitSha": source_sha, "checkedAt": utc_now_iso()}
+
+
 def latest_marketplace_pull_request(provider, marketplace_token: str, owner: str, repo_name: str) -> Optional[dict[str, Any]]:
+    pulls = provider.list_pull_requests(marketplace_token, marketplace_owner(), marketplace_repo(), state="all")
+    return latest_marketplace_pull_request_from(pulls, owner, repo_name)
+
+
+def latest_marketplace_pull_request_from(pulls: list[dict[str, Any]], owner: str, repo_name: str) -> Optional[dict[str, Any]]:
     branch_prefixes = (
         f"fossbot/publish-{owner}-{repo_name}-",
         f"fossbot/unpublish-{owner}-{repo_name}-",
@@ -430,7 +486,6 @@ def latest_marketplace_pull_request(provider, marketplace_token: str, owner: str
         f"Publish {owner}/{repo_name}",
         f"Unpublish {owner}/{repo_name}",
     }
-    pulls = provider.list_pull_requests(marketplace_token, marketplace_owner(), marketplace_repo(), state="all")
     matches = [
         pull for pull in pulls
         if pull.get("title") in titles
@@ -439,6 +494,24 @@ def latest_marketplace_pull_request(provider, marketplace_token: str, owner: str
     if not matches:
         return None
     return sorted(matches, key=lambda pull: pull.get("updated_at") or pull.get("created_at") or "", reverse=True)[0]
+
+
+def open_marketplace_unpublish_pull_request_from(pulls: list[dict[str, Any]], owner: str, repo_name: str) -> Optional[dict[str, Any]]:
+    title = f"Unpublish {owner}/{repo_name}"
+    prefix = f"fossbot/unpublish-{owner}-{repo_name}-"
+    matches = [
+        pull for pull in pulls
+        if pull.get("state") == "open"
+        and (pull.get("title") == title or ((pull.get("head") or {}).get("ref") or "").startswith(prefix))
+    ]
+    if not matches:
+        return None
+    return sorted(matches, key=lambda pull: pull.get("updated_at") or pull.get("created_at") or "", reverse=True)[0]
+
+
+def marketplace_entry_belongs_to(entry: dict[str, Any], github_login: str) -> bool:
+    login = (github_login or "").lower()
+    return login == str((entry.get("author") or {}).get("githubUsername") or "").lower() or login == str(entry.get("repoOwner") or "").lower()
 
 
 def create_marketplace_pr(provider, marketplace_token: str, marketplace_repo_data: dict[str, Any], title: str, body: str, branch_slug: str, write_entry) -> dict[str, Any]:
@@ -466,8 +539,9 @@ async def marketplace_index(
     q: str = Query("", max_length=120),
     tag: Optional[str] = Query(None, max_length=32),
     sort: str = Query("updated", pattern="^(updated|published|verified)$"),
+    refresh: bool = Query(False),
 ):
-    payload = cached_public_marketplace_index()
+    payload = cached_public_marketplace_index(force_refresh=refresh)
     stages = payload.get("stages") or []
     query = q.strip()
     tag_value = (tag or "").strip() or None
@@ -505,8 +579,6 @@ async def marketplace_index(
 async def marketplace_stage_status(owner: str, repo_name: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     provider = get_provider("github_app")
     try:
-        stage_token, stage_repo, _, _, _ = require_stage_repo_token(provider, db, current_user, owner, repo_name)
-        default_branch = stage_repo.get("default_branch") or "main"
         marketplace_token, _ = marketplace_installation_token(provider, create_github_app_jwt())
         entry_path = marketplace_entry_path(owner, repo_name)
         entry = None
@@ -516,13 +588,27 @@ async def marketplace_stage_status(owner: str, repo_name: str, current_user: Use
             if error.status_code != 404:
                 raise marketplace_access_error(error) from error
         pull_request = latest_marketplace_pull_request(provider, marketplace_token, owner, repo_name)
+        source_status = None
+        raw_base_url = None
+        try:
+            stage_token, stage_repo, _, _, _ = require_stage_repo_token(provider, db, current_user, owner, repo_name)
+            source_status = source_status_for_stage(provider, stage_token, stage_repo, entry)
+            default_branch = stage_repo.get("default_branch") or "main"
+            raw_base_url = github_raw_base_url(owner, repo_name, default_branch)
+        except HTTPException as error:
+            if error.status_code not in (403, 404):
+                raise
+            source_status = {"state": "unavailable", "sourceCommitSha": None, "checkedAt": utc_now_iso()}
+        except (ValueError, json.JSONDecodeError):
+            source_status = {"state": "invalid", "sourceCommitSha": None, "checkedAt": utc_now_iso()}
         return {
             "repoOwner": owner,
             "repoName": repo_name,
             "entryPath": entry_path,
             "entry": entry,
+            "lifecycle": lifecycle_payload(entry, source_status),
             "pullRequest": marketplace_pull_request_payload(pull_request),
-            "rawBaseUrl": github_raw_base_url(owner, repo_name, default_branch),
+            "rawBaseUrl": raw_base_url,
         }
     except HTTPException:
         raise
@@ -530,6 +616,39 @@ async def marketplace_stage_status(owner: str, repo_name: str, current_user: Use
         raise stage_error(400, "validation_failed", str(error)) from error
     except GitHubApiError as error:
         raise github_stage_error(error) from error
+    except RuntimeError as error:
+        raise stage_error(503, "provider_unconfigured", str(error)) from error
+
+
+@router.get("/api/marketplace/mine")
+async def my_marketplace_stages(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    provider = get_provider("github_app")
+    try:
+        connection, _ = require_connection(db, current_user)
+        entries = [
+            entry for entry in (cached_public_marketplace_index().get("stages") or [])
+            if marketplace_entry_belongs_to(entry, connection.provider_account_login)
+        ]
+        marketplace_token, _ = marketplace_installation_token(provider, create_github_app_jwt())
+        pulls = provider.list_pull_requests(marketplace_token, marketplace_owner(), marketplace_repo(), state="all")
+        return {
+            "stages": [
+                {
+                    "entry": entry,
+                    "entryPath": marketplace_entry_path(entry["repoOwner"], entry["repoName"]),
+                    "lifecycle": lifecycle_payload(entry),
+                    "pullRequest": marketplace_pull_request_payload(latest_marketplace_pull_request_from(pulls, entry["repoOwner"], entry["repoName"])),
+                    "unpublishPullRequest": marketplace_pull_request_payload(open_marketplace_unpublish_pull_request_from(pulls, entry["repoOwner"], entry["repoName"])),
+                }
+                for entry in sort_marketplace_entries(entries, "updated")
+            ],
+        }
+    except HTTPException:
+        raise
+    except MarketplaceSchemaError as error:
+        raise stage_error(400, "validation_failed", str(error)) from error
+    except GitHubApiError as error:
+        raise marketplace_access_error(error) from error
     except RuntimeError as error:
         raise stage_error(503, "provider_unconfigured", str(error)) from error
 
@@ -815,6 +934,15 @@ async def unpublish_stage_from_marketplace(owner: str, repo_name: str, request: 
             raise marketplace_access_error(error) from error
         if not entry_file:
             raise stage_error(404, "not_published", "That stage is not listed in the configured marketplace.")
+        open_pulls = provider.list_pull_requests(marketplace_token, marketplace_owner(), marketplace_repo(), state="open")
+        existing_unpublish_request = open_marketplace_unpublish_pull_request_from(open_pulls, owner, repo_name)
+        if existing_unpublish_request:
+            raise stage_error(
+                409,
+                "unpublish_request_open",
+                "An unpublish request is already open for this stage.",
+                extra={"pullRequest": marketplace_pull_request_payload(existing_unpublish_request)},
+            )
 
         def delete_entry(branch_name: str) -> None:
             provider.delete_file(
@@ -847,5 +975,25 @@ async def unpublish_stage_from_marketplace(owner: str, repo_name: str, request: 
         raise stage_error(400, "validation_failed", str(error)) from error
     except GitHubApiError as error:
         raise github_stage_error(error) from error
+    except RuntimeError as error:
+        raise stage_error(503, "provider_unconfigured", str(error)) from error
+
+
+@router.post("/api/marketplace/unpublish/{owner}/{repo_name}/cancel")
+async def cancel_unpublish_stage_request(owner: str, repo_name: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    provider = get_provider("github_app")
+    try:
+        require_stage_repo_token(provider, db, current_user, owner, repo_name)
+        marketplace_token, _ = marketplace_installation_token(provider, create_github_app_jwt())
+        pulls = provider.list_pull_requests(marketplace_token, marketplace_owner(), marketplace_repo(), state="open")
+        pull_request = open_marketplace_unpublish_pull_request_from(pulls, owner, repo_name)
+        if not pull_request or not pull_request.get("number"):
+            raise stage_error(404, "unpublish_request_not_found", "There is no open unpublish request for this stage.")
+        closed = provider.update_pull_request(marketplace_token, marketplace_owner(), marketplace_repo(), int(pull_request["number"]), state="closed")
+        return {"pullRequest": marketplace_pull_request_payload(closed)}
+    except HTTPException:
+        raise
+    except GitHubApiError as error:
+        raise marketplace_write_error(error) from error
     except RuntimeError as error:
         raise stage_error(503, "provider_unconfigured", str(error)) from error

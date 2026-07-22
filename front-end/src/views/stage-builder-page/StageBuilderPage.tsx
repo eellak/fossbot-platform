@@ -40,7 +40,7 @@ import { SaveToProviderDialog, type SaveToProviderValues } from 'src/stages/Save
 import { OpenFromProviderDialog } from 'src/stages/OpenFromProviderDialog';
 import { getMarketplaceStageStatus, publishStageToMarketplace, MarketplaceRequestError, type MarketplaceStageStatusResponse, type PublishMarketplaceResponse } from 'src/stages/MarketplaceApi';
 import { PublishToMarketplaceDialog, type PublishMarketplaceValues } from 'src/stages/PublishToMarketplaceDialog';
-import { invalidateMarketplaceFirstPage, invalidateUserStages, refreshMarketplaceFirstPage, refreshUserStages, stageListUserKey, subscribeUserStages, userStagesSnapshot } from 'src/stages/stageListCache';
+import { invalidateMarketplaceFirstPage, invalidateMyMarketplaceStages, invalidateUserStages, refreshMarketplaceFirstPage, refreshMyMarketplaceStages, refreshUserStages, stageListUserKey, subscribeUserStages, userStagesSnapshot } from 'src/stages/stageListCache';
 
 function userScope(user: ReturnType<typeof useAuth>['user']): string {
   if (!user) return 'anonymous';
@@ -435,6 +435,8 @@ const StageBuilderPage = () => {
     url: marketplaceResultForCurrentStage.pullRequestUrl,
     state: marketplaceResultForCurrentStage.pullRequestState || 'open',
   } : null) || marketplaceStatus?.pullRequest || null;
+  const marketplacePublishLabel = marketplaceStatus?.lifecycle.state === 'changes_ready_to_publish' ? 'Publish changes' : 'Publish stage';
+  const marketplacePublishReady = marketplaceStatus?.lifecycle.state === 'changes_ready_to_publish';
 
   const refreshProviderStatus = async ({ force = false }: RefreshCacheOptions = {}) => {
     if (!token) {
@@ -1086,6 +1088,12 @@ const StageBuilderPage = () => {
         repoName: remoteStage.repoName,
         entryPath: result.entryPath,
         entry: result.entry,
+        lifecycle: {
+          state: 'published_current',
+          message: 'Your changes were submitted for marketplace review.',
+          publishedCommitSha: result.entry.commitSha,
+          sourceCommitSha: result.entry.commitSha,
+        },
         pullRequest: result.pullRequest || (result.pullRequestUrl ? {
           number: result.pullRequestNumber,
           url: result.pullRequestUrl,
@@ -1095,7 +1103,9 @@ const StageBuilderPage = () => {
       });
       marketplaceStatusCacheRef.current = { key: `${remoteStage.repoOwner}/${remoteStage.repoName}`, checkedAt: Date.now() };
       invalidateMarketplaceFirstPage();
+      if (stageListUser) invalidateMyMarketplaceStages(stageListUser);
       await refreshMarketplaceFirstPage({ force: true });
+      if (stageListUser) await refreshMyMarketplaceStages(stageListUser, token, { force: true });
       setMessage(`Marketplace PR created for ${remoteStage.repoOwner}/${remoteStage.repoName}.`);
     } catch (error) {
       if (error instanceof MarketplaceRequestError) {
@@ -1467,6 +1477,8 @@ const StageBuilderPage = () => {
         marketplaceBusy={marketplacePublishing}
         marketplaceStatusLoading={marketplaceStatusLoading}
         marketplacePullRequest={marketplacePullRequest}
+        marketplacePublishLabel={marketplacePublishLabel}
+        marketplacePublishReady={marketplacePublishReady}
         onImport={() => importInputRef.current?.click()}
         onExport={handleExport}
         onRefreshGitHubStatus={() => { refreshProviderStatus(); refreshMarketplaceStatus(); }}
@@ -1712,6 +1724,7 @@ const StageBuilderPage = () => {
         busy={marketplacePublishing}
         error={marketplaceError}
         result={marketplaceResult}
+        lifecycle={marketplaceStatus?.lifecycle}
         onClose={() => setPublishMarketplaceOpen(false)}
         onSaveToGitHub={() => { setPublishMarketplaceOpen(false); setSaveProviderOpen(true); }}
         onPublish={handlePublishMarketplace}

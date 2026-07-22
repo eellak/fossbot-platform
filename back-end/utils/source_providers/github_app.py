@@ -308,6 +308,10 @@ class GitHubAppProvider:
         )
         return data
 
+    def update_pull_request(self, token: str, owner: str, repo: str, number: int, **changes: Any) -> dict[str, Any]:
+        data, _, _ = github_request("PATCH", f"/repos/{owner}/{repo}/pulls/{number}", token=token, body=changes)
+        return data
+
     def list_pull_requests(self, token: str, owner: str, repo: str, state: str = "all") -> list[dict[str, Any]]:
         pulls: list[dict[str, Any]] = []
         page = 1
