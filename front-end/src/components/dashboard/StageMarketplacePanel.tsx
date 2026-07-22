@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Alert,
   Box,
@@ -64,18 +64,7 @@ function ValidationChip({ entry }: { entry: MarketplaceStageEntry }) {
   );
 }
 
-function stageMatches(entry: MarketplaceStageEntry, query: string, activeTag: string): boolean {
-  const haystack = [
-    entry.title,
-    entry.description,
-    entry.repoOwner,
-    entry.repoName,
-    entry.author?.githubUsername,
-    entry.author?.platformUsername,
-    ...(entry.tags || []),
-  ].join(' ').toLowerCase();
-  return (!query || haystack.includes(query.toLowerCase())) && (!activeTag || entry.tags?.includes(activeTag));
-}
+const PAGE_SIZE = 24;
 
 function StagePreview({ entry }: { entry: MarketplaceStageEntry }) {
   if (entry.previewUrl) {
@@ -168,7 +157,7 @@ function MarketplaceDetailDrawer({ entry, open, onClose }: { entry: MarketplaceS
               <Box>
                 <Typography variant="subtitle2" fontWeight={800}>Author</Typography>
                 <Typography variant="body2" color="text.secondary">
-                  @{entry.author?.githubUsername || entry.repoOwner}{entry.author?.platformUsername ? ` · FOSSBot ${entry.author.platformUsername}` : ''}
+                  @{entry.author?.githubUsername || entry.repoOwner}
                 </Typography>
               </Box>
               <Box>
@@ -214,39 +203,34 @@ export default function StageMarketplacePanel() {
   const [query, setQuery] = useState('');
   const [activeTag, setActiveTag] = useState('');
   const [sort, setSort] = useState<'updated' | 'published' | 'verified'>('updated');
+  const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<MarketplaceStageEntry | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true);
     setError('');
-    getMarketplaceIndex()
-      .then((payload) => {
-        if (!controller.signal.aborted) setIndex(payload);
-      })
-      .catch((loadError) => {
-        if (!controller.signal.aborted) setError(loadError instanceof Error ? loadError.message : 'Could not load marketplace index.');
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
-      });
-    return () => controller.abort();
-  }, []);
+    const timer = window.setTimeout(() => {
+      getMarketplaceIndex({ page, pageSize: PAGE_SIZE, q: query.trim(), tag: activeTag, sort })
+        .then((payload) => {
+          if (!controller.signal.aborted) setIndex(payload);
+        })
+        .catch((loadError) => {
+          if (!controller.signal.aborted) setError(loadError instanceof Error ? loadError.message : 'Could not load marketplace index.');
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) setLoading(false);
+        });
+    }, 150);
+    return () => {
+      controller.abort();
+      window.clearTimeout(timer);
+    };
+  }, [activeTag, page, query, sort]);
 
-  const tags = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const entry of index?.stages || []) for (const tag of entry.tags || []) counts.set(tag, (counts.get(tag) || 0) + 1);
-    return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, 12);
-  }, [index]);
-
-  const filtered = useMemo(() => {
-    const entries = (index?.stages || []).filter((entry) => stageMatches(entry, query, activeTag));
-    return entries.sort((a, b) => {
-      if (sort === 'verified') return Number(b.badges?.verified || false) - Number(a.badges?.verified || false) || String(b.updatedAt).localeCompare(String(a.updatedAt));
-      if (sort === 'published') return String(b.publishedAt).localeCompare(String(a.publishedAt));
-      return String(b.updatedAt).localeCompare(String(a.updatedAt));
-    });
-  }, [activeTag, index, query, sort]);
+  const stages = index?.stages || [];
+  const pagination = index?.pagination;
+  const tags = index?.tags || [];
 
   return (
     <Box sx={{ mt: 3 }}>
@@ -258,7 +242,7 @@ export default function StageMarketplacePanel() {
           </Typography>
         </Box>
         <Stack direction="row" spacing={1} alignItems="center">
-          <Select size="small" value={sort} onChange={(event) => setSort(event.target.value as typeof sort)} sx={{ minWidth: 140 }}>
+          <Select size="small" value={sort} onChange={(event) => { setSort(event.target.value as typeof sort); setPage(1); }} sx={{ minWidth: 140 }}>
             <MenuItem value="updated">Recently updated</MenuItem>
             <MenuItem value="published">Recently published</MenuItem>
             <MenuItem value="verified">Verified first</MenuItem>
@@ -273,22 +257,22 @@ export default function StageMarketplacePanel() {
               size="small"
               placeholder="Search title, author, tag, or repo"
               value={query}
-              onChange={(event) => setQuery(event.target.value)}
+              onChange={(event) => { setQuery(event.target.value); setPage(1); }}
               InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> }}
               sx={{ flex: 1 }}
             />
-            <Button variant="outlined" onClick={() => { setQuery(''); setActiveTag(''); }}>Clear</Button>
+            <Button variant="outlined" onClick={() => { setQuery(''); setActiveTag(''); setPage(1); }}>Clear</Button>
           </Stack>
           {!!tags.length && (
             <Stack direction="row" sx={{ mt: 1.5, flexWrap: 'wrap', gap: 0.75 }}>
-              {tags.map(([tag, count]) => (
+              {tags.map(({ tag, count }) => (
                 <Chip
                   key={tag}
                   size="small"
                   label={`${tag} ${count}`}
                   color={activeTag === tag ? 'primary' : 'default'}
                   variant={activeTag === tag ? 'filled' : 'outlined'}
-                  onClick={() => setActiveTag((current) => current === tag ? '' : tag)}
+                  onClick={() => { setActiveTag((current) => current === tag ? '' : tag); setPage(1); }}
                 />
               ))}
             </Stack>
@@ -307,14 +291,27 @@ export default function StageMarketplacePanel() {
         ) : null}
 
         {!loading && !error && (
-          filtered.length ? (
-            <Grid container spacing={2} sx={{ p: 2 }}>
-              {filtered.map((entry) => (
-                <Grid key={`${entry.repoOwner}/${entry.repoName}`} item xs={12} sm={6} lg={4} xl={3}>
-                  <MarketplaceStageCard entry={entry} onSelect={setSelected} />
-                </Grid>
-              ))}
-            </Grid>
+          stages.length ? (
+            <>
+              <Grid container spacing={2} sx={{ p: 2 }}>
+                {stages.map((entry) => (
+                  <Grid key={`${entry.repoOwner}/${entry.repoName}`} item xs={12} sm={6} lg={4} xl={3}>
+                    <MarketplaceStageCard entry={entry} onSelect={setSelected} />
+                  </Grid>
+                ))}
+              </Grid>
+              {pagination && pagination.totalPages > 1 && (
+                <Stack direction={{ xs: 'column', sm: 'row' }} alignItems="center" justifyContent="space-between" spacing={1.5} sx={{ px: 2, pb: 2 }}>
+                  <Typography variant="body2" color="text.secondary">
+                    Page {pagination.page} of {pagination.totalPages} · {pagination.total} stages
+                  </Typography>
+                  <Stack direction="row" spacing={1}>
+                    <Button variant="outlined" disabled={!pagination.hasPrevious} onClick={() => setPage((current) => Math.max(1, current - 1))}>Previous</Button>
+                    <Button variant="outlined" disabled={!pagination.hasNext} onClick={() => setPage((current) => current + 1)}>Next</Button>
+                  </Stack>
+                </Stack>
+              )}
+            </>
           ) : (
             <Box sx={{ py: 6, px: 2, textAlign: 'center' }}>
               <Typography variant="subtitle1" fontWeight={800}>No stages found</Typography>
