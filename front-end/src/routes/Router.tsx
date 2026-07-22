@@ -19,6 +19,7 @@ const StageBuilderTestPage = Loadable(lazy(() => import('../views/stage-builder-
 const StageGitHubTestPage = Loadable(
   lazy(() => import('../views/stage-github-test-page/StageGitHubTestPage')),
 );
+const StagesPage = Loadable(lazy(() => import('../views/stages-page/StagesPage')));
 
 //const BlocklyPage = Loadable(lazy(() => import('../views/blockly-page/BlocklyPage')));
 //const BlocklyPage =  '../views/blockly-page/BlocklyPage';
@@ -121,6 +122,16 @@ const Router = [
     ],
   },
 
+  {
+    path: '/stages',
+    title: 'Stages',
+    element: (
+      <PrivateRoute>
+        <FullLayout />
+      </PrivateRoute>
+    ),
+    children: [{ path: '', exact: true, element: <StagesPage /> }],
+  },
   {
     path: '/stage-builder',
     title: 'Stage Builder',

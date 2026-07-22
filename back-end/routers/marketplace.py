@@ -7,9 +7,9 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
-from database.database import User
+from database.database import MarketplaceModerationAction, MarketplaceModerationOverride, MarketplaceReport, MarketplaceRoleAssignment, MarketplaceVerificationRequest as MarketplaceVerificationApplication, User
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -34,7 +34,9 @@ from utils.marketplace_schema import (
     MarketplaceSchemaError,
     build_marketplace_entry,
     build_marketplace_index,
+    canonical_marketplace_entry_hash,
     marketplace_entry_path,
+    raw_github_url,
     utc_now_iso,
     validate_marketplace_entry,
 )
@@ -47,6 +49,23 @@ router = APIRouter()
 DATA_URL_RE = re.compile(r"^data:([^;,]+)?(;base64)?,(.*)$", re.DOTALL)
 MARKETPLACE_INDEX_CACHE: dict[str, Any] = {"expiresAt": 0.0, "payload": None}
 
+MARKETPLACE_SHARING_LICENSES = {
+    "CC-BY-4.0": """Creative Commons Attribution 4.0 International
+
+SPDX-License-Identifier: CC-BY-4.0
+
+This work is licensed under the Creative Commons Attribution 4.0 International License.
+To view a copy of this license, visit https://creativecommons.org/licenses/by/4.0/legalcode
+""",
+    "CC0-1.0": """CC0 1.0 Universal
+
+SPDX-License-Identifier: CC0-1.0
+
+To the extent possible under law, the author has waived all copyright and related or neighboring rights to this work.
+To view a copy of this dedication, visit https://creativecommons.org/publicdomain/zero/1.0/legalcode
+""",
+}
+
 
 class MarketplacePublishRequest(BaseModel):
     repoOwner: str
@@ -55,6 +74,7 @@ class MarketplacePublishRequest(BaseModel):
     description: Optional[str] = None
     tags: list[str] = Field(default_factory=list)
     previewDataUrl: Optional[str] = None
+    sharingLicense: Literal["CC-BY-4.0", "CC0-1.0"] = "CC-BY-4.0"
     commitMessage: Optional[str] = None
 
 
@@ -65,6 +85,40 @@ class MarketplaceUnpublishRequest(BaseModel):
 class MarketplaceForkRequest(BaseModel):
     repoOwner: str
     repoName: str
+
+
+REPORT_CATEGORIES = {"broken_misleading", "inappropriate", "copyright_attribution", "safety", "spam", "other"}
+MODERATION_STATES = {"hidden", "removed"}
+
+
+class MarketplaceReportRequest(BaseModel):
+    repoOwner: str
+    repoName: str
+    category: str
+    explanation: str = Field(min_length=3, max_length=2000)
+    reporterContact: Optional[str] = Field(default=None, max_length=320)
+
+
+class MarketplaceModerationRequest(BaseModel):
+    state: str
+    reason: str = Field(min_length=3, max_length=2000)
+    reportId: Optional[int] = None
+
+
+class MarketplaceRestoreRequest(BaseModel):
+    reason: str = Field(min_length=3, max_length=2000)
+    reportId: Optional[int] = None
+
+
+class MarketplaceVerificationRequest(BaseModel):
+    requestId: int
+    verified: bool
+    stageRuns: bool
+    metadataAccurate: bool
+    attributionAcceptable: bool
+    contentAppropriate: bool
+    categoriesAppropriate: bool
+    notes: Optional[str] = Field(default=None, max_length=2000)
 
 
 def marketplace_fork_status(provider, user_token: str, connection, entry: dict[str, Any]) -> dict[str, Any]:
@@ -122,6 +176,43 @@ def marketplace_owner() -> str:
     return os.getenv("FOSSBOT_MARKETPLACE_OWNER", "fossbot")
 
 
+def reporting_contact() -> Optional[str]:
+    return os.getenv("FOSSBOT_MARKETPLACE_REPORTING_CONTACT") or None
+
+
+def marketplace_roles(db: Session, user: User) -> set[str]:
+    if getattr(user.role, "value", user.role) == "admin":
+        return {"verifier", "moderator"}
+    return {assignment.role for assignment in db.query(MarketplaceRoleAssignment).filter(MarketplaceRoleAssignment.user_id == user.id).all()}
+
+
+def require_marketplace_role(db: Session, user: User, role: str) -> None:
+    if role not in marketplace_roles(db, user):
+        raise stage_error(403, "marketplace_role_required", f"You do not have the marketplace {role} role.")
+
+
+def require_marketplace_contributor(provider, db: Session, user: User) -> str:
+    connection, user_token = require_connection(db, user)
+    repo = provider.get_repo(user_token, marketplace_owner(), marketplace_repo(), allowed_statuses=(404,))
+    permissions = (repo or {}).get("permissions") or {}
+    if not repo or not any(permissions.get(level) for level in ("admin", "maintain", "push")):
+        raise stage_error(403, "marketplace_contributor_required", "Verification requires GitHub contributor access to the marketplace repository.")
+    return connection.provider_account_login
+
+
+def moderation_payload(override: MarketplaceModerationOverride) -> dict[str, Any]:
+    return {
+        "repoOwner": override.repo_owner,
+        "repoName": override.repo_name,
+        "state": override.state,
+        "active": override.active,
+        "reason": override.reason,
+        "moderator": override.moderator.username if override.moderator else None,
+        "createdAt": override.created_at.isoformat() + "Z",
+        "updatedAt": override.updated_at.isoformat() + "Z",
+    }
+
+
 def marketplace_repo() -> str:
     return os.getenv("FOSSBOT_MARKETPLACE_REPO", "marketplace")
 
@@ -172,7 +263,9 @@ def decode_data_url(data_url: Optional[str], *, expected_prefix: str, max_bytes:
 
 
 def read_public_marketplace_index() -> dict[str, Any]:
-    url = marketplace_raw_index_url()
+    raw_url = marketplace_raw_index_url()
+    separator = "&" if "?" in raw_url else "?"
+    url = f"{raw_url}{separator}fossbot_cache_bust={int(time.time())}"
     try:
         request = urllib.request.Request(url, headers={"User-Agent": "fossbot-platform-marketplace"})
         with urllib.request.urlopen(request, timeout=15) as response:
@@ -229,11 +322,26 @@ def marketplace_entry_matches(entry: dict[str, Any], query: str, tag: Optional[s
     return query.lower() in haystack
 
 
-def published_marketplace_entry(owner: str, repo_name: str) -> dict[str, Any]:
-    for entry in cached_public_marketplace_index().get("stages") or []:
+def published_marketplace_entry(owner: str, repo_name: str, *, force_refresh: bool = False) -> dict[str, Any]:
+    for entry in cached_public_marketplace_index(force_refresh=force_refresh).get("stages") or []:
         if entry.get("repoOwner") == owner and entry.get("repoName") == repo_name:
             return entry
     raise stage_error(404, "marketplace_stage_not_found", "That stage is no longer published in the marketplace.")
+
+
+def current_marketplace_entry(provider, marketplace_token: str, owner: str, repo_name: str) -> dict[str, Any]:
+    entry, _ = provider.read_json_file(marketplace_token, marketplace_owner(), marketplace_repo(), marketplace_entry_path(owner, repo_name))
+    if not isinstance(entry, dict):
+        raise stage_error(404, "marketplace_stage_not_found", "That stage is no longer published in the marketplace.")
+    return entry
+
+
+def verification_request_payload(application: MarketplaceVerificationApplication) -> dict[str, Any]:
+    return {
+        "id": application.id,
+        "status": application.status,
+        "requestedAt": application.requested_at.isoformat() + "Z",
+    }
 
 
 def sort_marketplace_entries(entries: list[dict[str, Any]], sort: str) -> list[dict[str, Any]]:
@@ -509,6 +617,19 @@ def open_marketplace_unpublish_pull_request_from(pulls: list[dict[str, Any]], ow
     return sorted(matches, key=lambda pull: pull.get("updated_at") or pull.get("created_at") or "", reverse=True)[0]
 
 
+def open_marketplace_publish_pull_request_from(pulls: list[dict[str, Any]], owner: str, repo_name: str) -> Optional[dict[str, Any]]:
+    title = f"Publish {owner}/{repo_name}"
+    prefix = f"fossbot/publish-{owner}-{repo_name}-"
+    matches = [
+        pull for pull in pulls
+        if pull.get("state") == "open"
+        and (pull.get("title") == title or ((pull.get("head") or {}).get("ref") or "").startswith(prefix))
+    ]
+    if not matches:
+        return None
+    return sorted(matches, key=lambda pull: pull.get("updated_at") or pull.get("created_at") or "", reverse=True)[0]
+
+
 def marketplace_entry_belongs_to(entry: dict[str, Any], github_login: str) -> bool:
     login = (github_login or "").lower()
     return login == str((entry.get("author") or {}).get("githubUsername") or "").lower() or login == str(entry.get("repoOwner") or "").lower()
@@ -540,9 +661,14 @@ async def marketplace_index(
     tag: Optional[str] = Query(None, max_length=32),
     sort: str = Query("updated", pattern="^(updated|published|verified)$"),
     refresh: bool = Query(False),
+    db: Session = Depends(get_db),
 ):
     payload = cached_public_marketplace_index(force_refresh=refresh)
-    stages = payload.get("stages") or []
+    suppressed = {
+        (override.repo_owner, override.repo_name)
+        for override in db.query(MarketplaceModerationOverride).filter(MarketplaceModerationOverride.active.is_(True)).all()
+    }
+    stages = [entry for entry in (payload.get("stages") or []) if (entry.get("repoOwner"), entry.get("repoName")) not in suppressed]
     query = q.strip()
     tag_value = (tag or "").strip() or None
     entries_for_tags = [entry for entry in stages if marketplace_entry_matches(entry, query, None)]
@@ -573,6 +699,290 @@ async def marketplace_index(
             "expiresAt": MARKETPLACE_INDEX_CACHE.get("expiresAt"),
         },
     }
+
+
+@router.get("/api/marketplace/permissions")
+async def marketplace_permissions(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    roles = marketplace_roles(db, current_user)
+    has_moderators = db.query(MarketplaceRoleAssignment).filter(MarketplaceRoleAssignment.role == "moderator").first() is not None
+    return {
+        "roles": sorted(roles),
+        "reportingEnabled": has_moderators or getattr(current_user.role, "value", current_user.role) == "admin",
+        "reportingContact": reporting_contact(),
+    }
+
+
+@router.post("/api/marketplace/reports")
+async def create_marketplace_report(request: MarketplaceReportRequest, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if request.category not in REPORT_CATEGORIES:
+        raise stage_error(400, "validation_failed", "Choose a valid report category.")
+    has_moderators = db.query(MarketplaceRoleAssignment).filter(MarketplaceRoleAssignment.role == "moderator").first() is not None
+    if not has_moderators and getattr(current_user.role, "value", current_user.role) != "admin":
+        raise stage_error(503, "reporting_unavailable", "In-app reporting is not available for this marketplace.", extra={"reportingContact": reporting_contact()})
+    entry = published_marketplace_entry(request.repoOwner, request.repoName)
+    report = MarketplaceReport(
+        repo_owner=entry["repoOwner"],
+        repo_name=entry["repoName"],
+        commit_sha=entry["commitSha"],
+        category=request.category,
+        explanation=request.explanation.strip(),
+        reporter_contact=(request.reporterContact or "").strip() or None,
+        reporter_user_id=current_user.id,
+    )
+    db.add(report)
+    db.commit()
+    return {"id": report.id, "createdAt": report.created_at.isoformat() + "Z"}
+
+
+@router.get("/api/marketplace/moderation/reports")
+async def moderation_reports(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    require_marketplace_role(db, current_user, "moderator")
+    reports = db.query(MarketplaceReport).order_by(MarketplaceReport.resolved_at.isnot(None), MarketplaceReport.created_at.desc()).all()
+    return {"reports": [{
+        "id": report.id,
+        "repoOwner": report.repo_owner,
+        "repoName": report.repo_name,
+        "commitSha": report.commit_sha,
+        "category": report.category,
+        "explanation": report.explanation,
+        "reporterContact": report.reporter_contact,
+        "reporter": report.reporter.username if report.reporter else None,
+        "createdAt": report.created_at.isoformat() + "Z",
+        "resolvedAt": report.resolved_at.isoformat() + "Z" if report.resolved_at else None,
+    } for report in reports]}
+
+
+@router.get("/api/marketplace/moderation/overrides")
+async def moderation_overrides(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    require_marketplace_role(db, current_user, "moderator")
+    overrides = db.query(MarketplaceModerationOverride).order_by(MarketplaceModerationOverride.updated_at.desc()).all()
+    return {"overrides": [moderation_payload(override) for override in overrides]}
+
+
+@router.put("/api/marketplace/moderation/{owner}/{repo_name}")
+async def apply_moderation_override(owner: str, repo_name: str, request: MarketplaceModerationRequest, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    require_marketplace_role(db, current_user, "moderator")
+    if request.state not in MODERATION_STATES:
+        raise stage_error(400, "validation_failed", "Moderation state must be hidden or removed.")
+    existing = db.query(MarketplaceModerationOverride).filter(MarketplaceModerationOverride.repo_owner == owner, MarketplaceModerationOverride.repo_name == repo_name).first()
+    if existing is None:
+        existing = MarketplaceModerationOverride(repo_owner=owner, repo_name=repo_name, state=request.state, active=True, reason=request.reason.strip(), moderator_user_id=current_user.id)
+        db.add(existing)
+    else:
+        existing.state, existing.active, existing.reason, existing.moderator_user_id = request.state, True, request.reason.strip(), current_user.id
+    db.add(MarketplaceModerationAction(repo_owner=owner, repo_name=repo_name, action=request.state, reason=request.reason.strip(), moderator_user_id=current_user.id, report_id=request.reportId))
+    if request.reportId:
+        report = db.query(MarketplaceReport).filter(MarketplaceReport.id == request.reportId).first()
+        if report:
+            report.resolved_at = datetime.datetime.utcnow()
+    db.commit()
+    db.refresh(existing)
+    return moderation_payload(existing)
+
+
+@router.delete("/api/marketplace/moderation/{owner}/{repo_name}")
+async def restore_moderated_stage(owner: str, repo_name: str, request: MarketplaceRestoreRequest, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    require_marketplace_role(db, current_user, "moderator")
+    override = db.query(MarketplaceModerationOverride).filter(MarketplaceModerationOverride.repo_owner == owner, MarketplaceModerationOverride.repo_name == repo_name).first()
+    if not override:
+        raise stage_error(404, "moderation_not_found", "This stage has no local moderation override.")
+    override.active, override.reason, override.moderator_user_id = False, request.reason.strip(), current_user.id
+    db.add(MarketplaceModerationAction(repo_owner=owner, repo_name=repo_name, action="restored", reason=request.reason.strip(), moderator_user_id=current_user.id, report_id=request.reportId))
+    db.commit()
+    db.refresh(override)
+    return moderation_payload(override)
+
+
+@router.get("/api/marketplace/verification/queue")
+async def verification_queue(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    require_marketplace_role(db, current_user, "verifier")
+    requests = db.query(MarketplaceVerificationApplication).filter(MarketplaceVerificationApplication.status.in_(("requested", "pr_open"))).order_by(MarketplaceVerificationApplication.requested_at.asc()).all()
+    provider = get_provider("github_app")
+    try:
+        marketplace_token, _ = marketplace_installation_token(provider, create_github_app_jwt())
+        pull_requests = {
+            pull_request.get("number"): pull_request
+            for pull_request in provider.list_pull_requests(marketplace_token, marketplace_owner(), marketplace_repo(), state="all")
+        }
+        queued_requests = []
+        status_changed = False
+        for item in requests:
+            pull_request = pull_requests.get(item.review_pr_number) if item.status == "pr_open" else None
+            if item.status == "pr_open" and (not pull_request or pull_request.get("state") == "closed"):
+                item.status = "completed" if pull_request and pull_request.get("merged_at") else "declined"
+                item.reviewed_at = datetime.datetime.utcnow()
+                status_changed = True
+                continue
+            try:
+                entry = current_marketplace_entry(provider, marketplace_token, item.repo_owner, item.repo_name)
+            except GitHubApiError as error:
+                if error.status_code == 404:
+                    continue
+                raise
+            if entry.get("commitSha") != item.commit_sha:
+                continue
+            queued_requests.append(verification_request_payload(item) | {
+                "requestedBy": item.requested_by.username if item.requested_by else None,
+                "pullRequest": marketplace_pull_request_payload(pull_request) if pull_request else None,
+                "entry": entry,
+            })
+        if status_changed:
+            db.commit()
+        return {"requests": queued_requests}
+    except GitHubApiError as error:
+        raise marketplace_access_error(error) from error
+
+
+@router.post("/api/marketplace/verification/request/{owner}/{repo_name}")
+async def request_verification(owner: str, repo_name: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    connection, _ = require_connection(db, current_user)
+    provider = get_provider("github_app")
+    try:
+        marketplace_token, _ = marketplace_installation_token(provider, create_github_app_jwt())
+        entry = current_marketplace_entry(provider, marketplace_token, owner, repo_name)
+        if not marketplace_entry_belongs_to(entry, connection.provider_account_login):
+            raise stage_error(403, "verification_request_not_owner", "Only the original stage publisher can request verification.")
+        existing = db.query(MarketplaceVerificationApplication).filter(
+            MarketplaceVerificationApplication.repo_owner == entry["repoOwner"],
+            MarketplaceVerificationApplication.repo_name == entry["repoName"],
+            MarketplaceVerificationApplication.commit_sha == entry["commitSha"],
+        ).first()
+        if existing and existing.status in ("requested", "pr_open"):
+            raise stage_error(409, "verification_request_pending", "This published revision is already waiting for verification.")
+        if existing:
+            existing.status, existing.requested_by_user_id, existing.requested_at, existing.review_pr_number, existing.review_pr_url, existing.reviewed_at = "requested", current_user.id, datetime.datetime.utcnow(), None, None, None
+            application = existing
+        else:
+            application = MarketplaceVerificationApplication(repo_owner=entry["repoOwner"], repo_name=entry["repoName"], commit_sha=entry["commitSha"], requested_by_user_id=current_user.id)
+            db.add(application)
+        db.commit()
+        return {"id": application.id, "status": application.status, "requestedAt": application.requested_at.isoformat() + "Z"}
+    except GitHubApiError as error:
+        raise marketplace_access_error(error) from error
+
+
+@router.delete("/api/marketplace/verification/request/{owner}/{repo_name}")
+async def cancel_verification_request(owner: str, repo_name: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    connection, _ = require_connection(db, current_user)
+    provider = get_provider("github_app")
+    try:
+        marketplace_token, _ = marketplace_installation_token(provider, create_github_app_jwt())
+        entry = current_marketplace_entry(provider, marketplace_token, owner, repo_name)
+        if not marketplace_entry_belongs_to(entry, connection.provider_account_login):
+            raise stage_error(403, "verification_request_not_owner", "Only the original stage publisher can cancel verification.")
+        application = db.query(MarketplaceVerificationApplication).filter(
+            MarketplaceVerificationApplication.repo_owner == entry["repoOwner"],
+            MarketplaceVerificationApplication.repo_name == entry["repoName"],
+            MarketplaceVerificationApplication.commit_sha == entry["commitSha"],
+            MarketplaceVerificationApplication.requested_by_user_id == current_user.id,
+            MarketplaceVerificationApplication.status == "requested",
+        ).first()
+        if not application:
+            raise stage_error(404, "verification_request_not_found", "There is no pending verification request for this published revision.")
+        application.status = "cancelled"
+        db.commit()
+        return {"id": application.id, "status": application.status}
+    except GitHubApiError as error:
+        raise marketplace_access_error(error) from error
+
+
+@router.post("/api/marketplace/verification/{owner}/{repo_name}")
+async def submit_verification(
+    owner: str,
+    repo_name: str,
+    request: MarketplaceVerificationRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    require_marketplace_role(db, current_user, "verifier")
+    if request.verified and not all((request.stageRuns, request.metadataAccurate, request.attributionAcceptable, request.contentAppropriate, request.categoriesAppropriate)):
+        raise stage_error(400, "verification_checklist_incomplete", "Complete every verification check before proposing the Verified badge.")
+    provider = get_provider("github_app")
+    try:
+        reviewer = require_marketplace_contributor(provider, db, current_user)
+        marketplace_token, marketplace_repo_data = marketplace_installation_token(provider, create_github_app_jwt())
+        entry_path = marketplace_entry_path(owner, repo_name)
+        entry = current_marketplace_entry(provider, marketplace_token, owner, repo_name)
+        application = db.query(MarketplaceVerificationApplication).filter(
+            MarketplaceVerificationApplication.id == request.requestId,
+            MarketplaceVerificationApplication.repo_owner == owner,
+            MarketplaceVerificationApplication.repo_name == repo_name,
+            MarketplaceVerificationApplication.status == "requested",
+        ).first()
+        if not application:
+            raise stage_error(409, "verification_request_unavailable", "This verification request is no longer awaiting review. Refresh the queue and try again.")
+        if application.commit_sha != entry.get("commitSha"):
+            raise stage_error(409, "verification_request_stale", "The published revision changed after this request. Ask the publisher to request verification for the current revision.")
+        next_entry = json.loads(json.dumps(entry))
+        next_entry["previewUrl"] = raw_github_url(owner, repo_name, next_entry["commitSha"], next_entry["previewPath"]) if next_entry.get("previewPath") else None
+        next_entry.setdefault("badges", {})["verified"] = request.verified
+        next_entry["verification"] = {
+            "verified": request.verified,
+            "reviewedAt": utc_now_iso(),
+            "reviewedBy": reviewer,
+            "reviewPullRequest": None,
+            "reviewedEntryHash": None,
+            "checklist": {
+                "stageRuns": request.stageRuns,
+                "metadataAccurate": request.metadataAccurate,
+                "attributionAcceptable": request.attributionAcceptable,
+                "contentAppropriate": request.contentAppropriate,
+                "categoriesAppropriate": request.categoriesAppropriate,
+            },
+            "notes": (request.notes or "").strip() or None,
+        }
+        if request.verified:
+            next_entry["verification"]["reviewedEntryHash"] = canonical_marketplace_entry_hash(next_entry)
+        next_entry["updatedAt"] = utc_now_iso()
+        validate_marketplace_entry(next_entry)
+
+        checklist = "\n".join([
+            f"- [x] Stage runs from `{next_entry['commitSha']}`",
+            "- [x] Metadata and preview are accurate",
+            "- [x] Attribution and licensing are acceptable",
+            "- [x] Content is safe and appropriate",
+            "- [x] Categories and audience are appropriate",
+        ]) if request.verified else "- [x] Remove the Verified badge after review"
+        action = "Verify" if request.verified else "Remove verification for"
+        body = f"""{action} `{owner}/{repo_name}` after reviewer assessment by @{reviewer}.
+
+## Reviewer checklist
+
+{checklist}
+
+## Notes
+
+{(request.notes or 'No additional notes.').strip()}
+"""
+
+        def write_entry(branch_name: str) -> None:
+            current_file = provider.get_file(marketplace_token, marketplace_owner(), marketplace_repo(), entry_path, allowed_statuses=())
+            provider.put_file(
+                marketplace_token,
+                marketplace_owner(),
+                marketplace_repo(),
+                entry_path,
+                json.dumps(next_entry, indent=2).encode("utf-8"),
+                f"chore(marketplace): {'verify' if request.verified else 'unverify'} {owner}/{repo_name}",
+                sha=current_file.get("sha") if current_file else None,
+                branch=branch_name,
+            )
+
+        pr = create_marketplace_pr(provider, marketplace_token, marketplace_repo_data, f"{action} {owner}/{repo_name}", body, f"verify-{owner}-{repo_name}", write_entry)
+        application.status = "pr_open"
+        application.review_pr_number = pr.get("number")
+        application.review_pr_url = pr.get("html_url")
+        application.reviewed_at = datetime.datetime.utcnow()
+        db.commit()
+        return {"entry": next_entry, "pullRequest": marketplace_pull_request_payload(pr)}
+    except HTTPException:
+        raise
+    except MarketplaceSchemaError as error:
+        raise stage_error(400, "validation_failed", str(error)) from error
+    except GitHubApiError as error:
+        raise marketplace_access_error(error) from error
+    except RuntimeError as error:
+        raise stage_error(503, "provider_unconfigured", str(error)) from error
 
 
 @router.get("/api/marketplace/status/{owner}/{repo_name}")
@@ -625,12 +1035,28 @@ async def my_marketplace_stages(current_user: User = Depends(get_current_user), 
     provider = get_provider("github_app")
     try:
         connection, _ = require_connection(db, current_user)
-        entries = [
-            entry for entry in (cached_public_marketplace_index().get("stages") or [])
+        indexed_entries = [
+            entry for entry in (cached_public_marketplace_index(force_refresh=True).get("stages") or [])
             if marketplace_entry_belongs_to(entry, connection.provider_account_login)
         ]
         marketplace_token, _ = marketplace_installation_token(provider, create_github_app_jwt())
+        entries = [
+            current_marketplace_entry(provider, marketplace_token, entry["repoOwner"], entry["repoName"])
+            for entry in indexed_entries
+        ]
         pulls = provider.list_pull_requests(marketplace_token, marketplace_owner(), marketplace_repo(), state="all")
+        verification_requests = {
+            (item.repo_owner, item.repo_name, item.commit_sha): item
+            for item in db.query(MarketplaceVerificationApplication).filter(
+                MarketplaceVerificationApplication.requested_by_user_id == current_user.id,
+                MarketplaceVerificationApplication.status == "requested",
+            ).all()
+        }
+
+        def verification_request_for_entry(entry: dict[str, Any]) -> Optional[dict[str, Any]]:
+            application = verification_requests.get((entry["repoOwner"], entry["repoName"], entry["commitSha"]))
+            return verification_request_payload(application) if application else None
+
         return {
             "stages": [
                 {
@@ -639,6 +1065,7 @@ async def my_marketplace_stages(current_user: User = Depends(get_current_user), 
                     "lifecycle": lifecycle_payload(entry),
                     "pullRequest": marketplace_pull_request_payload(latest_marketplace_pull_request_from(pulls, entry["repoOwner"], entry["repoName"])),
                     "unpublishPullRequest": marketplace_pull_request_payload(open_marketplace_unpublish_pull_request_from(pulls, entry["repoOwner"], entry["repoName"])),
+                    "verificationRequest": verification_request_for_entry(entry),
                 }
                 for entry in sort_marketplace_entries(entries, "updated")
             ],
@@ -805,6 +1232,16 @@ async def publish_stage_to_marketplace(request: MarketplacePublishRequest, curre
             if error.status_code != 404:
                 raise marketplace_access_error(error) from error
 
+        open_pulls = provider.list_pull_requests(marketplace_token, marketplace_owner(), marketplace_repo(), state="open")
+        existing_publish_request = open_marketplace_publish_pull_request_from(open_pulls, request.repoOwner, request.repoName)
+        if existing_publish_request:
+            raise stage_error(
+                409,
+                "publish_request_open",
+                "A marketplace publish request is already open for this stage.",
+                extra={"pullRequest": marketplace_pull_request_payload(existing_publish_request)},
+            )
+
         preview_bytes = decode_data_url(request.previewDataUrl, expected_prefix="image/png", max_bytes=2 * 1024 * 1024)
         preview_path = "preview.png" if preview_bytes else previous_entry.get("previewPath") if previous_entry else None
         manifest_author = manifest.get("author") or {}
@@ -812,6 +1249,10 @@ async def publish_stage_to_marketplace(request: MarketplacePublishRequest, curre
 
         def build_entry_for_commit(commit_sha: str) -> dict[str, Any]:
             validation_state, validation_metadata = reusable_validation_for_commit(previous_entry, commit_sha)
+            verification_is_current = bool(
+                (previous_entry or {}).get("badges", {}).get("verified")
+                and (previous_entry or {}).get("commitSha") == commit_sha
+            )
             return build_marketplace_entry(
                 repo_owner=request.repoOwner,
                 repo_name=request.repoName,
@@ -822,12 +1263,12 @@ async def publish_stage_to_marketplace(request: MarketplacePublishRequest, curre
                 tags=request.tags,
                 author=author,
                 validation_state=validation_state,
-                verified=bool((previous_entry or {}).get("badges", {}).get("verified")),
+                verified=verification_is_current,
                 previous_entry=previous_entry,
                 preview_path=preview_path,
                 forked_from=manifest.get("forkedFrom"),
                 validation=validation_metadata,
-                verification=(previous_entry or {}).get("verification"),
+                verification=(previous_entry or {}).get("verification") if verification_is_current else None,
             )
 
         entry = build_entry_for_commit(stage_commit_sha)
@@ -844,6 +1285,17 @@ async def publish_stage_to_marketplace(request: MarketplacePublishRequest, curre
                 "chore(marketplace): update preview",
                 sha=preview_file.get("sha") if preview_file else None,
             )
+
+        license_file = provider.get_file(stage_token, request.repoOwner, request.repoName, "LICENSE", allowed_statuses=(404,))
+        provider.put_file(
+            stage_token,
+            request.repoOwner,
+            request.repoName,
+            "LICENSE",
+            MARKETPLACE_SHARING_LICENSES[request.sharingLicense].encode("utf-8"),
+            f"chore(marketplace): apply {request.sharingLicense} license",
+            sha=license_file.get("sha") if license_file else None,
+        )
 
         manifest["marketplace"] = {
             "published": True,

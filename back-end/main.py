@@ -10,6 +10,7 @@ import uvicorn
 from database.database import (
     Curriculum,
     Lesson,
+    MarketplaceRoleAssignment,
     Projects,
     User,
     create_db_tables,
@@ -35,6 +36,7 @@ from models.models import (
     UpdateUserPasswordRequest,
     UpdateUserRequest,
     UpdateUserRoleRequest,
+    UpdateMarketplaceRolesRequest,
     UserResponse,
     UserRole,
 )
@@ -82,6 +84,26 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 
 REVOKED_ACCESS_MESSAGE = "Your access to the platform has been revoked."
+MARKETPLACE_ROLES = {"verifier", "moderator"}
+
+
+def user_payload(db: SessionLocal, user: User) -> dict[str, Any]:
+    roles = [assignment.role for assignment in db.query(MarketplaceRoleAssignment).filter(MarketplaceRoleAssignment.user_id == user.id).all()]
+    return {
+        "id": user.id,
+        "username": user.username,
+        "firstname": user.firstname,
+        "lastname": user.lastname,
+        "email": user.email,
+        "role": user.role,
+        "image_url": user.image_url,
+        "beta_tester": user.beta_tester,
+        "activated": user.activated,
+        "firebase_uid": user.firebase_uid,
+        "provider": user.provider,
+        "access_revoked": user.access_revoked,
+        "marketplace_roles": sorted(roles),
+    }
 FIREBASE_CERTS_URL = 'https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com'
 _firebase_certs_cache = {'certs': {}, 'expires_at': 0}
 
@@ -287,7 +309,7 @@ def link_local_user_to_firebase_provider(db, user: User, firebase_uid: str, prov
         user.image_url = photo_url
     db.commit()
     db.refresh(user)
-    return user
+    return user_payload(db, user)
 
 
 def update_firebase_user_metadata(db, user: User, display_name: str, email: str, firebase_uid: str, provider: str, photo_url):
@@ -445,7 +467,7 @@ async def read_users_me(token: str = Depends(oauth2_scheme), db: SessionLocal = 
         raise credentials_exception
     if user.access_revoked:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=REVOKED_ACCESS_MESSAGE)
-    return user
+    return user_payload(db, user)
 
 @app.put("/users/me")
 async def update_user_info(user_update: UpdateUserRequest, current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):
@@ -538,6 +560,27 @@ async def update_user_role(user_id: int, user_role_update: UpdateUserRoleRequest
 
     return db_user
 
+
+@app.put("/users/{user_id}/marketplace-roles")
+async def update_marketplace_roles(
+    user_id: int,
+    role_update: UpdateMarketplaceRolesRequest,
+    current_user: User = Depends(get_current_user),
+    db: SessionLocal = Depends(get_db),
+):
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Not authorized to manage marketplace roles")
+    requested = set(role_update.roles)
+    if not requested.issubset(MARKETPLACE_ROLES):
+        raise HTTPException(status_code=400, detail="Marketplace roles must be verifier and/or moderator")
+    db_user = db.query(User).filter(User.id == user_id).first()
+    if db_user is None:
+        raise HTTPException(status_code=404, detail="User not found in database")
+    db.query(MarketplaceRoleAssignment).filter(MarketplaceRoleAssignment.user_id == user_id).delete()
+    db.add_all([MarketplaceRoleAssignment(user_id=user_id, role=role) for role in requested])
+    db.commit()
+    return user_payload(db, db_user)
+
 @app.put("/users/{user_id}/access_revoked")
 async def update_access_revoked_status(user_id: int, access_revoked_update: UpdateAccessRevokedRequest, current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):
     if current_user.role != UserRole.ADMIN:
@@ -597,8 +640,7 @@ async def read_users(current_user: User = Depends(get_current_user), db: Session
     if current_user.role != UserRole.ADMIN:
         raise HTTPException(status_code=403, detail="Not authorized to access this resource: GET USERS")
     
-    users = db.query(User).all()
-    return users
+    return [user_payload(db, user) for user in db.query(User).all()]
 
 def is_local_user(db_user: User) -> bool:
     return not db_user.firebase_uid and provider_is_local_only(db_user.provider)

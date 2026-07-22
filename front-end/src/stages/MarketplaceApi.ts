@@ -15,6 +15,7 @@ export interface MarketplaceVerificationDetails {
   reviewedAt?: string | null;
   reviewedBy?: string | null;
   reviewPullRequest?: string | null;
+  reviewedEntryHash?: string | null;
 }
 
 export type MarketplaceLifecycleState = 'unpublished' | 'published_current' | 'changes_ready_to_publish' | 'source_unavailable' | 'published_revision_invalid';
@@ -105,6 +106,7 @@ export interface PublishMarketplaceRequest {
   description: string;
   tags: string[];
   previewDataUrl?: string | null;
+  sharingLicense: 'CC-BY-4.0' | 'CC0-1.0';
   commitMessage?: string;
 }
 
@@ -137,6 +139,7 @@ export interface MyMarketplaceStage {
   lifecycle: MarketplaceLifecycle;
   pullRequest?: MarketplacePullRequestSummary | null;
   unpublishPullRequest?: MarketplacePullRequestSummary | null;
+  verificationRequest?: { id: number; status: 'requested'; requestedAt: string } | null;
 }
 
 export interface MyMarketplaceStagesResponse {
@@ -182,6 +185,55 @@ export interface MarketplaceForkStatusResponse {
   repoName?: string;
   message?: string | null;
   installationUrl?: string | null;
+}
+
+export type MarketplaceReportCategory = 'broken_misleading' | 'inappropriate' | 'copyright_attribution' | 'safety' | 'spam' | 'other';
+
+export interface MarketplacePermissions {
+  roles: ('verifier' | 'moderator')[];
+  reportingEnabled: boolean;
+  reportingContact?: string | null;
+}
+
+export interface MarketplaceReport {
+  id: number;
+  repoOwner: string;
+  repoName: string;
+  commitSha: string;
+  category: MarketplaceReportCategory;
+  explanation: string;
+  reporterContact?: string | null;
+  reporter?: string | null;
+  createdAt: string;
+  resolvedAt?: string | null;
+}
+
+export interface MarketplaceModerationOverride {
+  repoOwner: string;
+  repoName: string;
+  state: 'hidden' | 'removed';
+  active: boolean;
+  reason: string;
+  moderator?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MarketplaceVerificationChecklist {
+  stageRuns: boolean;
+  metadataAccurate: boolean;
+  attributionAcceptable: boolean;
+  contentAppropriate: boolean;
+  categoriesAppropriate: boolean;
+}
+
+export interface MarketplaceVerificationQueueItem {
+  id: number;
+  status: 'requested' | 'pr_open';
+  requestedAt: string;
+  requestedBy?: string | null;
+  pullRequest?: MarketplacePullRequestSummary | null;
+  entry: MarketplaceStageEntry;
 }
 
 export class MarketplaceRequestError extends Error {
@@ -246,6 +298,46 @@ export async function getMyMarketplaceStages(token: string): Promise<MyMarketpla
     headers: { Authorization: `Bearer ${token}` },
   });
   return parseJsonResponse<MyMarketplaceStagesResponse>(response);
+}
+
+export async function getMarketplacePermissions(token: string): Promise<MarketplacePermissions> {
+  return parseJsonResponse<MarketplacePermissions>(await fetch(`${backendUrl}/api/marketplace/permissions`, { headers: { Authorization: `Bearer ${token}` } }));
+}
+
+export async function reportMarketplaceStage(token: string, report: { repoOwner: string; repoName: string; category: MarketplaceReportCategory; explanation: string; reporterContact?: string }): Promise<{ id: number }> {
+  return parseJsonResponse<{ id: number }>(await fetch(`${backendUrl}/api/marketplace/reports`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify(report) }));
+}
+
+export async function getModerationReports(token: string): Promise<{ reports: MarketplaceReport[] }> {
+  return parseJsonResponse(await fetch(`${backendUrl}/api/marketplace/moderation/reports`, { headers: { Authorization: `Bearer ${token}` } }));
+}
+
+export async function getModerationOverrides(token: string): Promise<{ overrides: MarketplaceModerationOverride[] }> {
+  return parseJsonResponse(await fetch(`${backendUrl}/api/marketplace/moderation/overrides`, { headers: { Authorization: `Bearer ${token}` } }));
+}
+
+export async function getVerificationQueue(token: string): Promise<{ requests: MarketplaceVerificationQueueItem[] }> {
+  return parseJsonResponse(await fetch(`${backendUrl}/api/marketplace/verification/queue`, { headers: { Authorization: `Bearer ${token}` } }));
+}
+
+export async function requestMarketplaceVerification(token: string, owner: string, repo: string): Promise<{ id: number; status: string }> {
+  return parseJsonResponse(await fetch(`${backendUrl}/api/marketplace/verification/request/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } }));
+}
+
+export async function cancelMarketplaceVerificationRequest(token: string, owner: string, repo: string): Promise<{ id: number; status: string }> {
+  return parseJsonResponse(await fetch(`${backendUrl}/api/marketplace/verification/request/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } }));
+}
+
+export async function submitMarketplaceVerification(token: string, owner: string, repo: string, request: MarketplaceVerificationChecklist & { requestId: number; verified: boolean; notes?: string }): Promise<{ entry: MarketplaceStageEntry; pullRequest?: MarketplacePullRequestSummary | null }> {
+  return parseJsonResponse(await fetch(`${backendUrl}/api/marketplace/verification/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify(request) }));
+}
+
+export async function setModerationOverride(token: string, owner: string, repo: string, request: { state: 'hidden' | 'removed'; reason: string; reportId?: number }): Promise<MarketplaceModerationOverride> {
+  return parseJsonResponse(await fetch(`${backendUrl}/api/marketplace/moderation/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify(request) }));
+}
+
+export async function restoreMarketplaceStage(token: string, owner: string, repo: string, request: { reason: string; reportId?: number }): Promise<MarketplaceModerationOverride> {
+  return parseJsonResponse(await fetch(`${backendUrl}/api/marketplace/moderation/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`, { method: 'DELETE', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify(request) }));
 }
 
 export async function completeMarketplaceFork(token: string, repoOwner: string, repoName: string): Promise<ForkMarketplaceStageResponse> {

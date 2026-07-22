@@ -11,6 +11,7 @@ import {
   IconHandGrab,
   IconDeviceGamepad2,
   IconMap,
+  IconWorld,
 } from '@tabler/icons-react';
 
 interface MenuitemsType {
@@ -47,6 +48,12 @@ const Menuitems: MenuitemsType[] = [
     icon: IconLayoutDashboard,
     href: '/dashboard',
     chipColor: 'secondary',
+  },
+  {
+    id: uniqueId(),
+    title: 'Stages',
+    icon: IconWorld,
+    href: '/stages',
   },
   {
     navlabel: true,

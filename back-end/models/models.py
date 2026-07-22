@@ -82,12 +82,16 @@ class UserResponse(BaseModel):
     firebase_uid: Optional[str]
     provider: str
     access_revoked: bool
+    marketplace_roles: list[str] = Field(default_factory=list)
     
     class Config:
         orm_mode = True
 
 class UpdateUserRoleRequest(BaseModel):
     role: UserRole
+
+class UpdateMarketplaceRolesRequest(BaseModel):
+    roles: list[str] = Field(default_factory=list)
 
 class UpdateBetaTesterRequest(BaseModel):
     beta_tester: bool

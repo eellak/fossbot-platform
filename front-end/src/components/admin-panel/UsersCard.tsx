@@ -94,6 +94,18 @@ const UsersCard = ({ onShowSuccessAlert, onShowErrorAlert }: UsersCardProps) => 
     }
   };
 
+  const handleMarketplaceRoleChange = async (user, role: 'verifier' | 'moderator', checked: boolean) => {
+    const currentRoles = user.marketplace_roles || [];
+    const roles = checked ? [...new Set([...currentRoles, role])] : currentRoles.filter((currentRole) => currentRole !== role);
+    const updated = await auth.updateUserMarketplaceRoles(user.id, roles);
+    if (updated) {
+      setUsers((currentUsers) => currentUsers.map((currentUser) => currentUser.id === updated.id ? updated : currentUser));
+      onShowSuccessAlert(`Marketplace roles updated for ${updated.username}.`);
+    } else {
+      onShowErrorAlert(t('alertMessages.userDataUpdateError'));
+    }
+  };
+
   const handleBetaTesterChange = async (userId, event) => {
     const isBetaTester = event.target.checked;
 
@@ -257,6 +269,9 @@ const UsersCard = ({ onShowSuccessAlert, onShowErrorAlert }: UsersCardProps) => 
                   </Typography>
                 </TableCell>
                 <TableCell align="center">
+                  <Typography variant="subtitle2" fontWeight={600}>Marketplace roles</Typography>
+                </TableCell>
+                <TableCell align="center">
                   <Typography variant="subtitle2" fontWeight={600}>
                     {t('delete')}
                   </Typography>
@@ -266,7 +281,7 @@ const UsersCard = ({ onShowSuccessAlert, onShowErrorAlert }: UsersCardProps) => 
             <TableBody>
               {users.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={10}>
+                  <TableCell colSpan={11}>
                     <Typography>{t('admin-panel.noUsersFound')} </Typography>
                   </TableCell>
                 </TableRow>
@@ -324,6 +339,21 @@ const UsersCard = ({ onShowSuccessAlert, onShowErrorAlert }: UsersCardProps) => 
                         <MenuItem value={'tutor'}>{t('roles.tutor')}</MenuItem>
                         <MenuItem value={'admin'}>{t('roles.admin')}</MenuItem>
                       </Select>
+                    </TableCell>
+                    <TableCell align="center">
+                      <Stack spacing={0} alignItems="flex-start" sx={{ minWidth: 132 }}>
+                        {(['verifier', 'moderator'] as const).map((role) => (
+                          <Box key={role} sx={{ display: 'flex', alignItems: 'center' }}>
+                            <Checkbox
+                              size="small"
+                              checked={(user.marketplace_roles || []).includes(role)}
+                              onChange={(event) => handleMarketplaceRoleChange(user, role, event.target.checked)}
+                              inputProps={{ 'aria-label': `${role} role for ${user.username}` }}
+                            />
+                            <Typography variant="body2" textTransform="capitalize">{role}</Typography>
+                          </Box>
+                        ))}
+                      </Stack>
                     </TableCell>
                     <TableCell align="center">
                       {isLocalAccount(user) && (

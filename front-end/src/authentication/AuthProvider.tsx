@@ -13,6 +13,7 @@ import {
   BetaTesterData,
   ActivatedData,
   AccessRevokedData,
+  MarketplaceRole,
   FirebaseProviderName,
   LoginResponse,
   AuthStatus,
@@ -34,7 +35,8 @@ import {
   updateUserRoleById,
   updateUserBetaTesterStatusById,
   updateUserActivatedStatusById,
-  updateUserAccessRevokedStatusById
+  updateUserAccessRevokedStatusById,
+  updateUserMarketplaceRolesById,
 } from './AuthApi';
 import {
   getEmailFromFirebaseError,
@@ -44,6 +46,7 @@ import {
   signOutFromFirebase,
   subscribeToFirebaseAuthState,
 } from './firebase';
+import { clearUserStageCaches } from 'src/stages/stageListCache';
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const revokedAccessMessage = 'Your access to the platform has been revoked.';
@@ -93,6 +96,7 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
     setToken('');
     setAuthStatus('unauthenticated');
     localStorage.removeItem(localStorageName);
+    clearUserStageCaches();
   };
 
   const loadAuthenticatedUser = async (accessToken: string) => {
@@ -412,6 +416,17 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
     }
   };
 
+  const updateUserMarketplaceRoles = async (userId: number, roles: MarketplaceRole[]): Promise<User | undefined> => {
+    try {
+      const response = await updateUserMarketplaceRolesById(userId, roles, token);
+      if (response.status === 200) return await response.json();
+      throw new Error('Marketplace role update failed');
+    } catch (error) {
+      console.error(error);
+      return undefined;
+    }
+  };
+
   const updateUserPassword = async (data: PassswordData): Promise<User | undefined> => {
     try {
       const response = await updateUserPasswordData(data, token);
@@ -514,13 +529,14 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
       deleteUserByIdAction,
       updateUserBetaTesterStatus,
       updateUserRole,
+      updateUserMarketplaceRoles,
       updateUserActivatedStatus,
       updateUserAccessRevokedStatus,
     }),
     [token, user, authStatus, loginAction, loginWithFirebaseAction, registerAction, createProjectAction, getProjectsAction,
       deleteProjectByIdAction, getProjectByIdAction, updateProjectByIdAction, logOutAction,
       getUserDataAction, updateUser, updateUserPassword, getAllUsers, deleteUserByIdAction,
-      updateUserBetaTesterStatus, updateUserRole, updateUserActivatedStatus, updateUserAccessRevokedStatus]
+      updateUserBetaTesterStatus, updateUserRole, updateUserMarketplaceRoles, updateUserActivatedStatus, updateUserAccessRevokedStatus]
   );
 
   return (

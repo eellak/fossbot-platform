@@ -37,7 +37,7 @@ function visibilityLabel(stage: ProviderStageListItem): string {
   return stage.private ? 'Private' : 'Public';
 }
 
-export default function UserGitHubStagesPanel() {
+export default function UserGitHubStagesPanel({ embedded = false }: { embedded?: boolean }) {
   const { token, user } = useAuth();
   const userKey = stageListUserKey(user);
   const [status, setStatus] = useState<GitHubProviderStatus | null>(null);
@@ -106,7 +106,7 @@ export default function UserGitHubStagesPanel() {
   }, [token, userKey]);
 
   return (
-    <Box sx={{ mt: 3 }}>
+    <Box sx={embedded ? undefined : { mt: 3 }}>
       <DashboardCard
         title="Your GitHub stages"
         subtitle="Stages from fossbot-* repositories selected in your GitHub App installation. Private repos can be opened in the editor; public repos can also be tested and published."
@@ -121,6 +121,7 @@ export default function UserGitHubStagesPanel() {
             {connecting ? 'Connecting…' : 'Connect GitHub App'}
           </Button>
         ) : undefined}
+        compact={embedded}
       >
         {loading && !stages.length ? (
           <Stack sx={{ py: 4, alignItems: 'center' }} spacing={1.5}>
@@ -140,7 +141,7 @@ export default function UserGitHubStagesPanel() {
             No <Box component="code">fossbot-*</Box> stage repositories are selected for the FOSSBot GitHub App yet.
           </Alert>
         ) : (
-          <Stack spacing={1.25}>
+          <Stack spacing={1.5}>
             {stageListWarning && <Alert severity="warning">{stageListWarning}</Alert>}
             {refreshingStages && <Typography variant="caption" color="text.secondary">Refreshing…</Typography>}
             {stages.map((stage) => (
