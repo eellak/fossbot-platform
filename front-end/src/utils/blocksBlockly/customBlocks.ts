@@ -79,7 +79,7 @@ Blockly.Blocks['move_step'] = {
 
 pythonGenerator.forBlock['move_step'] = function (block) {
   var input_value = block.getFieldValue('option');
-  var code = `${input_value === "'forward'" ? 'move_forward_distance(-0.4)' : 'move_reverse_distance(0.4)'}\n`;
+  var code = `move_step(${input_value})\n`;
   return code;
 };
 
