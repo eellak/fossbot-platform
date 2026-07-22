@@ -9,6 +9,8 @@ export interface SimEngineConfig {
   publicAssetBaseUrl?: string
   /** Base URL for robot model assets (default: `${publicAssetBaseUrl}/models/robots/v2`). */
   assetBaseUrl?: string
+  /** Base URL for stage-owned relative assets, e.g. a GitHub raw repo root. */
+  stageAssetBaseUrl?: string
   /** Splash logo URL (default: `/images/superlogo.png`). */
   splashLogoUrl?: string
   /** Show splash screen on startup (default: read from localStorage, fallback `true`). */

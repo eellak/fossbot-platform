@@ -245,7 +245,7 @@ const StageBuilderTestPage = () => {
                 <LazyFossbotSimulator
                   ref={simRef}
                   initialStageConfig={handoff.record.config}
-                  config={{ ...simulatorConfig, showColliders: collisionWireVisible }}
+                  config={{ ...simulatorConfig, showColliders: collisionWireVisible, stageAssetBaseUrl: handoff.stageAssetBaseUrl || undefined }}
                   lockCamera={lockCamera}
                   onMountChange={(mounted) => {
                     if (mounted && sensorHelpersVisible) simRef.current?.setSensorHelpersVisible(true);

@@ -38,6 +38,7 @@ from models.models import (
 )
 from sqlalchemy.exc import IntegrityError, OperationalError
 from routers.stage_sources import router as stage_sources_router
+from routers.marketplace import router as marketplace_router
 from utils.utils_hash import get_hashed, verify_hashed
 from utils.utils_jwt import create_access_token, verify_access_token
 
@@ -60,6 +61,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.include_router(stage_sources_router)
+app.include_router(marketplace_router)
 
 # Security
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")

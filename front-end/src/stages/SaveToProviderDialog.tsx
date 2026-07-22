@@ -20,10 +20,12 @@ interface SaveToProviderDialogProps {
   bootstrapRepoName?: string | null;
   busy: boolean;
   error?: string | null;
+  errorCode?: string | null;
   onClose: () => void;
   onConnect: () => void;
   onRefreshStatus: () => void;
   onBeforeInstall?: () => void;
+  onOpenFromGitHub?: () => void;
   onCreateBootstrapLinks: (slug: string) => Promise<GitHubBootstrapLinks>;
   onSave: (values: SaveToProviderValues) => void;
 }
@@ -47,10 +49,12 @@ export function SaveToProviderDialog({
   bootstrapRepoName,
   busy,
   error,
+  errorCode,
   onClose,
   onConnect,
   onRefreshStatus,
   onBeforeInstall,
+  onOpenFromGitHub,
   onCreateBootstrapLinks,
   onSave,
 }: SaveToProviderDialogProps) {
@@ -70,8 +74,12 @@ export function SaveToProviderDialog({
     setLinkBusy(false);
   }, [defaultSlug, open]);
 
-  const connected = !!status?.connected;
-  const ready = !!status?.selectedInstallationReady;
+  const statusCode = status?.statusError || status?.errorCode || null;
+  const statusDetail = status?.statusDetail || status?.errorDetail || null;
+  const reconnectRequired = !!(status?.requiresReconnect || status?.needsReconnect || statusCode === 'token_expired');
+  const connected = !!status?.connected && !reconnectRequired;
+  const ready = !!status?.selectedInstallationReady && !reconnectRequired;
+  const allReposSelected = status?.repositorySelection === 'all' || statusCode === 'installation_scope_invalid';
   const repoName = remoteStage?.repoName || `fossbot-${slug}`;
   const canSave = connected && ready && !!slug.trim() && !busy;
 
@@ -96,8 +104,21 @@ export function SaveToProviderDialog({
             Save writes this stage to a public GitHub repository that you own. Uploaded OBJ/STL/GLB files are stored under <Box component="code">assets/</Box>.
           </Typography>
 
-          {error && <Alert severity="error">{error}</Alert>}
+          {error && (
+            <Alert
+              severity="error"
+              action={errorCode === 'sha_conflict' && onOpenFromGitHub ? (
+                <Button color="inherit" size="small" onClick={onOpenFromGitHub}>Open from GitHub</Button>
+              ) : undefined}
+            >
+              {error}
+            </Alert>
+          )}
           {linkError && <Alert severity="error">{linkError}</Alert>}
+
+          {!connected && statusDetail && (
+            <Alert severity="warning">{statusDetail}</Alert>
+          )}
 
           {!connected && (
             <Alert severity="info" icon={<GitHubIcon fontSize="inherit" />}>
@@ -105,7 +126,11 @@ export function SaveToProviderDialog({
             </Alert>
           )}
 
-          {connected && !ready && (
+          {connected && statusDetail && (
+            <Alert severity={allReposSelected ? 'error' : 'warning'}>{statusDetail}</Alert>
+          )}
+
+          {connected && !ready && !statusDetail && (
             <Alert severity="warning">
               First-time setup needs one selected repository. Create the first real stage repo on GitHub, install the FOSSBot app on that repo only, then return here and save.
             </Alert>
@@ -152,9 +177,11 @@ export function SaveToProviderDialog({
           {connected && !ready && !remoteStage && (
             <Box sx={{ p: 1.25, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
               <Stack spacing={1.25}>
-                <Typography variant="subtitle2" fontWeight={800}>First-time GitHub setup</Typography>
+                <Typography variant="subtitle2" fontWeight={800}>{allReposSelected ? 'Fix GitHub App access' : 'First-time GitHub setup'}</Typography>
                 <Typography variant="body2" color="text.secondary">
-                  Use these steps once. Future stage repos can be created from the editor automatically.
+                  {allReposSelected
+                    ? 'GitHub currently grants this app access to all repositories. Use the install link below to switch to selected repositories and choose only this fossbot-* repo.'
+                    : 'Use these steps once. Future stage repos can be created from the editor automatically.'}
                 </Typography>
                 {!links ? (
                   <Button variant="outlined" onClick={prepareBootstrap} disabled={linkBusy || !slug.trim()}>
@@ -166,7 +193,7 @@ export function SaveToProviderDialog({
                       1. Create {links.repoName} on GitHub
                     </Button>
                     <Button component="a" href={links.installUrl} onClick={onBeforeInstall} variant="outlined" endIcon={<OpenInNewIcon />}>
-                      2. Select that repo and click Save on GitHub
+                      2. Select only that repo and click Save on GitHub
                     </Button>
                     <Button variant="text" onClick={onRefreshStatus}>3. Refresh connection status</Button>
                   </Stack>
@@ -190,7 +217,7 @@ export function SaveToProviderDialog({
           <Button variant="contained" startIcon={<GitHubIcon />} onClick={onConnect}>Connect GitHub</Button>
         ) : (
           <Button variant="contained" disabled={!canSave} onClick={() => onSave({ slug, commitMessage })}>
-            {busy ? 'Saving…' : remoteStage ? 'Save' : ready ? 'Create repo & save' : 'Complete GitHub setup first'}
+            {busy ? 'Saving…' : remoteStage ? 'Save' : ready ? 'Create repo & save' : allReposSelected ? 'Reinstall with selected repos first' : 'Complete GitHub setup first'}
           </Button>
         )}
       </DialogActions>

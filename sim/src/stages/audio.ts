@@ -44,7 +44,7 @@ function sourceUrl(entry: StageAudioEntry, resolveAssetUrl?: (url: string) => st
   const source = entry.source?.trim()
   if (!source) return null
   if (/^(https?:|data:|blob:|\/)/.test(source)) return resolveAssetUrl ? resolveAssetUrl(source) : source
-  const assetSource = entry.sourceType === 'file' && !source.startsWith('js-simulator/')
+  const assetSource = entry.sourceType === 'file' && !source.startsWith('js-simulator/') && !source.startsWith('assets/')
     ? `js-simulator/${source}`
     : source
   return resolveAssetUrl ? resolveAssetUrl(assetSource) : assetSource

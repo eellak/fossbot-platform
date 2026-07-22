@@ -40,10 +40,15 @@ Options:
                            (default: authenticated GitHub user)
   --repo <name>            Repo name to create (default: fossbot-spike-<timestamp>)
   --callback-port <port>   Local OAuth callback port (default: 8787)
+  --callback-host <host>   Local OAuth callback host (default: 127.0.0.1)
   --allow-all-installation Continue if the app installation is all-repositories
                            (default: fail; v1 should require selected repos)
   --delete-repo            Attempt to delete the spike repo at the end
                            (off by default; may require extra permission)
+  --forbidden-repo <owner/repo>
+                           Harmless non-installed repo denial probe
+  --forbidden-write-repo <owner/repo>
+                           Opt-in destructive denial probe. Expects rejection.
   --no-open                Print the authorization URL instead of opening browser
   -h, --help               Show this help
 
@@ -59,6 +64,7 @@ Optional env:
   GITHUB_SPIKE_OWNER                      Same as --owner
   GITHUB_SPIKE_REPO_NAME                  Same as --repo
   GITHUB_SPIKE_CALLBACK_PORT              Same as --callback-port
+  GITHUB_SPIKE_CALLBACK_HOST              Same as --callback-host
   GITHUB_SPIKE_ALLOW_ALL_INSTALLATION=1   Same as --allow-all-installation
   GITHUB_SPIKE_DELETE_REPO=1              Same as --delete-repo
   GITHUB_SPIKE_FORBIDDEN_REPO=owner/repo  Harmless access-denial probe
@@ -79,8 +85,11 @@ function parseArgs(argv) {
     owner: process.env.GITHUB_SPIKE_OWNER || '',
     repo: process.env.GITHUB_SPIKE_REPO_NAME || '',
     callbackPort: Number(process.env.GITHUB_SPIKE_CALLBACK_PORT || 8787),
+    callbackHost: process.env.GITHUB_SPIKE_CALLBACK_HOST || '127.0.0.1',
     allowAllInstallation: process.env.GITHUB_SPIKE_ALLOW_ALL_INSTALLATION === '1',
     deleteRepo: process.env.GITHUB_SPIKE_DELETE_REPO === '1',
+    forbiddenRepo: process.env.GITHUB_SPIKE_FORBIDDEN_REPO || '',
+    forbiddenWriteRepo: process.env.GITHUB_SPIKE_FORBIDDEN_WRITE_REPO || '',
     openBrowser: true,
     help: false,
   }
@@ -101,10 +110,22 @@ function parseArgs(argv) {
       options.callbackPort = Number(requiredArg(argv, ++i, '--callback-port'))
     } else if (arg.startsWith('--callback-port=')) {
       options.callbackPort = Number(arg.slice('--callback-port='.length))
+    } else if (arg === '--callback-host') {
+      options.callbackHost = requiredArg(argv, ++i, '--callback-host')
+    } else if (arg.startsWith('--callback-host=')) {
+      options.callbackHost = arg.slice('--callback-host='.length)
     } else if (arg === '--allow-all-installation') {
       options.allowAllInstallation = true
     } else if (arg === '--delete-repo') {
       options.deleteRepo = true
+    } else if (arg === '--forbidden-repo') {
+      options.forbiddenRepo = requiredArg(argv, ++i, '--forbidden-repo')
+    } else if (arg.startsWith('--forbidden-repo=')) {
+      options.forbiddenRepo = arg.slice('--forbidden-repo='.length)
+    } else if (arg === '--forbidden-write-repo') {
+      options.forbiddenWriteRepo = requiredArg(argv, ++i, '--forbidden-write-repo')
+    } else if (arg.startsWith('--forbidden-write-repo=')) {
+      options.forbiddenWriteRepo = arg.slice('--forbidden-write-repo='.length)
     } else if (arg === '--no-open') {
       options.openBrowser = false
     } else {
@@ -114,6 +135,9 @@ function parseArgs(argv) {
 
   if (!Number.isInteger(options.callbackPort) || options.callbackPort <= 0) {
     throw new Error('--callback-port must be a positive integer')
+  }
+  if (!options.callbackHost.trim()) {
+    throw new Error('--callback-host must not be empty')
   }
 
   return options
@@ -239,14 +263,14 @@ async function openUrl(url) {
   }
 }
 
-async function getUserTokenViaBrowser({ clientId, clientSecret, callbackPort, openBrowser }) {
+async function getUserTokenViaBrowser({ clientId, clientSecret, callbackPort, callbackHost, openBrowser }) {
   if (process.env.GITHUB_USER_TOKEN) {
     logInfo('Using GITHUB_USER_TOKEN from env; skipping browser authorization.')
     return process.env.GITHUB_USER_TOKEN
   }
 
   const state = randomBytes(18).toString('hex')
-  const redirectUri = `http://127.0.0.1:${callbackPort}/callback`
+  const redirectUri = `http://${callbackHost}:${callbackPort}/callback`
   const authorizeUrl = new URL('/login/oauth/authorize', GITHUB_WEB)
   authorizeUrl.searchParams.set('client_id', clientId)
   authorizeUrl.searchParams.set('redirect_uri', redirectUri)
@@ -282,7 +306,7 @@ async function getUserTokenViaBrowser({ clientId, clientSecret, callbackPort, op
     })
 
     server.on('error', reject)
-    server.listen(callbackPort, '127.0.0.1', async () => {
+    server.listen(callbackPort, callbackHost, async () => {
       console.log(`Open this URL to authorize the GitHub App user token:\n${authorizeUrl.toString()}\n`)
       if (openBrowser) await openUrl(authorizeUrl.toString())
     })
@@ -622,8 +646,7 @@ async function createCheckRun(owner, repoName, headSha, token) {
   return data
 }
 
-async function probeForbiddenRepo(token) {
-  const target = process.env.GITHUB_SPIKE_FORBIDDEN_REPO
+async function probeForbiddenRepo(token, target) {
   if (!target) return
   const [owner, repoName] = target.split('/')
   if (!owner || !repoName) throw new Error('GITHUB_SPIKE_FORBIDDEN_REPO must be owner/repo')
@@ -635,8 +658,7 @@ async function probeForbiddenRepo(token) {
   }
 }
 
-async function probeForbiddenWrite(token) {
-  const target = process.env.GITHUB_SPIKE_FORBIDDEN_WRITE_REPO
+async function probeForbiddenWrite(token, target) {
   if (!target) return
   const [owner, repoName] = target.split('/')
   if (!owner || !repoName) throw new Error('GITHUB_SPIKE_FORBIDDEN_WRITE_REPO must be owner/repo')
@@ -695,6 +717,7 @@ async function main() {
     clientId,
     clientSecret,
     callbackPort: options.callbackPort,
+    callbackHost: options.callbackHost,
     openBrowser: options.openBrowser,
   })
   const { data: user } = await api(userToken, 'GET', '/user')
@@ -793,8 +816,8 @@ async function main() {
   }
 
   logStep('Optional access-denial probes')
-  await probeForbiddenRepo(installationToken)
-  await probeForbiddenWrite(installationToken)
+  await probeForbiddenRepo(installationToken, options.forbiddenRepo)
+  await probeForbiddenWrite(installationToken, options.forbiddenWriteRepo)
 
   logStep('Result')
   console.log(JSON.stringify({

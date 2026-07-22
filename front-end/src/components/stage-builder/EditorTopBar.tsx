@@ -25,10 +25,12 @@ export interface EditorTopBarProps {
   onDemo: () => void;
   providerLabel?: string;
   providerBusy?: boolean;
+  marketplaceBusy?: boolean;
   onImport: () => void;
   onExport: () => void;
   onSaveProvider: () => void;
   onOpenProvider: () => void;
+  onPublishMarketplace: () => void;
   onRunTest: () => void;
   onUndo: () => void;
   onRedo: () => void;
@@ -102,10 +104,12 @@ export function EditorTopBar({
   onDemo,
   providerLabel,
   providerBusy,
+  marketplaceBusy,
   onImport,
   onExport,
   onSaveProvider,
   onOpenProvider,
+  onPublishMarketplace,
   onRunTest,
   onUndo,
   onRedo,
@@ -199,6 +203,7 @@ export function EditorTopBar({
         <MenuItem onClick={() => { overflow.closeMenu(); onImport(); }}>Import JSON…</MenuItem>
         <MenuItem onClick={() => { overflow.closeMenu(); onOpenProvider(); }}>Open from GitHub…</MenuItem>
         <MenuItem onClick={() => { overflow.closeMenu(); onSaveProvider(); }}>Save to GitHub…</MenuItem>
+        <MenuItem disabled={marketplaceBusy} onClick={() => { overflow.closeMenu(); onPublishMarketplace(); }}>{marketplaceBusy ? 'Publishing…' : 'Publish to Marketplace…'}</MenuItem>
         <Divider />
         <MenuItem disabled={!canUndo} onClick={() => { overflow.closeMenu(); onUndo(); }}>Undo</MenuItem>
         <MenuItem disabled={!canRedo} onClick={() => { overflow.closeMenu(); onRedo(); }}>Redo</MenuItem>

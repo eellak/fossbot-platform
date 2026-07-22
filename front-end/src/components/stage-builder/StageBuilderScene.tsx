@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
@@ -10,6 +10,7 @@ import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 import { disposeScene, initScene, renderScene, type SceneHandle } from 'src/simulator/scene/scene';
 import { loadRobotV2 } from 'src/simulator/robot/v2';
 import { SENSOR_LAYOUT } from 'src/simulator/sensors/layout';
+import { createStageAssetResolver } from 'src/simulator/stages/assets';
 import type { EditorStageObject, StageBuilderGroup, StageBuilderMode, StageBuilderSkyboxSettings, StageBuilderTransformSpace, StageLabelAttachment, StageLabelFace, StageTextStyle, Vec3 } from './types';
 import type { StageBuilderControlScheme, StageBuilderLockMode, StageBuilderStyleVariant } from './stageBuilderPreferences';
 import type { StageBuilderSnapSettings } from './stageBuilderSnapping';
@@ -56,6 +57,7 @@ export interface StageBuilderSceneProps {
   lookThroughCameraId?: string | null;
   sensorHelpersVisible?: boolean;
   collisionWireVisible?: boolean;
+  stageAssetBaseUrl?: string | null;
   onSelect: (id: string | null) => void;
   onSelectionChange?: (ids: string[]) => void;
   onObjectChange: (object: EditorStageObject) => void;
@@ -190,16 +192,17 @@ function loadStageBuilderGLB(url: string): Promise<THREE.Group> {
   return pending.then(cloneGltfScene);
 }
 
-async function loadStageBuilderModel(object: Extract<EditorStageObject, { kind: 'model' }>): Promise<THREE.Object3D> {
+async function loadStageBuilderModel(object: Extract<EditorStageObject, { kind: 'model' }>, resolveAssetUrl: (url: string) => string = (url) => url): Promise<THREE.Object3D> {
   const name = (object.originalFileName || object.filename).toLowerCase();
+  const modelUrl = resolveAssetUrl(object.filename);
   if (object.format === 'stl' || (!object.format && name.endsWith('.stl'))) {
-    const geometry = await loadStageBuilderSTL(object.filename);
+    const geometry = await loadStageBuilderSTL(modelUrl);
     const group = new THREE.Group();
     group.add(new THREE.Mesh(geometry));
     return group;
   }
-  if (object.format === 'glb' || (!object.format && name.endsWith('.glb'))) return loadStageBuilderGLB(object.filename);
-  return loadStageBuilderOBJ(object.filename);
+  if (object.format === 'glb' || (!object.format && name.endsWith('.glb'))) return loadStageBuilderGLB(modelUrl);
+  return loadStageBuilderOBJ(modelUrl);
 }
 
 function disposeSceneBackgroundTexture(scene: THREE.Scene): void {
@@ -521,7 +524,7 @@ function makeCollisionEdgesLocal(root: THREE.Object3D, anchor: THREE.Object3D, c
   return line;
 }
 
-function makeImportedModelRoot(object: Extract<EditorStageObject, { kind: 'model' }>, options: ObjectVisualOptions, colors: ReturnType<typeof getEditorColors>, pickables: THREE.Object3D[]): THREE.Group {
+function makeImportedModelRoot(object: Extract<EditorStageObject, { kind: 'model' }>, options: ObjectVisualOptions, colors: ReturnType<typeof getEditorColors>, pickables: THREE.Object3D[], resolveAssetUrl?: (url: string) => string): THREE.Group {
   const group = new THREE.Group();
   group.position.set(...object.position);
   group.scale.setScalar(object.scale);
@@ -546,7 +549,7 @@ function makeImportedModelRoot(object: Extract<EditorStageObject, { kind: 'model
     group.add(initialWire);
   }
 
-  loadStageBuilderModel(object).then((loaded) => {
+  loadStageBuilderModel(object, resolveAssetUrl).then((loaded) => {
     if (group.userData.stageBuilderDisposed) return;
     group.remove(placeholder);
     placeholder.geometry.dispose();
@@ -1125,7 +1128,7 @@ function makeRobotSpawnVisual(object: Extract<EditorStageObject, { kind: 'fossbo
   return { root: group, pickables };
 }
 
-export function makeObjectRoot(object: EditorStageObject, options: ObjectVisualOptions = {}, context: { objects?: EditorStageObject[]; colors?: ReturnType<typeof getEditorColors> } = {}): MeshRecord {
+export function makeObjectRoot(object: EditorStageObject, options: ObjectVisualOptions = {}, context: { objects?: EditorStageObject[]; colors?: ReturnType<typeof getEditorColors>; resolveAssetUrl?: (url: string) => string } = {}): MeshRecord {
   const colors = context.colors ?? getEditorColors('studio');
   let pickables: THREE.Object3D[] = [];
   let root: THREE.Object3D;
@@ -1226,7 +1229,7 @@ export function makeObjectRoot(object: EditorStageObject, options: ObjectVisualO
     }
     root = group;
   } else if (object.kind === 'model') {
-    root = makeImportedModelRoot(object, options, colors, pickables);
+    root = makeImportedModelRoot(object, options, colors, pickables, context.resolveAssetUrl);
   } else if (object.kind === 'text') {
     const parent = object.attachment?.parentId ? context.objects?.find((item) => item.id === object.attachment?.parentId) : null;
     if (object.attachment && parent) {
@@ -1712,6 +1715,7 @@ export function StageBuilderScene({
   lookThroughCameraId = null,
   sensorHelpersVisible = false,
   collisionWireVisible = false,
+  stageAssetBaseUrl = null,
   onSelect,
   onSelectionChange,
   onObjectChange,
@@ -1747,6 +1751,7 @@ export function StageBuilderScene({
   const builderModeRef = useRef(builderMode);
   const placementObjectRef = useRef(placementObject);
   const stageDimensionsRef = useRef(stageDimensions);
+  const resolveAssetUrl = useMemo(() => createStageAssetResolver({ stageAssetBaseUrl }), [stageAssetBaseUrl]);
   const floorColorRef = useRef(floorColor);
   const skyboxRef = useRef(skybox);
   const gridVisibleRef = useRef(gridVisible);
@@ -2540,14 +2545,14 @@ export function StageBuilderScene({
     for (const object of objects) {
       if (object.hidden) continue;
       if (object.kind === 'text' && object.attachment?.parentId && objects.find((item) => item.id === object.attachment?.parentId)?.hidden) continue;
-      const record = makeObjectRoot(object, { validationSeverity: validationSeverityFor(object.id, validationResultsRef.current), sensorHelpersVisible, collisionWireVisible }, { objects, colors: styleColorsRef.current });
+      const record = makeObjectRoot(object, { validationSeverity: validationSeverityFor(object.id, validationResultsRef.current), sensorHelpersVisible, collisionWireVisible }, { objects, colors: styleColorsRef.current, resolveAssetUrl });
       if (object.id === lookThroughCameraId) record.root.visible = false;
       objectMapRef.current.set(object.id, record);
       scene.add(record.root);
     }
 
     syncTransformAttachment();
-  }, [objects, validationResults, lookThroughCameraId, sensorHelpersVisible, collisionWireVisible]);
+  }, [objects, validationResults, lookThroughCameraId, sensorHelpersVisible, collisionWireVisible, resolveAssetUrl]);
 
   useEffect(() => {
     const scene = sceneRef.current?.scene;
@@ -2558,12 +2563,12 @@ export function StageBuilderScene({
       ghostRef.current = null;
     }
     if (placementObject && builderMode === 'place') {
-      const ghost = makeObjectRoot(placementObject, { ghost: true, ghostValid: true }, { colors: styleColorsRef.current });
+      const ghost = makeObjectRoot(placementObject, { ghost: true, ghostValid: true }, { colors: styleColorsRef.current, resolveAssetUrl });
       ghostRef.current = ghost;
       scene.add(ghost.root);
     }
     if (!placementObject || builderMode !== 'place') onPlacementStatusChange?.(null);
-  }, [placementObject, builderMode, onPlacementStatusChange]);
+  }, [placementObject, builderMode, onPlacementStatusChange, resolveAssetUrl]);
 
   useEffect(() => {
     syncTransformAttachment();
