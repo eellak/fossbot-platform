@@ -6,6 +6,12 @@ export interface GitHubProviderStatus {
   installationId: string | null;
   repositorySelection: 'selected' | 'all' | null;
   selectedInstallationReady?: boolean;
+  requiresReconnect?: boolean;
+  needsReconnect?: boolean;
+  statusError?: string | null;
+  statusDetail?: string | null;
+  errorCode?: string | null;
+  errorDetail?: string | null;
 }
 
 export interface GitHubBootstrapLinks {
@@ -14,11 +20,30 @@ export interface GitHubBootstrapLinks {
   installUrl: string;
 }
 
+export class ProviderAuthRequestError extends Error {
+  code?: string;
+  status: number;
+
+  constructor(message: string, status: number, code?: string) {
+    super(message);
+    this.name = 'ProviderAuthRequestError';
+    this.status = status;
+    this.code = code;
+  }
+}
+
+function extractProviderError(payload: any): { code?: string; detail: string } {
+  const detail = payload?.detail;
+  if (detail && typeof detail === 'object') return { code: detail.error, detail: detail.detail || JSON.stringify(detail) };
+  if (payload?.error || payload?.detail) return { code: payload.error, detail: payload.detail };
+  return { detail: payload?.message || 'GitHub provider request failed' };
+}
+
 async function parseJsonResponse<T>(response: Response): Promise<T> {
   const payload = await response.json().catch(() => null);
   if (!response.ok) {
-    const detail = payload?.detail?.detail || payload?.detail || payload?.message || 'GitHub provider request failed';
-    throw new Error(typeof detail === 'string' ? detail : JSON.stringify(detail));
+    const { code, detail } = extractProviderError(payload);
+    throw new ProviderAuthRequestError(typeof detail === 'string' ? detail : JSON.stringify(detail), response.status, code);
   }
   return payload as T;
 }

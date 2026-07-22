@@ -8,6 +8,7 @@ export interface ProviderStageRef {
   repoUrl: string;
   commitSha?: string | null;
   stageJsonSha?: string | null;
+  rawBaseUrl?: string | null;
 }
 
 export interface ProviderStageListItem {
@@ -32,11 +33,40 @@ export interface LoadStageFromProviderResponse extends ProviderStageRef {
   manifestSha?: string | null;
 }
 
+export class ProviderRequestError extends Error {
+  code?: string;
+  status: number;
+  currentStageJsonSha?: string | null;
+  currentCommitSha?: string | null;
+  retryAfter?: number | null;
+
+  constructor(message: string, status: number, code?: string, details: Record<string, unknown> = {}) {
+    super(message);
+    this.name = 'ProviderRequestError';
+    this.status = status;
+    this.code = code;
+    this.currentStageJsonSha = typeof details.currentStageJsonSha === 'string' ? details.currentStageJsonSha : null;
+    this.currentCommitSha = typeof details.currentCommitSha === 'string' ? details.currentCommitSha : null;
+    this.retryAfter = typeof details.retryAfter === 'number' ? details.retryAfter : null;
+  }
+}
+
+function extractProviderError(payload: any): { code?: string; detail: string; details?: Record<string, unknown> } {
+  const detail = payload?.detail;
+  if (detail && typeof detail === 'object') {
+    return { code: detail.error, detail: detail.detail || JSON.stringify(detail), details: detail };
+  }
+  if (payload?.error || payload?.detail) {
+    return { code: payload.error, detail: payload.detail, details: payload };
+  }
+  return { detail: payload?.message || 'Stage provider request failed' };
+}
+
 async function parseJsonResponse<T>(response: Response): Promise<T> {
   const payload = await response.json().catch(() => null);
   if (!response.ok) {
-    const detail = payload?.detail?.detail || payload?.detail || payload?.message || 'Stage provider request failed';
-    throw new Error(typeof detail === 'string' ? detail : JSON.stringify(detail));
+    const { code, detail, details } = extractProviderError(payload);
+    throw new ProviderRequestError(typeof detail === 'string' ? detail : JSON.stringify(detail), response.status, code, details);
   }
   return payload as T;
 }

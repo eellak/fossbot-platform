@@ -9,7 +9,7 @@ export interface FossbotSimulatorHandle {
   stopMotion(): void
   reset(): void
   setStage(stageOrUrl: string): Promise<void>
-  setStageConfig(entries: RawStageConfig, name?: string): Promise<void>
+  setStageConfig(entries: RawStageConfig, name?: string, stageAssetBaseUrl?: string): Promise<void>
   getStageNames(): string[]
   setLightIntensity(intensity: number): void
   changeCamera(): void
@@ -49,7 +49,7 @@ export const FossbotSimulator = forwardRef<FossbotSimulatorHandle, FossbotSimula
       stopMotion: () => engineRef.current?.stopMotion(),
       reset: () => engineRef.current?.reset(),
       setStage: (stageOrUrl) => engineRef.current?.setStage(stageOrUrl) ?? Promise.resolve(),
-      setStageConfig: (entries, name) => engineRef.current?.setStageConfig(entries, name) ?? Promise.resolve(),
+      setStageConfig: (entries, name, stageAssetBaseUrl) => engineRef.current?.setStageConfig(entries, name, stageAssetBaseUrl) ?? Promise.resolve(),
       getStageNames: () => engineRef.current?.getStageNames() ?? [],
       setLightIntensity: (intensity) => engineRef.current?.setLightIntensity(intensity),
       changeCamera: () => engineRef.current?.changeCamera(),

@@ -35,9 +35,11 @@ import { writeStageBuilderRunHandoff } from 'src/components/stage-builder/stageB
 import { EditorThemeProvider, getEditorColors, getEditorPanelSx, getEditorTabsSx, getEditorTones, getEditorType, getInspectorPanelSx, useEditorTheme } from 'src/components/stage-builder/stageBuilderEditorTheme';
 import { CUSTOM_OBJECT_DEFAULT_FIT_METERS, CUSTOM_OBJECT_DIMENSION_EPSILON, CUSTOM_OBJECT_MAX_FILE_SIZE_BYTES } from 'src/components/stage-builder/stageBuilderCustomObjects';
 import { getGitHubBootstrapLinks, getGitHubLoginUrl, getGitHubProviderStatus, type GitHubProviderStatus } from 'src/stages/ProviderAuthApi';
-import { createStageOnProvider, listProviderStages, loadStageFromProvider, updateStageOnProvider, type ProviderStageListItem, type ProviderStageRef } from 'src/stages/StagesApi';
+import { createStageOnProvider, listProviderStages, loadStageFromProvider, ProviderRequestError, updateStageOnProvider, type ProviderStageListItem, type ProviderStageRef } from 'src/stages/StagesApi';
 import { SaveToProviderDialog, type SaveToProviderValues } from 'src/stages/SaveToProviderDialog';
 import { OpenFromProviderDialog } from 'src/stages/OpenFromProviderDialog';
+import { publishStageToMarketplace, MarketplaceRequestError, type PublishMarketplaceResponse } from 'src/stages/MarketplaceApi';
+import { PublishToMarketplaceDialog, type PublishMarketplaceValues } from 'src/stages/PublishToMarketplaceDialog';
 
 function userScope(user: ReturnType<typeof useAuth>['user']): string {
   if (!user) return 'anonymous';
@@ -305,12 +307,17 @@ const StageBuilderPage = () => {
   const [saveProviderOpen, setSaveProviderOpen] = useState(false);
   const [providerSaving, setProviderSaving] = useState(false);
   const [providerError, setProviderError] = useState('');
+  const [providerErrorCode, setProviderErrorCode] = useState<string | null>(null);
   const [remoteStage, setRemoteStage] = useState<ProviderStageRef | null>(null);
   const [bootstrapRepoName, setBootstrapRepoName] = useState<string | null>(null);
   const [openProviderOpen, setOpenProviderOpen] = useState(false);
   const [providerStages, setProviderStages] = useState<ProviderStageListItem[]>([]);
   const [providerListLoading, setProviderListLoading] = useState(false);
   const [providerListError, setProviderListError] = useState('');
+  const [publishMarketplaceOpen, setPublishMarketplaceOpen] = useState(false);
+  const [marketplacePublishing, setMarketplacePublishing] = useState(false);
+  const [marketplaceError, setMarketplaceError] = useState('');
+  const [marketplaceResult, setMarketplaceResult] = useState<PublishMarketplaceResponse | null>(null);
 
   const prefabs = useMemo(() => builtInStageBuilderPrefabs(), []);
   const snapSettings = useMemo(() => getSnapSettings(prefs.snapPreset, prefs.rotationSnapPreset), [prefs.snapPreset, prefs.rotationSnapPreset]);
@@ -355,7 +362,13 @@ const StageBuilderPage = () => {
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const params = new URLSearchParams(window.location.search);
-    if (params.get('github_connected') || params.get('github_installed')) {
+    if (params.get('github_error')) {
+      setSaveProviderOpen(true);
+      setProviderError(params.get('github_error') || 'GitHub connection failed.');
+      setProviderErrorCode('provider_error');
+      window.history.replaceState(null, '', window.location.pathname);
+      refreshProviderStatus();
+    } else if (params.get('github_connected') || params.get('github_installed')) {
       const repo = params.get('repo');
       if (repo) setBootstrapRepoName(repo);
       setSaveProviderOpen(true);
@@ -764,6 +777,7 @@ const StageBuilderPage = () => {
   const handleProviderConnect = async () => {
     if (!token) {
       setProviderError('Sign in before connecting GitHub.');
+      setProviderErrorCode('not_connected');
       return;
     }
     try {
@@ -771,6 +785,7 @@ const StageBuilderPage = () => {
       window.location.assign(url);
     } catch (error) {
       setProviderError(error instanceof Error ? error.message : 'Could not start GitHub connection.');
+      setProviderErrorCode(null);
     }
   };
 
@@ -782,10 +797,12 @@ const StageBuilderPage = () => {
   const handleProviderSave = async ({ slug, commitMessage }: SaveToProviderValues) => {
     if (!token) {
       setProviderError('Sign in before saving to GitHub.');
+      setProviderErrorCode('not_connected');
       return;
     }
     setProviderSaving(true);
     setProviderError('');
+    setProviderErrorCode(null);
     try {
       const record = editorStageToRecord(stage);
       const saved = remoteStage
@@ -803,13 +820,76 @@ const StageBuilderPage = () => {
       setExportedAt(new Date().toISOString());
       clearStageBuilderDraft(scope);
       setSaveProviderOpen(false);
+      setProviderErrorCode(null);
       setMessage(`Saved to GitHub: ${saved.repoOwner}/${saved.repoName}`);
       refreshProviderStatus();
     } catch (error) {
-      setProviderError(error instanceof Error ? error.message : 'Save to GitHub failed.');
+      if (error instanceof ProviderRequestError) {
+        setProviderErrorCode(error.code || null);
+        if (error.code === 'sha_conflict') {
+          const shaHint = error.currentStageJsonSha ? ` Current remote stage.json SHA: ${error.currentStageJsonSha}.` : '';
+          setProviderError(`${error.message}${shaHint} Open the stage from GitHub to reload it, or save this edit as a new fossbot-* repository.`);
+        } else if (error.code === 'repo_not_installed' || error.code === 'no_installation') {
+          setProviderError(`${error.message} Refresh GitHub status after changing the app installation.`);
+        } else if (error.code === 'repo_name_taken') {
+          setProviderError(`${error.message} If this is your stage repo, install the FOSSBot GitHub App on it and save again.`);
+        } else if (error.code === 'token_expired' || error.code === 'not_connected') {
+          setProviderError(`${error.message} Use Connect GitHub to refresh authorization.`);
+          refreshProviderStatus();
+        } else if (error.code === 'installation_scope_invalid') {
+          setProviderError(`${error.message} Reinstall with selected repositories, then refresh status.`);
+          refreshProviderStatus();
+        } else {
+          setProviderError(error.message);
+        }
+      } else {
+        setProviderErrorCode(null);
+        setProviderError(error instanceof Error ? error.message : 'Save to GitHub failed.');
+      }
     } finally {
       setProviderSaving(false);
     }
+  };
+
+  const handlePublishMarketplace = async ({ title, description, tags, previewDataUrl, commitMessage }: PublishMarketplaceValues) => {
+    if (!token) {
+      setMarketplaceError('Sign in before publishing to the marketplace.');
+      return;
+    }
+    if (!remoteStage) {
+      setMarketplaceError('Save this stage to GitHub before publishing.');
+      return;
+    }
+    setMarketplacePublishing(true);
+    setMarketplaceError('');
+    setMarketplaceResult(null);
+    try {
+      const result = await publishStageToMarketplace(token, {
+        repoOwner: remoteStage.repoOwner,
+        repoName: remoteStage.repoName,
+        title,
+        description,
+        tags,
+        previewDataUrl,
+        commitMessage,
+      });
+      setMarketplaceResult(result);
+      setMessage(`Marketplace PR created for ${remoteStage.repoOwner}/${remoteStage.repoName}.`);
+    } catch (error) {
+      if (error instanceof MarketplaceRequestError) {
+        setMarketplaceError(error.message);
+      } else {
+        setMarketplaceError(error instanceof Error ? error.message : 'Publish to marketplace failed.');
+      }
+    } finally {
+      setMarketplacePublishing(false);
+    }
+  };
+
+  const handleOpenMarketplaceDialog = () => {
+    setMarketplaceError('');
+    setMarketplaceResult(null);
+    setPublishMarketplaceOpen(true);
   };
 
   const refreshProviderStageList = async () => {
@@ -849,6 +929,7 @@ const StageBuilderPage = () => {
         repoUrl: loaded.repoUrl,
         commitSha: loaded.commitSha,
         stageJsonSha: loaded.stageJsonSha,
+        rawBaseUrl: loaded.rawBaseUrl,
       });
       setOpenProviderOpen(false);
     } catch (error) {
@@ -874,7 +955,7 @@ const StageBuilderPage = () => {
       setMessage(`Fix ${blocking.length} validation error${blocking.length === 1 ? '' : 's'} before running the test simulation.`);
       return;
     }
-    const handoffId = writeStageBuilderRunHandoff(editorStageToRecord(stage), undefined, { collisionWireVisible });
+    const handoffId = writeStageBuilderRunHandoff(editorStageToRecord(stage), undefined, { collisionWireVisible, stageAssetBaseUrl: remoteStage?.rawBaseUrl });
     if (!handoffId) {
       setMessage('Run Test could not store this stage locally. Remove a large imported object or export JSON, then try again.');
       return;
@@ -1147,10 +1228,12 @@ const StageBuilderPage = () => {
         onDemo={handleDemo}
         providerLabel={providerLabel}
         providerBusy={providerSaving || providerStatusLoading}
+        marketplaceBusy={marketplacePublishing}
         onImport={() => importInputRef.current?.click()}
         onExport={handleExport}
-        onSaveProvider={() => { setProviderError(''); setSaveProviderOpen(true); }}
+        onSaveProvider={() => { setProviderError(''); setProviderErrorCode(null); setSaveProviderOpen(true); }}
         onOpenProvider={handleProviderOpenDialog}
+        onPublishMarketplace={handleOpenMarketplaceDialog}
         onRunTest={handleRunTest}
         onUndo={undo}
         onRedo={redo}
@@ -1219,6 +1302,7 @@ const StageBuilderPage = () => {
             lookThroughCameraId={lookThroughCamera?.id || null}
             sensorHelpersVisible={sensorHelpersVisible}
             collisionWireVisible={collisionWireVisible}
+            stageAssetBaseUrl={remoteStage?.rawBaseUrl}
             onSelect={handleSelect}
             onSelectionChange={handleSelectionChange}
             onObjectChange={updateObject}
@@ -1359,10 +1443,12 @@ const StageBuilderPage = () => {
         bootstrapRepoName={bootstrapRepoName}
         busy={providerSaving}
         error={providerError}
+        errorCode={providerErrorCode}
         onClose={() => setSaveProviderOpen(false)}
         onConnect={handleProviderConnect}
         onRefreshStatus={refreshProviderStatus}
         onBeforeInstall={() => writeStageBuilderDraft(stage, scope)}
+        onOpenFromGitHub={() => { setSaveProviderOpen(false); handleProviderOpenDialog(); }}
         onCreateBootstrapLinks={handleCreateBootstrapLinks}
         onSave={handleProviderSave}
       />
@@ -1375,6 +1461,19 @@ const StageBuilderPage = () => {
         onClose={() => setOpenProviderOpen(false)}
         onRefresh={refreshProviderStageList}
         onOpenStage={handleOpenProviderStage}
+      />
+
+      <PublishToMarketplaceDialog
+        open={publishMarketplaceOpen}
+        stageTitle={stage.title}
+        stageDescription={stage.description}
+        remoteStage={remoteStage}
+        busy={marketplacePublishing}
+        error={marketplaceError}
+        result={marketplaceResult}
+        onClose={() => setPublishMarketplaceOpen(false)}
+        onSaveToGitHub={() => { setPublishMarketplaceOpen(false); setSaveProviderOpen(true); }}
+        onPublish={handlePublishMarketplace}
       />
 
       <Snackbar open={!!message} autoHideDuration={3600} onClose={() => setMessage('')} message={message} />

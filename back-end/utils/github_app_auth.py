@@ -5,6 +5,7 @@ import hmac
 import json
 import os
 import time
+import urllib.error
 import urllib.request
 from typing import Any, Optional
 from urllib.parse import urlencode
@@ -205,8 +206,18 @@ def _oauth_token_request(body: dict[str, str]) -> dict[str, Any]:
             "User-Agent": "fossbot-platform-stage-storage",
         },
     )
-    with urllib.request.urlopen(request, timeout=20) as response:
-        data = json.loads(response.read().decode("utf-8"))
+    try:
+        with urllib.request.urlopen(request, timeout=20) as response:
+            data = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as error:
+        raw = error.read().decode("utf-8")
+        try:
+            data = json.loads(raw) if raw else {}
+        except json.JSONDecodeError:
+            data = {"error_description": raw}
+        raise GitHubApiError(error.code, data.get("error_description") or data.get("message") or "GitHub token request failed", data) from error
+    except (TimeoutError, urllib.error.URLError) as error:
+        raise GitHubApiError(502, "GitHub token request failed. Check the server network path and callback URL configuration.") from error
     if data.get("error"):
         raise GitHubApiError(400, data.get("error_description") or "GitHub token request failed", data)
     return data

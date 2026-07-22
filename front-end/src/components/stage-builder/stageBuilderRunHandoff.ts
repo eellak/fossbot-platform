@@ -8,6 +8,7 @@ export type StageBuilderRunHandoff = {
   createdAt: string;
   record: LocalStageRecord;
   collisionWireVisible?: boolean;
+  stageAssetBaseUrl?: string | null;
 };
 
 export function makeRunHandoffId(): string {
@@ -43,9 +44,9 @@ function removeKeysWithPrefix(prefix: string): void {
   }
 }
 
-export function writeStageBuilderRunHandoff(record: LocalStageRecord, id = makeRunHandoffId(), options: { collisionWireVisible?: boolean } = {}): string | null {
+export function writeStageBuilderRunHandoff(record: LocalStageRecord, id = makeRunHandoffId(), options: { collisionWireVisible?: boolean; stageAssetBaseUrl?: string | null } = {}): string | null {
   if (typeof window === 'undefined') return id;
-  const payload: StageBuilderRunHandoff = { id, createdAt: new Date().toISOString(), record: compactRunHandoffRecord(record), collisionWireVisible: options.collisionWireVisible };
+  const payload: StageBuilderRunHandoff = { id, createdAt: new Date().toISOString(), record: compactRunHandoffRecord(record), collisionWireVisible: options.collisionWireVisible, stageAssetBaseUrl: options.stageAssetBaseUrl };
   const key = stageBuilderRunHandoffKey(id);
   const serialized = JSON.stringify(payload);
   try {

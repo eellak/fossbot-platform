@@ -67,6 +67,11 @@ password : 123456
 
 
 Docs running here : http://0.0.0.0:8000/docs
+
+### Stage Builder GitHub storage and marketplace
+
+- [GitHub Stage Storage and Marketplace Setup](docs/github-stage-marketplace-setup.md)
+- [GitHub Marketplace Security Review](docs/github-marketplace-security-review.md)
  
  
 ## Software Development Team

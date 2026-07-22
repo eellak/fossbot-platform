@@ -9,6 +9,7 @@ import { ROBOT_COLLIDERS } from '../physics/colliders'
 import { syncMeshFromBody, syncObjectToBody } from '../physics/mesh-sync'
 import { createVehicle, syncVehicleVisual, type VehicleHandle, type VehicleSettings, type VehicleTelemetry } from '../physics/vehicle'
 import { loadStage, loadStageEntries, STAGE_NAMES, DEFAULT_STAGE, type RawStageConfig, type StageHandle, type StageName } from '../stages'
+import { resolveStageAssetUrl, stageAssetBaseUrlFromStageUrl } from '../stages/assets'
 import { installKeyboard, type KeyboardHandle } from '../util/keyboard'
 import { log } from '../util/log'
 import {
@@ -50,6 +51,7 @@ function resolveConfig(cfg: Partial<SimEngineConfig> | undefined): Required<SimE
   return {
     publicAssetBaseUrl,
     assetBaseUrl: cfg?.assetBaseUrl ?? `${publicAssetBaseUrl.replace(/\/$/, '')}/models/robots/v2`,
+    stageAssetBaseUrl: cfg?.stageAssetBaseUrl,
     splashLogoUrl: cfg?.splashLogoUrl ?? '/images/superlogo.png',
     splashEnabled: cfg?.splashEnabled ?? getSplashEnabledDefault(),
     splashExtraTime: cfg?.splashExtraTime ?? getSplashExtraTimeDefault(),
@@ -147,6 +149,7 @@ export class SimEngine {
   private benchDrive: { left: number; right: number } | null = null
   private physicsCrashed = false
   private swappingStage = false
+  private activeStageAssetBaseUrl: string | undefined = undefined
   private highYLogged = false
   private fellThroughLogged = false
   private pendingMotionResolve: (() => void) | null = null
@@ -500,19 +503,29 @@ export class SimEngine {
 
   async setStage(stageOrUrl: string): Promise<void> {
     const stage = this.normalizeStageName(stageOrUrl)
-    if (!stage) {
-      console.warn(`[SimEngine] Unknown stage: ${stageOrUrl}`)
+    this.stopMotion()
+    this.drawLine(false)
+    if (stage) {
+      await this.swapStage(stage)
       return
     }
-    this.stopMotion()
-    this.drawLine(false)
-    await this.swapStage(stage)
+
+    try {
+      const response = await fetch(stageOrUrl)
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+      const payload = await response.json() as RawStageConfig | { config?: RawStageConfig }
+      const entries = Array.isArray(payload) ? payload : payload.config
+      if (!Array.isArray(entries)) throw new Error('stage JSON must be an array or LocalStageRecord')
+      await this.swapStageEntries('remote_stage', entries, stageAssetBaseUrlFromStageUrl(stageOrUrl))
+    } catch (error) {
+      console.warn(`[SimEngine] Could not load stage: ${stageOrUrl}`, error)
+    }
   }
 
-  async setStageConfig(entries: RawStageConfig, name = 'custom_stage'): Promise<void> {
+  async setStageConfig(entries: RawStageConfig, name = 'custom_stage', stageAssetBaseUrl?: string): Promise<void> {
     this.stopMotion()
     this.drawLine(false)
-    await this.swapStageEntries(name, entries)
+    await this.swapStageEntries(name, entries, stageAssetBaseUrl ?? this.config.stageAssetBaseUrl)
   }
 
   getStageNames(): string[] {
@@ -659,14 +672,10 @@ export class SimEngine {
     return STAGE_NAMES.includes(stage) ? stage : null
   }
 
-  private resolvePublicAssetUrl = (url: string): string => {
-    if (!url) return url
-    if (/^(https?:|data:|blob:)/.test(url)) return url
-    const base = this.config.publicAssetBaseUrl.replace(/\/$/, '')
-    if (url.startsWith('/js-simulator/')) return `${base}${url.slice('/js-simulator'.length)}`
-    if (url.startsWith('js-simulator/')) return `${base}/${url.slice('js-simulator/'.length)}`
-    return url
-  }
+  private resolveStageAssetUrl = (url: string): string => resolveStageAssetUrl(url, {
+    publicAssetBaseUrl: this.config.publicAssetBaseUrl,
+    stageAssetBaseUrl: this.activeStageAssetBaseUrl,
+  })
 
   private ensureSensorDebugViz(): SensorDebugVizHandle | null {
     if (this.sensorDebugViz) return this.sensorDebugViz
@@ -736,16 +745,18 @@ export class SimEngine {
       this.positionPresets?.refresh()
 
       if (this.config.initialStageConfig) {
+        this.activeStageAssetBaseUrl = this.config.stageAssetBaseUrl
         this.splash.setStatus('Loading custom stage...')
         this.currentStage = await loadStageEntries('custom_stage', this.config.initialStageConfig, this.sceneHandle!.scene, world, {
-          resolveAssetUrl: this.resolvePublicAssetUrl,
+          resolveAssetUrl: this.resolveStageAssetUrl,
           camera: this.sceneHandle!.camera,
           gestureTarget: this.container,
         })
       } else {
+        this.activeStageAssetBaseUrl = undefined
         this.splash.setStatus(`Loading stage ${initialStage}...`)
         this.currentStage = await loadStage(initialStage, this.sceneHandle!.scene, world, {
-          resolveAssetUrl: this.resolvePublicAssetUrl,
+          resolveAssetUrl: this.resolveStageAssetUrl,
           camera: this.sceneHandle!.camera,
           gestureTarget: this.container,
         })
@@ -1362,8 +1373,9 @@ export class SimEngine {
     try {
       this.positionStore?.setStage(next)
       this.positionPresets?.refresh()
+      this.activeStageAssetBaseUrl = undefined
       const loadedStage = await loadStage(next, this.sceneHandle.scene, this.worldHandle.world, {
-        resolveAssetUrl: this.resolvePublicAssetUrl,
+        resolveAssetUrl: this.resolveStageAssetUrl,
         camera: this.sceneHandle.camera,
         gestureTarget: this.container,
       })
@@ -1379,14 +1391,15 @@ export class SimEngine {
     }
   }
 
-  private async swapStageEntries(name: StageName, entries: RawStageConfig): Promise<void> {
+  private async swapStageEntries(name: StageName, entries: RawStageConfig, stageAssetBaseUrl?: string): Promise<void> {
     if (!this.currentStage || this.cancelled || !this.sceneHandle || !this.worldHandle) return
     log.world('swap stage', this.currentStage.name, '→', name)
 
     if (!this.prepareStageSwap()) return
     try {
+      this.activeStageAssetBaseUrl = stageAssetBaseUrl
       const loadedStage = await loadStageEntries(name, entries, this.sceneHandle.scene, this.worldHandle.world, {
-        resolveAssetUrl: this.resolvePublicAssetUrl,
+        resolveAssetUrl: this.resolveStageAssetUrl,
         camera: this.sceneHandle.camera,
         gestureTarget: this.container,
       })

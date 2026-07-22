@@ -16,6 +16,7 @@ const LandingPage = Loadable(lazy(() => import('../views/landing-page/LandingPag
 const AccountsSettingsPage = Loadable(lazy(() => import('../views/account-settings-page/AccountsSettingsPage')));
 const StageBuilderPage = Loadable(lazy(() => import('../views/stage-builder-page/StageBuilderPage')));
 const StageBuilderTestPage = Loadable(lazy(() => import('../views/stage-builder-test-page/StageBuilderTestPage')));
+const StageGitHubTestPage = Loadable(lazy(() => import('../views/stage-github-test-page/StageGitHubTestPage')));
 
 //const BlocklyPage = Loadable(lazy(() => import('../views/blockly-page/BlocklyPage')));
 //const BlocklyPage =  '../views/blockly-page/BlocklyPage';
@@ -128,6 +129,14 @@ const Router = [
     children: [
       { path: '', exact: true, element: <StageBuilderPage /> },
       { path: 'test', exact: true, element: <StageBuilderTestPage /> },
+    ],
+  },
+  {
+    path: '/stage-test',
+    title: 'GitHub Stage Test',
+    element: <BlankLayout />,
+    children: [
+      { path: '', exact: true, element: <StageGitHubTestPage /> },
     ],
   },
   {
