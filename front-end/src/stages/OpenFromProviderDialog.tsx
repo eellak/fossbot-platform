@@ -10,6 +10,7 @@ interface OpenFromProviderDialogProps {
   stages: ProviderStageListItem[];
   busy: boolean;
   error?: string | null;
+  warning?: boolean;
   onClose: () => void;
   onRefresh: () => void;
   onOpenStage: (stage: ProviderStageListItem) => void;
@@ -20,6 +21,7 @@ export function OpenFromProviderDialog({
   stages,
   busy,
   error,
+  warning = false,
   onClose,
   onRefresh,
   onOpenStage,
@@ -32,7 +34,7 @@ export function OpenFromProviderDialog({
           <Typography variant="body2" color="text.secondary">
             Choose an installed <Box component="code">fossbot-*</Box> repository to load into the editor. Private repos can be edited here, but browser test links and marketplace publishing require public repos in v1.
           </Typography>
-          {error && <Alert severity="error">{error}</Alert>}
+          {error && <Alert severity={warning ? 'warning' : 'error'}>{error}</Alert>}
           {!busy && !stages.length && !error && (
             <Alert severity="info" icon={<GitHubIcon fontSize="inherit" />}>
               No installed FOSSBot stage repositories were found. Save a stage to GitHub first, or install the GitHub App on an existing <Box component="code">fossbot-*</Box> repo.

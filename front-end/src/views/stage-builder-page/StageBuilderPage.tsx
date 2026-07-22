@@ -35,11 +35,12 @@ import { writeStageBuilderRunHandoff } from 'src/components/stage-builder/stageB
 import { EditorThemeProvider, getEditorColors, getEditorPanelSx, getEditorTabsSx, getEditorTones, getEditorType, getInspectorPanelSx, useEditorTheme } from 'src/components/stage-builder/stageBuilderEditorTheme';
 import { CUSTOM_OBJECT_DEFAULT_FIT_METERS, CUSTOM_OBJECT_DIMENSION_EPSILON, CUSTOM_OBJECT_MAX_FILE_SIZE_BYTES } from 'src/components/stage-builder/stageBuilderCustomObjects';
 import { getGitHubBootstrapLinks, getGitHubLoginUrl, getGitHubProviderStatus, type GitHubProviderStatus } from 'src/stages/ProviderAuthApi';
-import { createStageOnProvider, listProviderStages, loadStageFromProvider, ProviderRequestError, updateStageOnProvider, type ProviderStageListItem, type ProviderStageRef } from 'src/stages/StagesApi';
+import { createStageOnProvider, loadStageFromProvider, ProviderRequestError, updateStageOnProvider, type ProviderStageListItem, type ProviderStageRef } from 'src/stages/StagesApi';
 import { SaveToProviderDialog, type SaveToProviderValues } from 'src/stages/SaveToProviderDialog';
 import { OpenFromProviderDialog } from 'src/stages/OpenFromProviderDialog';
 import { getMarketplaceStageStatus, publishStageToMarketplace, MarketplaceRequestError, type MarketplaceStageStatusResponse, type PublishMarketplaceResponse } from 'src/stages/MarketplaceApi';
 import { PublishToMarketplaceDialog, type PublishMarketplaceValues } from 'src/stages/PublishToMarketplaceDialog';
+import { invalidateMarketplaceFirstPage, invalidateUserStages, refreshMarketplaceFirstPage, refreshUserStages, stageListUserKey, subscribeUserStages, userStagesSnapshot } from 'src/stages/stageListCache';
 
 function userScope(user: ReturnType<typeof useAuth>['user']): string {
   if (!user) return 'anonymous';
@@ -114,7 +115,6 @@ const stageBuilderPanelSizing = {
 } as const;
 
 const GITHUB_PROVIDER_STATUS_CACHE_MS = 30_000;
-const GITHUB_STAGE_LIST_CACHE_MS = 45_000;
 const MARKETPLACE_STATUS_CACHE_MS = 45_000;
 
 type RefreshCacheOptions = { force?: boolean };
@@ -356,7 +356,6 @@ const StageBuilderPage = () => {
   const customObjectInputRef = useRef<HTMLInputElement | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const providerStatusCacheRef = useRef(0);
-  const providerStageListCacheRef = useRef(0);
   const marketplaceStatusCacheRef = useRef<{ key: string; checkedAt: number }>({ key: '', checkedAt: 0 });
   const historyRef = useRef<StageBuilderHistory>(createStageBuilderHistory());
   const [historyVersion, setHistoryVersion] = useState(0);
@@ -394,6 +393,7 @@ const StageBuilderPage = () => {
   const [providerStages, setProviderStages] = useState<ProviderStageListItem[]>([]);
   const [providerListLoading, setProviderListLoading] = useState(false);
   const [providerListError, setProviderListError] = useState('');
+  const [providerListWarning, setProviderListWarning] = useState(false);
   const [publishMarketplaceOpen, setPublishMarketplaceOpen] = useState(false);
   const [marketplacePublishing, setMarketplacePublishing] = useState(false);
   const [marketplaceError, setMarketplaceError] = useState('');
@@ -406,6 +406,7 @@ const StageBuilderPage = () => {
     const target = githubDeepLinkTargetFromLocation();
     return target ? { status: 'loading', repoLabel: target.label, step: 'Checking GitHub connection…' } : { status: 'idle' };
   });
+  const stageListUser = useMemo(() => stageListUserKey(user), [user]);
 
   const prefabs = useMemo(() => builtInStageBuilderPrefabs(), []);
   const snapSettings = useMemo(() => getSnapSettings(prefs.snapPreset, prefs.rotationSnapPreset), [prefs.snapPreset, prefs.rotationSnapPreset]);
@@ -484,6 +485,25 @@ const StageBuilderPage = () => {
 
   useEffect(() => { refreshProviderStatus(); }, [token]);
   useEffect(() => { refreshMarketplaceStatus(); }, [token, remoteStage?.repoOwner, remoteStage?.repoName, remoteStage?.private]);
+
+  useEffect(() => {
+    if (!stageListUser) {
+      setProviderStages([]);
+      setProviderListLoading(false);
+      setProviderListError('');
+      setProviderListWarning(false);
+      return undefined;
+    }
+    const sync = () => {
+      const snapshot = userStagesSnapshot(stageListUser);
+      setProviderStages(snapshot.data || []);
+      setProviderListLoading(snapshot.refreshing);
+      setProviderListError(snapshot.refreshError || '');
+      setProviderListWarning(!!snapshot.refreshError && !!snapshot.data);
+    };
+    sync();
+    return subscribeUserStages(stageListUser, sync);
+  }, [stageListUser]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -998,7 +1018,10 @@ const StageBuilderPage = () => {
         })
         : await createStageOnProvider(token, { record, slug, commitMessage, visibility });
       setRemoteStage(saved);
-      providerStageListCacheRef.current = 0;
+      if (stageListUser) {
+        invalidateUserStages(stageListUser);
+        await refreshUserStages(stageListUser, token, { force: true });
+      }
       setBootstrapRepoName(null);
       setLastExportFingerprint(stageFingerprint(stage));
       setExportedAt(new Date().toISOString());
@@ -1071,6 +1094,8 @@ const StageBuilderPage = () => {
         rawBaseUrl: result.rawBaseUrl,
       });
       marketplaceStatusCacheRef.current = { key: `${remoteStage.repoOwner}/${remoteStage.repoName}`, checkedAt: Date.now() };
+      invalidateMarketplaceFirstPage();
+      await refreshMarketplaceFirstPage({ force: true });
       setMessage(`Marketplace PR created for ${remoteStage.repoOwner}/${remoteStage.repoName}.`);
     } catch (error) {
       if (error instanceof MarketplaceRequestError) {
@@ -1090,26 +1115,13 @@ const StageBuilderPage = () => {
   };
 
   const refreshProviderStageList = async ({ force = false }: RefreshCacheOptions = {}) => {
-    if (!token) {
-      providerStageListCacheRef.current = 0;
+    if (!token || !stageListUser) {
       setProviderListError('Sign in before opening from GitHub.');
+      setProviderListWarning(false);
       setProviderStages([]);
       return;
     }
-    const now = Date.now();
-    if (!force && providerStageListCacheRef.current && now - providerStageListCacheRef.current < GITHUB_STAGE_LIST_CACHE_MS) return;
-    setProviderListLoading(true);
-    setProviderListError('');
-    try {
-      setProviderStages(await listProviderStages(token));
-      providerStageListCacheRef.current = Date.now();
-    } catch (error) {
-      providerStageListCacheRef.current = 0;
-      setProviderStages([]);
-      setProviderListError(error instanceof Error ? error.message : 'Could not list GitHub stages.');
-    } finally {
-      setProviderListLoading(false);
-    }
+    await refreshUserStages(stageListUser, token, { force });
   };
 
   const handleProviderOpenDialog = () => {
@@ -1122,6 +1134,7 @@ const StageBuilderPage = () => {
     if (!confirmIfDirty('Open this GitHub stage and replace the current editor stage? Unsaved changes will remain only as a recovery draft.')) return;
     setProviderListLoading(true);
     setProviderListError('');
+    setProviderListWarning(false);
     try {
       const loaded = await loadStageFromProvider(token, item.repoOwner, item.repoName);
       replaceStage(configToEditorStage(loaded.record), { undoable: true, clean: true, message: 'Opened stage from GitHub.' });
@@ -1138,6 +1151,7 @@ const StageBuilderPage = () => {
       setOpenProviderOpen(false);
     } catch (error) {
       setProviderListError(error instanceof Error ? error.message : 'Could not open GitHub stage.');
+      setProviderListWarning(false);
     } finally {
       setProviderListLoading(false);
     }
@@ -1684,6 +1698,7 @@ const StageBuilderPage = () => {
         stages={providerStages}
         busy={providerListLoading}
         error={providerListError}
+        warning={providerListWarning}
         onClose={() => setOpenProviderOpen(false)}
         onRefresh={() => refreshProviderStageList({ force: true })}
         onOpenStage={handleOpenProviderStage}
