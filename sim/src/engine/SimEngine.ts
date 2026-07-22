@@ -584,16 +584,6 @@ export class SimEngine {
     this.clearTracePoints()
   }
 
-  lineFollowing(status: boolean): void {
-    if (status) {
-      this.startLineFollowing()
-      return
-    }
-    this.cancelLineFollow()
-    this.vehicle?.setDrive(0, 0)
-    this.haltBodyMotion()
-  }
-
   private beginPendingMotion(): Promise<void> {
     this.resolvePendingMotion()
     return new Promise((resolve) => {
