@@ -10,9 +10,13 @@ interface RoleBasedRouteProps {
 }
 
 const RoleBasedRoute: React.FC<RoleBasedRouteProps> = ({ children, betaTesterOnly }) => {
-  const { user } = useAuth();
+  const { user, authStatus } = useAuth();
 
-  if (!user) {
+  if (authStatus === 'loading') {
+    return null;
+  }
+
+  if (!user || authStatus !== 'authenticated') {
     return <Navigate to="/auth/login" />;
   }
 

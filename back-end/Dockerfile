@@ -16,6 +16,6 @@ COPY utils/ ./utils/
 # Install any needed packages specified in requirements.txt
 RUN pip install -r requirements.txt
 
-# Run app.py when the container launches
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers"]
+# Run app.py when the container launches. Set BACKEND_RELOAD=true for local hot reload.
+CMD ["sh", "-c", "if [ \"$BACKEND_RELOAD\" = \"true\" ]; then exec uvicorn main:app --host 0.0.0.0 --port 8000 --proxy-headers --reload --reload-dir /usr/src/app/back-end; else exec uvicorn main:app --host 0.0.0.0 --port 8000 --proxy-headers; fi"]
 

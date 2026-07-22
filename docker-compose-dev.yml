@@ -1,11 +1,32 @@
+# Add Firebase settings to ignored *.env.local files to test social login.
 services:
+  frontend:
+    build:
+      context: ./front-end
+      dockerfile: Dockerfile.dev
+    container_name: fsbt-front-local
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./front-end:/usr/src/app/front-end
+      - /usr/src/app/front-end/node_modules
+    stdin_open: true
+    tty: true
+    depends_on:
+      - backend
+
   backend:
     image: fsbt-back
-    container_name: fsbt-back
+    container_name: fsbt-back-local
     restart: unless-stopped
     build: ./back-end
     env_file:
       - .env
+      - back-end/.env.development
+      - path: back-end/.env.local
+        required: false
+    environment:
+      - BACKEND_RELOAD=${BACKEND_RELOAD:-true}
     ports:
       - "8000:8000"
     volumes:
@@ -20,12 +41,12 @@ services:
 
   db:
     image: postgres:16
-    container_name: fsbt-db
+    container_name: fsbt-db-local
     restart: unless-stopped
     env_file:
       - .env
     volumes:
-      - db-data:/var/lib/postgresql/data
+      - db-data-firebase:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 2s
@@ -33,4 +54,5 @@ services:
       retries: 15
 
 volumes:
-  db-data:
+  # Isolated from the existing development and production database volumes.
+  db-data-firebase:

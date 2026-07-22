@@ -1,9 +1,14 @@
 // Define the shape of your context data
+export type AuthStatus = 'loading' | 'authenticated' | 'unauthenticated';
+
 export interface AuthContextType {
     user: User | null;
     token: string;
+    authStatus: AuthStatus;
+    isAuthenticated: boolean;
     loginAction: (data: LoginData) => Promise<LoginResponse>;
-    registerAction: (data: RegisterData) => Promise<void>;
+    loginWithFirebaseAction: (provider: FirebaseProviderName) => Promise<LoginResponse>;
+    registerAction: (data: RegisterData) => Promise<LoginResponse>;
 
     logOutAction: () => void;
     getUserDataAction: () => Promise<User | undefined>;
@@ -14,14 +19,17 @@ export interface AuthContextType {
     updateUserRole: (userId: number, data: RoleData) => Promise<User | undefined>;
     updateUserBetaTesterStatus: (userId: number, beta_tester: BetaTesterData) => Promise<boolean>;
     updateUserActivatedStatus: (userId: number, activated: ActivatedData) => Promise<boolean>;
+    updateUserAccessRevokedStatus: (userId: number, access_revoked: AccessRevokedData) => Promise<boolean>;
 
     createProjectAction: (data: NewProjectData) => Promise<number | undefined>;
     getProjectsAction: () => Promise<Project[] | undefined>;
     deleteProjectByIdAction: (projectId: number) => Promise<boolean>;
     getProjectByIdAction: (projectId: number) => Promise<Project | undefined>;
     updateProjectByIdAction: (projectId: number, data: NewProjectData) => Promise<Project | undefined>;
-    
+
 }
+
+export type FirebaseProviderName = 'google' | 'github';
 
 // Registration data
 export interface RegisterData {
@@ -57,6 +65,14 @@ export interface LoginData {
     password: string;
 }
 
+export interface FirebaseTokenData {
+    id_token: string;
+    display_name?: string;
+    email?: string;
+    photo_url?: string;
+}
+
+
 export interface User {
     id: number;
     username: string;
@@ -67,6 +83,10 @@ export interface User {
     image_url?: string;
     hashed_password?: string;
     beta_tester: boolean;
+    activated?: boolean;
+    firebase_uid?: string;
+    provider: string;
+    access_revoked: boolean;
 }
 
 export interface UserData {
@@ -96,6 +116,10 @@ export interface BetaTesterData {
 
 export interface ActivatedData {
     activated: boolean;
+}
+
+export interface AccessRevokedData {
+    access_revoked: boolean;
 }
 
 export interface LoginResponse {

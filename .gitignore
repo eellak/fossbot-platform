@@ -9,9 +9,16 @@ data/
 /back-end/.env
 /back-end/jwtgenerator.py
 **/*-env/
+**/.env
+**/.env.local
+**/.env.*.local
 **/alembic.ini
 **/alembic/
 **/old*
 **/versions/*.py
 temp_addon/
 front-end/.local-certs/
+**/node_modules/
+
+/secrets/
+*adminsdk*.json

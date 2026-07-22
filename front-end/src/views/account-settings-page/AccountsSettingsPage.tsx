@@ -37,6 +37,10 @@ const AccountsSettingsPage = () => {
     const [showErrorAlertText, setShowErrorAlertText] = useState("");
 
     useEffect(() => {
+        if (auth.authStatus !== 'authenticated' || !auth.token) {
+            return;
+        }
+
         const fetchProjects = async () => {
             try {
                 const fetchedProjects: Project[] = await auth.getProjectsAction();
@@ -56,11 +60,22 @@ const AccountsSettingsPage = () => {
         };
 
         fetchProjects();
-    }, []);
+    }, [auth.authStatus, auth.token]);
 
 
     useEffect(() => {
+        if (auth.user) {
+            setUser(auth.user);
+            setIsLoading(false);
+        }
+    }, [auth.user]);
+
+    useEffect(() => {
         const fetchUserData = async () => {
+            if (auth.authStatus !== 'authenticated' || !auth.token) {
+                return;
+            }
+
             try {
                 const userData = await auth.getUserDataAction();
                 setUser(userData);
@@ -75,7 +90,7 @@ const AccountsSettingsPage = () => {
         };
 
         fetchUserData();
-    }, []);
+    }, [auth.authStatus, auth.token]);
 
     const handleFormSubmitResult = (result) => {
         if (result) {

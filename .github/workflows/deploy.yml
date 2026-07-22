@@ -3,12 +3,39 @@ name: Deploy to SSH Server
 on:
   workflow_dispatch:
 
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
+
+      - name: Validate deployment configuration
+        env:
+          FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
+          FIREBASE_AUTH_DOMAIN: ${{ secrets.FIREBASE_AUTH_DOMAIN }}
+          FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
+          FIREBASE_STORAGE_BUCKET: ${{ secrets.FIREBASE_STORAGE_BUCKET }}
+          FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.FIREBASE_MESSAGING_SENDER_ID }}
+          FIREBASE_APP_ID: ${{ secrets.FIREBASE_APP_ID }}
+        run: |
+          for name in \
+            FIREBASE_API_KEY \
+            FIREBASE_AUTH_DOMAIN \
+            FIREBASE_PROJECT_ID \
+            FIREBASE_STORAGE_BUCKET \
+            FIREBASE_MESSAGING_SENDER_ID \
+            FIREBASE_APP_ID
+          do
+            if [ -z "${!name}" ]; then
+              echo "Missing required Actions secret: ${name}" >&2
+              exit 1
+            fi
+          done
 
       - name: Install SSH key
         run: |
@@ -19,30 +46,85 @@ jobs:
 
       - name: SSH and Deploy
         run: |
-          ssh -i ~/.ssh/id_rsa ${{ secrets.SSH_USERNAME }}@${{ secrets.SSH_HOST }} << 'EOF'
+          ssh -i ~/.ssh/id_rsa ${{ secrets.SSH_USERNAME }}@${{ secrets.SSH_HOST }} 'bash -se' << 'EOF'
+            set -euo pipefail
             cd /fossbot-platform
-            sudo git fetch origin
-            sudo git reset --hard origin/master
-            sudo rm -f .env
-            echo "SECRET_KEY=${{ secrets.SECRET_KEY }}" | sudo tee -a .env > /dev/null
-            echo "ADMIN_USERNAME=${{ secrets.ADMIN_USERNAME }}" | sudo tee -a .env > /dev/null
-            echo "ADMIN_PASSWORD=${{ secrets.ADMIN_PASSWORD }}" | sudo tee -a .env > /dev/null
-            echo "POSTGRES_USER=${{ secrets.POSTGRES_USER }}" | sudo tee -a .env > /dev/null
-            echo "POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}" | sudo tee -a .env > /dev/null
-            echo "POSTGRES_DB=${{ secrets.POSTGRES_DB }}" | sudo tee -a .env > /dev/null
-            echo "DATABASE=postgresql://${{secrets.POSTGRES_USER}}:${{secrets.POSTGRES_PASSWORD}}@db:5432/${{secrets.POSTGRES_DB}}" | sudo tee -a .env > /dev/null
-            echo "MATOMO_DATABASE_HOST=${{ secrets.MATOMO_DATABASE_HOST }}" | sudo tee -a .env > /dev/null
-            echo "MATOMO_DATABASE_USERNAME=${{secrets.MATOMO_DATABASE_USERNAME}}" | sudo tee -a .env > /dev/null
-            echo "MATOMO_DATABASE_PASSWORD=${{secrets.MATOMO_DATABASE_PASSWORD}}" | sudo tee -a .env > /dev/null
-            echo "MATOMO_DATABASE_DBNAME=${{secrets.MATOMO_DATABASE_DBNAME}}" | sudo tee -a .env > /dev/null                             
-            echo "MATOMO_TRUSTED_HOSTS=${{secrets.MATOMO_TRUSTED_HOSTS}}" | sudo tee -a .env > /dev/null                             
-            echo "MATOMO_ASSUME_SECURE_PROTOCOL=1" | sudo tee -a .env > /dev/null                             
-            echo "MATOMO_PROXY_URI_HEADER=1" | sudo tee -a .env > /dev/null                          
-            echo "MYSQL_ROOT_PASSWORD=${{secrets.MYSQL_ROOT_PASSWORD}}" | sudo tee -a .env > /dev/null                             
-            echo "MYSQL_DATABASE=${{secrets.MATOMO_DATABASE_DBNAME}}" | sudo tee -a .env > /dev/null                             
-            echo "MYSQL_USER=${{secrets.MATOMO_DATABASE_USERNAME}}" | sudo tee -a .env > /dev/null                             
-            echo "MYSQL_PASSWORD=${{secrets.MATOMO_DATABASE_PASSWORD}}" | sudo tee -a .env > /dev/null                             
-            sudo docker compose -f docker-compose-production.yml down
-            sudo docker compose -f docker-compose-production.yml build --no-cache
+
+            postgres_version=$(sudo docker exec fsbt-db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "SHOW server_version_num"')
+            if [[ "$postgres_version" != 16* ]]; then
+              echo "Refusing deployment: production PostgreSQL is ${postgres_version}, expected major version 16." >&2
+              exit 1
+            fi
+
+            backup_dir=/fossbot-backups
+            backup_file="$backup_dir/fossbot-db-$(date -u +%Y%m%d-%H%M%SZ).dump"
+            sudo mkdir -p "$backup_dir"
+            sudo docker exec fsbt-db sh -c 'exec pg_dump -Fc -U "$POSTGRES_USER" -d "$POSTGRES_DB"' \
+              | sudo tee "$backup_file" >/dev/null
+            sudo test -s "$backup_file"
+            sudo sh -c "cat '$backup_file' | docker exec -i fsbt-db pg_restore --list >/dev/null"
+            sudo chmod 600 "$backup_file"
+            echo "Verified database backup: $backup_file"
+
+            sudo git -c safe.directory=/fossbot-platform fetch origin
+            sudo git -c safe.directory=/fossbot-platform reset --hard origin/master
+
+            sudo tee .env >/dev/null <<'ENV_FILE'
+          SECRET_KEY=${{ secrets.SECRET_KEY }}
+          ADMIN_USERNAME=${{ secrets.ADMIN_USERNAME }}
+          ADMIN_PASSWORD=${{ secrets.ADMIN_PASSWORD }}
+          POSTGRES_USER=${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+          POSTGRES_DB=${{ secrets.POSTGRES_DB }}
+          DATABASE=postgresql://${{ secrets.POSTGRES_USER }}:${{ secrets.POSTGRES_PASSWORD }}@db:5432/${{ secrets.POSTGRES_DB }}
+          MATOMO_DATABASE_HOST=${{ secrets.MATOMO_DATABASE_HOST }}
+          MATOMO_DATABASE_USERNAME=${{ secrets.MATOMO_DATABASE_USERNAME }}
+          MATOMO_DATABASE_PASSWORD=${{ secrets.MATOMO_DATABASE_PASSWORD }}
+          MATOMO_DATABASE_DBNAME=${{ secrets.MATOMO_DATABASE_DBNAME }}
+          MATOMO_TRUSTED_HOSTS=${{ secrets.MATOMO_TRUSTED_HOSTS }}
+          MATOMO_ASSUME_SECURE_PROTOCOL=1
+          MATOMO_PROXY_URI_HEADER=1
+          MYSQL_ROOT_PASSWORD=${{ secrets.MYSQL_ROOT_PASSWORD }}
+          MYSQL_DATABASE=${{ secrets.MATOMO_DATABASE_DBNAME }}
+          MYSQL_USER=${{ secrets.MATOMO_DATABASE_USERNAME }}
+          MYSQL_PASSWORD=${{ secrets.MATOMO_DATABASE_PASSWORD }}
+          FIREBASE_API_KEY=${{ secrets.FIREBASE_API_KEY }}
+          FIREBASE_AUTH_DOMAIN=${{ secrets.FIREBASE_AUTH_DOMAIN }}
+          FIREBASE_PROJECT_ID=${{ secrets.FIREBASE_PROJECT_ID }}
+          FIREBASE_STORAGE_BUCKET=${{ secrets.FIREBASE_STORAGE_BUCKET }}
+          FIREBASE_MESSAGING_SENDER_ID=${{ secrets.FIREBASE_MESSAGING_SENDER_ID }}
+          FIREBASE_APP_ID=${{ secrets.FIREBASE_APP_ID }}
+          ENV_FILE
+
+            sudo tee front-end/.env.production >/dev/null <<'FRONTEND_ENV'
+          REACT_APP_BACKEND_URL=/api
+          REACT_APP_FIREBASE_API_KEY=${{ secrets.FIREBASE_API_KEY }}
+          REACT_APP_FIREBASE_AUTH_DOMAIN=${{ secrets.FIREBASE_AUTH_DOMAIN }}
+          REACT_APP_FIREBASE_PROJECT_ID=${{ secrets.FIREBASE_PROJECT_ID }}
+          REACT_APP_FIREBASE_STORAGE_BUCKET=${{ secrets.FIREBASE_STORAGE_BUCKET }}
+          REACT_APP_FIREBASE_MESSAGING_SENDER_ID=${{ secrets.FIREBASE_MESSAGING_SENDER_ID }}
+          REACT_APP_FIREBASE_APP_ID=${{ secrets.FIREBASE_APP_ID }}
+          FRONTEND_ENV
+
+            sudo docker compose -f docker-compose-production.yml config --quiet
+            sudo docker compose -f docker-compose-production.yml build --pull
             sudo docker compose -f docker-compose-production.yml up -d
+
+            ready=false
+            for attempt in {1..30}; do
+              if curl --fail --silent http://localhost:8000/openapi.json >/dev/null \
+                && curl --fail --silent --insecure --resolve fossbot.gr:443:127.0.0.1 https://fossbot.gr/ >/dev/null; then
+                ready=true
+                break
+              fi
+              sleep 2
+            done
+
+            if [[ "$ready" != true ]]; then
+              sudo docker compose -f docker-compose-production.yml ps
+              sudo docker compose -f docker-compose-production.yml logs --tail=100 backend frontend
+              exit 1
+            fi
+
+            sudo docker compose -f docker-compose-production.yml ps
           EOF
