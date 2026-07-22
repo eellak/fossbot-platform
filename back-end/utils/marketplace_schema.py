@@ -6,6 +6,7 @@ from typing import Any, Optional
 MARKETPLACE_VERSION = 1
 MARKETPLACE_INDEX_SCHEMA_VERSION = 1
 VALIDATION_STATES = {"validated", "unvalidated", "error"}
+SOURCE_STATUS_STATES = {"current", "changes_ready_to_publish", "unavailable", "invalid"}
 ENTRY_PATH_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\.json$")
 TAG_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,31}$")
 
@@ -65,6 +66,7 @@ def build_marketplace_entry(
     forked_from: Optional[dict[str, Any]] = None,
     validation: Optional[dict[str, Any]] = None,
     verification: Optional[dict[str, Any]] = None,
+    source_status: Optional[dict[str, Any]] = None,
 ) -> dict[str, Any]:
     clean_title = (title or "").strip()
     if not clean_title:
@@ -88,6 +90,12 @@ def build_marketplace_entry(
         "reviewPullRequest": None,
     }
     verification_metadata["verified"] = bool(verified)
+    source_status_metadata = source_status or {
+        "state": "current",
+        "sourceCommitSha": commit_sha,
+        "checkedAt": None,
+        "message": "The published revision is being revalidated.",
+    }
 
     return {
         "marketplaceVersion": MARKETPLACE_VERSION,
@@ -112,6 +120,7 @@ def build_marketplace_entry(
         },
         "validation": validation_metadata,
         "verification": verification_metadata,
+        "sourceStatus": source_status_metadata,
         "publishedAt": first_published_at,
         "updatedAt": utc_now_iso(),
     }
@@ -142,6 +151,9 @@ def validate_marketplace_entry(entry: dict[str, Any]) -> None:
     verification = entry.get("verification") or {}
     if verification and verification.get("verified") != badges.get("verified"):
         raise MarketplaceSchemaError("Marketplace verification metadata must match badge state")
+    source_status = entry.get("sourceStatus") or {}
+    if source_status and source_status.get("state") not in SOURCE_STATUS_STATES:
+        raise MarketplaceSchemaError("Marketplace source status is invalid")
 
 
 def build_marketplace_index(entries: list[dict[str, Any]]) -> dict[str, Any]:

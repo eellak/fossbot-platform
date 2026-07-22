@@ -32,7 +32,7 @@ function parseArgs(argv) {
     else if (arg === '--root') options.root = argv[++index] || options.root
     else if (arg === '--index') options.indexPath = argv[++index] || options.indexPath
     else if (arg === '--help' || arg === '-h') {
-      console.log(`Usage: node scripts/build-marketplace-index.mjs [root] [options]\n\nOptions:\n  --validate-stage-repos    Validate each entry against its public GitHub stage repo\n  --write-entry-validation  Write badges.validation + validation metadata back to entries\n  --check-run               Create a GitHub check run when GitHub Actions env is present\n  --fail-on-error           Exit non-zero when validation errors are found\n  --changed-stage-files     Validate only stage entry JSON files changed against the PR base branch\n  --index <path>            Output index path relative to root (default: index.json)`)
+      console.log(`Usage: node scripts/build-marketplace-index.mjs [root] [options]\n\nOptions:\n  --validate-stage-repos    Revalidate each entry's pinned revision and check its source branch\n  --write-entry-validation  Write validation and source-status metadata back to entries\n  --check-run               Create a GitHub check run when GitHub Actions env is present\n  --fail-on-error           Exit non-zero when pinned revision validation errors are found\n  --changed-stage-files     Validate only stage entry JSON files changed against the PR base branch\n  --index <path>            Output index path relative to root (default: index.json)`)
       process.exit(0)
     } else if (!arg.startsWith('--') && !positionalRoot) {
       options.root = arg
@@ -94,6 +94,9 @@ function validateEntry(entry, file) {
   if (entry.verification && entry.verification.verified !== entry.badges.verified) {
     throw new Error(`${file}: verification.verified must match badges.verified`)
   }
+  if (entry.sourceStatus && !['current', 'changes_ready_to_publish', 'unavailable', 'invalid'].includes(entry.sourceStatus.state)) {
+    throw new Error(`${file}: invalid sourceStatus.state`)
+  }
 }
 
 function githubHeaders() {
@@ -153,12 +156,9 @@ async function validateStageRepo(entry) {
     const branch = await githubJson(`/repos/${entry.repoOwner}/${entry.repoName}/commits/${encodeURIComponent(entry.defaultBranch)}`)
     const branchSha = branch?.sha
     if (!branchSha) throw new Error(`Could not resolve ${entry.defaultBranch}`)
-    if (branchSha !== entry.commitSha) {
-      return {
-        state: 'unvalidated',
-        message: `Entry commit ${entry.commitSha} is stale; ${entry.defaultBranch} is now ${branchSha}.`,
-      }
-    }
+    const sourceStatus = branchSha === entry.commitSha
+      ? { state: 'current', sourceCommitSha: branchSha, message: 'The source repository matches the published revision.' }
+      : { state: 'changes_ready_to_publish', sourceCommitSha: branchSha, message: 'The source repository has changes that are not yet published.' }
 
     const [stage, manifest] = await Promise.all([
       readRepoJson(entry.repoOwner, entry.repoName, entry.commitSha, 'stage.json'),
@@ -166,9 +166,18 @@ async function validateStageRepo(entry) {
     ])
     if (!stage || typeof stage !== 'object' || !stage.config) throw new Error('stage.json must contain a FOSSBot stage record with config')
     verifyManifest(manifest, entry)
-    return { state: 'validated', message: 'Current stage commit passed marketplace validation.' }
+    return { state: 'validated', message: 'Published stage commit passed marketplace validation.', sourceStatus }
   } catch (error) {
-    return { state: 'error', message: error instanceof Error ? error.message : String(error) }
+    const message = error instanceof Error ? error.message : String(error)
+    return {
+      state: 'error',
+      message,
+      sourceStatus: {
+        state: /not found|private|denied|404|403/i.test(message) ? 'unavailable' : 'invalid',
+        sourceCommitSha: null,
+        message,
+      },
+    }
   }
 }
 
@@ -191,6 +200,10 @@ function applyValidation(entry, result, checkedAt) {
     reviewPullRequest: null,
   }
   entry.verification.verified = entry.badges.verified
+  entry.sourceStatus = {
+    ...result.sourceStatus,
+    checkedAt,
+  }
 }
 
 function buildIndex(entries) {

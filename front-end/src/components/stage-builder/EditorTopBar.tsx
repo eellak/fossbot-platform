@@ -8,6 +8,7 @@ import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import GitHubIcon from '@mui/icons-material/GitHub';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
+import PublishIcon from '@mui/icons-material/Publish';
 import { activeValidationResults, validationSummary, type StageBuilderValidationResult } from './stageBuilderValidation';
 import { useEditorTheme } from './stageBuilderEditorTheme';
 
@@ -30,6 +31,8 @@ export interface EditorTopBarProps {
   marketplaceBusy?: boolean;
   marketplaceStatusLoading?: boolean;
   marketplacePullRequest?: { number?: number | null; url?: string | null; state?: string | null } | null;
+  marketplacePublishLabel?: string;
+  marketplacePublishReady?: boolean;
   onImport: () => void;
   onExport: () => void;
   onRefreshGitHubStatus?: () => void;
@@ -121,6 +124,8 @@ export function EditorTopBar({
   marketplaceBusy,
   marketplaceStatusLoading,
   marketplacePullRequest,
+  marketplacePublishLabel = 'Publish stage',
+  marketplacePublishReady = false,
   onImport,
   onExport,
   onRefreshGitHubStatus,
@@ -169,6 +174,16 @@ export function EditorTopBar({
     fontWeight: 800,
     textTransform: 'none',
     '&:hover': { bgcolor: editorColors.success },
+  } as const;
+
+  const publishButtonSx = {
+    height: 34,
+    px: 1.5,
+    bgcolor: editorColors.accentText,
+    color: '#FFFFFF',
+    fontWeight: 800,
+    textTransform: 'none',
+    '&:hover': { bgcolor: editorColors.accentText },
   } as const;
 
   const active = activeValidationResults(validationResults);
@@ -223,6 +238,18 @@ export function EditorTopBar({
             </Button>
           </span>
         </Tooltip>
+        {marketplacePublishReady && (
+          <Button
+            size="small"
+            variant="contained"
+            disableElevation
+            startIcon={<PublishIcon />}
+            onClick={onPublishMarketplace}
+            sx={{ ...publishButtonSx, display: { xs: 'none', md: 'inline-flex' } }}
+          >
+            Publish changes
+          </Button>
+        )}
         <Button size="small" variant="contained" disableElevation startIcon={<PlayArrowIcon />} onClick={onRunTest} sx={runButtonSx}>Run Test</Button>
         <IconButton size="small" onClick={overflow.openMenu} sx={topbarIconButtonSx}><MoreVertIcon fontSize="small" /></IconButton>
       </Stack>
@@ -237,7 +264,22 @@ export function EditorTopBar({
         {!providerConnected && <MenuItem disabled={providerBusy} onClick={() => { github.closeMenu(); onConnectProvider(); }}>{providerBusy ? 'Connecting…' : 'Connect GitHub…'}</MenuItem>}
         <MenuItem disabled={providerBusy} onClick={() => { github.closeMenu(); onSaveProvider(); }}>{providerBusy ? 'Saving…' : 'Save to GitHub…'}</MenuItem>
         <MenuItem disabled={providerBusy} onClick={() => { github.closeMenu(); onOpenProvider(); }}>Open from GitHub…</MenuItem>
-        <MenuItem disabled={marketplaceBusy} onClick={() => { github.closeMenu(); onPublishMarketplace(); }}>{marketplaceBusy ? 'Publishing…' : 'Publish to Marketplace…'}</MenuItem>
+        <MenuItem
+          disabled={marketplaceBusy}
+          onClick={() => { github.closeMenu(); onPublishMarketplace(); }}
+          sx={marketplacePublishReady ? {
+            mx: 0.75,
+            my: 0.5,
+            borderRadius: 1,
+            bgcolor: editorColors.accentSoft,
+            color: editorColors.accentText,
+            fontWeight: 800,
+            '&:hover': { bgcolor: editorColors.accentSoft },
+          } : undefined}
+        >
+          {marketplacePublishReady && <PublishIcon fontSize="small" sx={{ mr: 1 }} />}
+          {marketplaceBusy ? 'Publishing…' : marketplacePublishLabel}
+        </MenuItem>
         <Divider />
         {marketplaceStatusLoading ? (
           <MenuItem disabled>Checking marketplace PR…</MenuItem>

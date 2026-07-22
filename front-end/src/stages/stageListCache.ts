@@ -1,5 +1,5 @@
 import type { User } from 'src/authentication/AuthInterfaces';
-import { getMarketplaceIndex, type MarketplaceIndexResponse } from './MarketplaceApi';
+import { getMarketplaceIndex, getMyMarketplaceStages, type MarketplaceIndexResponse, type MyMarketplaceStage } from './MarketplaceApi';
 import { listProviderStages, type ProviderStageListItem } from './StagesApi';
 
 export const MARKETPLACE_FIRST_PAGE_REQUEST = {
@@ -11,6 +11,7 @@ export const MARKETPLACE_FIRST_PAGE_REQUEST = {
 const STORAGE_PREFIX = 'fossbot:stage-list-cache:v1';
 const MARKETPLACE_STORAGE_KEY = `${STORAGE_PREFIX}:marketplace-first-page`;
 const USER_STORAGE_PREFIX = `${STORAGE_PREFIX}:user:`;
+const MY_MARKETPLACE_STORAGE_PREFIX = `${STORAGE_PREFIX}:my-marketplace:`;
 const MARKETPLACE_FALLBACK_MS = 24 * 60 * 60 * 1000;
 const USER_STAGES_FALLBACK_MS = 7 * 24 * 60 * 60 * 1000;
 const MARKETPLACE_REFRESH_AFTER_MS = 15 * 60 * 1000;
@@ -40,6 +41,7 @@ interface CacheRecord<T> {
 
 let marketplaceCache: CacheRecord<MarketplaceIndexResponse> | null = null;
 const userCaches = new Map<string, CacheRecord<ProviderStageListItem[]>>();
+const myMarketplaceCaches = new Map<string, CacheRecord<MyMarketplaceStage[]>>();
 
 function emptySnapshot<T>(): StageListSnapshot<T> {
   return { data: null, updatedAt: null, refreshing: false, refreshError: null };
@@ -92,6 +94,14 @@ function userRecord(userKey: string): CacheRecord<ProviderStageListItem[]> {
   if (existing) return existing;
   const created = createCache<ProviderStageListItem[]>(`${USER_STORAGE_PREFIX}${encodeURIComponent(userKey)}`, USER_STAGES_FALLBACK_MS);
   userCaches.set(userKey, created);
+  return created;
+}
+
+function myMarketplaceRecord(userKey: string): CacheRecord<MyMarketplaceStage[]> {
+  const existing = myMarketplaceCaches.get(userKey);
+  if (existing) return existing;
+  const created = createCache<MyMarketplaceStage[]>(`${MY_MARKETPLACE_STORAGE_PREFIX}${encodeURIComponent(userKey)}`, USER_STAGES_FALLBACK_MS);
+  myMarketplaceCaches.set(userKey, created);
   return created;
 }
 
@@ -156,7 +166,12 @@ export function subscribeMarketplaceFirstPage(listener: Listener): () => void {
 }
 
 export function refreshMarketplaceFirstPage(options: { force?: boolean } = {}): Promise<void> {
-  return refresh(marketplaceRecord(), () => getMarketplaceIndex(MARKETPLACE_FIRST_PAGE_REQUEST), options.force, MARKETPLACE_REFRESH_AFTER_MS);
+  return refresh(
+    marketplaceRecord(),
+    () => getMarketplaceIndex({ ...MARKETPLACE_FIRST_PAGE_REQUEST, refresh: !!options.force }),
+    options.force,
+    MARKETPLACE_REFRESH_AFTER_MS,
+  );
 }
 
 export function invalidateMarketplaceFirstPage(): void {
@@ -179,6 +194,23 @@ export function invalidateUserStages(userKey: string): void {
   invalidate(userRecord(userKey));
 }
 
+/** Private cached marketplace listings authored by the signed-in GitHub account. */
+export function myMarketplaceStagesSnapshot(userKey: string): StageListSnapshot<MyMarketplaceStage[]> {
+  return myMarketplaceRecord(userKey).snapshot;
+}
+
+export function subscribeMyMarketplaceStages(userKey: string, listener: Listener): () => void {
+  return subscribe(myMarketplaceRecord(userKey), listener);
+}
+
+export function refreshMyMarketplaceStages(userKey: string, token: string, options: { force?: boolean } = {}): Promise<void> {
+  return refresh(myMarketplaceRecord(userKey), async () => (await getMyMarketplaceStages(token)).stages, options.force, USER_STAGES_REFRESH_AFTER_MS);
+}
+
+export function invalidateMyMarketplaceStages(userKey: string): void {
+  invalidate(myMarketplaceRecord(userKey));
+}
+
 /** Refreshes both shared lists without clearing either currently visible result. */
 export async function refreshStageLists(userKey: string | null, token: string, options: { force?: boolean } = {}): Promise<void> {
   const requests = [refreshMarketplaceFirstPage(options)];
@@ -190,7 +222,7 @@ export async function refreshStageLists(userKey: string | null, token: string, o
 export function clearUserStageCaches(): void {
   if (storageAvailable()) {
     Object.keys(window.localStorage)
-      .filter((key) => key.startsWith(USER_STORAGE_PREFIX))
+      .filter((key) => key.startsWith(USER_STORAGE_PREFIX) || key.startsWith(MY_MARKETPLACE_STORAGE_PREFIX))
       .forEach((key) => window.localStorage.removeItem(key));
   }
   userCaches.forEach((cache) => {
@@ -199,4 +231,10 @@ export function clearUserStageCaches(): void {
     notify(cache);
   });
   userCaches.clear();
+  myMarketplaceCaches.forEach((cache) => {
+    cache.version += 1;
+    cache.snapshot = emptySnapshot();
+    notify(cache);
+  });
+  myMarketplaceCaches.clear();
 }

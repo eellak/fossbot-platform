@@ -43,7 +43,7 @@ function stageNeedsProviderLoad(
   stage: ProjectStageReference | null,
 ): stage is ProjectStageReference & { repoOwner: string; repoName: string } {
   return (
-    (stage?.sourceType === 'github' || stage?.sourceType === 'marketplace') &&
+    stage?.sourceType === 'github' &&
     !!stage.repoOwner &&
     !!stage.repoName
   );

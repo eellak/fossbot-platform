@@ -15,7 +15,7 @@ import {
 } from '@mui/material';
 import StorefrontIcon from '@mui/icons-material/Storefront';
 import type { ProviderStageRef } from './StagesApi';
-import type { PublishMarketplaceResponse } from './MarketplaceApi';
+import type { MarketplaceLifecycle, PublishMarketplaceResponse } from './MarketplaceApi';
 
 export interface PublishMarketplaceValues {
   title: string;
@@ -33,6 +33,7 @@ interface PublishToMarketplaceDialogProps {
   busy: boolean;
   error?: string | null;
   result?: PublishMarketplaceResponse | null;
+  lifecycle?: MarketplaceLifecycle | null;
   onClose: () => void;
   onSaveToGitHub: () => void;
   onPublish: (values: PublishMarketplaceValues) => void;
@@ -72,6 +73,7 @@ export function PublishToMarketplaceDialog({
   busy,
   error,
   result,
+  lifecycle,
   onClose,
   onSaveToGitHub,
   onPublish,
@@ -118,12 +120,18 @@ export function PublishToMarketplaceDialog({
 
   return (
     <Dialog open={open} onClose={busy ? undefined : onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>Publish to Marketplace</DialogTitle>
+      <DialogTitle>{lifecycle?.state === 'changes_ready_to_publish' ? 'Publish changes' : 'Publish to Marketplace'}</DialogTitle>
       <DialogContent>
         <Stack spacing={1.75} sx={{ pt: 0.5 }}>
           <Typography variant="body2" color="text.secondary">
-            Publishing opens a review pull request for the Git-hosted stage library. After merge, marketplace CI validates the stage and updates its badge.
+            {lifecycle?.state === 'changes_ready_to_publish'
+              ? "You've made changes since this stage was published. Publishing them opens a new review request; your existing marketplace revision stays available until that request is merged."
+              : 'Publishing opens a review pull request for the Git-hosted stage library. After merge, marketplace CI validates the stage and updates its badge.'}
           </Typography>
+
+          {lifecycle && lifecycle.state !== 'unpublished' && lifecycle.state !== 'published_current' && lifecycle.state !== 'changes_ready_to_publish' && (
+            <Alert severity={lifecycle.state === 'published_revision_invalid' ? 'warning' : 'info'}>{lifecycle.message}</Alert>
+          )}
 
           {!remoteStage ? (
             <Alert
@@ -214,7 +222,7 @@ export function PublishToMarketplaceDialog({
           disabled={!canPublish}
           onClick={() => onPublish({ title, description, tags, previewDataUrl, commitMessage })}
         >
-          {busy ? 'Publishing…' : 'Open review PR'}
+          {busy ? 'Publishing…' : lifecycle?.state === 'changes_ready_to_publish' ? 'Publish changes' : 'Open review PR'}
         </Button>
       </DialogActions>
     </Dialog>
