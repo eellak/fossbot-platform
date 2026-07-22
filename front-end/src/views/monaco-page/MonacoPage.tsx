@@ -47,6 +47,7 @@ import { Project, type ProjectStageReference } from 'src/authentication/AuthInte
 import { loadStageFromProvider } from 'src/stages/StagesApi';
 import type { RawStageConfig } from 'src/simulator/stages';
 import StageLoadScreen from 'src/components/stage-select-popup/StageLoadScreen';
+import ProjectStageIndicator from 'src/components/editors/ProjectStageIndicator';
 
 const textart = `
 # __   __   __   __   __   __  ___     __      ___       __
@@ -341,6 +342,7 @@ const MonacoPage: React.FC = () => {
                   {projectDescription}
                 </Typography>
               )}
+              <ProjectStageIndicator stage={selectedStage} />
             </Box>
           </Grid>
           <Grid item xs={4} lg={4}>

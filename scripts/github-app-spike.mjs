@@ -6,6 +6,9 @@ import { stdin as input, stdout as output } from 'node:process'
 import { randomBytes, createSign } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { spawn } from 'node:child_process'
+import { loadLocalEnv } from './load-local-env.mjs'
+
+loadLocalEnv()
 
 const GITHUB_API = 'https://api.github.com'
 const GITHUB_WEB = 'https://github.com'
@@ -74,6 +77,7 @@ Optional env:
                                            expects GitHub to reject it.
 
 Notes:
+  - Local runs automatically load .env and back-end/.env. Existing shell variables win.
   - The script creates a public repository by default and leaves it in place.
   - The repo is created with auto_init=true so Contents API writes have a branch.
   - Production may use Git Data API for a cleaner initial commit.

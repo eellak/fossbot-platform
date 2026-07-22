@@ -63,7 +63,17 @@ Guidelines:
 
 ## Marketplace repository CI
 
-The marketplace repository should contain:
+Create a ready-to-initialize local repository from the platform's current validator and workflow templates:
+
+```bash
+node scripts/create-marketplace-repo.mjs
+```
+
+See [Creating the FOSSBot marketplace repository](create-marketplace-repository.md) for prerequisites, environment variables, the outside-this-repository workflow, Git initialization, and backend connection steps.
+
+The script automatically reads `.env` and `back-end/.env`. It uses `FOSSBOT_MARKETPLACE_REPO` for the default sibling-directory name; set `FOSSBOT_MARKETPLACE_LOCAL_PATH` to choose another target, or pass the target path as the first argument. It only writes a local scaffold—it does not initialize Git, create a GitHub repository, or push.
+
+The resulting marketplace repository contains:
 
 ```txt
 .github/workflows/validate-marketplace.yml
@@ -86,6 +96,16 @@ node scripts/build-marketplace-index.mjs . --validate-stage-repos --write-entry-
 ```
 
 The push workflow should commit generated changes to `index.json` and `stages/**/*.json`.
+
+## GitHub App developer spike
+
+The GitHub App spike also reads `.env` and `back-end/.env`, so a configured local run is simply:
+
+```bash
+node scripts/github-app-spike.mjs
+```
+
+When the selected-repository installation is already configured, FOSSBot programmatically grants it access to each newly created `fossbot-*` stage repository. The app does not automatically open a GitHub page. The first repository and any recovery from denied access remain explicit GitHub actions.
 
 ## Badge semantics
 

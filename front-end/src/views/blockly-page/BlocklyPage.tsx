@@ -38,6 +38,7 @@ import { loadStageFromProvider } from 'src/stages/StagesApi';
 import type { RawStageConfig } from 'src/simulator/stages';
 import { useMediaQuery } from '@mui/material';
 import StageLoadScreen from 'src/components/stage-select-popup/StageLoadScreen';
+import ProjectStageIndicator from 'src/components/editors/ProjectStageIndicator';
 
 function stageNeedsProviderLoad(
   stage: ProjectStageReference | null,
@@ -299,6 +300,7 @@ const BlocklyPage = () => {
               <Typography mt={1} ml={0} color={'grey'}>
                 {projectDescription}
               </Typography>
+              <ProjectStageIndicator stage={selectedStage} />
             </Box>
           </Grid>
           <Grid item xs={4} lg={4}>
