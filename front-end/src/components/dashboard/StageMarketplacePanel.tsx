@@ -4,12 +4,16 @@ import {
   Box,
   Button,
   Chip,
-  CircularProgress,
   Divider,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Drawer,
   Grid,
   IconButton,
   InputAdornment,
+  Menu,
   MenuItem,
   Select,
   Stack,
@@ -25,26 +29,14 @@ import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked';
 import SearchIcon from '@mui/icons-material/Search';
 import VerifiedIcon from '@mui/icons-material/Verified';
-import { useNavigate } from 'react-router-dom';
+import MoreVertIcon from '@mui/icons-material/MoreVert';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from 'src/authentication/AuthProvider';
-import { completeMarketplaceFork, getMarketplaceForkStatus, getMarketplaceIndex, MarketplaceRequestError, type MarketplaceIndexResponse, type MarketplaceStageEntry, type MarketplaceValidationState } from 'src/stages/MarketplaceApi';
+import { completeMarketplaceFork, getMarketplaceForkStatus, getMarketplaceIndex, getMarketplacePermissions, reportMarketplaceStage, MarketplaceRequestError, type MarketplaceIndexResponse, type MarketplacePermissions, type MarketplaceReportCategory, type MarketplaceStageEntry, type MarketplaceValidationState } from 'src/stages/MarketplaceApi';
 import { invalidateMarketplaceFirstPage, invalidateUserStages, marketplaceFirstPageSnapshot, refreshMarketplaceFirstPage, refreshStageLists, stageListUserKey, subscribeMarketplaceFirstPage } from 'src/stages/stageListCache';
-
-function formatDate(value?: string | null): string {
-  if (!value) return 'Unknown';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
-}
-
-function formatRefreshTime(value: number | null): string {
-  if (!value) return '';
-  const minutes = Math.max(0, Math.floor((Date.now() - value) / 60_000));
-  if (minutes < 1) return 'Updated just now';
-  if (minutes === 1) return 'Updated a minute ago';
-  if (minutes < 60) return `Updated ${minutes} minutes ago`;
-  return `Updated ${Math.floor(minutes / 60)} hours ago`;
-}
+import { formatStageDate, formatStageRelativeTime, GitHubIdentity, StageCard, StageCardSkeleton, StagePreview } from 'src/stages/StageCard';
+import { MARKETPLACE_COPY, MARKETPLACE_REPORT_CATEGORIES } from 'src/stages/marketplaceCopy';
+import DashboardCard from 'src/components/shared/DashboardCardWithChildren';
 
 const validationBadges: Record<MarketplaceValidationState, { label: string; color: 'success' | 'warning' | 'error'; description: string }> = {
   validated: {
@@ -112,64 +104,42 @@ function writeForkFlow(flow: ForkFlow | null): void {
   else window.sessionStorage.setItem(FORK_FLOW_STORAGE_KEY, JSON.stringify(flow));
 }
 
-function StagePreview({ entry }: { entry: MarketplaceStageEntry }) {
-  if (entry.previewUrl) {
-    return (
-      <Box
-        component="img"
-        src={entry.previewUrl}
-        alt=""
-        sx={{ width: '100%', height: 156, objectFit: 'cover', display: 'block', bgcolor: '#0f172a' }}
-      />
-    );
-  }
+function MarketplaceStageCard({ entry, onSelect, embedded = false }: { entry: MarketplaceStageEntry; onSelect: (entry: MarketplaceStageEntry) => void; embedded?: boolean }) {
   return (
-    <Box sx={{ height: 156, display: 'grid', placeItems: 'center', background: 'linear-gradient(135deg, #e8f0ff 0%, #eefcfb 100%)', color: '#475569' }}>
-      <Stack spacing={0.5} alignItems="center">
-        <Typography variant="h6" fontWeight={800}>FOSSBot</Typography>
-        <Typography variant="caption">No preview yet</Typography>
-      </Stack>
-    </Box>
+    <StageCard
+      title={entry.title}
+      description={entry.description || 'A community FOSSBot stage.'}
+      previewUrl={entry.previewUrl}
+      metadata={<GitHubIdentity username={entry.author?.githubUsername || entry.repoOwner} />}
+      onOpen={() => onSelect(entry)}
+      surface={embedded ? 'embedded' : 'outlined'}
+      badges={(
+        <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 1 }}>
+          {entry.badges?.verified && <Chip size="small" color="primary" icon={<VerifiedIcon />} label="Verified" variant="outlined" />}
+          <ValidationChip entry={entry} />
+          {(entry.tags || []).slice(0, 2).map((tag) => <Chip key={tag} size="small" label={tag} />)}
+        </Stack>
+      )}
+    />
   );
 }
 
-function MarketplaceStageCard({ entry, onSelect }: { entry: MarketplaceStageEntry; onSelect: (entry: MarketplaceStageEntry) => void }) {
+function MarketplacePanelFrame({ preview, action, children }: { preview: boolean; action: React.ReactNode; children: React.ReactNode }) {
+  const subtitle = preview ? 'Discover community stages for FOSSBot simulations.' : 'Browse public stages for FOSSBot simulations.';
+  if (preview) {
+    return <DashboardCard title={MARKETPLACE_COPY.stageLibrary} subtitle={subtitle} action={action} compact>{children}</DashboardCard>;
+  }
   return (
-    <Box
-      component="article"
-      sx={{
-        height: '100%',
-        overflow: 'hidden',
-        border: '1px solid',
-        borderColor: 'divider',
-        borderRadius: 2,
-        bgcolor: 'background.paper',
-        display: 'flex',
-        flexDirection: 'column',
-      }}
-    >
-      <StagePreview entry={entry} />
-      <Stack spacing={1.5} sx={{ p: 2, flex: 1 }}>
-        <Stack direction="row" alignItems="flex-start" justifyContent="space-between" spacing={1}>
-          <Box sx={{ minWidth: 0 }}>
-            <Typography variant="subtitle1" fontWeight={800} noWrap title={entry.title}>{entry.title}</Typography>
-            <Typography variant="caption" color="text.secondary" noWrap display="block">
-              {entry.repoOwner}/{entry.repoName}
-            </Typography>
-          </Box>
-          {entry.badges?.verified && <VerifiedIcon color="primary" fontSize="small" titleAccess="Verified by a marketplace maintainer" />}
-        </Stack>
-        <Typography variant="body2" color="text.secondary" sx={{ minHeight: 40, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-          {entry.description || 'A community FOSSBot stage.'}
-        </Typography>
-        <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 0.75 }}>
-          <ValidationChip entry={entry} />
-          {(entry.tags || []).slice(0, 3).map((tag) => <Chip key={tag} size="small" label={tag} />)}
-        </Stack>
-        <Box sx={{ flex: 1 }} />
-        <Button size="small" variant="outlined" onClick={() => onSelect(entry)}>Details</Button>
+    <>
+      <Stack direction={{ xs: 'column', md: 'row' }} justifyContent="space-between" spacing={2} sx={{ mb: 2 }}>
+        <Box>
+          <Typography variant="h5" fontWeight={850}>{MARKETPLACE_COPY.stageLibrary}</Typography>
+          <Typography variant="body2" color="text.secondary">{subtitle}</Typography>
+        </Box>
+        {action}
       </Stack>
-    </Box>
+      {children}
+    </>
   );
 }
 
@@ -208,6 +178,8 @@ function MarketplaceDetailDrawer({
   forkBusy,
   forkError,
   forkInstallationUrl,
+  reporting,
+  onReport,
 }: {
   entry: MarketplaceStageEntry | null;
   open: boolean;
@@ -219,7 +191,10 @@ function MarketplaceDetailDrawer({
   forkBusy: boolean;
   forkError: string;
   forkInstallationUrl?: string | null;
+  reporting: MarketplacePermissions | null;
+  onReport: () => void;
 }) {
+  const [moreAnchor, setMoreAnchor] = useState<HTMLElement | null>(null);
   const stageTestUrl = entry ? `/stage-test?repo=${encodeURIComponent(`${entry.repoOwner}/${entry.repoName}`)}&ref=${encodeURIComponent(entry.commitSha)}` : '#';
   return (
     <Drawer anchor="right" open={open} onClose={onClose} PaperProps={{ sx: { width: { xs: '100%', sm: 520 } } }}>
@@ -228,12 +203,18 @@ function MarketplaceDetailDrawer({
           <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ p: 2, borderBottom: '1px solid', borderColor: 'divider' }}>
             <Box sx={{ minWidth: 0 }}>
               <Typography variant="h6" fontWeight={850} noWrap>{entry.title}</Typography>
-              <Typography variant="caption" color="text.secondary" noWrap display="block">{entry.repoOwner}/{entry.repoName}</Typography>
+              <GitHubIdentity username={entry.author?.githubUsername || entry.repoOwner} suffix={`/${entry.repoName}`} />
             </Box>
-            <IconButton onClick={onClose} aria-label="Close stage details"><CloseIcon /></IconButton>
+            <Stack direction="row" spacing={0.5}>
+              {(reporting?.reportingEnabled || reporting?.reportingContact) && <IconButton onClick={(event) => setMoreAnchor(event.currentTarget)} aria-label="More stage actions"><MoreVertIcon /></IconButton>}
+              <IconButton onClick={onClose} aria-label="Close stage details"><CloseIcon /></IconButton>
+            </Stack>
+            <Menu anchorEl={moreAnchor} open={!!moreAnchor} onClose={() => setMoreAnchor(null)}>
+              {reporting?.reportingEnabled ? <MenuItem onClick={() => { setMoreAnchor(null); onReport(); }}>Report stage</MenuItem> : reporting?.reportingContact ? <MenuItem component="a" href={`mailto:${reporting.reportingContact}`} onClick={() => setMoreAnchor(null)}>Contact marketplace owner</MenuItem> : null}
+            </Menu>
           </Stack>
           <Box sx={{ overflow: 'auto', flex: 1 }}>
-            <StagePreview entry={entry} />
+            <StagePreview title={entry.title} previewUrl={entry.previewUrl} />
             <Stack spacing={2} sx={{ p: 2.5 }}>
               <Typography variant="body2" color="text.secondary">{entry.description || 'No description provided.'}</Typography>
               <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 1 }}>
@@ -246,31 +227,17 @@ function MarketplaceDetailDrawer({
                 {(entry.tags || []).map((tag) => <Chip key={tag} size="small" label={tag} />)}
               </Stack>
               <Divider />
-              <Box>
-                <Typography variant="subtitle2" fontWeight={800}>Author</Typography>
-                <Typography variant="body2" color="text.secondary">
-                  @{entry.author?.githubUsername || entry.repoOwner}
-                </Typography>
+              <Box sx={{ display: 'grid', gridTemplateColumns: 'auto minmax(0, 1fr)', columnGap: 2, rowGap: 1 }}>
+                <Typography variant="caption" color="text.secondary">Author</Typography><GitHubIdentity username={entry.author?.githubUsername || entry.repoOwner} />
+                <Typography variant="caption" color="text.secondary">Updated</Typography><Typography variant="body2">{formatStageDate(entry.updatedAt)}</Typography>
+                <Typography variant="caption" color="text.secondary">Status</Typography><Typography variant="body2">{entry.badges?.verified ? 'Verified' : 'Community published'} · {validationMeta(entry.badges?.validation).label}</Typography>
               </Box>
-              <Box>
-                <Typography variant="subtitle2" fontWeight={800}>Published state</Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Published {formatDate(entry.publishedAt)} · updated {formatDate(entry.updatedAt)}
-                </Typography>
-                <Typography variant="caption" color="text.secondary" sx={{ wordBreak: 'break-all' }}>
-                  Commit {entry.commitSha}
-                </Typography>
-              </Box>
-              <Box>
-                <Typography variant="subtitle2" fontWeight={800}>Validation</Typography>
-                <Typography variant="body2" color="text.secondary">
-                  {entry.validation?.message || validationMeta(entry.badges?.validation).description}
-                </Typography>
-                {entry.validation?.checkedAt && (
-                  <Typography variant="caption" color="text.secondary">
-                    Checked {formatDate(entry.validation.checkedAt)}
-                  </Typography>
-                )}
+              <Box component="details">
+                <Typography component="summary" variant="body2" fontWeight={700} sx={{ cursor: 'pointer', minHeight: 44, display: 'flex', alignItems: 'center' }}>Revision</Typography>
+                <Stack spacing={1} sx={{ pb: 1 }}>
+                  <Typography variant="caption" color="text.secondary" sx={{ wordBreak: 'break-all' }}>{entry.commitSha}</Typography>
+                  <Button size="small" variant="outlined" onClick={() => void navigator.clipboard.writeText(entry.commitSha)} sx={{ alignSelf: 'flex-start' }}>Copy revision</Button>
+                </Stack>
               </Box>
               <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
                 <Button component="a" href={stageTestUrl} target="_blank" rel="noreferrer" variant="contained" startIcon={<PlayArrowIcon />}>
@@ -278,7 +245,7 @@ function MarketplaceDetailDrawer({
                 </Button>
                 {!forkStep && (
                   <Button variant="outlined" onClick={() => onOpenFork(entry)} disabled={forkBusy} startIcon={<GitHubIcon />}>
-                    {forkBusy ? 'Checking GitHub…' : 'Fork stage'}
+                    {forkBusy ? 'Checking GitHub…' : MARKETPLACE_COPY.forkStage}
                   </Button>
                 )}
                 <Button component="a" href={entry.repoUrl} target="_blank" rel="noreferrer" variant="outlined" startIcon={<GitHubIcon />} endIcon={<OpenInNewIcon />}>
@@ -371,10 +338,11 @@ function MarketplaceDetailDrawer({
   );
 }
 
-export default function StageMarketplacePanel({ embedded = false }: { embedded?: boolean }) {
+export default function StageMarketplacePanel({ embedded = false, preview = false }: { embedded?: boolean; preview?: boolean }) {
   const { token, user } = useAuth();
   const userKey = stageListUserKey(user);
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [index, setIndex] = useState<MarketplaceIndexResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -382,12 +350,28 @@ export default function StageMarketplacePanel({ embedded = false }: { embedded?:
   const [activeTag, setActiveTag] = useState('');
   const [sort, setSort] = useState<'updated' | 'published' | 'verified'>('updated');
   const [page, setPage] = useState(1);
+  const [retryKey, setRetryKey] = useState(0);
+  const [detailLookupKey, setDetailLookupKey] = useState('');
+  const [detailUnavailable, setDetailUnavailable] = useState(false);
   const [selected, setSelected] = useState<MarketplaceStageEntry | null>(null);
   const [forkFlow, setForkFlow] = useState<ForkFlow | null>(readForkFlow);
   const [forkBusy, setForkBusy] = useState(false);
   const [forkError, setForkError] = useState('');
   const [cacheRefreshing, setCacheRefreshing] = useState(false);
   const [cacheUpdatedAt, setCacheUpdatedAt] = useState<number | null>(null);
+  const [reporting, setReporting] = useState<MarketplacePermissions | null>(null);
+  const [reportOpen, setReportOpen] = useState(false);
+  const [reportCategory, setReportCategory] = useState<MarketplaceReportCategory>('broken_misleading');
+  const [reportExplanation, setReportExplanation] = useState('');
+  const [reportTouched, setReportTouched] = useState(false);
+  const [reportBusy, setReportBusy] = useState(false);
+  const [reportError, setReportError] = useState('');
+  const [reportSent, setReportSent] = useState(false);
+
+  useEffect(() => {
+    if (!token || preview) return;
+    void getMarketplacePermissions(token).then(setReporting).catch(() => setReporting(null));
+  }, [preview, token]);
 
   const setActiveForkFlow = (flow: ForkFlow | null) => {
     setForkFlow(flow);
@@ -469,7 +453,7 @@ export default function StageMarketplacePanel({ embedded = false }: { embedded?:
     return () => { active = false; };
   }, [forkFlow, token]);
 
-  const canonicalRequest = !query.trim() && !activeTag && sort === 'updated' && page === 1;
+  const canonicalRequest = preview || (!query.trim() && !activeTag && sort === 'updated' && page === 1);
 
   useEffect(() => {
     if (!canonicalRequest) return undefined;
@@ -510,52 +494,123 @@ export default function StageMarketplacePanel({ embedded = false }: { embedded?:
       controller.abort();
       window.clearTimeout(timer);
     };
-  }, [activeTag, canonicalRequest, page, query, sort]);
+  }, [activeTag, canonicalRequest, page, query, retryKey, sort]);
 
-  const stages = index?.stages || [];
+  const stages = preview ? (index?.stages || []).slice(0, 3) : index?.stages || [];
   const pagination = index?.pagination;
   const tags = index?.tags || [];
   const selectedForkFlow = forkFlow && selected && forkFlow.repoOwner === selected.repoOwner && forkFlow.repoName === selected.repoName
     ? forkFlow
     : null;
 
+  useEffect(() => {
+    if (preview) return;
+    let active = true;
+    const stageKey = searchParams.get('stage');
+    if (!stageKey) {
+      if (selected) setSelected(null);
+      if (detailUnavailable) setDetailUnavailable(false);
+      return;
+    }
+    if (selected && `${selected.repoOwner}/${selected.repoName}` !== stageKey) {
+      setSelected(null);
+      return;
+    }
+    const match = stages.find((entry) => `${entry.repoOwner}/${entry.repoName}` === stageKey);
+    if (match && match !== selected) {
+      setDetailUnavailable(false);
+      setSelected(match);
+      return;
+    }
+    if (!match && index && detailLookupKey !== stageKey) {
+      setDetailLookupKey(stageKey);
+      setDetailUnavailable(false);
+      void getMarketplaceIndex({ q: stageKey, pageSize: PAGE_SIZE }).then((result) => {
+        if (!active) return;
+        const exact = result.stages.find((entry) => `${entry.repoOwner}/${entry.repoName}` === stageKey);
+        if (exact) setSelected(exact);
+        else setDetailUnavailable(true);
+      }).catch(() => { if (active) setDetailUnavailable(true); });
+      return () => { active = false; };
+    }
+    return () => { active = false; };
+  }, [detailLookupKey, detailUnavailable, index, preview, searchParams, selected, stages]);
+
+  const selectStage = (entry: MarketplaceStageEntry) => {
+    if (preview) {
+      navigate(`/stages?tab=explore&stage=${encodeURIComponent(`${entry.repoOwner}/${entry.repoName}`)}`);
+      return;
+    }
+    setSelected(entry);
+    const next = new URLSearchParams(searchParams);
+    next.set('tab', 'explore');
+    next.set('stage', `${entry.repoOwner}/${entry.repoName}`);
+    setSearchParams(next);
+  };
+
+  const closeStage = () => {
+    setSelected(null);
+    setForkError('');
+    const next = new URLSearchParams(searchParams);
+    next.delete('stage');
+    setSearchParams(next, { replace: true });
+  };
+
+  const submitReport = async () => {
+    if (!reportExplanation.trim()) {
+      setReportTouched(true);
+      return;
+    }
+    if (!token || !selected) return;
+    setReportBusy(true);
+    setReportError('');
+    try {
+      await reportMarketplaceStage(token, { repoOwner: selected.repoOwner, repoName: selected.repoName, category: reportCategory, explanation: reportExplanation.trim() });
+      setReportSent(true);
+    } catch (submitError) {
+      setReportError(submitError instanceof Error ? submitError.message : 'Could not send this report.');
+    } finally {
+      setReportBusy(false);
+    }
+  };
+
+  const panelAction = (
+    <Stack direction="row" spacing={1} alignItems="center">
+      {canonicalRequest && cacheUpdatedAt && <Typography variant="caption" color="text.secondary">{cacheRefreshing ? 'Refreshing…' : formatStageRelativeTime(cacheUpdatedAt)}</Typography>}
+      {preview ? (
+        <Button variant="outlined" size="small" onClick={() => navigate('/stages?tab=explore')}>Explore stages</Button>
+      ) : (
+        <Button variant="outlined" size="small" onClick={() => { void refreshStageLists(userKey, token, { force: true }); }} disabled={cacheRefreshing}>
+          {cacheRefreshing ? 'Refreshing…' : 'Refresh stages'}
+        </Button>
+      )}
+    </Stack>
+  );
+
   return (
     <Box sx={embedded ? undefined : { mt: 3 }}>
-      <Stack direction={{ xs: 'column', md: 'row' }} justifyContent="space-between" spacing={2} sx={{ mb: 2 }}>
-        <Box>
-          <Typography variant="h5" fontWeight={850}>Stage library</Typography>
-          <Typography variant="body2" color="text.secondary">
-            Discover reviewed Git-hosted stages for FOSSBot simulations.
-          </Typography>
-        </Box>
-        <Stack direction="row" spacing={1} alignItems="center">
-          {canonicalRequest && cacheUpdatedAt && <Typography variant="caption" color="text.secondary">{cacheRefreshing ? 'Refreshing…' : formatRefreshTime(cacheUpdatedAt)}</Typography>}
-          <Button variant="outlined" size="small" onClick={() => { void refreshStageLists(userKey, token, { force: true }); }} disabled={cacheRefreshing}>
-            {cacheRefreshing ? 'Refreshing…' : 'Refresh stages'}
-          </Button>
-          <Select size="small" value={sort} onChange={(event) => { setSort(event.target.value as typeof sort); setPage(1); }} sx={{ minWidth: 140 }}>
-            <MenuItem value="updated">Recently updated</MenuItem>
-            <MenuItem value="published">Recently published</MenuItem>
-            <MenuItem value="verified">Verified first</MenuItem>
-          </Select>
-        </Stack>
-      </Stack>
-
-      <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, bgcolor: 'background.paper' }}>
-        <Box sx={{ p: 2, borderBottom: '1px solid', borderColor: 'divider' }}>
-          <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5}>
+      <MarketplacePanelFrame preview={preview} action={panelAction}>
+        <Box sx={preview ? undefined : { border: '1px solid', borderColor: 'divider', borderRadius: 2, bgcolor: 'background.paper' }}>
+        {!preview && <Box sx={{ p: 2, borderBottom: '1px solid', borderColor: 'divider' }}>
+          <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} alignItems={{ md: 'center' }}>
             <TextField
               size="small"
               placeholder="Search title, author, tag, or repo"
+              inputProps={{ 'aria-label': 'Search stages' }}
               value={query}
               onChange={(event) => { setQuery(event.target.value); setPage(1); }}
               InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> }}
               sx={{ flex: 1 }}
             />
-            <Button variant="outlined" onClick={() => { setQuery(''); setActiveTag(''); setPage(1); }}>Clear</Button>
+            <Select size="small" value={sort} onChange={(event) => { setSort(event.target.value as typeof sort); setPage(1); }} sx={{ minWidth: 176 }} aria-label="Sort stages">
+              <MenuItem value="updated">Recently updated</MenuItem>
+              <MenuItem value="published">Recently published</MenuItem>
+              <MenuItem value="verified">Verified first</MenuItem>
+            </Select>
+            {(query || activeTag) && <Button variant="text" onClick={() => { setQuery(''); setActiveTag(''); setPage(1); }}>Clear filters</Button>}
           </Stack>
           {!!tags.length && (
-            <Stack direction="row" sx={{ mt: 1.5, flexWrap: 'wrap', gap: 0.75 }}>
+                <Stack direction="row" sx={{ mt: 1.5, flexWrap: 'wrap', gap: 1 }}>
               {tags.map(({ tag, count }) => (
                 <Chip
                   key={tag}
@@ -568,15 +623,14 @@ export default function StageMarketplacePanel({ embedded = false }: { embedded?:
               ))}
             </Stack>
           )}
-        </Box>
+        </Box>}
 
         {loading && !index ? (
-          <Stack sx={{ py: 6, alignItems: 'center' }} spacing={1.5}>
-            <CircularProgress size={28} />
-            <Typography variant="body2" color="text.secondary">Loading marketplace index…</Typography>
-          </Stack>
+          <Grid container spacing={2} sx={{ p: preview ? 0 : 2 }} aria-label="Loading stages">
+            {Array.from({ length: preview ? 3 : 8 }).map((_, item) => <Grid key={item} item xs={12} sm={6} lg={4} xl={preview ? 4 : 3}><StageCardSkeleton surface={preview ? 'embedded' : 'outlined'} /></Grid>)}
+          </Grid>
         ) : error ? (
-          <Alert severity={index ? "warning" : "error"} sx={{ m: 2 }}>{error}</Alert>
+          <Alert severity={index ? "warning" : "error"} sx={{ m: 2 }} action={<Button color="inherit" size="small" onClick={() => canonicalRequest ? void refreshStageLists(userKey, token, { force: true }) : setRetryKey((current) => current + 1)}>Retry</Button>}>{error}</Alert>
         ) : index?.warning ? (
           <Alert severity="info" sx={{ m: 2 }}>{index.warning}</Alert>
         ) : null}
@@ -584,10 +638,11 @@ export default function StageMarketplacePanel({ embedded = false }: { embedded?:
         {!loading && (
           stages.length ? (
             <>
-              <Grid container spacing={2} sx={{ p: 2 }}>
+              {!preview && pagination && <Typography variant="body2" color="text.secondary" sx={{ px: 2, pt: 2 }}>{pagination.total} stage{pagination.total === 1 ? '' : 's'}</Typography>}
+              <Grid container spacing={2} sx={{ p: preview ? 0 : 2 }}>
                 {stages.map((entry) => (
-                  <Grid key={`${entry.repoOwner}/${entry.repoName}`} item xs={12} sm={6} lg={4} xl={3}>
-                    <MarketplaceStageCard entry={entry} onSelect={setSelected} />
+                  <Grid key={`${entry.repoOwner}/${entry.repoName}`} item xs={12} sm={6} lg={4} xl={preview ? 4 : 3}>
+                    <MarketplaceStageCard entry={entry} onSelect={selectStage} embedded={preview} />
                   </Grid>
                 ))}
               </Grid>
@@ -610,11 +665,22 @@ export default function StageMarketplacePanel({ embedded = false }: { embedded?:
             </Box>
           )
         )}
-      </Box>
+        </Box>
+      </MarketplacePanelFrame>
+      <Drawer anchor="right" open={detailUnavailable && !selected && !!searchParams.get('stage')} onClose={closeStage} PaperProps={{ sx: { width: { xs: '100%', sm: 420 } } }}>
+        <Stack spacing={2} sx={{ p: 3 }}>
+          <Stack direction="row" alignItems="center" justifyContent="space-between">
+            <Typography variant="h6" fontWeight={800}>Stage unavailable</Typography>
+            <IconButton onClick={closeStage} aria-label="Close unavailable stage details"><CloseIcon /></IconButton>
+          </Stack>
+          <Typography variant="body2" color="text.secondary">This stage may have been unpublished, removed, or moved.</Typography>
+          <Button variant="contained" onClick={closeStage} sx={{ alignSelf: 'flex-start' }}>Back to {MARKETPLACE_COPY.stageLibrary.toLowerCase()}</Button>
+        </Stack>
+      </Drawer>
       <MarketplaceDetailDrawer
         entry={selected}
         open={!!selected}
-        onClose={() => { setSelected(null); setForkError(''); }}
+        onClose={closeStage}
         onOpenFork={handleOpenFork}
         onCompleteFork={handleCompleteFork}
         onCancelFork={() => { setActiveForkFlow(null); setForkError(''); }}
@@ -622,7 +688,28 @@ export default function StageMarketplacePanel({ embedded = false }: { embedded?:
         forkBusy={forkBusy}
         forkError={forkError}
         forkInstallationUrl={selectedForkFlow?.installationUrl}
+        reporting={reporting}
+        onReport={() => { setReportCategory('broken_misleading'); setReportExplanation(''); setReportTouched(false); setReportError(''); setReportSent(false); setReportOpen(true); }}
       />
+      <Dialog open={reportOpen} onClose={reportBusy ? undefined : () => setReportOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Report stage</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ pt: 0.5 }}>
+            {reportSent ? <Alert severity="success">Report sent to this FOSSBot instance’s moderators.</Alert> : <>
+              <Typography variant="body2" color="text.secondary">Reports are private and include the published stage revision.</Typography>
+              {reportError && <Alert severity="error">{reportError}</Alert>}
+              <TextField select label="Reason" value={reportCategory} onChange={(event) => setReportCategory(event.target.value as MarketplaceReportCategory)} fullWidth>
+                {MARKETPLACE_REPORT_CATEGORIES.map((category) => <MenuItem key={category.value} value={category.value}>{category.label}</MenuItem>)}
+              </TextField>
+              <TextField label="What happened?" value={reportExplanation} onChange={(event) => setReportExplanation(event.target.value)} onBlur={() => setReportTouched(true)} multiline minRows={3} required error={reportTouched && !reportExplanation.trim()} helperText={reportTouched && !reportExplanation.trim() ? 'Add a short explanation.' : ' '} fullWidth />
+            </>}
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setReportOpen(false)} disabled={reportBusy}>{reportSent ? 'Done' : 'Cancel'}</Button>
+          {!reportSent && <Button variant="contained" onClick={submitReport} disabled={reportBusy || !reportExplanation.trim()}>{reportBusy ? 'Sending…' : 'Send report'}</Button>}
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

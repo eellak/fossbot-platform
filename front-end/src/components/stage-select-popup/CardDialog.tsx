@@ -3,12 +3,7 @@ import {
   Alert,
   Box,
   Button,
-  Card,
-  CardActions,
-  CardContent,
-  CardMedia,
   Chip,
-  CircularProgress,
   Dialog,
   DialogContent,
   DialogTitle,
@@ -25,6 +20,9 @@ import { resolveStageAssetUrl, stageAssetBaseUrlFromStageUrl } from 'src/simulat
 import type { MarketplaceStageEntry } from 'src/stages/MarketplaceApi';
 import { loadStageFromProvider, type ProviderStageListItem } from 'src/stages/StagesApi';
 import { marketplaceFirstPageSnapshot, refreshMarketplaceFirstPage, refreshUserStages, stageListUserKey, subscribeMarketplaceFirstPage, subscribeUserStages, userStagesSnapshot } from 'src/stages/stageListCache';
+import { GitHubIdentity, StageCard, StageCardSkeleton } from 'src/stages/StageCard';
+import { getGitHubLoginUrl, getGitHubProviderStatus, type GitHubProviderStatus } from 'src/stages/ProviderAuthApi';
+import { MARKETPLACE_COPY } from 'src/stages/marketplaceCopy';
 
 export type StageSelectionSource = 'default' | 'github' | 'marketplace';
 
@@ -143,53 +141,6 @@ function emitStageSelection(stage: StageSelection): void {
   window.dispatchEvent(new CustomEvent<StageSelection>('fossbot:stage-selected', { detail: stage }));
 }
 
-function StageCard({
-  title,
-  description,
-  image,
-  badges,
-  disabled,
-  disabledReason,
-  onSelect,
-}: {
-  title: string;
-  description?: string | null;
-  image?: string | null;
-  badges?: React.ReactNode;
-  disabled?: boolean;
-  disabledReason?: string;
-  onSelect: () => void | Promise<void>;
-}) {
-  return (
-    <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      {image ? (
-        <CardMedia component="img" height="140" image={image} alt={title} />
-      ) : (
-        <Box sx={{ height: 140, display: 'grid', placeItems: 'center', bgcolor: 'grey.100', color: 'text.secondary' }}>
-          <Typography variant="subtitle2" fontWeight={800}>FOSSBot stage</Typography>
-        </Box>
-      )}
-      <CardContent sx={{ flex: 1 }}>
-        <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
-          <Typography gutterBottom variant="h5" component="div" sx={{ mb: 0, flex: 1 }}>{title}</Typography>
-          {badges}
-        </Stack>
-        <Typography variant="body2" color="text.secondary">
-          {description || 'No description provided.'}
-        </Typography>
-        {disabled && disabledReason && (
-          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
-            {disabledReason}
-          </Typography>
-        )}
-      </CardContent>
-      <CardActions sx={{ mt: 'auto' }}>
-        <Button size="small" color="primary" disabled={disabled} onClick={onSelect}>Select</Button>
-      </CardActions>
-    </Card>
-  );
-}
-
 const CardDialog: React.FC<CardDialogProps> = ({ open, onClose, onSelect, onSelectStage }) => {
   const { token, user } = useAuth();
   const userKey = stageListUserKey(user);
@@ -200,7 +151,9 @@ const CardDialog: React.FC<CardDialogProps> = ({ open, onClose, onSelect, onSele
   const [marketplaceLoading, setMarketplaceLoading] = useState(false);
   const [userError, setUserError] = useState('');
   const [marketplaceError, setMarketplaceError] = useState('');
-  const [selecting, setSelecting] = useState(false);
+  const [providerStatus, setProviderStatus] = useState<GitHubProviderStatus | null>(null);
+  const [providerLoading, setProviderLoading] = useState(false);
+  const [connecting, setConnecting] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -209,6 +162,16 @@ const CardDialog: React.FC<CardDialogProps> = ({ open, onClose, onSelect, onSele
 
   useEffect(() => {
     if (!open || !token || !userKey) return undefined;
+    let active = true;
+    setProviderLoading(true);
+    getGitHubProviderStatus(token)
+      .then((status) => {
+        if (!active) return;
+        setProviderStatus(status);
+        if (status.connected && !status.needsReconnect) void refreshUserStages(userKey, token);
+      })
+      .catch((error) => { if (active) setUserError(error instanceof Error ? error.message : 'Could not check the GitHub connection.'); })
+      .finally(() => { if (active) setProviderLoading(false); });
     const sync = () => {
       const snapshot = userStagesSnapshot(userKey);
       setUserStages(snapshot.data || []);
@@ -217,9 +180,20 @@ const CardDialog: React.FC<CardDialogProps> = ({ open, onClose, onSelect, onSele
     };
     sync();
     const unsubscribe = subscribeUserStages(userKey, sync);
-    void refreshUserStages(userKey, token);
-    return unsubscribe;
+    return () => { active = false; unsubscribe(); };
   }, [open, token, userKey]);
+
+  const handleConnect = async () => {
+    if (!token) return;
+    setConnecting(true);
+    setUserError('');
+    try {
+      window.location.assign(await getGitHubLoginUrl(token));
+    } catch (error) {
+      setUserError(error instanceof Error ? error.message : 'Could not start GitHub connection.');
+      setConnecting(false);
+    }
+  };
 
   useEffect(() => {
     if (!open) return undefined;
@@ -307,20 +281,20 @@ const CardDialog: React.FC<CardDialogProps> = ({ open, onClose, onSelect, onSele
   };
 
   return (
-    <Dialog open={open} onClose={selecting ? undefined : onClose} maxWidth="lg" fullWidth sx={{ '& .MuiDialog-container': { position: 'relative' } }}>
+    <Dialog open={open} onClose={onClose} maxWidth="lg" fullWidth>
       <DialogTitle>Select a stage</DialogTitle>
       <DialogContent>
         <Tabs value={tab} onChange={(_event, value) => setTab(value)} sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}>
-          <Tab value="default" label={`Defaults (${tabCounts.default})`} />
-          <Tab value="github" label={`User (${tabCounts.github})`} />
-          <Tab value="marketplace" label={`Marketplace (${tabCounts.marketplace})`} />
+          <Tab value="default" label={<span>Built-in <Typography component="span" variant="caption" color="text.secondary">{tabCounts.default}</Typography></span>} />
+          <Tab value="github" label={<span>{MARKETPLACE_COPY.myStages} <Typography component="span" variant="caption" color="text.secondary">{tabCounts.github}</Typography></span>} />
+          <Tab value="marketplace" label={<span>{MARKETPLACE_COPY.marketplace} <Typography component="span" variant="caption" color="text.secondary">{tabCounts.marketplace}</Typography></span>} />
         </Tabs>
 
         {tab === 'default' && (
           <Grid container spacing={2}>
             {defaultStages.map((stage) => (
               <Grid key={stage.url} item xs={12} sm={6} md={3}>
-                <StageCard {...stage} onSelect={() => handleDefaultSelect(stage)} />
+                <StageCard title={stage.title} description={stage.description} previewUrl={stage.image} actionLabel="Select" onAction={() => handleDefaultSelect(stage)} />
               </Grid>
             ))}
           </Grid>
@@ -328,29 +302,29 @@ const CardDialog: React.FC<CardDialogProps> = ({ open, onClose, onSelect, onSele
 
         {tab === 'github' && (
           <Stack spacing={2}>
-            {!token && (
-              <Alert severity="info" icon={<GitHubIcon fontSize="inherit" />}>
-                Sign in and connect GitHub to choose one of your FOSSBot stage repositories. Lectures may use public or private GitHub stages.
-              </Alert>
+            {(!token || (!providerLoading && (!providerStatus?.connected || providerStatus.needsReconnect))) && (
+              <Box sx={{ py: 3, textAlign: 'center' }}><Typography variant="subtitle1" fontWeight={800}>Connect GitHub to use your saved stages.</Typography>{token && <Button variant="contained" startIcon={connecting ? undefined : <GitHubIcon />} onClick={handleConnect} disabled={connecting} sx={{ mt: 2 }}>{connecting ? 'Connecting…' : MARKETPLACE_COPY.connectGitHub}</Button>}</Box>
             )}
             {userError && <Alert severity={userStages.length ? "warning" : "error"}>{userError}</Alert>}
-            {userLoading ? (
-              <Stack direction="row" spacing={1} alignItems="center"><CircularProgress size={20} /><Typography>Loading your GitHub stages…</Typography></Stack>
-            ) : userStages.length ? (
+            {userLoading || providerLoading ? (
+              <Grid container spacing={2}>{Array.from({ length: 6 }).map((_, item) => <Grid key={item} item xs={12} sm={6} md={4}><StageCardSkeleton /></Grid>)}</Grid>
+            ) : providerStatus?.connected && !providerStatus.needsReconnect && userStages.length ? (
               <Grid container spacing={2}>
                 {userStages.map((stage) => (
-                    <Grid key={`${stage.repoOwner}/${stage.repoName}`} item xs={12} sm={6} md={3}>
+                    <Grid key={`${stage.repoOwner}/${stage.repoName}`} item xs={12} sm={6} md={4}>
                       <StageCard
                         title={stage.title || stage.repoName}
                         description={stage.description || `${stage.repoOwner}/${stage.repoName}`}
+                        metadata={<GitHubIdentity username={stage.repoOwner} />}
                         badges={<Chip size="small" label={stage.private ? 'Private' : 'Public'} color={stage.private ? 'warning' : 'success'} variant="outlined" />}
-                        onSelect={() => handleUserSelect(stage)}
+                        actionLabel="Select"
+                        onAction={() => handleUserSelect(stage)}
                       />
                     </Grid>
                 ))}
               </Grid>
-            ) : token ? (
-              <Alert severity="info">No installed FOSSBot stage repositories were found.</Alert>
+            ) : token && providerStatus?.connected && !providerStatus.needsReconnect ? (
+              <Box sx={{ py: 3, textAlign: 'center' }}><Typography variant="subtitle1" fontWeight={800}>No saved stages yet</Typography><Typography variant="body2" color="text.secondary">Create one in Stage Builder.</Typography></Box>
             ) : null}
           </Stack>
         )}
@@ -359,46 +333,29 @@ const CardDialog: React.FC<CardDialogProps> = ({ open, onClose, onSelect, onSele
           <Stack spacing={2}>
             {marketplaceError && <Alert severity={marketplaceStages.length ? "warning" : "error"}>{marketplaceError}</Alert>}
             {marketplaceLoading ? (
-              <Stack direction="row" spacing={1} alignItems="center"><CircularProgress size={20} /><Typography>Loading marketplace stages…</Typography></Stack>
+              <Grid container spacing={2}>{Array.from({ length: 6 }).map((_, item) => <Grid key={item} item xs={12} sm={6} md={4}><StageCardSkeleton /></Grid>)}</Grid>
             ) : marketplaceStages.length ? (
               <Grid container spacing={2}>
                 {marketplaceStages.map((stage) => (
-                  <Grid key={`${stage.repoOwner}/${stage.repoName}`} item xs={12} sm={6} md={3}>
+                  <Grid key={`${stage.repoOwner}/${stage.repoName}`} item xs={12} sm={6} md={4}>
                     <StageCard
                       title={stage.title}
                       description={stage.description || `${stage.repoOwner}/${stage.repoName}`}
-                      image={stage.previewUrl}
+                      previewUrl={stage.previewUrl}
+                      metadata={<GitHubIdentity username={stage.author?.githubUsername || stage.repoOwner} />}
                       badges={<Chip size="small" icon={<PublicIcon />} label={stage.badges?.verified ? 'Verified' : 'Published'} color={stage.badges?.verified ? 'primary' : 'default'} variant="outlined" />}
-                      onSelect={() => handleMarketplaceSelect(stage)}
+                      actionLabel="Select"
+                      onAction={() => handleMarketplaceSelect(stage)}
                     />
                   </Grid>
                 ))}
               </Grid>
             ) : (
-              <Alert severity="info">No published marketplace stages were found.</Alert>
+              <Box sx={{ py: 3, textAlign: 'center' }}><Typography variant="subtitle1" fontWeight={800}>No marketplace stages yet</Typography><Typography variant="body2" color="text.secondary">Check again after stages have been published.</Typography></Box>
             )}
           </Stack>
         )}
       </DialogContent>
-      {selecting && (
-        <Box
-          sx={{
-            position: 'absolute',
-            inset: 0,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 1.5,
-            bgcolor: 'rgba(255,255,255,0.85)',
-            zIndex: 1300,
-            borderRadius: 1,
-          }}
-        >
-          <CircularProgress size={40} />
-          <Typography variant="body2" color="text.secondary">Loading stage…</Typography>
-        </Box>
-      )}
     </Dialog>
   );
 };

@@ -77,6 +77,7 @@ type GitHubDeepLinkTarget = {
   repoOwner: string;
   repoName: string;
   label: string;
+  action?: 'publish';
 };
 
 type GitHubDeepLinkLoadState = {
@@ -95,7 +96,7 @@ function githubDeepLinkTargetFromLocation(): GitHubDeepLinkTarget | null {
   const repoOwner = ownerFromRepo || params.get('owner') || '';
   const repoName = nameFromRepo || params.get('name') || '';
   if (!repoOwner || !repoName) return null;
-  return { repoOwner, repoName, label: `${repoOwner}/${repoName}` };
+  return { repoOwner, repoName, label: `${repoOwner}/${repoName}`, action: params.get('action') === 'publish' ? 'publish' : undefined };
 }
 
 function delay(ms: number): Promise<void> {
@@ -564,6 +565,7 @@ const StageBuilderPage = () => {
           private: loaded.private,
           visibility: loaded.visibility,
         });
+        if (githubDeepLinkTarget.action === 'publish') setPublishMarketplaceOpen(true);
         window.history.replaceState(null, '', window.location.pathname);
         setGithubDeepLinkLoad({ status: 'idle' });
       } catch (error) {

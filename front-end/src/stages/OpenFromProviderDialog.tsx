@@ -1,9 +1,11 @@
 import React from 'react';
 import {
-  Alert, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, List, ListItemButton, ListItemText, Stack, Typography,
+  Alert, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, List, ListItemButton, ListItemText, Skeleton, Stack, Typography,
 } from '@mui/material';
 import GitHubIcon from '@mui/icons-material/GitHub';
 import type { ProviderStageListItem } from './StagesApi';
+import { formatStageRelativeTime } from './StageCard';
+import { MARKETPLACE_COPY } from './marketplaceCopy';
 
 interface OpenFromProviderDialogProps {
   open: boolean;
@@ -28,20 +30,18 @@ export function OpenFromProviderDialog({
 }: OpenFromProviderDialogProps) {
   return (
     <Dialog open={open} onClose={busy ? undefined : onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>Open from GitHub</DialogTitle>
+      <DialogTitle>{MARKETPLACE_COPY.openFromGitHub}</DialogTitle>
       <DialogContent>
         <Stack spacing={1.5} sx={{ pt: 0.5 }}>
           <Typography variant="body2" color="text.secondary">
-            Choose an installed <Box component="code">fossbot-*</Box> repository to load into the editor. Private repos can be edited here, but browser test links and marketplace publishing require public repos in v1.
+            Choose a GitHub project to load into Stage Builder.
           </Typography>
           {error && <Alert severity={warning ? 'warning' : 'error'}>{error}</Alert>}
           {!busy && !stages.length && !error && (
-            <Alert severity="info" icon={<GitHubIcon fontSize="inherit" />}>
-              No installed FOSSBot stage repositories were found. Save a stage to GitHub first, or install the GitHub App on an existing <Box component="code">fossbot-*</Box> repo.
-            </Alert>
+            <Box sx={{ py: 2, textAlign: 'center' }}><GitHubIcon color="action" /><Typography variant="subtitle2" fontWeight={800}>No saved stages yet</Typography><Typography variant="body2" color="text.secondary">Save a stage to GitHub first.</Typography></Box>
           )}
           {busy ? (
-            <Typography variant="body2" color="text.secondary">Loading GitHub repositories…</Typography>
+            <Stack spacing={1} aria-label="Loading GitHub stages">{Array.from({ length: 4 }).map((_, item) => <Skeleton key={item} variant="rounded" height={64} />)}</Stack>
           ) : (
             <List disablePadding sx={{ border: stages.length ? '1px solid' : 0, borderColor: 'divider', borderRadius: 1, overflow: 'hidden' }}>
               {stages.map((stage) => (
@@ -53,7 +53,7 @@ export function OpenFromProviderDialog({
                         <Chip size="small" label={stage.private ? 'Private' : 'Public'} color={stage.private ? 'warning' : 'success'} variant="outlined" />
                       </Stack>
                     )}
-                    secondary={stage.private ? 'Private stage. Editor access uses your GitHub App connection.' : stage.updatedAt ? `Updated ${new Date(stage.updatedAt).toLocaleString()}` : stage.repoUrl}
+                    secondary={stage.updatedAt ? formatStageRelativeTime(stage.updatedAt) : 'Update time unknown'}
                   />
                 </ListItemButton>
               ))}
@@ -62,7 +62,7 @@ export function OpenFromProviderDialog({
         </Stack>
       </DialogContent>
       <DialogActions>
-        <Button onClick={onRefresh} disabled={busy}>Refresh</Button>
+        <Button onClick={onRefresh} disabled={busy}>Refresh list</Button>
         <Button onClick={onClose} disabled={busy}>Close</Button>
       </DialogActions>
     </Dialog>

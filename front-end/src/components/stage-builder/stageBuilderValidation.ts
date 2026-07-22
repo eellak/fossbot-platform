@@ -162,9 +162,6 @@ export function blockingValidationResults(results: StageBuilderValidationResult[
 
 export function validationSummary(results: StageBuilderValidationResult[]): string {
   const active = activeValidationResults(results);
-  const errors = active.filter((item) => item.severity === 'error').length;
-  const warnings = active.filter((item) => item.severity === 'warning').length;
-  if (errors) return `${errors} error${errors === 1 ? '' : 's'} need fixing`;
-  if (warnings) return `${warnings} warning${warnings === 1 ? '' : 's'}`;
+  if (active.length) return `${active.length} issue${active.length === 1 ? '' : 's'}`;
   return 'Stage looks ready';
 }
