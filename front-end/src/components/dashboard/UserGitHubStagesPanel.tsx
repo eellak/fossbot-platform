@@ -59,6 +59,8 @@ export default function UserGitHubStagesPanel() {
     }
   }, [token]);
 
+  const shouldShowConnectAction = !loading && (!status?.connected || status?.needsReconnect);
+
   useEffect(() => {
     if (!token) return undefined;
     const controller = new AbortController();
@@ -88,6 +90,17 @@ export default function UserGitHubStagesPanel() {
       <DashboardCard
         title="Your GitHub stages"
         subtitle="Stages from fossbot-* repositories selected in your GitHub App installation. Private repos can be opened in the editor; public repos can also be tested and published."
+        action={shouldShowConnectAction ? (
+          <Button
+            variant="contained"
+            startIcon={connecting ? <CircularProgress size={18} color="inherit" /> : <GitHubIcon />}
+            onClick={handleConnect}
+            disabled={connecting}
+            sx={{ flexShrink: 0 }}
+          >
+            {connecting ? 'Connecting…' : 'Connect GitHub App'}
+          </Button>
+        ) : undefined}
       >
         {loading ? (
           <Stack sx={{ py: 4, alignItems: 'center' }} spacing={1.5}>
@@ -97,19 +110,9 @@ export default function UserGitHubStagesPanel() {
         ) : error ? (
           <Alert severity="error">{error}</Alert>
         ) : !status?.connected || status?.needsReconnect ? (
-          <Stack sx={{ py: 2, alignItems: 'center' }} spacing={2}>
-            <Typography variant="body2" color="text.secondary" textAlign="center">
-              Connect the FOSSBot GitHub App to save, edit, and manage your stage repositories right from the dashboard.
-            </Typography>
-            <Button
-              variant="contained"
-              startIcon={connecting ? <CircularProgress size={18} color="inherit" /> : <GitHubIcon />}
-              onClick={handleConnect}
-              disabled={connecting}
-            >
-              {connecting ? 'Connecting…' : 'Connect GitHub App'}
-            </Button>
-          </Stack>
+          <Alert severity="info">
+            Connect the FOSSBot GitHub App to save, edit, and manage your stage repositories right from the dashboard.
+          </Alert>
         ) : stages.length === 0 ? (
           <Alert severity="info">
             No <Box component="code">fossbot-*</Box> stage repositories are selected for the FOSSBot GitHub App yet.
