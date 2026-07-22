@@ -1,4 +1,4 @@
-import Blockly from 'blockly';
+import Blockly, { WorkspaceSvg } from 'blockly';
 import TOOLBOX_JSON_EN from '../../utils/toolboxBlockly/toolbox_en.ts';
 import TOOLBOX_JSON_GR from '../../utils/toolboxBlockly/toolbox_gr.ts';
 
@@ -9,7 +9,7 @@ import { BlocklyWorkspace } from 'react-blockly';
 import { AppState } from 'src/store/Store';
 import { useSelector } from 'src/store/Store';
 import { Languages } from 'src/utils/languages/Languages.ts';
-import { createContext, useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { pythonGenerator } from 'blockly/python';
 import { useTranslation } from 'react-i18next';
 import LightTheme from './LightTheme.js'; // Import the custom theme
@@ -29,6 +29,7 @@ const BlocklyEditorComponent = ({
   handleGetPythonCodeValue,
 }: BlocklyEditorProps) => {
   const { i18n } = useTranslation();
+  const workspaceRef = useRef<WorkspaceSvg | null>(null);
 
   const customizer = useSelector((state: AppState) => state.customizer);
   const currentLang =
@@ -39,14 +40,14 @@ const BlocklyEditorComponent = ({
   currentLang.value == 'gr' ? Blockly.setLocale(localeEl) : Blockly.setLocale(localeEn);
 
   // Define the custom Python generator within the component
-  const customPythonGenerator = Object.create(pythonGenerator);
-
-  // Override the workspaceToCode method to add import statements
-  customPythonGenerator.workspaceToCode = function(workspace) {
-    const code = pythonGenerator.workspaceToCode(workspace);
-    const imports = 'import time\n'; // Add any other libraries here
-    return imports + code;
-  };
+  const customPythonGenerator = useMemo(() => {
+    const generator = Object.create(pythonGenerator);
+    generator.workspaceToCode = function(workspace) {
+      const generatedCode = pythonGenerator.workspaceToCode(workspace);
+      return `import time\n${generatedCode}`;
+    };
+    return generator;
+  }, []);
 
   const onWorkspaceChange = useCallback(
     (xml: string) => {
@@ -55,10 +56,10 @@ const BlocklyEditorComponent = ({
       const pythonCode = customPythonGenerator.workspaceToCode(Blockly.getMainWorkspace());
       handleGetPythonCodeValue(pythonCode);
     },
-    [handleGetValue, handleGetPythonCodeValue],
+    [customPythonGenerator, handleGetValue, handleGetPythonCodeValue],
   );
 
-  const [theme, setTheme] = useState(customizer.activeMode === 'dark' ? DarkTheme : LightTheme);
+  const theme = customizer.activeMode === 'dark' ? DarkTheme : LightTheme;
 
   useEffect(() => {
     console.log('Current Color:', customizer.activeMode);
@@ -83,17 +84,36 @@ const BlocklyEditorComponent = ({
   }, [i18n]);
 
   useEffect(() => {
-    setTheme(customizer.activeMode === 'light' ? DarkTheme : LightTheme);
-  }, [customizer.activeMode]);
+    const workspace = workspaceRef.current;
+    if (!workspace) return;
+    workspace.setTheme(theme);
+    Blockly.svgResize(workspace);
+  }, [theme]);
+
+  const workspaceConfiguration = useMemo(() => ({ theme }), [theme]);
+
+  const handleInject = useCallback(
+    (workspace: WorkspaceSvg) => {
+      workspaceRef.current = workspace;
+      workspace.setTheme(theme);
+      Blockly.svgResize(workspace);
+    },
+    [theme],
+  );
+
+  const handleDispose = useCallback((workspace: WorkspaceSvg) => {
+    if (workspaceRef.current === workspace) workspaceRef.current = null;
+  }, []);
 
   return (
     <BlocklyWorkspace
-      key={customizer.activeMode} // Use key to force re-render
-      className={'blocklyDiv'}
+      className={`blocklyDiv ${customizer.activeMode === 'dark' ? 'blockly-theme-dark' : 'blockly-theme-light'}`}
       toolboxConfiguration={toolboxJSON}
       initialXml={code}
       onXmlChange={onWorkspaceChange}
-      workspaceConfiguration={{ theme }} 
+      workspaceConfiguration={workspaceConfiguration}
+      onInject={handleInject}
+      onDispose={handleDispose}
     />
   );
 };

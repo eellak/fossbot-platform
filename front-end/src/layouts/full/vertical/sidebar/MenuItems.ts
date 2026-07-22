@@ -8,7 +8,8 @@ import {
   IconMoodHappy,
   IconLayoutDashboard,
   IconAlbum,
-  IconHandGrab
+  IconHandGrab,
+  IconDeviceGamepad2
 } from '@tabler/icons-react';
 
 interface MenuitemsType {
@@ -72,9 +73,15 @@ const Menuitems: MenuitemsType[] = [
     title: 'menu.interactive',
     subtitle: 'menu.interactiveBased',
     icon: IconHandGrab,
-    chip: 'beta',
-    // chipColor: 'primary',
     href: '/interactive-page',
+    disabled: false,
+  },
+  {
+    id: uniqueId(),
+    title: 'menu.rcMode',
+    subtitle: 'menu.rcBased',
+    icon: IconDeviceGamepad2,
+    href: '/rc-page',
     disabled: false,
   },
 

@@ -1,6 +1,31 @@
 import { ActivatedData, BetaTesterData, LoginData, NewProjectData, PassswordData, RegisterData, RoleData, User, UserData } from './AuthInterfaces';
 
-const backendUrl: string = process.env.REACT_APP_BACKEND_URL;
+const resolveBackendUrl = (): string => {
+    const configuredUrl = process.env.REACT_APP_BACKEND_URL || '/api';
+
+    if (typeof window === 'undefined' || configuredUrl.startsWith('/')) {
+        return configuredUrl.replace(/\/$/, '');
+    }
+
+    try {
+        const url = new URL(configuredUrl);
+        const frontendIsRemote =
+            window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
+        const backendUsesLoopback = url.hostname === 'localhost' || url.hostname === '127.0.0.1';
+
+        // During LAN development, localhost in the browser means the visitor's
+        // computer. The API is running beside the frontend on the host computer.
+        if (frontendIsRemote && backendUsesLoopback) {
+            url.hostname = window.location.hostname;
+        }
+
+        return url.toString().replace(/\/$/, '');
+    } catch {
+        return configuredUrl.replace(/\/$/, '');
+    }
+};
+
+export const backendUrl = resolveBackendUrl();
 
 export async function login(data: LoginData) {
     const response = await fetch(`${backendUrl}/token`, {

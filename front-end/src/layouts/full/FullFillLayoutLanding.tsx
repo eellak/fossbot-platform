@@ -31,7 +31,7 @@ const FullFillLayout: FC = () => {
 
   return (
     <MainWrapper
-      className={customizer.activeMode === 'ligh' ? 'darkbg mainwrapper' : 'lightbg mainwrapper'}
+      className={customizer.activeMode === 'dark' ? 'darkbg mainwrapper' : 'lightbg mainwrapper'}
     >
       {/* ------------------------------------------- */}
       {/* Sidebar */}

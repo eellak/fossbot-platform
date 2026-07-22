@@ -46,10 +46,10 @@ const AuthLogin = ({ title, subtitle, subtext, handleShowErrorAlert }: loginType
         handleShowErrorAlert(success.detail);
        }
       }
-    } catch (error) {
+    } catch (error: unknown) {
       // Handle errors (e.g., show an error message to the user)
       console.error('Login error:', error);
-      handleShowErrorAlert(error || 'Login failed.');
+      handleShowErrorAlert(error instanceof Error ? error.message : 'Login failed.');
     }
   };
 

@@ -81,12 +81,16 @@ const NavItem = ({ item, level, pathDirect, hideMenu, onClick }: ItemType) => {
     href?: string;
     target?: any;
     to?: any;
-  } = {
-    component: item?.external ? 'a' : 'a',
-    to: item?.href,
-    href: item?.external ? item?.href : item?.href,
-    target: item?.external ? '_blank' : '',
-  };
+  } = item?.external
+    ? {
+        component: 'a',
+        href: item?.href,
+        target: '_blank',
+      }
+    : {
+        component: NavLink,
+        to: item?.href,
+      };
 
   return (
     <List component="li" disablePadding key={item?.id && item.title}>

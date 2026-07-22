@@ -4,7 +4,7 @@ import { scene, camera, renderer } from './scene.js';
 import { ambientLight, directionalLight } from './environment_lights.js';
 import { plane, updateTexture} from './floor_loader.js';
 import { loadBaseObject } from './robot_loader.js';
-import { startAnimation, stopAnimation, stopMotion, moveStep, rotateStep, controls, rgb_set_color, changeCamera, just_rotate, just_move, drawLine } from './animate.js';
+import { startAnimation, stopAnimation, stopMotion, moveStep, rotateStep, controls, rgb_set_color, changeCamera, just_rotate, just_move, rc_drive, drawLine } from './animate.js';
 import { loadObjectsFromJSON, robot_position } from './stage_loader.js';
 import { faMap, faArrowUp, faArrowDown, faArrowLeft, faArrowRight, faBinoculars, faLightbulb, faRefresh } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
@@ -210,4 +210,4 @@ const WebGLApp = forwardRef(({ appsessionId, onMountChange }: WebGLAppProps, ref
   );
 });
 
-export { WebGLApp, moveStep, rotateStep, stopMotion, get_distance, rgb_set_color, get_acceleration, get_gyroscope, get_floor_sensor, just_move, just_rotate, get_light_sensor, drawLine};
+export { WebGLApp, moveStep, rotateStep, stopMotion, get_distance, rgb_set_color, get_acceleration, get_gyroscope, get_floor_sensor, just_move, just_rotate, rc_drive, get_light_sensor, drawLine};

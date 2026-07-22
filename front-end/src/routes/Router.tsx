@@ -19,6 +19,7 @@ const AccountsSettingsPage = Loadable(lazy(() => import('../views/account-settin
 //const BlocklyPage =  '../views/blockly-page/BlocklyPage';
 import BlocklyPage from '../views/blockly-page/BlocklyPage';
 const InteractivePage = Loadable(lazy(() => import('../views/interactive-page/InteractivePage')));
+const RcPage = Loadable(lazy(() => import('../views/rc-page/RcPage')));
 import MonacoPage from '../views/monaco-page/MonacoPage';
 import TutorialsPage from '../views/tutorials/TutorialsPage';
 
@@ -128,6 +129,20 @@ const Router = [
       {
         path: '',
         element: <InteractivePage />,
+      },
+    ],
+  },
+  {
+    path: '/rc-page',
+    element: (
+      <PrivateRoute>
+        <FullLayout />
+      </PrivateRoute>
+    ),
+    children: [
+      {
+        path: '',
+        element: <RcPage />,
       },
     ],
   },

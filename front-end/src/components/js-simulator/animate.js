@@ -31,6 +31,8 @@ let rotateResolve = null;
 let moveIntervalId = null;
 let rotateIntervalId = null;
 let lastPosition = new THREE.Vector3();
+let rcThrottle = 0;
+let rcSteering = 0;
 
 
 
@@ -119,9 +121,19 @@ function handleRotation() {
     }
 }
 
+function handleRcMovement() {
+    if (Math.abs(rcThrottle) >= 0.04) {
+        move(-rcThrottle * maxSpeed);
+    }
+    if (Math.abs(rcSteering) >= 0.04) {
+        rotate(-rcSteering * turnSpeed);
+    }
+}
+
 function moveBaseObject() {
     handleMovement();
     handleRotation();
+    handleRcMovement();
     performRotation();
     performLinearMove();
     if (traceEnabled) {
@@ -284,6 +296,8 @@ function rotateStep(angle) {
 function stopMotion() {
     // Stop movement
     velocity = 0;
+    rcThrottle = 0;
+    rcSteering = 0;
     if (baseObject) {
         baseObject.velocity = 0;
     }
@@ -312,6 +326,11 @@ function stopMotion() {
         clearInterval(rotateIntervalId);
         rotateIntervalId = null;
     }
+}
+
+function rc_drive(throttle, steering) {
+    rcThrottle = THREE.MathUtils.clamp(Number(throttle) || 0, -1, 1);
+    rcSteering = THREE.MathUtils.clamp(Number(steering) || 0, -1, 1);
 }
 
 // Non-blocking continuous movement
@@ -349,4 +368,4 @@ function drawLine(status) {
 }
 
 // initStats();
-export { startAnimation, stopAnimation, stopMotion, stats, controls, rgb_set_color, changeCamera, move, rotate, moveStep, rotateStep, just_move, just_rotate, drawLine };
+export { startAnimation, stopAnimation, stopMotion, stats, controls, rgb_set_color, changeCamera, move, rotate, moveStep, rotateStep, just_move, just_rotate, rc_drive, drawLine };

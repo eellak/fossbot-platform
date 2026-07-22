@@ -37,8 +37,10 @@ const buttonRegions = [
 interface VideoBoxProps {
   moveStep: (distance: number) => Promise<void>;
   rotateStep: (angle: number) => Promise<void>;
-  rgb_set_color: (color: string) => void;
+  rgb_set_color: (color: string) => void | Promise<void>;
   drawLine: (status: boolean) => void;
+  onActionError?: (error: unknown) => void;
+  requireGestureRelease?: boolean;
 }
 
 const VideoBox: React.FC<VideoBoxProps> = ({
@@ -46,17 +48,39 @@ const VideoBox: React.FC<VideoBoxProps> = ({
   rotateStep,
   rgb_set_color,
   drawLine,
+  onActionError,
+  requireGestureRelease = false,
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const moveStepRef = useRef(moveStep);
+  const rotateStepRef = useRef(rotateStep);
+  const rgbSetColorRef = useRef(rgb_set_color);
+  const drawLineRef = useRef(drawLine);
+  const onActionErrorRef = useRef(onActionError);
+  const requireGestureReleaseRef = useRef(requireGestureRelease);
+  const detectionLoopIdRef = useRef(0);
+
+  // Hand detection is a long-running animation loop. Keep its actions pointed
+  // at the latest props when the page switches between simulator and robot.
+  moveStepRef.current = moveStep;
+  rotateStepRef.current = rotateStep;
+  rgbSetColorRef.current = rgb_set_color;
+  drawLineRef.current = drawLine;
+  onActionErrorRef.current = onActionError;
+  requireGestureReleaseRef.current = requireGestureRelease;
   
   const [model, setModel] = useState<any>(null);
   const [cameraAvailable, setCameraAvailable] = useState<boolean>(true);
   const [lightOn, setLightOn] = useState<boolean>(false);
   const [drawOn, setDrawOn] = useState<boolean>(false);
+  const lightOnRef = useRef(false);
+  const drawOnRef = useRef(false);
   const [selectedButton, setSelectedButton] = useState<string | null>(null);
   const cooldownRef = useRef<boolean>(false);
   const actionInProgressRef = useRef<boolean>(false);
+  const latchedButtonRef = useRef<string | null>(null);
+  const gestureClearSinceRef = useRef<number | null>(null);
   const [buttonImages, setButtonImages] = useState<{ [key: string]: HTMLImageElement }>({});
   const soundFile = require('../../assets/sfx/achive-sound-132273.mp3');
 
@@ -103,20 +127,29 @@ const VideoBox: React.FC<VideoBoxProps> = ({
   }, []);
 
   useEffect(() => {
-    if (videoRef.current) {
-      const handleLoadedData = () => {
-        if (model) {
-          runDetection();
-        }
-      };
-      videoRef.current.addEventListener('loadeddata', handleLoadedData);
+    const video = videoRef.current;
+    if (!video || !model) return;
+    const loopId = detectionLoopIdRef.current + 1;
+    detectionLoopIdRef.current = loopId;
 
-      return () => {
-        if (videoRef.current) {
-          videoRef.current.removeEventListener('loadeddata', handleLoadedData);
-        }
-      };
+    const startDetection = () => {
+      runDetection(loopId);
+    };
+
+    // The camera can become ready before the asynchronous hand model loads.
+    // In that case `loadeddata` has already fired, so start immediately.
+    if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+      startDetection();
+    } else {
+      video.addEventListener('loadeddata', startDetection, { once: true });
     }
+
+    return () => {
+      video.removeEventListener('loadeddata', startDetection);
+      if (detectionLoopIdRef.current === loopId) {
+        detectionLoopIdRef.current += 1;
+      }
+    };
   }, [model]);
 
   useEffect(() => {
@@ -131,7 +164,8 @@ const VideoBox: React.FC<VideoBoxProps> = ({
     setButtonImages(images);
   }, []);
 
-  const runDetection = () => {
+  const runDetection = (loopId: number) => {
+    if (detectionLoopIdRef.current !== loopId) return;
     if (!cameraAvailable) {
       drawMessage('Camera disconnected');
       return;
@@ -145,17 +179,21 @@ const VideoBox: React.FC<VideoBoxProps> = ({
         context.translate(-canvasRef.current.width, 0);
 
         model.detect(videoRef.current).then((predictions: any) => {
+          if (detectionLoopIdRef.current !== loopId) return;
           if (canvasRef.current && context) {
             context.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
             model.renderPredictions(predictions, canvasRef.current, context, videoRef.current);
             context.restore();
             drawButtons(context);
-            checkButtonPress(predictions);
+            void checkButtonPress(predictions).catch((error) => {
+              console.error('Interactive robot action failed:', error);
+              onActionErrorRef.current?.(error);
+            });
           }
 
           // Check if the video is still playing
           if (videoRef.current?.readyState === 4) {
-            requestAnimationFrame(runDetection);
+            requestAnimationFrame(() => runDetection(loopId));
           } else {
             drawMessage('Camera disconnected');
           }
@@ -185,8 +223,7 @@ const VideoBox: React.FC<VideoBoxProps> = ({
   };
 
   const checkButtonPress = async (predictions: any) => {
-    if (cooldownRef.current || actionInProgressRef.current) return;
-
+    let pressedButton: (typeof buttonRegions)[number] | undefined;
     for (const prediction of predictions) {
       if (prediction.label === 'closed') {
         const [x, y, width, height] = prediction.bbox;
@@ -200,52 +237,70 @@ const VideoBox: React.FC<VideoBoxProps> = ({
             centerY >= button.y &&
             centerY <= button.y + button.height
           ) {
-            playSound();
-            cooldownRef.current = true;
-            actionInProgressRef.current = true;
-            setSelectedButton(button.name);
-            try {
-              switch (button.name) {
-                case 'up':
-                  await moveStep(-0.4);
-                  break;
-                case 'down':
-                  await moveStep(0.4);
-                  break;
-                case 'left':
-                  await rotateStep(Math.PI / 2);
-                  break;
-                case 'right':
-                  await rotateStep(-Math.PI / 2);
-                  break;
-                case 'light':
-                  setLightOn(prev => {
-                    const newStatus = !prev;
-                    rgb_set_color(newStatus ? "white" : "off");
-                    return newStatus;
-                  });
-                  break;
-                case 'draw':
-                  setDrawOn(prev => {
-                    const newStatus = !prev;
-                    drawLine(newStatus);
-                    return newStatus;
-                  });
-                  break;
-                default:
-                  break;
-              }
-            } finally {
-              setTimeout(() => {
-                setSelectedButton(null);
-                cooldownRef.current = false;
-                actionInProgressRef.current = false;
-              }, 500); // Change to 2 seconds
-            }
-            return;
+            pressedButton = button;
+            break;
           }
         }
       }
+      if (pressedButton) break;
+    }
+
+    if (requireGestureReleaseRef.current) {
+      if (!pressedButton) {
+        const now = performance.now();
+        if (gestureClearSinceRef.current === null) {
+          gestureClearSinceRef.current = now;
+        } else if (now - gestureClearSinceRef.current >= 400) {
+          latchedButtonRef.current = null;
+        }
+        return;
+      }
+      gestureClearSinceRef.current = null;
+      if (latchedButtonRef.current !== null || actionInProgressRef.current) return;
+      // Keep this gesture latched until the closed hand leaves every button for
+      // a few consecutive frames. A held or flickering gesture cannot fire twice.
+      latchedButtonRef.current = pressedButton.name;
+    } else if (cooldownRef.current || actionInProgressRef.current || !pressedButton) {
+      return;
+    }
+
+    playSound();
+    cooldownRef.current = true;
+    actionInProgressRef.current = true;
+    setSelectedButton(pressedButton.name);
+    try {
+      switch (pressedButton.name) {
+                case 'up':
+                  await moveStepRef.current(-0.4);
+                  break;
+                case 'down':
+                  await moveStepRef.current(0.4);
+                  break;
+                case 'left':
+                  await rotateStepRef.current(Math.PI / 2);
+                  break;
+                case 'right':
+                  await rotateStepRef.current(-Math.PI / 2);
+                  break;
+                case 'light':
+                  lightOnRef.current = !lightOnRef.current;
+                  await rgbSetColorRef.current(lightOnRef.current ? "white" : "off");
+                  setLightOn(lightOnRef.current);
+                  break;
+                case 'draw':
+                  drawOnRef.current = !drawOnRef.current;
+                  drawLineRef.current(drawOnRef.current);
+                  setDrawOn(drawOnRef.current);
+                  break;
+                default:
+                  break;
+      }
+    } finally {
+      setTimeout(() => {
+        setSelectedButton(null);
+        cooldownRef.current = false;
+        actionInProgressRef.current = false;
+      }, 500);
     }
   };
 

@@ -1,6 +1,6 @@
  
 import React from 'react';
-import { Avatar, IconButton, Menu, MenuItem, Typography, Stack } from '@mui/material';
+import { Box, IconButton, Menu, MenuItem, Typography, Stack } from '@mui/material';
 import { useSelector, useDispatch } from 'src/store/Store';
 import { setLanguage } from 'src/store/customizer/CustomizerSlice';
 import { useTranslation } from 'react-i18next';
@@ -24,7 +24,7 @@ const Language = () => {
   };
   useEffect(() => {
     i18n.changeLanguage(customizer.isLanguage);
-  }, []);
+  }, [customizer.isLanguage, i18n]);
 
   return (
     <>
@@ -36,7 +36,12 @@ const Language = () => {
         aria-haspopup="true"
         onClick={handleClick}
       >
-        <Avatar src={currentLang.icon} alt={currentLang.value} sx={{ width: 20, height: 20 }} />
+        <Box
+          component="img"
+          src={currentLang.icon}
+          alt={currentLang.value}
+          sx={{ width: 20, height: 20, borderRadius: '50%' }}
+        />
       </IconButton>
       <Menu
         id="long-menu"
@@ -53,10 +58,18 @@ const Language = () => {
           <MenuItem
             key={index}
             sx={{ py: 2, px: 3 }}
-            onClick={() => dispatch(setLanguage(option.value))}
+            onClick={() => {
+              dispatch(setLanguage(option.value));
+              handleClose();
+            }}
           >
             <Stack direction="row" spacing={1} alignItems="center">
-              <Avatar src={option.icon} alt={option.icon} sx={{ width: 20, height: 20 }} />
+              <Box
+                component="img"
+                src={option.icon}
+                alt={option.flagname}
+                sx={{ width: 20, height: 20, borderRadius: '50%' }}
+              />
               <Typography> {t(option.flagname)}</Typography>
             </Stack>
           </MenuItem>

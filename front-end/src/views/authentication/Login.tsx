@@ -17,7 +17,7 @@ const Login = () => {
   const [showErrorAlert, setShowErrorAlert] = useState(false);
   const [showErrorAlertText, setShowErrorAlertText] = useState("");
 
-  const handleShowErrorAlert = (message) => {
+  const handleShowErrorAlert = (message: string) => {
     setShowErrorAlertText(message);
     setShowErrorAlert(true);
   };

@@ -1,0 +1,13 @@
+services:
+  local-https:
+    image: nginx:stable-alpine
+    container_name: fossbot-local-https
+    restart: unless-stopped
+    ports:
+      - "3443:443"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./front-end/build:/usr/share/nginx/html:ro
+      - ./front-end/nginx.local-https.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./front-end/.local-certs:/etc/nginx/certs:ro

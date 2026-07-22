@@ -14,6 +14,18 @@ import Navigation from './Navigation';
 import MobileRightSidebar from './MobileRightSidebar';
 import ToggleTheme from './ToggleTheme';
 
+const AppBarStyled = styled(AppBar)(({ theme }) => ({
+  boxShadow: 'none',
+  background: theme.palette.background.paper,
+  justifyContent: 'center',
+  backdropFilter: 'blur(4px)',
+}));
+
+const ToolbarStyled = styled(Toolbar)(({ theme }) => ({
+  width: '100%',
+  color: theme.palette.text.secondary,
+}));
+
 const Header = () => {
   const lgUp = useMediaQuery((theme: any) => theme.breakpoints.up('lg'));
   const lgDown = useMediaQuery((theme: any) => theme.breakpoints.down('lg'));
@@ -22,22 +34,16 @@ const Header = () => {
   const customizer = useSelector((state: AppState) => state.customizer);
   const dispatch = useDispatch();
 
-  const AppBarStyled = styled(AppBar)(({ theme }) => ({
-    boxShadow: 'none',
-    background: theme.palette.background.paper,
-    justifyContent: 'center',
-    backdropFilter: 'blur(4px)',
-    [theme.breakpoints.up('lg')]: {
-      minHeight: customizer.TopbarHeight,
-    },
-  }));
-  const ToolbarStyled = styled(Toolbar)(({ theme }) => ({
-    width: '100%',
-    color: theme.palette.text.secondary,
-  }));
-
   return (
-    <AppBarStyled position="sticky" color="default">
+    <AppBarStyled
+      position="sticky"
+      color="default"
+      sx={(theme) => ({
+        [theme.breakpoints.up('lg')]: {
+          minHeight: customizer.TopbarHeight,
+        },
+      })}
+    >
       <ToolbarStyled>
         {/* ------------------------------------------- */}
         {/* Toggle Button Sidebar */}

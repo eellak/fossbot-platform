@@ -3,6 +3,7 @@ import english from './languages/en.json';
 import greek from './languages/gr.json';
 
 import { initReactI18next } from 'react-i18next';
+import { loadUiPreferences } from './uiPreferences';
 
 const resources = {
   en: {
@@ -17,7 +18,7 @@ i18n
   .use(initReactI18next) // passes i18n down to react-i18next
   .init({
     resources,
-    lng: 'en',
+    lng: loadUiPreferences().language || 'en',
     interpolation: {
       escapeValue: false, // react already safes from xss
     },
