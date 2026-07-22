@@ -13,6 +13,7 @@ import {
   getSensorsHudDefault,
   getSensorsLabelsDefault,
   getSensorsLdrProbesDefault,
+  getSensorsMicHelperDefault,
   getSensorsMicOverrideDefault,
   getSensorsMicRadiusDefault,
   getSensorsRaysDefault,
@@ -21,6 +22,7 @@ import {
   setSensorsHud,
   setSensorsLabels,
   setSensorsLdrProbes,
+  setSensorsMicHelper,
   setSensorsMicOverride,
   setSensorsMicRadius,
   setSensorsRays,
@@ -136,6 +138,9 @@ export function buildSensorsFolder(
         setSensorsMicRadius(v)
       })
 
+    const micHelper = { visible: getSensorsMicHelperDefault() }
+    viz.setMicHelperVisible(micHelper.visible)
+
     // Initialize helpers from persisted sub-toggle state when the master is on.
     extras.setLdrProbesVisible(state.enabled && ldrProbes.visible)
     extras.setMicRadiusVisible(state.enabled && micRadius.visible)
@@ -176,6 +181,13 @@ export function buildSensorsFolder(
 
     if (extras.setMicOverride || extras.setMicMaxDistance || extras.setMicLocalPosX) {
       const micFolder = gui.addFolder('Microphone')
+      micFolder
+        .add(micHelper, 'visible')
+        .name('show helper')
+        .onChange((v: boolean) => {
+          viz.setMicHelperVisible(v)
+          setSensorsMicHelper(v)
+        })
       if (extras.setMicOverride) {
         const initial = getSensorsMicOverrideDefault()
         const micOverride = { value: initial }
@@ -200,9 +212,18 @@ export function buildSensorsFolder(
       if (extras.setMicLocalPosX && extras.setMicLocalPosY && extras.setMicLocalPosZ && extras.getMicLocalPos) {
         const init = extras.getMicLocalPos()
         const micPose = { px: init[0], py: init[1], pz: init[2] }
-        micFolder.add(micPose, 'px', -0.2, 0.2, 0.001).name('pos x').onChange((v: number) => extras.setMicLocalPosX!(v))
-        micFolder.add(micPose, 'py', -0.1, 0.2, 0.001).name('pos y').onChange((v: number) => extras.setMicLocalPosY!(v))
-        micFolder.add(micPose, 'pz', -0.2, 0.2, 0.001).name('pos z').onChange((v: number) => extras.setMicLocalPosZ!(v))
+        micFolder.add(micPose, 'px', -0.2, 0.2, 0.001).name('pos x').onChange((v: number) => {
+          extras.setMicLocalPosX!(v)
+          viz.refreshLayout()
+        })
+        micFolder.add(micPose, 'py', -0.1, 0.2, 0.001).name('pos y').onChange((v: number) => {
+          extras.setMicLocalPosY!(v)
+          viz.refreshLayout()
+        })
+        micFolder.add(micPose, 'pz', -0.2, 0.2, 0.001).name('pos z').onChange((v: number) => {
+          extras.setMicLocalPosZ!(v)
+          viz.refreshLayout()
+        })
       }
       micFolder.close()
     }

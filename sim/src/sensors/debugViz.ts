@@ -43,6 +43,7 @@ export interface SensorDebugVizHandle {
   isEnabled(): boolean
   setSensorLineVisible(id: string, v: boolean): void
   setSensorFanVisible(id: string, v: boolean): void
+  setMicHelperVisible(v: boolean): void
   setRaysVisible(v: boolean): void
   getRaysVisible(): boolean
   setHitsVisible(v: boolean): void
@@ -212,12 +213,14 @@ export function createSensorDebugViz(opts: SensorDebugVizOptions): SensorDebugVi
   const micEntry = opts.layout.find((e) => e.kind === 'microphone')
   let micMarker: THREE.Mesh | null = null
   let micLabel: THREE.Sprite | null = null
+  let micGroup: THREE.Group | null = null
   let micLabelTex: THREE.CanvasTexture | null = null
   let micLabelCanvas: HTMLCanvasElement | null = null
   let micLabelCtx: CanvasRenderingContext2D | null = null
   let micLastText = ''
+  let micHelperVisible = true
   if (micEntry) {
-    const micGroup = new THREE.Group()
+    micGroup = new THREE.Group()
     micGroup.name = 'sensor_microphone'
     micGroup.position.set(micEntry.localPos[0], micEntry.localPos[1], micEntry.localPos[2])
     root.add(micGroup)
@@ -250,6 +253,9 @@ export function createSensorDebugViz(opts: SensorDebugVizOptions): SensorDebugVi
     for (const s of sensors) {
       s.group.position.set(s.entry.localPos[0], s.entry.localPos[1], s.entry.localPos[2])
       rebuildDirs(s)
+    }
+    if (micEntry && micGroup) {
+      micGroup.position.set(micEntry.localPos[0], micEntry.localPos[1], micEntry.localPos[2])
     }
   }
 
@@ -357,8 +363,8 @@ export function createSensorDebugViz(opts: SensorDebugVizOptions): SensorDebugVi
         ctx.fillText(text, micLabelCanvas.width / 2, micLabelCanvas.height / 2)
         micLabelTex.needsUpdate = true
       }
-      micMarker.visible = hitsVisible
-      micLabel.visible = labelsVisible
+      micMarker.visible = micHelperVisible && hitsVisible
+      micLabel.visible = micHelperVisible && labelsVisible
     }
   }
 
@@ -385,6 +391,11 @@ export function createSensorDebugViz(opts: SensorDebugVizOptions): SensorDebugVi
         s.fanVisible = v
         syncVisibility(s)
       }
+    },
+    setMicHelperVisible(v) {
+      micHelperVisible = v
+      if (micMarker) micMarker.visible = v && hitsVisible
+      if (micLabel) micLabel.visible = v && labelsVisible
     },
     setRaysVisible(v) {
       raysVisible = v
@@ -426,6 +437,7 @@ export function createSensorDebugViz(opts: SensorDebugVizOptions): SensorDebugVi
       }
       if (micLabelTex) micLabelTex.dispose()
       if (micLabel) micLabel.material.dispose()
+      if (micGroup) micGroup.removeFromParent()
       root.removeFromParent()
     },
   }
