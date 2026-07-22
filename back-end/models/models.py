@@ -1,6 +1,7 @@
 from enum import Enum as PyEnum
 from pydantic import BaseModel
 from typing import Optional
+from pydantic import Field
 
 class UserRole(PyEnum):
     ADMIN = 'admin'
@@ -27,11 +28,37 @@ class UpdateUserRequest(BaseModel):
 class UpdateUserPasswordRequest(BaseModel): 
     password: str
 
+class LectureStageReference(BaseModel):
+    sourceType: Optional[str] = Field(default=None, pattern="^(default|github|marketplace)$")
+    repoOwner: Optional[str] = None
+    repoName: Optional[str] = None
+    marketplaceEntryPath: Optional[str] = None
+    title: Optional[str] = None
+    url: Optional[str] = None
+    visibility: Optional[str] = None
+    commitSha: Optional[str] = None
+
 class ProjectsCreate(BaseModel):
     name: str
     description: str
     project_type: str    
     code: str
+    stageReference: Optional[LectureStageReference] = None
+
+class LessonCreate(BaseModel):
+    title: str
+    description: Optional[str] = None
+    image_url: Optional[str] = None
+    video_url: Optional[str] = None
+    curriculum_id: int
+    stageReference: Optional[LectureStageReference] = None
+
+class LessonUpdate(BaseModel):
+    title: str
+    description: Optional[str] = None
+    image_url: Optional[str] = None
+    video_url: Optional[str] = None
+    stageReference: Optional[LectureStageReference] = None
 
 class SessionTokenRequest(BaseModel):
     session_token: str

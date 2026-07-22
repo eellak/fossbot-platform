@@ -3,13 +3,14 @@ import datetime
 import json
 import os
 import re
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
 from typing import Any, Optional
 
 from database.database import User
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -41,6 +42,7 @@ from utils.stage_repo_manifest import verify_stage_manifest
 
 router = APIRouter()
 DATA_URL_RE = re.compile(r"^data:([^;,]+)?(;base64)?,(.*)$", re.DOTALL)
+MARKETPLACE_INDEX_CACHE: dict[str, Any] = {"expiresAt": 0.0, "payload": None}
 
 
 class MarketplacePublishRequest(BaseModel):
@@ -129,6 +131,62 @@ def read_public_marketplace_index() -> dict[str, Any]:
         raise stage_error(error.code, "provider_error", f"Marketplace index request failed: HTTP {error.code}") from error
     except (TimeoutError, urllib.error.URLError, json.JSONDecodeError) as error:
         raise stage_error(502, "provider_error", f"Marketplace index request failed: {error}") from error
+
+
+def marketplace_index_cache_ttl() -> int:
+    try:
+        return max(0, int(os.getenv("FOSSBOT_MARKETPLACE_INDEX_CACHE_SECONDS", "60")))
+    except ValueError:
+        return 60
+
+
+def cached_public_marketplace_index() -> dict[str, Any]:
+    now = time.time()
+    cached = MARKETPLACE_INDEX_CACHE.get("payload")
+    if cached is not None and now < float(MARKETPLACE_INDEX_CACHE.get("expiresAt") or 0):
+        return cached
+    payload = read_public_marketplace_index()
+    MARKETPLACE_INDEX_CACHE["payload"] = payload
+    MARKETPLACE_INDEX_CACHE["expiresAt"] = now + marketplace_index_cache_ttl()
+    return payload
+
+
+def marketplace_entry_matches(entry: dict[str, Any], query: str, tag: Optional[str]) -> bool:
+    if tag and tag not in (entry.get("tags") or []):
+        return False
+    if not query:
+        return True
+    haystack = " ".join(
+        str(value or "")
+        for value in (
+            entry.get("title"),
+            entry.get("description"),
+            entry.get("repoOwner"),
+            entry.get("repoName"),
+            (entry.get("author") or {}).get("githubUsername"),
+            " ".join(entry.get("tags") or []),
+        )
+    ).lower()
+    return query.lower() in haystack
+
+
+def sort_marketplace_entries(entries: list[dict[str, Any]], sort: str) -> list[dict[str, Any]]:
+    if sort == "verified":
+        return sorted(entries, key=lambda item: (bool((item.get("badges") or {}).get("verified")), str(item.get("updatedAt") or "")), reverse=True)
+    if sort == "published":
+        return sorted(entries, key=lambda item: str(item.get("publishedAt") or ""), reverse=True)
+    return sorted(entries, key=lambda item: str(item.get("updatedAt") or ""), reverse=True)
+
+
+def marketplace_tag_counts(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    counts: dict[str, int] = {}
+    for entry in entries:
+        for tag in entry.get("tags") or []:
+            counts[tag] = counts.get(tag, 0) + 1
+    return [
+        {"tag": tag, "count": count}
+        for tag, count in sorted(counts.items(), key=lambda item: (-item[1], item[0]))[:24]
+    ]
 
 
 def marketplace_access_error(error: GitHubApiError) -> HTTPException:
@@ -250,6 +308,73 @@ This repository contains a FOSSBot stage. Stage data lives in `stage.json`; FOSS
 """
 
 
+def build_publish_pr_body(entry: dict[str, Any]) -> str:
+    tags = ", ".join(f"`{tag}`" for tag in entry.get("tags") or []) or "None"
+    author = entry.get("author") or {}
+    github_author = author.get("githubUsername") or entry.get("repoOwner")
+    description = entry.get("description") or "No description provided."
+    validation = (entry.get("badges") or {}).get("validation") or "unvalidated"
+    verified = "yes" if (entry.get("badges") or {}).get("verified") else "no"
+    return f"""Adds or updates the marketplace entry for `{entry['repoOwner']}/{entry['repoName']}`.
+
+Submitted through FOSSBot for @{github_author}.
+
+## Stage
+
+- Title: {entry['title']}
+- Source: [{entry['repoOwner']}/{entry['repoName']}]({entry['repoUrl']})
+- Commit: `{entry['commitSha']}`
+- Tags: {tags}
+- Validation badge: `{validation}`
+- Verified badge: `{verified}`
+
+## Description
+
+{description}
+
+## Review notes
+
+- Marketplace CI validates the referenced stage repo and commit.
+- `Verified` should only be set by a maintainer after human review.
+- GitHub shows the FOSSBot app as the PR author because marketplace updates are submitted through the app.
+"""
+
+
+def marketplace_pull_request_payload(pr: Optional[dict[str, Any]]) -> Optional[dict[str, Any]]:
+    if not pr:
+        return None
+    state = "merged" if pr.get("merged_at") else pr.get("state") or "unknown"
+    return {
+        "number": pr.get("number"),
+        "url": pr.get("html_url"),
+        "state": state,
+        "title": pr.get("title"),
+        "createdAt": pr.get("created_at"),
+        "updatedAt": pr.get("updated_at"),
+        "mergedAt": pr.get("merged_at"),
+    }
+
+
+def latest_marketplace_pull_request(provider, marketplace_token: str, owner: str, repo_name: str) -> Optional[dict[str, Any]]:
+    branch_prefixes = (
+        f"fossbot/publish-{owner}-{repo_name}-",
+        f"fossbot/unpublish-{owner}-{repo_name}-",
+    )
+    titles = {
+        f"Publish {owner}/{repo_name}",
+        f"Unpublish {owner}/{repo_name}",
+    }
+    pulls = provider.list_pull_requests(marketplace_token, marketplace_owner(), marketplace_repo(), state="all")
+    matches = [
+        pull for pull in pulls
+        if pull.get("title") in titles
+        or any(((pull.get("head") or {}).get("ref") or "").startswith(prefix) for prefix in branch_prefixes)
+    ]
+    if not matches:
+        return None
+    return sorted(matches, key=lambda pull: pull.get("updated_at") or pull.get("created_at") or "", reverse=True)[0]
+
+
 def create_marketplace_pr(provider, marketplace_token: str, marketplace_repo_data: dict[str, Any], title: str, body: str, branch_slug: str, write_entry) -> dict[str, Any]:
     owner = marketplace_owner()
     repo = marketplace_repo()
@@ -269,8 +394,78 @@ def create_marketplace_pr(provider, marketplace_token: str, marketplace_repo_dat
 
 
 @router.get("/api/marketplace/index")
-async def marketplace_index():
-    return read_public_marketplace_index()
+async def marketplace_index(
+    page: int = Query(1, ge=1),
+    pageSize: int = Query(24, ge=1, le=96),
+    q: str = Query("", max_length=120),
+    tag: Optional[str] = Query(None, max_length=32),
+    sort: str = Query("updated", pattern="^(updated|published|verified)$"),
+):
+    payload = cached_public_marketplace_index()
+    stages = payload.get("stages") or []
+    query = q.strip()
+    tag_value = (tag or "").strip() or None
+    entries_for_tags = [entry for entry in stages if marketplace_entry_matches(entry, query, None)]
+    filtered = [entry for entry in stages if marketplace_entry_matches(entry, query, tag_value)]
+    sorted_entries = sort_marketplace_entries(filtered, sort)
+    total = len(sorted_entries)
+    total_pages = max(1, (total + pageSize - 1) // pageSize)
+    current_page = min(page, total_pages)
+    start = (current_page - 1) * pageSize
+    end = start + pageSize
+
+    return {
+        "generatedAt": payload.get("generatedAt") or utc_now_iso(),
+        "schemaVersion": payload.get("schemaVersion") or 1,
+        "stages": sorted_entries[start:end],
+        "warning": payload.get("warning"),
+        "pagination": {
+            "page": current_page,
+            "pageSize": pageSize,
+            "total": total,
+            "totalPages": total_pages,
+            "hasNext": current_page < total_pages,
+            "hasPrevious": current_page > 1,
+        },
+        "tags": marketplace_tag_counts(entries_for_tags),
+        "cache": {
+            "ttlSeconds": marketplace_index_cache_ttl(),
+            "expiresAt": MARKETPLACE_INDEX_CACHE.get("expiresAt"),
+        },
+    }
+
+
+@router.get("/api/marketplace/status/{owner}/{repo_name}")
+async def marketplace_stage_status(owner: str, repo_name: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    provider = get_provider("github_app")
+    try:
+        stage_token, stage_repo, _, _, _ = require_stage_repo_token(provider, db, current_user, owner, repo_name)
+        default_branch = stage_repo.get("default_branch") or "main"
+        marketplace_token, _ = marketplace_installation_token(provider, create_github_app_jwt())
+        entry_path = marketplace_entry_path(owner, repo_name)
+        entry = None
+        try:
+            entry, _ = provider.read_json_file(marketplace_token, marketplace_owner(), marketplace_repo(), entry_path)
+        except GitHubApiError as error:
+            if error.status_code != 404:
+                raise marketplace_access_error(error) from error
+        pull_request = latest_marketplace_pull_request(provider, marketplace_token, owner, repo_name)
+        return {
+            "repoOwner": owner,
+            "repoName": repo_name,
+            "entryPath": entry_path,
+            "entry": entry,
+            "pullRequest": marketplace_pull_request_payload(pull_request),
+            "rawBaseUrl": github_raw_base_url(owner, repo_name, default_branch),
+        }
+    except HTTPException:
+        raise
+    except MarketplaceSchemaError as error:
+        raise stage_error(400, "validation_failed", str(error)) from error
+    except GitHubApiError as error:
+        raise github_stage_error(error) from error
+    except RuntimeError as error:
+        raise stage_error(503, "provider_unconfigured", str(error)) from error
 
 
 @router.post("/api/marketplace/publish")
@@ -295,25 +490,30 @@ async def publish_stage_to_marketplace(request: MarketplacePublishRequest, curre
 
         preview_bytes = decode_data_url(request.previewDataUrl, expected_prefix="image/png", max_bytes=2 * 1024 * 1024)
         preview_path = "preview.png" if preview_bytes else previous_entry.get("previewPath") if previous_entry else None
-        author = manifest.get("author") or {"platformUsername": current_user.username, "githubUsername": request.repoOwner}
-        validation_state, validation_metadata = reusable_validation_for_commit(previous_entry, stage_commit_sha)
-        entry = build_marketplace_entry(
-            repo_owner=request.repoOwner,
-            repo_name=request.repoName,
-            default_branch=default_branch,
-            commit_sha=stage_commit_sha,
-            title=request.title or manifest.get("title") or stage_record.get("title") or request.repoName,
-            description=request.description if request.description is not None else manifest.get("description") or stage_record.get("description") or "",
-            tags=request.tags,
-            author=author,
-            validation_state=validation_state,
-            verified=bool((previous_entry or {}).get("badges", {}).get("verified")),
-            previous_entry=previous_entry,
-            preview_path=preview_path,
-            forked_from=manifest.get("forkedFrom"),
-            validation=validation_metadata,
-            verification=(previous_entry or {}).get("verification"),
-        )
+        manifest_author = manifest.get("author") or {}
+        author = {"githubUsername": manifest_author.get("githubUsername") or request.repoOwner, "platformUsername": ""}
+
+        def build_entry_for_commit(commit_sha: str) -> dict[str, Any]:
+            validation_state, validation_metadata = reusable_validation_for_commit(previous_entry, commit_sha)
+            return build_marketplace_entry(
+                repo_owner=request.repoOwner,
+                repo_name=request.repoName,
+                default_branch=default_branch,
+                commit_sha=commit_sha,
+                title=request.title or manifest.get("title") or stage_record.get("title") or request.repoName,
+                description=request.description if request.description is not None else manifest.get("description") or stage_record.get("description") or "",
+                tags=request.tags,
+                author=author,
+                validation_state=validation_state,
+                verified=bool((previous_entry or {}).get("badges", {}).get("verified")),
+                previous_entry=previous_entry,
+                preview_path=preview_path,
+                forked_from=manifest.get("forkedFrom"),
+                validation=validation_metadata,
+                verification=(previous_entry or {}).get("verification"),
+            )
+
+        entry = build_entry_for_commit(stage_commit_sha)
         validate_marketplace_entry(entry)
 
         if preview_bytes:
@@ -332,7 +532,6 @@ async def publish_stage_to_marketplace(request: MarketplacePublishRequest, curre
             "published": True,
             "entryPath": entry_path,
             "repo": f"{marketplace_owner()}/{marketplace_repo()}",
-            "commitSha": stage_commit_sha,
             "updatedAt": utc_now_iso(),
         }
         manifest_file = provider.get_file(stage_token, request.repoOwner, request.repoName, "fossbot.json", allowed_statuses=())
@@ -357,6 +556,11 @@ async def publish_stage_to_marketplace(request: MarketplacePublishRequest, curre
             sha=readme_file.get("sha") if readme_file else None,
         )
 
+        final_stage_commit_sha = current_branch_commit_sha(provider, stage_token, request.repoOwner, request.repoName, default_branch)
+        if not final_stage_commit_sha:
+            raise stage_error(502, "provider_error", "Could not find updated stage repository commit.")
+        entry = build_entry_for_commit(final_stage_commit_sha)
+        validate_marketplace_entry(entry)
         entry_bytes = json.dumps(entry, indent=2).encode("utf-8")
 
         def write_entry(branch_name: str) -> None:
@@ -377,15 +581,17 @@ async def publish_stage_to_marketplace(request: MarketplacePublishRequest, curre
             marketplace_token,
             marketplace_repo_data,
             f"Publish {request.repoOwner}/{request.repoName}",
-            f"Adds or updates the marketplace entry for `{request.repoOwner}/{request.repoName}`.\n\nSource: {entry['repoUrl']}",
+            build_publish_pr_body(entry),
             f"publish-{request.repoOwner}-{request.repoName}",
             write_entry,
         )
         return {
             "entry": entry,
             "entryPath": entry_path,
+            "pullRequest": marketplace_pull_request_payload(pr),
             "pullRequestUrl": pr.get("html_url"),
             "pullRequestNumber": pr.get("number"),
+            "pullRequestState": "merged" if pr.get("merged_at") else pr.get("state") or "open",
             "rawBaseUrl": github_raw_base_url(request.repoOwner, request.repoName, default_branch),
         }
     except HTTPException:

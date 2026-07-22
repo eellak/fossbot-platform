@@ -4,7 +4,7 @@ import os
 import re
 import time
 import urllib.request
-from typing import List
+from typing import Any, List, Optional
 
 import uvicorn
 from database.database import (
@@ -23,6 +23,8 @@ from jose import JWTError, jwt
 from models.models import (
     EmailVerificationRequest,
     FirebaseTokenRequest,
+    LessonCreate,
+    LessonUpdate,
     LoginRequest,
     ProjectsCreate,
     RegisterRequest,
@@ -37,8 +39,19 @@ from models.models import (
     UserRole,
 )
 from sqlalchemy.exc import IntegrityError, OperationalError
-from routers.stage_sources import router as stage_sources_router
-from routers.marketplace import router as marketplace_router
+from routers.stage_sources import (
+    FOSSBOT_REPO_PREFIX,
+    github_stage_error,
+    require_connection,
+    router as stage_sources_router,
+    stage_error,
+    stage_repo_list_item,
+)
+from routers.marketplace import cached_public_marketplace_index, router as marketplace_router
+from utils.github_app_auth import create_github_app_jwt
+from utils.marketplace_schema import marketplace_entry_path
+from utils.source_providers import get_provider
+from utils.source_providers.github_app import GitHubApiError
 from utils.utils_hash import get_hashed, verify_hashed
 from utils.utils_jwt import create_access_token, verify_access_token
 
@@ -621,22 +634,24 @@ async def delete_user(
 
 @app.get("/projects/")
 async def read_own_projects(current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):
-    return db.query(Projects).filter(Projects.user_id == current_user.id).all()
+    projects = db.query(Projects).filter(Projects.user_id == current_user.id).all()
+    return [project_payload(project) for project in projects]
 
 @app.post("/projects/")
 async def create_project(project: ProjectsCreate, current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):
     db_project = Projects(name=project.name, description=project.description,project_type=project.project_type,code=project.code, user_id=current_user.id)
+    set_project_stage_reference(db_project, normalize_stage_reference(project.stageReference, current_user, db))
     db.add(db_project)
     db.commit()
     db.refresh(db_project)
-    return db_project
+    return project_payload(db_project)
 
 @app.get("/projects/{project_id}")
 async def read_project(project_id: int, current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):
     project = db.query(Projects).filter(Projects.id == project_id, Projects.user_id == current_user.id).first()
     if project is None:
         raise HTTPException(status_code=404, detail="Project not found")
-    return project
+    return project_payload(project)
 
 @app.delete("/projects/{project_id}")
 async def delete_project(project_id: int, current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):
@@ -656,10 +671,278 @@ async def update_project(project_id: int, project_update: ProjectsCreate, curren
     db_project.name = project_update.name
     db_project.description = project_update.description    
     db_project.code = project_update.code
+    if stage_reference_was_provided(project_update):
+        set_project_stage_reference(db_project, normalize_stage_reference(project_update.stageReference, current_user, db))
 
     db.commit()
     db.refresh(db_project)
-    return db_project
+    return project_payload(db_project)
+
+
+def clear_project_stage_reference(project: Projects) -> None:
+    project.stage_source_type = None
+    project.stage_repo_owner = None
+    project.stage_repo_name = None
+    project.stage_repo_visibility = None
+    project.stage_marketplace_entry_path = None
+    project.stage_title = None
+    project.stage_url = None
+    project.stage_commit_sha = None
+
+
+def set_project_stage_reference(project: Projects, reference: Optional[dict[str, Any]]) -> None:
+    clear_project_stage_reference(project)
+    if not reference:
+        return
+    project.stage_source_type = reference.get("sourceType")
+    project.stage_repo_owner = reference.get("repoOwner")
+    project.stage_repo_name = reference.get("repoName")
+    project.stage_repo_visibility = reference.get("visibility")
+    project.stage_marketplace_entry_path = reference.get("marketplaceEntryPath")
+    project.stage_title = reference.get("title")
+    project.stage_url = reference.get("url")
+    project.stage_commit_sha = reference.get("commitSha")
+
+
+def stage_reference_payload(source: Any) -> Optional[dict[str, Any]]:
+    if not source.stage_source_type:
+        return None
+    return {
+        "sourceType": source.stage_source_type,
+        "repoOwner": source.stage_repo_owner,
+        "repoName": source.stage_repo_name,
+        "visibility": source.stage_repo_visibility,
+        "marketplaceEntryPath": source.stage_marketplace_entry_path,
+        "title": source.stage_title,
+        "url": source.stage_url,
+        "commitSha": source.stage_commit_sha,
+    }
+
+
+def project_payload(project: Projects) -> dict[str, Any]:
+    return {
+        "id": project.id,
+        "name": project.name,
+        "description": project.description,
+        "project_type": project.project_type,
+        "date_created": project.date_created,
+        "code": project.code,
+        "stage_source_type": project.stage_source_type,
+        "stage_repo_owner": project.stage_repo_owner,
+        "stage_repo_name": project.stage_repo_name,
+        "stage_repo_visibility": project.stage_repo_visibility,
+        "stage_marketplace_entry_path": project.stage_marketplace_entry_path,
+        "stage_title": project.stage_title,
+        "stage_url": project.stage_url,
+        "stage_commit_sha": project.stage_commit_sha,
+        "stageReference": stage_reference_payload(project),
+    }
+
+
+def user_curriculum_or_404(db: SessionLocal, current_user: User, curriculum_id: int) -> Curriculum:
+    curriculum = db.query(Curriculum).filter(Curriculum.id == curriculum_id, Curriculum.user_id == current_user.id).first()
+    if curriculum is None:
+        raise HTTPException(status_code=404, detail="Curriculum not found")
+    return curriculum
+
+
+def user_lesson_or_404(db: SessionLocal, current_user: User, lesson_id: int) -> Lesson:
+    lesson = db.query(Lesson).join(Curriculum).filter(Lesson.id == lesson_id, Curriculum.user_id == current_user.id).first()
+    if lesson is None:
+        raise HTTPException(status_code=404, detail="Lesson not found")
+    return lesson
+
+
+def stage_reference_was_provided(payload: Any) -> bool:
+    fields = getattr(payload, "model_fields_set", getattr(payload, "__fields_set__", set()))
+    return "stageReference" in fields
+
+
+def clear_lesson_stage_reference(lesson: Lesson) -> None:
+    lesson.stage_source_type = None
+    lesson.stage_repo_owner = None
+    lesson.stage_repo_name = None
+    lesson.stage_repo_visibility = None
+    lesson.stage_marketplace_entry_path = None
+    lesson.stage_title = None
+    lesson.stage_url = None
+    lesson.stage_commit_sha = None
+
+
+def published_marketplace_entry(owner: Optional[str], repo: Optional[str], entry_path: Optional[str]) -> dict[str, Any]:
+    payload = cached_public_marketplace_index()
+    stages = payload.get("stages") or []
+    normalized_entry_path = entry_path
+    if not normalized_entry_path and owner and repo:
+        normalized_entry_path = marketplace_entry_path(owner, repo)
+    for entry in stages:
+        candidate_path = marketplace_entry_path(entry.get("repoOwner") or "", entry.get("repoName") or "")
+        if normalized_entry_path and candidate_path == normalized_entry_path:
+            return entry
+        if owner and repo and entry.get("repoOwner") == owner and entry.get("repoName") == repo:
+            return entry
+    raise stage_error(404, "marketplace_stage_not_found", "Choose a stage that is already published in the marketplace.")
+
+
+def installed_user_stage_reference(current_user: User, db: SessionLocal, owner: str, repo_name: str) -> dict[str, Any]:
+    if not repo_name.startswith(FOSSBOT_REPO_PREFIX):
+        raise stage_error(403, "repo_not_allowed", "Lecture stages must use fossbot-* repositories.")
+    provider = get_provider("github_app")
+    try:
+        connection, user_token = require_connection(db, current_user)
+        repos = provider.list_installation_repositories(user_token, connection.installation_id)
+        repo = next(
+            (
+                item for item in repos
+                if item.get("name") == repo_name and (item.get("owner") or {}).get("login", "").lower() == owner.lower()
+            ),
+            None,
+        )
+        if not repo:
+            raise stage_error(404, "repo_not_allowed", "Choose one of your installed FOSSBot GitHub stage repositories.")
+        installation_token = provider.create_installation_token(create_github_app_jwt(), connection.installation_id, repo.get("id"))
+        stage_item = stage_repo_list_item(provider, installation_token, repo)
+    except GitHubApiError as error:
+        raise github_stage_error(error) from error
+    if not stage_item:
+        raise stage_error(400, "validation_failed", "That repository is not a valid FOSSBot stage repository.")
+    return stage_item
+
+
+def normalize_stage_reference(reference: Any, current_user: User, db: SessionLocal) -> Optional[dict[str, Any]]:
+    if reference is None:
+        return None
+    source_type = reference.sourceType
+    if source_type == "default":
+        return {
+            "sourceType": "default",
+            "repoOwner": None,
+            "repoName": None,
+            "visibility": None,
+            "marketplaceEntryPath": None,
+            "title": reference.title,
+            "url": reference.url,
+            "commitSha": None,
+        }
+    if source_type == "github":
+        if not reference.repoOwner or not reference.repoName:
+            raise stage_error(400, "validation_failed", "GitHub stage references need repoOwner and repoName.")
+        stage = installed_user_stage_reference(current_user, db, reference.repoOwner, reference.repoName)
+        return {
+            "sourceType": "github",
+            "repoOwner": stage["repoOwner"],
+            "repoName": stage["repoName"],
+            "visibility": stage.get("visibility") or ("private" if stage.get("private") else "public"),
+            "marketplaceEntryPath": None,
+            "title": stage.get("title") or stage["repoName"],
+            "url": reference.url or stage.get("repoUrl"),
+            "commitSha": None,
+        }
+    if source_type == "marketplace":
+        entry = published_marketplace_entry(reference.repoOwner, reference.repoName, reference.marketplaceEntryPath)
+        return {
+            "sourceType": "marketplace",
+            "repoOwner": entry["repoOwner"],
+            "repoName": entry["repoName"],
+            "visibility": "public",
+            "marketplaceEntryPath": marketplace_entry_path(entry["repoOwner"], entry["repoName"]),
+            "title": entry.get("title") or entry["repoName"],
+            "url": reference.url or entry.get("repoUrl"),
+            "commitSha": entry.get("commitSha"),
+        }
+    raise stage_error(400, "validation_failed", "stageReference.sourceType must be default, github, or marketplace.")
+
+
+def set_lesson_stage_reference(lesson: Lesson, reference: Optional[dict[str, Any]]) -> None:
+    clear_lesson_stage_reference(lesson)
+    if not reference:
+        return
+    lesson.stage_source_type = reference.get("sourceType")
+    lesson.stage_repo_owner = reference.get("repoOwner")
+    lesson.stage_repo_name = reference.get("repoName")
+    lesson.stage_repo_visibility = reference.get("visibility")
+    lesson.stage_marketplace_entry_path = reference.get("marketplaceEntryPath")
+    lesson.stage_title = reference.get("title")
+    lesson.stage_url = reference.get("url")
+    lesson.stage_commit_sha = reference.get("commitSha")
+
+
+def lesson_payload(lesson: Lesson) -> dict[str, Any]:
+    stage_reference = None
+    if lesson.stage_source_type:
+        stage_reference = stage_reference_payload(lesson)
+    return {
+        "id": lesson.id,
+        "title": lesson.title,
+        "description": lesson.description,
+        "image_url": lesson.image_url,
+        "video_url": lesson.video_url,
+        "curriculum_id": lesson.curriculum_id,
+        "stage_source_type": lesson.stage_source_type,
+        "stage_repo_owner": lesson.stage_repo_owner,
+        "stage_repo_name": lesson.stage_repo_name,
+        "stage_repo_visibility": lesson.stage_repo_visibility,
+        "stage_marketplace_entry_path": lesson.stage_marketplace_entry_path,
+        "stage_title": lesson.stage_title,
+        "stage_url": lesson.stage_url,
+        "stage_commit_sha": lesson.stage_commit_sha,
+        "stageReference": stage_reference,
+    }
+
+
+@app.get("/curriculums/{curriculum_id}/lessons")
+async def read_curriculum_lessons(curriculum_id: int, current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):
+    user_curriculum_or_404(db, current_user, curriculum_id)
+    lessons = db.query(Lesson).filter(Lesson.curriculum_id == curriculum_id).all()
+    return [lesson_payload(lesson) for lesson in lessons]
+
+
+@app.post("/lessons/")
+@app.post("/lectures/")
+async def create_lesson(lesson: LessonCreate, current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):
+    user_curriculum_or_404(db, current_user, lesson.curriculum_id)
+    db_lesson = Lesson(
+        title=lesson.title,
+        description=lesson.description,
+        image_url=lesson.image_url,
+        video_url=lesson.video_url,
+        curriculum_id=lesson.curriculum_id,
+    )
+    set_lesson_stage_reference(db_lesson, normalize_stage_reference(lesson.stageReference, current_user, db))
+    db.add(db_lesson)
+    db.commit()
+    db.refresh(db_lesson)
+    return lesson_payload(db_lesson)
+
+
+@app.get("/lessons/{lesson_id}")
+@app.get("/lectures/{lesson_id}")
+async def read_lesson(lesson_id: int, current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):
+    return lesson_payload(user_lesson_or_404(db, current_user, lesson_id))
+
+
+@app.put("/lessons/{lesson_id}")
+@app.put("/lectures/{lesson_id}")
+async def update_lesson(lesson_id: int, lesson_update: LessonUpdate, current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):
+    db_lesson = user_lesson_or_404(db, current_user, lesson_id)
+    db_lesson.title = lesson_update.title
+    db_lesson.description = lesson_update.description
+    db_lesson.image_url = lesson_update.image_url
+    db_lesson.video_url = lesson_update.video_url
+    if stage_reference_was_provided(lesson_update):
+        set_lesson_stage_reference(db_lesson, normalize_stage_reference(lesson_update.stageReference, current_user, db))
+    db.commit()
+    db.refresh(db_lesson)
+    return lesson_payload(db_lesson)
+
+
+@app.delete("/lessons/{lesson_id}")
+@app.delete("/lectures/{lesson_id}")
+async def delete_lesson(lesson_id: int, current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):
+    db_lesson = user_lesson_or_404(db, current_user, lesson_id)
+    db.delete(db_lesson)
+    db.commit()
+    return {"detail": "Lesson deleted"}
 
 
 # Run the application
