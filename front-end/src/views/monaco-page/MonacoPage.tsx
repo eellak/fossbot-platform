@@ -50,6 +50,7 @@ import StageLoadScreen from 'src/components/stage-select-popup/StageLoadScreen';
 import ExecutionTargetPanel from 'src/components/robot/ExecutionTargetPanel';
 import PhysicalRobotTerminal from 'src/components/robot/PhysicalRobotTerminal';
 import { useRobotConnection } from 'src/robot/RobotConnectionContext';
+import ProjectStageIndicator from 'src/components/editors/ProjectStageIndicator';
 
 const textart = ` 
 # __   __   __   __   __   __  ___     __      ___       __       
@@ -410,6 +411,7 @@ const MonacoPage: React.FC = () => {
                   {projectDescription}
                 </Typography>
               )}
+              <ProjectStageIndicator stage={selectedStage} />
             </Box>
           </Grid>
           <Grid item xs={4} lg={4}>

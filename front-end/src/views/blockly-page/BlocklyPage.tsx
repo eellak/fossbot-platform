@@ -41,6 +41,7 @@ import { useMediaQuery } from '@mui/material';
 import ExecutionTargetPanel from 'src/components/robot/ExecutionTargetPanel';
 import PhysicalRobotTerminal from 'src/components/robot/PhysicalRobotTerminal';
 import { useRobotConnection } from 'src/robot/RobotConnectionContext';
+import ProjectStageIndicator from 'src/components/editors/ProjectStageIndicator';
 
 function stageNeedsProviderLoad(
   stage: ProjectStageReference | null,
@@ -370,6 +371,7 @@ const BlocklyPage = () => {
               <Typography mt={1} ml={0} color={'grey'}>
                 {projectDescription}
               </Typography>
+              <ProjectStageIndicator stage={selectedStage} />
             </Box>
           </Grid>
           <Grid item xs={4} lg={4}>

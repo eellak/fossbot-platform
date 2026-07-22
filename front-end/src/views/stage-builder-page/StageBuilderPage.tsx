@@ -71,7 +71,8 @@ function isTypingTarget(target: EventTarget | null): boolean {
   return !!element?.tagName.match(/INPUT|TEXTAREA|SELECT/) || !!element?.isContentEditable;
 }
 
-const leaveMessage = 'You have unsaved changes. A local recovery draft will be kept, but you should export JSON when you are ready to save.';
+const leaveMessage = 'You have unsaved changes. A local recovery draft will be kept, but you should save JSON when you are ready to keep a copy.';
+const DRAFT_SAVE_DELAY_MS = 2_000;
 
 type GitHubDeepLinkTarget = {
   repoOwner: string;
@@ -606,20 +607,25 @@ const StageBuilderPage = () => {
 
   useEffect(() => {
     if (!draftReady) return;
-    if (dirty) writeStageBuilderDraft(stage, scope);
-    else clearStageBuilderDraft(scope);
+    if (!dirty) {
+      clearStageBuilderDraft(scope);
+      return;
+    }
+    const timeout = window.setTimeout(() => writeStageBuilderDraft(stage, scope), DRAFT_SAVE_DELAY_MS);
+    return () => window.clearTimeout(timeout);
   }, [stage, dirty, draftReady, scope]);
 
   useEffect(() => {
     if (!dirty) return undefined;
     const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      writeStageBuilderDraft(stage, scope);
       event.preventDefault();
       event.returnValue = leaveMessage;
       return leaveMessage;
     };
     window.addEventListener('beforeunload', onBeforeUnload);
     return () => window.removeEventListener('beforeunload', onBeforeUnload);
-  }, [dirty]);
+  }, [dirty, stage, scope]);
 
   useEffect(() => {
     if (!panelResize) return undefined;
@@ -747,7 +753,11 @@ const StageBuilderPage = () => {
     if (options.message) setMessage(options.message);
   };
 
-  const confirmIfDirty = (messageText = leaveMessage): boolean => !dirty || window.confirm(messageText);
+  const confirmIfDirty = (messageText = leaveMessage): boolean => {
+    if (!dirty) return true;
+    writeStageBuilderDraft(stage, scope);
+    return window.confirm(messageText);
+  };
 
   const handleSelectionChange = (ids: string[]) => {
     const existing = ids.filter((id) => stage.objects.some((object) => object.id === id));
@@ -1175,7 +1185,7 @@ const StageBuilderPage = () => {
     setLastExportFingerprint(stageFingerprint(stage));
     setExportedAt(new Date().toISOString());
     clearStageBuilderDraft(scope);
-    setMessage('Exported JSON. This is the save action for this implementation stage.');
+    setMessage('Saved stage JSON to your downloads.');
   };
 
   const handleRunTest = () => {

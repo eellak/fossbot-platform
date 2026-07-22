@@ -213,7 +213,7 @@ export function EditorTopBar({
         <TopStatusText label={validationSummary(validationResults)} tone={hasErrors ? editorColors.danger : hasWarnings ? editorColors.warning : editorColors.success} onClick={onOpenValidation} />
       </Stack>
       <Stack direction="row" spacing={0.75} alignItems="center" sx={{ pl: 0.75, ml: 0.25 }}>
-        <Button size="small" color="inherit" variant="outlined" startIcon={<FileDownloadIcon />} onClick={onExport} sx={{ ...exportButtonSx, display: { xs: 'none', sm: 'inline-flex' } }}>Export JSON</Button>
+        <Button size="small" color="inherit" variant="outlined" startIcon={<FileDownloadIcon />} onClick={onExport} sx={{ ...exportButtonSx, display: { xs: 'none', sm: 'inline-flex' } }}>Save JSON</Button>
         <Tooltip title={providerLabel || 'GitHub actions'}>
           <span>
             <Button
@@ -268,6 +268,8 @@ export function EditorTopBar({
         )}
       </Menu>
       <Menu anchorEl={overflow.anchorEl} open={overflow.open} onClose={overflow.closeMenu}>
+        <MenuItem onClick={() => { overflow.closeMenu(); onExport(); }}>Save JSON</MenuItem>
+        <Divider />
         <MenuItem onClick={() => { overflow.closeMenu(); onNew(); }}>New stage</MenuItem>
         <MenuItem onClick={() => { overflow.closeMenu(); onDemo(); }}>Load demo</MenuItem>
         <MenuItem onClick={() => { overflow.closeMenu(); onImport(); }}>Import JSON…</MenuItem>
