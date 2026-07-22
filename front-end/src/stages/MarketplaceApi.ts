@@ -120,32 +120,65 @@ export interface PublishMarketplaceResponse {
   rawBaseUrl?: string | null;
 }
 
+export interface ForkMarketplaceStageResponse {
+  repoOwner: string;
+  repoName: string;
+  repoUrl: string;
+  commitSha?: string | null;
+  rawBaseUrl?: string | null;
+  private: false;
+  visibility: 'public';
+  forkedFrom: {
+    repoOwner: string;
+    repoName: string;
+    commitSha: string;
+    forkedAt: string;
+  };
+  forkedBy: {
+    githubUsername?: string | null;
+    platformUsername?: string | null;
+  };
+}
+
+export interface MarketplaceForkStatusResponse {
+  exists: boolean;
+  valid: boolean;
+  appAccess?: boolean;
+  setupComplete?: boolean;
+  repoOwner?: string;
+  repoName?: string;
+  message?: string | null;
+  installationUrl?: string | null;
+}
+
 export class MarketplaceRequestError extends Error {
   code?: string;
   status: number;
   retryAfter?: number | null;
+  installationUrl?: string | null;
 
-  constructor(message: string, status: number, code?: string, retryAfter?: number | null) {
+  constructor(message: string, status: number, code?: string, retryAfter?: number | null, installationUrl?: string | null) {
     super(message);
     this.name = 'MarketplaceRequestError';
     this.status = status;
     this.code = code;
     this.retryAfter = typeof retryAfter === 'number' ? retryAfter : null;
+    this.installationUrl = typeof installationUrl === 'string' ? installationUrl : null;
   }
 }
 
-function extractMarketplaceError(payload: any): { code?: string; detail: string; retryAfter?: number | null } {
+function extractMarketplaceError(payload: any): { code?: string; detail: string; retryAfter?: number | null; installationUrl?: string | null } {
   const detail = payload?.detail;
-  if (detail && typeof detail === 'object') return { code: detail.error, detail: detail.detail || JSON.stringify(detail), retryAfter: detail.retryAfter };
-  if (payload?.error || payload?.detail) return { code: payload.error, detail: payload.detail, retryAfter: payload.retryAfter };
+  if (detail && typeof detail === 'object') return { code: detail.error, detail: detail.detail || JSON.stringify(detail), retryAfter: detail.retryAfter, installationUrl: detail.installationUrl };
+  if (payload?.error || payload?.detail) return { code: payload.error, detail: payload.detail, retryAfter: payload.retryAfter, installationUrl: payload.installationUrl };
   return { detail: payload?.message || 'Marketplace request failed' };
 }
 
 async function parseJsonResponse<T>(response: Response): Promise<T> {
   const payload = await response.json().catch(() => null);
   if (!response.ok) {
-    const { code, detail, retryAfter } = extractMarketplaceError(payload);
-    throw new MarketplaceRequestError(typeof detail === 'string' ? detail : JSON.stringify(detail), response.status, code, retryAfter);
+    const { code, detail, retryAfter, installationUrl } = extractMarketplaceError(payload);
+    throw new MarketplaceRequestError(typeof detail === 'string' ? detail : JSON.stringify(detail), response.status, code, retryAfter, installationUrl);
   }
   return payload as T;
 }
@@ -171,6 +204,26 @@ export async function getMarketplaceStageStatus(token: string, owner: string, re
     },
   });
   return parseJsonResponse<MarketplaceStageStatusResponse>(response);
+}
+
+export async function completeMarketplaceFork(token: string, repoOwner: string, repoName: string): Promise<ForkMarketplaceStageResponse> {
+  const response = await fetch(`${backendUrl}/api/marketplace/fork/complete`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ repoOwner, repoName }),
+  });
+  return parseJsonResponse<ForkMarketplaceStageResponse>(response);
+}
+
+export async function getMarketplaceForkStatus(token: string, repoOwner: string, repoName: string): Promise<MarketplaceForkStatusResponse> {
+  const response = await fetch(`${backendUrl}/api/marketplace/fork/status/${encodeURIComponent(repoOwner)}/${encodeURIComponent(repoName)}`, {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return parseJsonResponse<MarketplaceForkStatusResponse>(response);
 }
 
 export async function publishStageToMarketplace(token: string, request: PublishMarketplaceRequest): Promise<PublishMarketplaceResponse> {

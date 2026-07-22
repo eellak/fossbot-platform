@@ -105,6 +105,10 @@ function githubRawStageUrl(stage: ProviderStageListItem): string {
   return `https://raw.githubusercontent.com/${stage.repoOwner}/${stage.repoName}/${stage.defaultBranch || 'main'}/stage.json`;
 }
 
+function marketplaceRawStageUrl(stage: MarketplaceStageEntry): string {
+  return `https://raw.githubusercontent.com/${stage.repoOwner}/${stage.repoName}/${stage.commitSha}/stage.json`;
+}
+
 function resolveStageEntryAssets(entry: any, stageUrl: string): any {
   if (!entry || typeof entry !== 'object') return entry;
   const stageAssetBaseUrl = stageAssetBaseUrlFromStageUrl(stageUrl);
@@ -271,7 +275,7 @@ const CardDialog: React.FC<CardDialogProps> = ({ open, onClose, onSelect, onSele
   };
 
   const handleMarketplaceSelect = async (stage: MarketplaceStageEntry) => {
-    const stageUrl = `https://raw.githubusercontent.com/${stage.repoOwner}/${stage.repoName}/${stage.defaultBranch || 'main'}/stage.json`;
+    const stageUrl = marketplaceRawStageUrl(stage);
     const selection = {
       sourceType: 'marketplace' as const,
       title: stage.title,

@@ -18,12 +18,16 @@ import {
   Typography,
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import GitHubIcon from '@mui/icons-material/GitHub';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
+import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked';
 import SearchIcon from '@mui/icons-material/Search';
 import VerifiedIcon from '@mui/icons-material/Verified';
-import { getMarketplaceIndex, type MarketplaceIndexResponse, type MarketplaceStageEntry, type MarketplaceValidationState } from 'src/stages/MarketplaceApi';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from 'src/authentication/AuthProvider';
+import { completeMarketplaceFork, getMarketplaceForkStatus, getMarketplaceIndex, MarketplaceRequestError, type MarketplaceIndexResponse, type MarketplaceStageEntry, type MarketplaceValidationState } from 'src/stages/MarketplaceApi';
 
 function formatDate(value?: string | null): string {
   if (!value) return 'Unknown';
@@ -65,6 +69,38 @@ function ValidationChip({ entry }: { entry: MarketplaceStageEntry }) {
 }
 
 const PAGE_SIZE = 24;
+const FORK_FLOW_STORAGE_KEY = 'fossbot:marketplace-fork-flow';
+
+type ForkFlowStep = 'create' | 'select' | 'finish' | 'ready';
+
+type ForkFlow = {
+  repoOwner: string;
+  repoName: string;
+  step: ForkFlowStep;
+  installationUrl?: string;
+};
+
+function readForkFlow(): ForkFlow | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const value = JSON.parse(window.sessionStorage.getItem(FORK_FLOW_STORAGE_KEY) || 'null');
+    if (!value?.repoOwner || !value?.repoName || !['create', 'select', 'finish', 'ready'].includes(value.step)) return null;
+    return {
+      repoOwner: value.repoOwner,
+      repoName: value.repoName,
+      step: value.step,
+      installationUrl: typeof value.installationUrl === 'string' ? value.installationUrl : undefined,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function writeForkFlow(flow: ForkFlow | null): void {
+  if (typeof window === 'undefined') return;
+  if (!flow) window.sessionStorage.removeItem(FORK_FLOW_STORAGE_KEY);
+  else window.sessionStorage.setItem(FORK_FLOW_STORAGE_KEY, JSON.stringify(flow));
+}
 
 function StagePreview({ entry }: { entry: MarketplaceStageEntry }) {
   if (entry.previewUrl) {
@@ -127,8 +163,54 @@ function MarketplaceStageCard({ entry, onSelect }: { entry: MarketplaceStageEntr
   );
 }
 
-function MarketplaceDetailDrawer({ entry, open, onClose }: { entry: MarketplaceStageEntry | null; open: boolean; onClose: () => void }) {
-  const stageTestUrl = entry ? `/stage-test?repo=${encodeURIComponent(`${entry.repoOwner}/${entry.repoName}`)}&ref=${encodeURIComponent(entry.defaultBranch || 'main')}` : '#';
+function ForkProgress({ step }: { step: ForkFlowStep }) {
+  const steps = [
+    { label: 'Create the fork on GitHub', complete: step !== 'create' },
+    { label: 'Select the fork for FOSSBot', complete: step === 'finish' || step === 'ready' },
+    { label: 'Open your editable copy', complete: step === 'ready' },
+  ];
+  const activeIndex = step === 'create' ? 0 : step === 'select' ? 1 : 2;
+  return (
+    <Stack spacing={1} aria-label="Fork progress">
+      {steps.map((item, index) => {
+        const active = index === activeIndex;
+        return (
+          <Stack key={item.label} direction="row" spacing={1} alignItems="center">
+            {item.complete ? <CheckCircleIcon color="success" fontSize="small" /> : <RadioButtonUncheckedIcon color={active ? 'primary' : 'disabled'} fontSize="small" />}
+            <Typography variant="body2" fontWeight={active ? 700 : 400} color={active ? 'text.primary' : 'text.secondary'}>
+              {item.label}
+            </Typography>
+          </Stack>
+        );
+      })}
+    </Stack>
+  );
+}
+
+function MarketplaceDetailDrawer({
+  entry,
+  open,
+  onClose,
+  onOpenFork,
+  onCompleteFork,
+  onCancelFork,
+  forkStep,
+  forkBusy,
+  forkError,
+  forkInstallationUrl,
+}: {
+  entry: MarketplaceStageEntry | null;
+  open: boolean;
+  onClose: () => void;
+  onOpenFork: (entry: MarketplaceStageEntry) => void;
+  onCompleteFork: (entry: MarketplaceStageEntry) => void;
+  onCancelFork: () => void;
+  forkStep: ForkFlowStep | null;
+  forkBusy: boolean;
+  forkError: string;
+  forkInstallationUrl?: string | null;
+}) {
+  const stageTestUrl = entry ? `/stage-test?repo=${encodeURIComponent(`${entry.repoOwner}/${entry.repoName}`)}&ref=${encodeURIComponent(entry.commitSha)}` : '#';
   return (
     <Drawer anchor="right" open={open} onClose={onClose} PaperProps={{ sx: { width: { xs: '100%', sm: 520 } } }}>
       {!entry ? null : (
@@ -184,10 +266,93 @@ function MarketplaceDetailDrawer({ entry, open, onClose }: { entry: MarketplaceS
                 <Button component="a" href={stageTestUrl} target="_blank" rel="noreferrer" variant="contained" startIcon={<PlayArrowIcon />}>
                   Test stage
                 </Button>
+                {!forkStep && (
+                  <Button variant="outlined" onClick={() => onOpenFork(entry)} disabled={forkBusy} startIcon={<GitHubIcon />}>
+                    {forkBusy ? 'Checking GitHub…' : 'Fork stage'}
+                  </Button>
+                )}
                 <Button component="a" href={entry.repoUrl} target="_blank" rel="noreferrer" variant="outlined" startIcon={<GitHubIcon />} endIcon={<OpenInNewIcon />}>
                   Source
                 </Button>
               </Stack>
+              {forkStep === 'ready' ? (
+                <Box sx={{ p: 2, border: '1px solid', borderColor: 'success.light', borderRadius: 1.5, bgcolor: 'success.light' }}>
+                  <Stack spacing={1.5}>
+                    <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1}>
+                      <Box>
+                        <Typography variant="subtitle2" fontWeight={800}>“{entry.title}” is ready to edit</Typography>
+                        <Typography variant="body2" color="text.secondary">This fork is already connected to FOSSBot.</Typography>
+                      </Box>
+                      <IconButton size="small" onClick={onCancelFork} aria-label="Dismiss completed fork status">
+                        <CloseIcon fontSize="small" />
+                      </IconButton>
+                    </Stack>
+                    <Button variant="contained" color="success" onClick={() => onCompleteFork(entry)} disabled={forkBusy} sx={{ alignSelf: 'flex-start' }}>
+                      {forkBusy ? 'Opening editable copy…' : 'Open editable copy'}
+                    </Button>
+                  </Stack>
+                </Box>
+              ) : forkStep && (
+                <Box sx={{ p: 2, border: '1px solid', borderColor: 'primary.light', borderRadius: 1.5, bgcolor: 'primary.light' }}>
+                  <Stack spacing={1.5}>
+                    <Box>
+                      <Typography variant="subtitle2" fontWeight={800}>Forking “{entry.title}”</Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        {forkStep === 'create'
+                          ? 'Finish the GitHub fork, then continue here.'
+                          : forkStep === 'select'
+                            ? 'Give FOSSBot access to the new fork, then finish setup.'
+                            : 'FOSSBot can access this fork. Finish setting up your editable copy.'}
+                      </Typography>
+                    </Box>
+                    <ForkProgress step={forkStep} />
+                    <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
+                      {forkStep === 'create' ? (
+                        <>
+                          <Button component="a" href={`${entry.repoUrl}/fork`} target="_blank" rel="noreferrer" variant="outlined" startIcon={<GitHubIcon />}>
+                            Open GitHub
+                          </Button>
+                          <Button variant="contained" onClick={() => onCompleteFork(entry)} disabled={forkBusy}>
+                            {forkBusy ? 'Checking fork…' : 'I created the fork'}
+                          </Button>
+                        </>
+                      ) : forkStep === 'select' ? (
+                        <>
+                          {forkInstallationUrl && (
+                            <Button component="a" href={forkInstallationUrl} target="_blank" rel="noreferrer" variant="outlined" startIcon={<GitHubIcon />}>
+                              Select fork in GitHub
+                            </Button>
+                          )}
+                          <Button variant="contained" onClick={() => onCompleteFork(entry)} disabled={forkBusy}>
+                            {forkBusy ? 'Finishing setup…' : 'I selected it'}
+                          </Button>
+                        </>
+                      ) : (
+                        <Button variant="contained" onClick={() => onCompleteFork(entry)} disabled={forkBusy}>
+                          {forkBusy ? 'Finishing setup…' : 'Finish setup'}
+                        </Button>
+                      )}
+                    </Stack>
+                    <Typography variant="body2" color="text.secondary" sx={{ maxWidth: '68ch' }}>
+                      {forkStep === 'create' ? (
+                        <>Click <strong>Open GitHub</strong> to create the fork. When it is ready, return here and click <strong>I created the fork</strong>.</>
+                      ) : forkStep === 'select' ? (
+                        <>Click <strong>Select fork in GitHub</strong>, select this repository for the FOSSBot App, then return here and click <strong>I selected it</strong>.</>
+                      ) : (
+                        <>Click <strong>Finish setup</strong> to open your editable copy.</>
+                      )}
+                    </Typography>
+                    <Button variant="outlined" size="small" color="inherit" onClick={onCancelFork} sx={{ alignSelf: 'flex-start', color: 'text.secondary' }}>
+                      Cancel fork
+                    </Button>
+                  </Stack>
+                </Box>
+              )}
+              {forkError && (
+                <Alert severity="error">
+                  {forkError}
+                </Alert>
+              )}
             </Stack>
           </Box>
         </Box>
@@ -197,6 +362,8 @@ function MarketplaceDetailDrawer({ entry, open, onClose }: { entry: MarketplaceS
 }
 
 export default function StageMarketplacePanel() {
+  const { token } = useAuth();
+  const navigate = useNavigate();
   const [index, setIndex] = useState<MarketplaceIndexResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -205,6 +372,86 @@ export default function StageMarketplacePanel() {
   const [sort, setSort] = useState<'updated' | 'published' | 'verified'>('updated');
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<MarketplaceStageEntry | null>(null);
+  const [forkFlow, setForkFlow] = useState<ForkFlow | null>(readForkFlow);
+  const [forkBusy, setForkBusy] = useState(false);
+  const [forkError, setForkError] = useState('');
+
+  const setActiveForkFlow = (flow: ForkFlow | null) => {
+    setForkFlow(flow);
+    writeForkFlow(flow);
+  };
+
+  const handleOpenFork = async (entry: MarketplaceStageEntry) => {
+    if (!token) {
+      setForkError('Sign in and connect GitHub before forking a stage.');
+      return;
+    }
+    setForkBusy(true);
+    setForkError('');
+    try {
+      const status = await getMarketplaceForkStatus(token, entry.repoOwner, entry.repoName);
+      if (status.exists) {
+        if (!status.valid) {
+          setForkError(status.message || 'A repository with this name already exists but is not the expected fork.');
+          return;
+        }
+        setActiveForkFlow({
+          repoOwner: entry.repoOwner,
+          repoName: entry.repoName,
+          step: status.setupComplete ? 'ready' : status.appAccess ? 'finish' : 'select',
+          installationUrl: status.installationUrl || undefined,
+        });
+        return;
+      }
+      setActiveForkFlow({ repoOwner: entry.repoOwner, repoName: entry.repoName, step: 'create' });
+    } catch (error) {
+      setForkError(error instanceof Error ? error.message : 'Could not check GitHub for an existing fork.');
+    } finally {
+      setForkBusy(false);
+    }
+  };
+
+  const handleCompleteFork = async (entry: MarketplaceStageEntry) => {
+    if (!token) return;
+    setForkBusy(true);
+    setForkError('');
+    try {
+      const fork = await completeMarketplaceFork(token, entry.repoOwner, entry.repoName);
+      setActiveForkFlow(null);
+      navigate(`/stage-builder?open=github&repo=${encodeURIComponent(`${fork.repoOwner}/${fork.repoName}`)}`);
+    } catch (error) {
+      setForkError(error instanceof Error ? error.message : 'Could not fork this stage.');
+      if (error instanceof MarketplaceRequestError && error.code === 'repo_not_installed') {
+        setActiveForkFlow({
+          repoOwner: entry.repoOwner,
+          repoName: entry.repoName,
+          step: 'select',
+          installationUrl: error.installationUrl || undefined,
+        });
+      }
+    } finally {
+      setForkBusy(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!token || !forkFlow || forkFlow.step !== 'select' || forkFlow.installationUrl) return;
+    let active = true;
+    getMarketplaceForkStatus(token, forkFlow.repoOwner, forkFlow.repoName)
+      .then((status) => {
+        if (!active || !status.exists || !status.valid) return;
+        const restoredFlow: ForkFlow = {
+          repoOwner: forkFlow.repoOwner,
+          repoName: forkFlow.repoName,
+          step: status.setupComplete ? 'ready' : status.appAccess ? 'finish' : 'select',
+          installationUrl: status.installationUrl || undefined,
+        };
+        setForkFlow(restoredFlow);
+        writeForkFlow(restoredFlow);
+      })
+      .catch(() => undefined);
+    return () => { active = false; };
+  }, [forkFlow, token]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -231,6 +478,9 @@ export default function StageMarketplacePanel() {
   const stages = index?.stages || [];
   const pagination = index?.pagination;
   const tags = index?.tags || [];
+  const selectedForkFlow = forkFlow && selected && forkFlow.repoOwner === selected.repoOwner && forkFlow.repoName === selected.repoName
+    ? forkFlow
+    : null;
 
   return (
     <Box sx={{ mt: 3 }}>
@@ -320,7 +570,18 @@ export default function StageMarketplacePanel() {
           )
         )}
       </Box>
-      <MarketplaceDetailDrawer entry={selected} open={!!selected} onClose={() => setSelected(null)} />
+      <MarketplaceDetailDrawer
+        entry={selected}
+        open={!!selected}
+        onClose={() => { setSelected(null); setForkError(''); }}
+        onOpenFork={handleOpenFork}
+        onCompleteFork={handleCompleteFork}
+        onCancelFork={() => { setActiveForkFlow(null); setForkError(''); }}
+        forkStep={selectedForkFlow?.step || null}
+        forkBusy={forkBusy}
+        forkError={forkError}
+        forkInstallationUrl={selectedForkFlow?.installationUrl}
+      />
     </Box>
   );
 }
