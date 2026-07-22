@@ -1,5 +1,5 @@
-import React, { forwardRef, lazy, Suspense, useCallback, useMemo, useRef, useState } from 'react';
-import { Box, Button, Grid, Slider } from '@mui/material';
+import React, { forwardRef, lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Box, Button, CircularProgress, Grid, Slider, Typography } from '@mui/material';
 import {
   faMap,
   faArrowUp,
@@ -27,6 +27,7 @@ import {
   drawLine as legacyDrawLine,
 } from 'src/components/js-simulator/Simulator';
 import CardDialog from 'src/components/stage-select-popup/CardDialog';
+import type { RawStageConfig } from 'src/simulator/stages';
 import type { FossbotSimulatorHandle } from 'src/simulator/FossbotSimulator';
 
 type SimulatorVersion = 'v1' | 'v2';
@@ -34,6 +35,9 @@ type SimulatorVersion = 'v1' | 'v2';
 type WebGLAppProps = {
   appsessionId: string;
   onMountChange: (isMounted: boolean) => void;
+  initialStageUrl?: string | null;
+  /** Pre-fetched stage config entries; takes priority over initialStageUrl. */
+  initialStageConfig?: RawStageConfig | null;
 };
 
 const SIMULATOR_VERSION_KEY = 'fossbot.simulatorVersion';
@@ -76,7 +80,7 @@ export function getSimulatorVersion(): SimulatorVersion {
   }
 
   const envVersion = process.env.REACT_APP_SIMULATOR_VERSION;
-  return isSimulatorVersion(envVersion) ? envVersion : 'v1';
+  return isSimulatorVersion(envVersion) ? envVersion : 'v2';
 }
 
 function isV2DevMode(): boolean {
@@ -136,6 +140,47 @@ const V2WebGLApp = forwardRef<unknown, WebGLAppProps>((props, ref) => {
   const [lightIntensity, setLightIntensity] = useState(100);
   const [currentURL, setCurrentURL] = useState(DEFAULT_STAGE_URL);
   const [openDialog, setOpenDialog] = useState(false);
+  const [initialStageConfig, setInitialStageConfig] = useState<RawStageConfig | null | undefined>(undefined);
+  // undefined = loading, null = no custom stage (use default), RawStageConfig = ready
+  const [stageLoadError, setStageLoadError] = useState<string | null>(null);
+
+  // Use pre-fetched config from parent if provided; otherwise fetch from URL
+  useEffect(() => {
+    if (props.initialStageConfig) {
+      setCurrentURL(props.initialStageUrl || DEFAULT_STAGE_URL);
+      setInitialStageConfig(props.initialStageConfig);
+      setStageLoadError(null);
+      return;
+    }
+    if (!props.initialStageUrl) {
+      setInitialStageConfig(null);
+      setStageLoadError(null);
+      return;
+    }
+    setCurrentURL(props.initialStageUrl);
+    setInitialStageConfig(undefined);
+    setStageLoadError(null);
+
+    let cancelled = false;
+    fetch(props.initialStageUrl)
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      })
+      .then((payload) => {
+        if (cancelled) return;
+        const entries = Array.isArray(payload) ? payload : payload?.config;
+        if (!Array.isArray(entries)) throw new Error('stage JSON must contain a config array');
+        setInitialStageConfig(entries);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        console.warn('[Simulator] Could not pre-fetch stage, will load default then swap:', err);
+        setInitialStageConfig(null);
+        setStageLoadError(err instanceof Error ? err.message : String(err));
+      });
+    return () => { cancelled = true; };
+  }, [props.initialStageUrl, props.initialStageConfig]);
 
   const setV2Handle = useCallback(
     (handle: FossbotSimulatorHandle | null) => {
@@ -145,6 +190,27 @@ const V2WebGLApp = forwardRef<unknown, WebGLAppProps>((props, ref) => {
     },
     [ref],
   );
+
+  const handleMountChange = useCallback(
+    (mounted: boolean) => {
+      props.onMountChange(mounted);
+      // After simulator is mounted-with-correct-stage, apply subsequent stage changes
+      // via setStage (e.g. from dialog or reload). The initial stage is handled by initialStageConfig.
+      if (mounted && initialStageConfig === null && stageLoadError) {
+        // Pre-fetch failed; try swapping now that the engine is ready
+        if (handleRef.current && props.initialStageUrl) {
+          void handleRef.current.setStage(props.initialStageUrl);
+        }
+      }
+    },
+    [initialStageConfig, stageLoadError, props.initialStageUrl, props.onMountChange],
+  );
+
+  // Listen for subsequent stage changes (dialog, reload button)
+  useEffect(() => {
+    if (!handleRef.current) return;
+    void handleRef.current.setStage(currentURL);
+  }, [currentURL]);
 
   const handleForward = async () => {
     await handleRef.current?.moveStep(-0.4);
@@ -170,10 +236,9 @@ const V2WebGLApp = forwardRef<unknown, WebGLAppProps>((props, ref) => {
     await handleRef.current?.setStage(currentURL);
   };
 
-  const handleCardSelect = async (url: string) => {
+  const handleCardSelect = (url: string) => {
     setCurrentURL(url);
     setOpenDialog(false);
-    await handleRef.current?.setStage(url);
   };
 
   const handleLightIntensityChange = (_event: Event, newValue: number | number[]) => {
@@ -181,6 +246,24 @@ const V2WebGLApp = forwardRef<unknown, WebGLAppProps>((props, ref) => {
     setLightIntensity(intensity);
     handleRef.current?.setLightIntensity(intensity);
   };
+
+  // While pre-fetching the stage, show a centered loading spinner
+  if (initialStageConfig === undefined) {
+    return (
+      <Box
+        display="flex"
+        flexDirection="column"
+        alignItems="center"
+        justifyContent="center"
+        height="100%"
+        width="100%"
+        gap={2}
+      >
+        <CircularProgress size={48} />
+        <Typography variant="body2" color="text.secondary">Loading stage…</Typography>
+      </Box>
+    );
+  }
 
   return (
     <Box
@@ -195,9 +278,10 @@ const V2WebGLApp = forwardRef<unknown, WebGLAppProps>((props, ref) => {
         <Suspense fallback={<div style={{ width: '100%', height: '100%' }} />}>
           <LazyFossbotSimulator
             appsessionId={props.appsessionId}
-            onMountChange={props.onMountChange}
+            onMountChange={handleMountChange}
             config={v2Config}
             ref={setV2Handle}
+            initialStageConfig={initialStageConfig || undefined}
           />
         </Suspense>
       </Box>
