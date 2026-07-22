@@ -46,6 +46,7 @@ import ErrorAlert from 'src/components/alerts/ErrorAlert';
 import { Project, type ProjectStageReference } from 'src/authentication/AuthInterfaces';
 import { loadStageFromProvider } from 'src/stages/StagesApi';
 import type { RawStageConfig } from 'src/simulator/stages';
+import StageLoadScreen from 'src/components/stage-select-popup/StageLoadScreen';
 import ExecutionTargetPanel from 'src/components/robot/ExecutionTargetPanel';
 import PhysicalRobotTerminal from 'src/components/robot/PhysicalRobotTerminal';
 import { useRobotConnection } from 'src/robot/RobotConnectionContext';
@@ -57,6 +58,16 @@ const textart = `
 
 print("hello world")`;
 
+function stageNeedsProviderLoad(
+  stage: ProjectStageReference | null,
+): stage is ProjectStageReference & { repoOwner: string; repoName: string } {
+  return (
+    (stage?.sourceType === 'github' || stage?.sourceType === 'marketplace') &&
+    !!stage.repoOwner &&
+    !!stage.repoName
+  );
+}
+
 const MonacoPage: React.FC = () => {
   const { t } = useTranslation();
   const location = useLocation();
@@ -65,11 +76,11 @@ const MonacoPage: React.FC = () => {
   const [projectDescription, setProjectDescription] = useState(t('newProjectDescription'));
   const [selectedStage, setSelectedStage] = useState<ProjectStageReference | null>(null);
   const [initialStageConfig, setInitialStageConfig] = useState<RawStageConfig | null | undefined>(undefined);
+  const [initialStageAssetBaseUrl, setInitialStageAssetBaseUrl] = useState<string | null>(null);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [isEditingDescription, setIsEditingDescription] = useState(false);
   const [sessionId, setSessionId] = useState('');
   const [loading, setLoading] = useState(true);
-  const [isSimulatorLoading, setIsSimulatorLoading] = useState(true);
   const [showDrawer, setShowDrawer] = useState(false);
   const [showVideoPlayer, setShowVideoPlayer] = useState(false);
   const runScriptRef = useRef<() => Promise<void>>();
@@ -168,11 +179,16 @@ const MonacoPage: React.FC = () => {
             setEditorValue(fetchedProject.code);
             setProjectTitle(fetchedProject.name);
             setProjectDescription(fetchedProject.description);
-            setSelectedStage(fetchedProject.stageReference || null);
+            const stageRef = fetchedProject.stageReference || null;
+            setInitialStageConfig(stageNeedsProviderLoad(stageRef) ? undefined : null);
+            setInitialStageAssetBaseUrl(null);
+            setSelectedStage(stageRef);
           }
         } else {
           setEditorValue(textart);
           setProjectTitle(translationRef.current('newProject'));
+          setInitialStageConfig(null);
+          setInitialStageAssetBaseUrl(null);
         }
       } catch (error) {
         console.error('Error fetching project:', error);
@@ -186,30 +202,38 @@ const MonacoPage: React.FC = () => {
   }, [projectId, navigate]);
 
   useEffect(() => {
-    if (!token || !selectedStage?.repoOwner || !selectedStage?.repoName) {
-      setInitialStageConfig(undefined);
+    if (!stageNeedsProviderLoad(selectedStage)) {
+      setInitialStageConfig(null);
+      setInitialStageAssetBaseUrl(null);
       return;
     }
-    if (selectedStage.sourceType !== 'github' && selectedStage.sourceType !== 'marketplace') {
-      setInitialStageConfig(undefined);
-      return;
-    }
+    if (!token) return;
 
     setInitialStageConfig(undefined);
+    setInitialStageAssetBaseUrl(null);
     let cancelled = false;
     loadStageFromProvider(token, selectedStage.repoOwner, selectedStage.repoName)
       .then((loaded) => {
-        if (!cancelled) setInitialStageConfig(loaded.record.config);
+        if (!cancelled) {
+          setInitialStageAssetBaseUrl(loaded.rawBaseUrl || null);
+          setInitialStageConfig(loaded.record.config);
+        }
       })
       .catch(() => {
-        if (!cancelled) setInitialStageConfig(undefined);
+        if (!cancelled) {
+          setInitialStageAssetBaseUrl(null);
+          setInitialStageConfig(null);
+        }
       });
     return () => { cancelled = true; };
   }, [token, selectedStage?.repoOwner, selectedStage?.repoName, selectedStage?.sourceType]);
 
   useEffect(() => {
     const handleStageSelected = (event: Event) => {
-      setSelectedStage((event as CustomEvent<ProjectStageReference>).detail || null);
+      const stageRef = (event as CustomEvent<ProjectStageReference>).detail || null;
+      setInitialStageConfig(stageNeedsProviderLoad(stageRef) ? undefined : null);
+      setInitialStageAssetBaseUrl(null);
+      setSelectedStage(stageRef);
     };
     window.addEventListener('fossbot:stage-selected', handleStageSelected);
     return () => window.removeEventListener('fossbot:stage-selected', handleStageSelected);
@@ -262,7 +286,6 @@ const MonacoPage: React.FC = () => {
 
   const handleMountChange = (isMounted: boolean) => {
     console.log('isMounted:', isMounted);
-    setIsSimulatorLoading(false);
   };
 
   const handleDrawerClose = () => {
@@ -296,6 +319,10 @@ const MonacoPage: React.FC = () => {
   const unhideVideoPlayer = () => {
     setIsInPIP(false);
   };
+
+  const isStageConfigLoading =
+    stageNeedsProviderLoad(selectedStage) && initialStageConfig === undefined;
+  const selectedStageLabel = selectedStage?.title || [selectedStage?.repoOwner, selectedStage?.repoName].filter(Boolean).join('/');
 
   const terminalPanel = (
     <Box
@@ -400,8 +427,10 @@ const MonacoPage: React.FC = () => {
             </Box>
           </Grid>
         </Grid>
-        {loading && isSimulatorLoading ? (
+        {loading ? (
           <Spinner />
+        ) : isStageConfigLoading ? (
+          <StageLoadScreen stageLabel={selectedStageLabel} />
         ) : (
           <Grid
             container
@@ -490,6 +519,7 @@ const MonacoPage: React.FC = () => {
                   onMountChange={handleMountChange}
                   initialStageUrl={selectedStage?.url || null}
                   initialStageConfig={initialStageConfig}
+                  initialStageAssetBaseUrl={initialStageAssetBaseUrl}
                 />
               </ExecutionTargetPanel>
 
