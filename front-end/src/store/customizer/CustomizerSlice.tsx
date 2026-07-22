@@ -1,4 +1,5 @@
 import { createSlice } from '@reduxjs/toolkit';
+import { loadUiPreferences } from 'src/utils/uiPreferences';
 
 interface StateType {
   activeDir?: string;
@@ -17,9 +18,11 @@ interface StateType {
   borderRadius?: number;
 }
 
+const storedPreferences = loadUiPreferences();
+
 const initialState = {
   activeDir: 'ltr',
-  activeMode: 'light', // This can be light or dark
+  activeMode: storedPreferences.activeMode || 'light', // This can be light or dark
   activeTheme: 'BLUE_THEME', // BLUE_THEME, GREEN_THEME, BLACK_THEME, PURPLE_THEME, ORANGE_THEME
   SidebarWidth: 270,
   MiniSidebarWidth: 87,
@@ -29,7 +32,7 @@ const initialState = {
   isSidebarHover: false,
   isMobileSidebar: false,
   isHorizontal: false,
-  isLanguage: 'en',
+  isLanguage: storedPreferences.language || 'en',
   isCardShadow: true,
   borderRadius: 7,
 };

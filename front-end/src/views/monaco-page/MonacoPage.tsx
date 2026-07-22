@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useCallback, useEffect, useState, useRef } from 'react';
 import {
   Box,
   Grid,
@@ -44,6 +44,9 @@ import ReactPlayer from 'react-player';
 import SuccessAlert from 'src/components/alerts/SuccessAlert';
 import ErrorAlert from 'src/components/alerts/ErrorAlert';
 import { Project } from 'src/authentication/AuthInterfaces';
+import ExecutionTargetPanel from 'src/components/robot/ExecutionTargetPanel';
+import PhysicalRobotTerminal from 'src/components/robot/PhysicalRobotTerminal';
+import { useRobotConnection } from 'src/robot/RobotConnectionContext';
 
 const textart = ` 
 # __   __   __   __   __   __  ___     __      ___       __       
@@ -68,9 +71,18 @@ const MonacoPage: React.FC = () => {
   const runScriptRef = useRef<() => Promise<void>>();
   const stopScriptRef = useRef<() => void>();
   const auth = useAuth();
+  const authRef = useRef(auth);
+  const translationRef = useRef(t);
+  authRef.current = auth;
+  translationRef.current = t;
   const navigate = useNavigate();
   const { projectId } = useParams<{ projectId: string }>();
   const [isInPIP, setIsInPIP] = useState(false);
+  const {
+    target,
+    runCode: runCodeOnRobot,
+    stop: stopPhysicalRobot,
+  } = useRobotConnection();
 
   const isColumn = useMediaQuery('(max-width:1024px)');
 
@@ -91,18 +103,36 @@ const MonacoPage: React.FC = () => {
     setShowErrorAlert(true);
   };
 
-  const handlePlayClick = () => {
+  const handlePlayClick = async () => {
     if (editorValue == '') {
       handleShowErrorAlert(t('alertMessages.emptyCodeMonaco'));
       return;
     }
+    if (target === 'robot') {
+      try {
+        await runCodeOnRobot(editorValue, `${projectTitle || 'fossbot_program'}.py`);
+        handleShowSuccessAlert('The physical FOSSBot accepted the program.');
+      } catch (error) {
+        handleShowErrorAlert(error instanceof Error ? error.message : String(error));
+      }
+      return;
+    }
     if (runScriptRef.current) {
-      runScriptRef.current();
+      await runScriptRef.current();
       handleShowSuccessAlert(t('alertMessages.codeRunning'));
     }
   };
 
-  const handleStopClick = () => {
+  const handleStopClick = async () => {
+    if (target === 'robot') {
+      try {
+        await stopPhysicalRobot();
+        handleShowErrorAlert(t('alertMessages.codeStopped'));
+      } catch (error) {
+        handleShowErrorAlert(error instanceof Error ? error.message : String(error));
+      }
+      return;
+    }
     if (stopScriptRef.current) {
       stopScriptRef.current();
       stopMotion();
@@ -110,13 +140,13 @@ const MonacoPage: React.FC = () => {
     }
   };
 
-  const setRunScriptFunction = (runScript: () => Promise<void>) => {
+  const setRunScriptFunction = useCallback((runScript: () => Promise<void>) => {
     runScriptRef.current = runScript;
-  };
+  }, []);
 
-  const setStopScriptFunction = (stopScript: () => void) => {
+  const setStopScriptFunction = useCallback((stopScript: () => void) => {
     stopScriptRef.current = stopScript;
-  };
+  }, []);
 
   useEffect(() => {
     const newSessionId = uuidv4();
@@ -128,7 +158,7 @@ const MonacoPage: React.FC = () => {
     const fetchProject = async () => {
       try {
         if (projectId && projectId !== '') {
-          const fetchedProject = await auth.getProjectByIdAction(Number(projectId));
+          const fetchedProject = await authRef.current.getProjectByIdAction(Number(projectId));
           if (fetchedProject) {
             setEditorValue(fetchedProject.code);
             setProjectTitle(fetchedProject.name);
@@ -136,7 +166,7 @@ const MonacoPage: React.FC = () => {
           }
         } else {
           setEditorValue(textart);
-          setProjectTitle(t('newProject'));
+          setProjectTitle(translationRef.current('newProject'));
         }
       } catch (error) {
         console.error('Error fetching project:', error);
@@ -147,7 +177,7 @@ const MonacoPage: React.FC = () => {
     };
 
     fetchProject();
-  }, [auth, projectId, navigate]);
+  }, [projectId, navigate]);
 
   useEffect(() => {
     if (location.pathname.endsWith('/monaco-tutorial-page')) {
@@ -160,10 +190,10 @@ const MonacoPage: React.FC = () => {
     }
   }, [location.pathname]);
 
-  const handleGetValue = (getValueFunc: () => string) => {
+  const handleGetValue = useCallback((getValueFunc: () => string) => {
     const value = getValueFunc();
     setEditorValue(value);
-  };
+  }, []);
 
   const handleSaveClick = async () => {
     if (
@@ -229,6 +259,45 @@ const MonacoPage: React.FC = () => {
   const unhideVideoPlayer = () => {
     setIsInPIP(false);
   };
+
+  const terminalPanel = (
+    <Box
+      height="35vh"
+      style={{
+        backgroundColor: 'black',
+        color: 'white',
+        padding: '2px 20px 5px',
+        overflow: 'auto',
+        fontFamily: 'monospace',
+        marginTop: target === 'simulation' ? '20px' : 0,
+        marginBottom: target === 'robot' ? '20px' : 0,
+      }}
+    >
+      <p>{t('monaco-page.fossbot-terminal')} 🐍</p>
+      {target === 'simulation' ? (
+        <PythonExecutor
+          pythonScript={editorValue}
+          sessionId={sessionId}
+          onRunScript={setRunScriptFunction}
+          onStopScript={setStopScriptFunction}
+          moveStep={moveStep}
+          rotateStep={rotateStep}
+          getdistance={get_distance}
+          rgbsetcolor={rgb_set_color}
+          getacceleration={get_acceleration}
+          getgyroscope={get_gyroscope}
+          getfloorsensor={get_floor_sensor}
+          justRotate={just_rotate}
+          justMove={just_move}
+          stopMotion={stopMotion}
+          getLightSensor={get_light_sensor}
+          drawLine={drawLine}
+        />
+      ) : (
+        <PhysicalRobotTerminal />
+      )}
+    </Box>
+  );
 
   return (
     <PageContainer title={t('monaco-page.title')} description={t('monaco-page.description')}>
@@ -302,7 +371,7 @@ const MonacoPage: React.FC = () => {
             paddingTop="0rem"
             paddingBottom="0rem"
             height={
-              isColumn
+              target === 'robot' || isColumn
                 ? 'auto'
                 : showVideoPlayer && !isInPIP
                 ? 'calc(150vh - 300px)'
@@ -375,41 +444,13 @@ const MonacoPage: React.FC = () => {
                 </Box>
               )}
 
-              <Box height="50vh">
-                <WebGLApp appsessionId={sessionId} onMountChange={handleMountChange} />
-              </Box>
+              {target === 'robot' && terminalPanel}
 
-              <Box
-                height="35vh"
-                style={{
-                  backgroundColor: 'black',
-                  color: 'white',
-                  padding: '2px 20px 5px',
-                  overflow: 'auto',
-                  fontFamily: 'monospace',
-                  marginTop: '20px',
-                }}
-              >
-                <p>{t('monaco-page.fossbot-terminal')} 🐍</p>
-                <PythonExecutor
-                  pythonScript={editorValue}
-                  sessionId={sessionId}
-                  onRunScript={setRunScriptFunction}
-                  onStopScript={setStopScriptFunction}
-                  moveStep={moveStep}
-                  rotateStep={rotateStep}
-                  getdistance={get_distance}
-                  rgbsetcolor={rgb_set_color}
-                  getacceleration={get_acceleration}
-                  getgyroscope={get_gyroscope}
-                  getfloorsensor={get_floor_sensor}
-                  justRotate={just_rotate}
-                  justMove={just_move}
-                  stopMotion={stopMotion}
-                  getLightSensor={get_light_sensor}
-                  drawLine={drawLine}
-                />
-              </Box>
+              <ExecutionTargetPanel height="50vh">
+                <WebGLApp appsessionId={sessionId} onMountChange={handleMountChange} />
+              </ExecutionTargetPanel>
+
+              {target === 'simulation' && terminalPanel}
             </Grid>
           </Grid>
         )}

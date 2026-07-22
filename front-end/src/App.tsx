@@ -13,6 +13,7 @@ import PageContainer from './components/container/PageContainer';
 import Footer from './components/landingpage/footer/Footer';
 import DevicesPage from './components/devices-page/DevicesPage';
 import { useTranslation } from 'react-i18next';
+import { RobotConnectionProvider } from './robot/RobotConnectionContext';
 
 function App() {
   const routing = useRoutes(Router);
@@ -41,7 +42,9 @@ function App() {
         <RTL direction={customizer.activeDir}>
           <CssBaseline />
           <MatomoTracker />
-          <ScrollToTop>{routing}</ScrollToTop>
+          <RobotConnectionProvider>
+            <ScrollToTop>{routing}</ScrollToTop>
+          </RobotConnectionProvider>
         </RTL>
       </ThemeProvider>
     </AuthProvider>

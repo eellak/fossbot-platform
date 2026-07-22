@@ -37,6 +37,26 @@ interface AuthProviderProps {
     children: ReactNode;
 }
 
+const errorMessage = (error: unknown, fallback: string): string =>
+    error instanceof Error ? error.message : typeof error === 'string' ? error : fallback;
+
+const readApiJson = async (response: Response): Promise<any> => {
+    const contentType = response.headers.get('content-type') || '';
+    const body = await response.text();
+    if (!contentType.toLowerCase().includes('application/json')) {
+        throw new Error(
+            response.status >= 500
+                ? 'The platform API is unavailable. Check that the backend is running.'
+                : `The platform API returned an unexpected response (${response.status}).`,
+        );
+    }
+    try {
+        return body ? JSON.parse(body) : {};
+    } catch {
+        throw new Error(`The platform API returned invalid JSON (${response.status}).`);
+    }
+};
+
 const AuthProvider = ({ children }: AuthProviderProps) => {
     const localStorageName = 'fossbot-platform';
     const [user, setUser] = useState<User | null>(null);
@@ -70,7 +90,7 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
     const loginAction = async (data: LoginData) => {
         try {
             const response = await login(data);
-            const res = await response.json();
+            const res = await readApiJson(response);
 
             console.log(res)
             if (res.access_token) {
@@ -83,7 +103,13 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
             return { success: false, detail: res.detail || 'Login failed' };
         } catch (err) {
             console.error(err);
-            return { success: false, detail: err || 'Login failed' };
+            return {
+                success: false,
+                detail: errorMessage(
+                    err,
+                    'Could not reach the platform API. Check that the backend is running.',
+                ),
+            };
 
         }
     };

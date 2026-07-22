@@ -1,6 +1,7 @@
 import { configureStore } from '@reduxjs/toolkit';
 import CustomizerReducer from './customizer/CustomizerSlice';
 import { combineReducers } from 'redux';
+import { saveUiPreferences } from 'src/utils/uiPreferences';
 import {
   useDispatch as useAppDispatch,
   useSelector as useAppSelector,
@@ -11,6 +12,14 @@ export const store = configureStore({
   reducer: {
     customizer: CustomizerReducer,
   },
+});
+
+store.subscribe(() => {
+  const { activeMode, isLanguage } = store.getState().customizer;
+  saveUiPreferences({
+    activeMode: activeMode === 'dark' ? 'dark' : 'light',
+    language: isLanguage === 'gr' ? 'gr' : 'en',
+  });
 });
 
 const rootReducer = combineReducers({

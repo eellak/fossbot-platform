@@ -1,5 +1,5 @@
-# Use an official Node.js runtime as a base image
-FROM node:14-alpine as build-stage
+# Use a maintained Node.js runtime compatible with the v3 npm lockfile
+FROM node:20-alpine AS build-stage
 
 # Set the working directory in the container
 WORKDIR /usr/src/app/front-end
@@ -7,21 +7,18 @@ WORKDIR /usr/src/app/front-end
 # Copy package.json and package-lock.json to the working directory
 COPY package*.json ./
 
-# Install dependencies
-RUN npm install
+# Install the exact dependency versions captured in package-lock.json
+RUN npm ci
 
 # Copy the rest of the application code to the working directory
 COPY . .
 
-# Install env-cmd globally
-RUN npm install -g env-cmd
-
-# Build the React app
-RUN env-cmd -f .env.production npm run build
+# react-scripts automatically loads .env.production for production builds
+RUN npm run build
 
 
 # Stage 2: Serve the app using a lightweight server
-FROM nginx:stable-alpine as production-stage
+FROM nginx:stable-alpine AS production-stage
 
 # Copy the built assets from the build stage to the nginx server directory
 COPY --from=build-stage /usr/src/app/front-end/build /usr/share/nginx/html

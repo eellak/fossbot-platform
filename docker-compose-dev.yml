@@ -1,8 +1,8 @@
-version: '3.8'
 services:
   backend:
     image: fsbt-back
     container_name: fsbt-back
+    restart: unless-stopped
     build: ./back-end
     env_file:
       - .env
@@ -14,14 +14,23 @@ services:
       - ./back-end/utils:/usr/src/app/back-end/utils
       - ./back-end/database:/usr/src/app/back-end/database
       - ./back-end/models:/usr/src/app/back-end/models
+    depends_on:
+      db:
+        condition: service_healthy
 
   db:
-    image: postgres:latest
+    image: postgres:16
     container_name: fsbt-db
+    restart: unless-stopped
     env_file:
       - .env
     volumes:
       - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 2s
+      timeout: 5s
+      retries: 15
 
 volumes:
   db-data:

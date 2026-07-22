@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useCallback, useEffect, useState, useRef } from 'react';
 import { Box, Grid, Stack, DialogContent, Typography } from '@mui/material';
 import { useAuth } from 'src/authentication/AuthProvider'; // Assuming AuthProvider is in the same directory
 import { v4 as uuidv4 } from 'uuid';
@@ -35,6 +35,9 @@ import SuccessAlert from 'src/components/alerts/SuccessAlert';
 import ErrorAlert from 'src/components/alerts/ErrorAlert';
 import { Project } from 'src/authentication/AuthInterfaces';
 import { useMediaQuery } from '@mui/material';
+import ExecutionTargetPanel from 'src/components/robot/ExecutionTargetPanel';
+import PhysicalRobotTerminal from 'src/components/robot/PhysicalRobotTerminal';
+import { useRobotConnection } from 'src/robot/RobotConnectionContext';
 
 const BlocklyPage = () => {
   const { t } = useTranslation();
@@ -54,11 +57,20 @@ const BlocklyPage = () => {
 
   const runScriptRef = useRef<() => Promise<void>>();
   const auth = useAuth();
+  const authRef = useRef(auth);
+  const translationRef = useRef(t);
+  authRef.current = auth;
+  translationRef.current = t;
   const navigate = useNavigate();
   const { projectId } = useParams(); // Get project ID from URL
   const stopScriptRef = useRef<() => void>(); // Added stop script ref
   const [openDialog, setOpenDialog] = useState(false); // New state for dialog
   const [isInPIP, setIsInPIP] = useState(false);
+  const {
+    target,
+    runCode: runCodeOnRobot,
+    stop: stopPhysicalRobot,
+  } = useRobotConnection();
   // ALERTS HANDLING
   const [showSuccessAlert, setShowSuccessAlert] = useState(false);
   const [showErrorAlert, setShowErrorAlert] = useState(false);
@@ -76,7 +88,7 @@ const BlocklyPage = () => {
     setShowErrorAlert(true);
   };
 
-  const handlePlayClick = () => {
+  const handlePlayClick = async () => {
     if (
       editorValue == '<xml xmlns="https://developers.google.com/blockly/xml"></xml>' ||
       editorValue == ''
@@ -84,20 +96,32 @@ const BlocklyPage = () => {
       handleShowErrorAlert(t('alertMessages.emptyCodeBlockly'));
       return;
     }
+    if (target === 'robot') {
+      if (!editorPythonValue.trim()) {
+        handleShowErrorAlert('Add at least one executable Blockly block.');
+        return;
+      }
+      try {
+        await runCodeOnRobot(editorPythonValue, `${projectTitle || 'blockly_program'}.py`);
+        handleShowSuccessAlert('The physical FOSSBot accepted the Blockly program.');
+      } catch (error) {
+        handleShowErrorAlert(error instanceof Error ? error.message : String(error));
+      }
+      return;
+    }
     if (runScriptRef.current) {
-      runScriptRef.current();
+      await runScriptRef.current();
       handleShowSuccessAlert(t('alertMessages.codeRunning'));
     }
   };
-
-  const setRunScriptFunction = (runScript: () => Promise<void>) => {
+  const setRunScriptFunction = useCallback((runScript: () => Promise<void>) => {
     runScriptRef.current = runScript;
-  };
+  }, []);
 
-  const setStopScriptFunction = (stopScript: () => void) => {
+  const setStopScriptFunction = useCallback((stopScript: () => void) => {
     // Added set stop script function
     stopScriptRef.current = stopScript;
-  };
+  }, []);
 
   useEffect(() => {
     // Generate a new session ID when the component mounts
@@ -110,7 +134,7 @@ const BlocklyPage = () => {
     const fetchProject = async () => {
       try {
         if (projectId != '' && projectId != undefined) {
-          const fetchedProject = await auth.getProjectByIdAction(Number(projectId));
+          const fetchedProject = await authRef.current.getProjectByIdAction(Number(projectId));
           if (fetchedProject) {
             if (fetchedProject.code != '') {
               setEditorValue(fetchedProject.code);
@@ -119,7 +143,7 @@ const BlocklyPage = () => {
           }
         } else {
           //setEditorValue( '<xml xmlns="https://developers.google.com/blockly/xml"></xml>');
-          setProjectTitle(t('newProject'));
+          setProjectTitle(translationRef.current('newProject'));
         }
       } catch (error) {
         console.error('Error fetching project:', error);
@@ -130,7 +154,7 @@ const BlocklyPage = () => {
     };
 
     fetchProject();
-  }, [auth, projectId, editorValue, projectTitle, navigate]);
+  }, [projectId, navigate]);
 
   useEffect(() => {
     if (location.pathname.endsWith('/blockly-tutorial-page')) {
@@ -144,13 +168,21 @@ const BlocklyPage = () => {
   }, [location.pathname]);
 
   // Function to be called when the value in the editor changes
-  const handleGetValue = (getValueFunc) => {
+  const handleGetValue = useCallback((getValueFunc) => {
     // Save xml code
     const value = getValueFunc();
     setEditorValue(value);
-  };
-
-  const handleStopClick = () => {
+  }, []);
+  const handleStopClick = async () => {
+    if (target === 'robot') {
+      try {
+        await stopPhysicalRobot();
+        handleShowErrorAlert(t('alertMessages.codeStopped'));
+      } catch (error) {
+        handleShowErrorAlert(error instanceof Error ? error.message : String(error));
+      }
+      return;
+    }
     if (stopScriptRef.current) {
       stopScriptRef.current();
       stopMotion();
@@ -158,11 +190,11 @@ const BlocklyPage = () => {
     }
   };
 
-  const handleGetPythonCodeValue = (getValueFunc) => {
+  const handleGetPythonCodeValue = useCallback((getValueFunc) => {
     // Save Python code
     const value = getValueFunc;
     setEditorPythonValue(value);
-  };
+  }, []);
 
   const handleSaveClick = async () => {
     if (
@@ -209,6 +241,45 @@ const BlocklyPage = () => {
   };
 
   const isResponsive = useMediaQuery('(max-width:1024px)');
+
+  const terminalPanel = (
+    <Box
+      height="35vh"
+      style={{
+        backgroundColor: 'black',
+        color: 'white',
+        padding: '2px 20px 5px',
+        overflow: 'auto',
+        fontFamily: 'monospace',
+        marginTop: target === 'simulation' ? '20px' : 0,
+        marginBottom: target === 'robot' ? '20px' : 0,
+      }}
+    >
+      <p>{t('blockly-page.fossbot-terminal')} 🐍</p>
+      {target === 'simulation' ? (
+        <PythonExecutor
+          pythonScript={editorPythonValue}
+          sessionId={sessionId}
+          onRunScript={setRunScriptFunction}
+          onStopScript={setStopScriptFunction}
+          moveStep={moveStep}
+          rotateStep={rotateStep}
+          getdistance={get_distance}
+          rgbsetcolor={rgb_set_color}
+          getacceleration={get_acceleration}
+          getgyroscope={get_gyroscope}
+          getfloorsensor={get_floor_sensor}
+          justRotate={just_rotate}
+          justMove={just_move}
+          stopMotion={stopMotion}
+          getLightSensor={get_light_sensor}
+          drawLine={drawLine}
+        />
+      ) : (
+        <PhysicalRobotTerminal />
+      )}
+    </Box>
+  );
 
   return (
     <PageContainer title={t('blockly-page.title')} description={t('blockly-page.description')}>
@@ -268,7 +339,13 @@ const BlocklyPage = () => {
             spacing={1}
             paddingTop={'0rem'}
             paddingBottom={'0rem'}
-            height={showVideoPlayer && !isInPIP ? 'calc(150vh - 300px)' : 'calc(120vh - 300px)'}
+            height={
+              target === 'robot'
+                ? 'auto'
+                : showVideoPlayer && !isInPIP
+                ? 'calc(150vh - 300px)'
+                : 'calc(120vh - 300px)'
+            }
             direction={isResponsive ? 'column' : 'row'}
             className="blocklyResponsive"
           >
@@ -336,51 +413,13 @@ const BlocklyPage = () => {
                 </Box>
               )}
 
-              <Box height="50vh">
+              {target === 'robot' && terminalPanel}
+
+              <ExecutionTargetPanel height="50vh">
                 <WebGLApp appsessionId={sessionId} onMountChange={handleMountChange} />
-              </Box>
-              <br />
+              </ExecutionTargetPanel>
 
-              {/* Terminal */}
-
-              <Box
-                height={'35vh'}
-                style={{
-                  backgroundColor: 'black',
-                  color: 'white',
-                  padding: '2px 20px 5px',
-                  overflow: 'auto',
-                  fontFamily: 'monospace', // setting the font to monospace for a console-like appearance
-                }}
-              >
-                <p>{t('blockly-page.fossbot-terminal')} 🐍</p>
-                <PythonExecutor
-                  pythonScript={editorPythonValue}
-                  sessionId={sessionId}
-                  onRunScript={setRunScriptFunction}
-                  onStopScript={setStopScriptFunction} // Pass set stop script function
-                  moveStep={moveStep} // Pass move function as prop
-                  rotateStep={rotateStep} // Pass rotate function as prop
-                  getdistance={get_distance}
-                  rgbsetcolor={rgb_set_color}
-                  getacceleration={get_acceleration}
-                  getgyroscope={get_gyroscope}
-                  getfloorsensor={get_floor_sensor}
-                  justRotate={just_rotate}
-                  justMove={just_move}
-                  stopMotion={stopMotion}
-                  getLightSensor={get_light_sensor}
-                  drawLine={drawLine}
-                />
-
-                {/*                 
-                <PythonTerminal
-                  pythonScript={editorPythonValue}
-                  sessionId={sessionId}
-                  onRunScript={setRunScriptFunction}
-
-                /> */}
-              </Box>
+              {target === 'simulation' && terminalPanel}
             </Grid>
           </Grid>
         )}

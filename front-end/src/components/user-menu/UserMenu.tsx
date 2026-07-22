@@ -74,7 +74,6 @@ const UserMenu = () => {
       <Menu
         id="msgs-menu"
         anchorEl={anchorEl2}
-        keepMounted
         open={Boolean(anchorEl2)}
         onClose={handleClose2}
         anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
@@ -122,9 +121,10 @@ const UserMenu = () => {
                     alignItems="center"
                     justifyContent="center"
                   >
-                    <Avatar
+                    <Box
+                      component="img"
                       src={profile.icon}
-                      alt={profile.icon}
+                      alt=""
                       sx={{
                         width: 24,
                         height: 24,
@@ -176,9 +176,10 @@ const UserMenu = () => {
                         alignItems="center"
                         justifyContent="center"
                       >
-                        <Avatar
+                        <Box
+                          component="img"
                           src={admin.icon}
-                          alt={admin.icon}
+                          alt=""
                           sx={{
                             width: 24,
                             height: 24,

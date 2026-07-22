@@ -13,3 +13,5 @@ data/
 **/alembic/
 **/old*
 **/versions/*.py
+temp_addon/
+front-end/.local-certs/
