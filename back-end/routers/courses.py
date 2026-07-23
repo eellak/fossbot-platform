@@ -6,7 +6,7 @@ import uuid
 import xml.etree.ElementTree as ElementTree
 from typing import Any, Literal, Optional
 
-from database.database import Course, CourseRelease, Enrollment, Lesson, LessonProgress, User
+from database.database import Course, CourseRelease, Enrollment, Lesson, LessonProgress, LessonWorkspace, User
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError
@@ -209,6 +209,11 @@ class LessonUpdate(BaseModel):
 
 class ReorderRequest(BaseModel):
     lesson_ids: list[int] = Field(min_length=1)
+
+
+class WorkspaceSaveRequest(BaseModel):
+    content: Any = None
+    revision: int = Field(ge=1)
 
 
 class LessonResponse(BaseModel):
@@ -603,6 +608,9 @@ def validate_publication(course: Course, lessons: list[Lesson]) -> None:
             validate_activities(lesson.activities)
         except ValueError as error:
             raise HTTPException(status_code=422, detail=f"Lesson {lesson.lesson_key}: {error}") from error
+    for previous, lesson in zip(lessons, lessons[1:]):
+        if lesson.start_mode == "inherit_previous_code" and lesson.editor_type != previous.editor_type:
+            raise HTTPException(status_code=422, detail=f"Lesson {lesson.lesson_key}: inherited workspaces require the same editor type as the previous lesson")
 
 
 def stage_model_from_lesson(lesson: Lesson) -> Optional[StageReference]:
@@ -987,6 +995,85 @@ def progress_row(db: Session, enrollment: Enrollment, lesson_key: str) -> Option
     ).first()
 
 
+def workspace_payload(workspace: LessonWorkspace) -> dict[str, Any]:
+    return {
+        "id": workspace.id,
+        "enrollment_id": workspace.enrollment_id,
+        "release_id": workspace.release_id,
+        "lesson_key": workspace.lesson_key,
+        "editor_type": workspace.editor_type,
+        "content": workspace.saved_content,
+        "origin": workspace.origin,
+        "revision": workspace.revision,
+        "initialized_at": workspace.initialized_at,
+        "updated_at": workspace.updated_at,
+    }
+
+
+def workspace_row(db: Session, enrollment_id: int, release_id: int, lesson_key: str) -> Optional[LessonWorkspace]:
+    return db.query(LessonWorkspace).filter(
+        LessonWorkspace.enrollment_id == enrollment_id,
+        LessonWorkspace.release_id == release_id,
+        LessonWorkspace.lesson_key == lesson_key,
+    ).first()
+
+
+def initialize_workspace(db: Session, enrollment: Enrollment, release: CourseRelease, lesson: dict[str, Any]) -> LessonWorkspace:
+    existing = workspace_row(db, enrollment.id, release.id, lesson["lessonKey"])
+    if existing:
+        return existing
+
+    now = datetime.datetime.utcnow()
+    content = lesson.get("starterContent")
+    origin: dict[str, Any] = {"type": "fresh", "baseline": content}
+    if lesson["startMode"] == "inherit_previous_code":
+        lessons = release_lessons(release)
+        index = next(index for index, item in enumerate(lessons) if item["lessonKey"] == lesson["lessonKey"])
+        previous = lessons[index - 1] if index > 0 else None
+        source = workspace_row(db, enrollment.id, release.id, previous["lessonKey"]) if previous else None
+        if source is None:
+            raise HTTPException(status_code=409, detail={
+                "error": "previous_workspace_required",
+                "detail": "Start the previous lesson before opening this inherited workspace.",
+                "previousLessonKey": previous["lessonKey"] if previous else None,
+            })
+        if source.editor_type != lesson["editorType"]:
+            raise HTTPException(status_code=409, detail={
+                "error": "previous_workspace_incompatible",
+                "detail": "The previous lesson uses a different editor type.",
+                "previousLessonKey": previous["lessonKey"],
+            })
+        content = source.saved_content
+        origin = {
+            "type": "inherited",
+            "sourceLessonKey": source.lesson_key,
+            "sourceWorkspaceRevision": source.revision,
+            "baseline": content,
+        }
+
+    workspace = LessonWorkspace(
+        enrollment_id=enrollment.id,
+        release_id=release.id,
+        lesson_key=lesson["lessonKey"],
+        editor_type=lesson["editorType"],
+        saved_content=content,
+        origin=origin,
+        revision=1,
+        initialized_at=now,
+    )
+    db.add(workspace)
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        existing = workspace_row(db, enrollment.id, release.id, lesson["lessonKey"])
+        if existing:
+            return existing
+        raise
+    db.refresh(workspace)
+    return workspace
+
+
 def refresh_course_completion(db: Session, enrollment: Enrollment, release: CourseRelease) -> None:
     db.flush()
     lesson_keys = [lesson["lessonKey"] for lesson in release_lessons(release)]
@@ -1102,6 +1189,55 @@ def start_lesson(enrollment_id: int, lesson_key: str, user: User = Depends(get_c
     return enrollment_payload(db, enrollment)
 
 
+@router.get("/enrollments/{enrollment_id}/lessons/{lesson_key}/workspace")
+def read_lesson_workspace(enrollment_id: int, lesson_key: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    require_student(user)
+    enrollment = owned_enrollment_or_404(db, user, enrollment_id)
+    release = db.query(CourseRelease).filter(CourseRelease.id == enrollment.active_release_id).one()
+    lesson = lesson_for_release_or_404(release, lesson_key)
+    return workspace_payload(initialize_workspace(db, enrollment, release, lesson))
+
+
+@router.put("/enrollments/{enrollment_id}/lessons/{lesson_key}/workspace")
+def save_lesson_workspace(enrollment_id: int, lesson_key: str, request: WorkspaceSaveRequest, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    require_student(user)
+    enrollment = owned_enrollment_or_404(db, user, enrollment_id)
+    release = db.query(CourseRelease).filter(CourseRelease.id == enrollment.active_release_id).one()
+    lesson = lesson_for_release_or_404(release, lesson_key)
+    workspace = initialize_workspace(db, enrollment, release, lesson)
+    if workspace.revision != request.revision:
+        raise HTTPException(status_code=409, detail={
+            "error": "workspace_revision_conflict",
+            "detail": "This workspace was saved in another tab.",
+            "currentRevision": workspace.revision,
+        })
+    try:
+        validate_starter(workspace.editor_type, request.content)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    workspace.saved_content = request.content
+    workspace.revision += 1
+    safe_commit(db)
+    db.refresh(workspace)
+    return workspace_payload(workspace)
+
+
+@router.post("/enrollments/{enrollment_id}/lessons/{lesson_key}/workspace/reset")
+def reset_lesson_workspace(enrollment_id: int, lesson_key: str, request: WorkspaceSaveRequest, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    require_student(user)
+    enrollment = owned_enrollment_or_404(db, user, enrollment_id)
+    release = db.query(CourseRelease).filter(CourseRelease.id == enrollment.active_release_id).one()
+    lesson = lesson_for_release_or_404(release, lesson_key)
+    workspace = initialize_workspace(db, enrollment, release, lesson)
+    if workspace.revision != request.revision:
+        raise HTTPException(status_code=409, detail={"error": "workspace_revision_conflict", "detail": "This workspace was saved in another tab.", "currentRevision": workspace.revision})
+    workspace.saved_content = workspace.origin.get("baseline")
+    workspace.revision += 1
+    safe_commit(db)
+    db.refresh(workspace)
+    return workspace_payload(workspace)
+
+
 @router.post("/enrollments/{enrollment_id}/lessons/{lesson_key}/complete")
 def complete_lesson(enrollment_id: int, lesson_key: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     require_student(user)
@@ -1185,6 +1321,10 @@ def update_enrollment_release(enrollment_id: int, user: User = Depends(get_curre
         LessonProgress.enrollment_id == enrollment.id,
         LessonProgress.release_id == active.id,
     ).all()}
+    old_workspaces = {item.lesson_key: item for item in db.query(LessonWorkspace).filter(
+        LessonWorkspace.enrollment_id == enrollment.id,
+        LessonWorkspace.release_id == active.id,
+    ).all()}
     for lesson in release_lessons(latest):
         key = lesson["lessonKey"]
         previous = active_by_key.get(key)
@@ -1198,6 +1338,18 @@ def update_enrollment_release(enrollment_id: int, user: User = Depends(get_curre
                 started_at=progress.started_at,
                 completed_at=progress.completed_at,
                 completion_method=progress.completion_method,
+            ))
+        workspace = old_workspaces.get(key)
+        if previous and workspace and previous["definitionHash"] == lesson["definitionHash"]:
+            db.add(LessonWorkspace(
+                enrollment_id=enrollment.id,
+                release_id=latest.id,
+                lesson_key=key,
+                editor_type=workspace.editor_type,
+                saved_content=workspace.saved_content,
+                origin={**(workspace.origin or {}), "carriedFromReleaseId": active.id, "carriedFromWorkspaceRevision": workspace.revision},
+                revision=1,
+                initialized_at=datetime.datetime.utcnow(),
             ))
     enrollment.active_release_id = latest.id
     enrollment.release_updated_at = datetime.datetime.utcnow()

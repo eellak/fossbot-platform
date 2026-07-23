@@ -10,6 +10,7 @@ import type {
   Enrollment,
   ReleaseUpdate,
   StudentCourse,
+  LessonWorkspace,
 } from './types';
 
 const backendUrl: string = process.env.REACT_APP_BACKEND_URL;
@@ -133,4 +134,16 @@ export async function readReleaseUpdate(token: string, enrollmentId: number): Pr
 
 export async function updateEnrollmentRelease(token: string, enrollmentId: number): Promise<Enrollment> {
   return parse(await fetch(`${backendUrl}/enrollments/${enrollmentId}/update-release`, { method: 'POST', headers: headers(token) }));
+}
+
+export async function readLessonWorkspace(token: string, enrollmentId: number, lessonKey: string): Promise<LessonWorkspace> {
+  return parse(await fetch(`${backendUrl}/enrollments/${enrollmentId}/lessons/${encodeURIComponent(lessonKey)}/workspace`, { headers: headers(token) }));
+}
+
+export async function saveLessonWorkspace(token: string, enrollmentId: number, lessonKey: string, content: LessonWorkspace['content'], revision: number): Promise<LessonWorkspace> {
+  return parse(await fetch(`${backendUrl}/enrollments/${enrollmentId}/lessons/${encodeURIComponent(lessonKey)}/workspace`, { method: 'PUT', headers: headers(token), body: JSON.stringify({ content, revision }) }));
+}
+
+export async function resetLessonWorkspace(token: string, enrollmentId: number, lessonKey: string, revision: number): Promise<LessonWorkspace> {
+  return parse(await fetch(`${backendUrl}/enrollments/${enrollmentId}/lessons/${encodeURIComponent(lessonKey)}/workspace/reset`, { method: 'POST', headers: headers(token), body: JSON.stringify({ revision }) }));
 }

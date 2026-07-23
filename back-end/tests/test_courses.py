@@ -1,6 +1,6 @@
 from unittest.mock import patch
 
-from database.database import Course, CourseRelease, Enrollment, Lesson, LessonProgress, User
+from database.database import Course, CourseRelease, Enrollment, Lesson, LessonProgress, LessonWorkspace, User
 from models.models import UserRole
 
 
@@ -418,3 +418,82 @@ def test_archived_course_remains_available_to_enrolled_student(client_for, users
     assert learner.post(f"/courses/{course['id']}/enroll").status_code == 201
     assert teacher.delete(f"/courses/{course['id']}").status_code == 204
     assert learner.get(f"/courses/{course['id']}").status_code == 200
+
+
+def test_workspace_fresh_save_conflict_and_reset(client_for, users):
+    tutor, _, student, _ = users
+    teacher = client_for(tutor)
+    course = create_course(teacher)
+    lesson = add_lesson(teacher, course["id"], editor_type="python", starter_content="print('start')")
+    teacher.post(f"/courses/{course['id']}/publish")
+    learner = client_for(student)
+    enrollment = learner.post(f"/courses/{course['id']}/enroll").json()
+    path = f"/enrollments/{enrollment['id']}/lessons/{lesson['lesson_key']}/workspace"
+
+    initial = learner.get(path).json()
+    assert initial["content"] == "print('start')"
+    assert initial["origin"]["type"] == "fresh"
+    saved = learner.put(path, json={"content": "print('student')", "revision": 1}).json()
+    assert saved["revision"] == 2
+    conflict = learner.put(path, json={"content": "stale", "revision": 1})
+    assert conflict.status_code == 409
+    assert conflict.json()["detail"]["error"] == "workspace_revision_conflict"
+    reset = learner.post(f"{path}/reset", json={"revision": 2}).json()
+    assert reset["content"] == "print('start')"
+    assert reset["revision"] == 3
+
+
+def test_workspace_inheritance_is_one_time_and_requires_previous(client_for, users):
+    tutor, _, student, _ = users
+    teacher = client_for(tutor)
+    course = create_course(teacher)
+    first = add_lesson(teacher, course["id"], "One", editor_type="python", starter_content="one")
+    second = add_lesson(teacher, course["id"], "Two", editor_type="python", start_mode="inherit_previous_code")
+    third = add_lesson(teacher, course["id"], "Three", editor_type="python", start_mode="inherit_previous_code")
+    teacher.post(f"/courses/{course['id']}/publish")
+    learner = client_for(student)
+    enrollment = learner.post(f"/courses/{course['id']}/enroll").json()
+    base = f"/enrollments/{enrollment['id']}/lessons"
+
+    required = learner.get(f"{base}/{second['lesson_key']}/workspace")
+    assert required.status_code == 409
+    assert required.json()["detail"]["error"] == "previous_workspace_required"
+    first_workspace = learner.get(f"{base}/{first['lesson_key']}/workspace").json()
+    learner.put(f"{base}/{first['lesson_key']}/workspace", json={"content": "student one", "revision": first_workspace["revision"]})
+    inherited = learner.get(f"{base}/{second['lesson_key']}/workspace").json()
+    assert inherited["content"] == "student one"
+    assert inherited["origin"]["sourceLessonKey"] == first["lesson_key"]
+    learner.put(f"{base}/{first['lesson_key']}/workspace", json={"content": "later edit", "revision": 2})
+    assert learner.get(f"{base}/{second['lesson_key']}/workspace").json()["content"] == "student one"
+    assert learner.get(f"{base}/{third['lesson_key']}/workspace").json()["content"] == "student one"
+
+
+def test_publication_rejects_inheritance_across_editor_types(client_for, users):
+    tutor, _, _, _ = users
+    teacher = client_for(tutor)
+    course = create_course(teacher)
+    add_lesson(teacher, course["id"], editor_type="python", starter_content="start")
+    add_lesson(teacher, course["id"], editor_type="blockly", start_mode="inherit_previous_code")
+    response = teacher.post(f"/courses/{course['id']}/publish")
+    assert response.status_code == 422
+    assert "same editor type" in response.json()["detail"]
+
+
+def test_unchanged_workspace_is_carried_to_new_release_without_deleting_history(client_for, users, db):
+    tutor, _, student, _ = users
+    teacher = client_for(tutor)
+    course = create_course(teacher)
+    lesson = add_lesson(teacher, course["id"], editor_type="python", starter_content="start")
+    teacher.post(f"/courses/{course['id']}/publish")
+    learner = client_for(student)
+    enrollment = learner.post(f"/courses/{course['id']}/enroll").json()
+    path = f"/enrollments/{enrollment['id']}/lessons/{lesson['lesson_key']}/workspace"
+    workspace = learner.get(path).json()
+    learner.put(path, json={"content": "student", "revision": workspace["revision"]})
+
+    teacher.post(f"/courses/{course['id']}/publish")
+    updated = learner.post(f"/enrollments/{enrollment['id']}/update-release").json()
+    carried = learner.get(path).json()
+    assert carried["content"] == "student"
+    assert carried["release_id"] == updated["active_release"]["id"]
+    assert db.query(LessonWorkspace).filter(LessonWorkspace.enrollment_id == enrollment["id"]).count() == 2

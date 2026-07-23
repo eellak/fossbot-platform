@@ -117,8 +117,9 @@ export async function listProviderStages(token: string): Promise<ProviderStageLi
   return payload.stages;
 }
 
-export async function loadStageFromProvider(token: string, owner: string, repo: string): Promise<LoadStageFromProviderResponse> {
-  const response = await fetch(`${backendUrl}/api/stages/load/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`, {
+export async function loadStageFromProvider(token: string, owner: string, repo: string, commitSha?: string | null): Promise<LoadStageFromProviderResponse> {
+  const revision = commitSha ? `?commit_sha=${encodeURIComponent(commitSha)}` : '';
+  const response = await fetch(`${backendUrl}/api/stages/load/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}${revision}`, {
     method: 'GET',
     headers: {
       'Content-Type': 'application/json',

@@ -41,6 +41,7 @@ type WebGLAppProps = {
   initialStageConfig?: RawStageConfig | null;
   /** Base URL for assets referenced by initialStageConfig, such as GitHub stage assets. */
   initialStageAssetBaseUrl?: string | null;
+  showControls?: boolean;
 };
 
 const SIMULATOR_VERSION_KEY = 'fossbot.simulatorVersion';
@@ -298,7 +299,7 @@ const V2WebGLApp = forwardRef<unknown, WebGLAppProps>((props, ref) => {
           />
         </Suspense>
       </Box>
-      <Box mt={2} width="100%">
+      {props.showControls !== false && <Box mt={2} width="100%">
         <Grid container spacing={2} justifyContent="center">
           <Grid item>
             <Button variant="contained" color="primary" onClick={handleForward}>
@@ -336,8 +337,8 @@ const V2WebGLApp = forwardRef<unknown, WebGLAppProps>((props, ref) => {
             </Button>
           </Grid>
         </Grid>
-      </Box>
-      <Box mt={2} width="80%">
+      </Box>}
+      {props.showControls !== false && <Box mt={2} width="80%">
         <Grid container spacing={2} alignItems="center" justifyContent="center">
           <Grid item>
             <FontAwesomeIcon icon={faLightbulb} size="2x" color="primary" />
@@ -353,8 +354,8 @@ const V2WebGLApp = forwardRef<unknown, WebGLAppProps>((props, ref) => {
             />
           </Grid>
         </Grid>
-      </Box>
-      <CardDialog open={openDialog} onClose={() => setOpenDialog(false)} onSelect={handleCardSelect} />
+      </Box>}
+      {props.showControls !== false && <CardDialog open={openDialog} onClose={() => setOpenDialog(false)} onSelect={handleCardSelect} />}
     </Box>
   );
 });
@@ -453,6 +454,11 @@ export function drawLine(status: boolean): void {
   const handle = getActiveV2Handle();
   if (handle) handle.drawLine(status);
   else if (getSimulatorVersion() !== 'v2') legacyDrawLine(status);
+}
+
+export function changeCameraView(): void {
+  const handle = getActiveV2Handle();
+  if (handle) handle.changeCamera();
 }
 
 export { WebGLApp };
