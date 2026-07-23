@@ -6,8 +6,8 @@ import uuid
 import xml.etree.ElementTree as ElementTree
 from typing import Any, Literal, Optional
 
-from database.database import Course, CourseRelease, Enrollment, Lesson, User
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from database.database import Course, CourseRelease, Enrollment, Lesson, LessonProgress, User
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError
 from models.models import LessonCreate as LegacyLessonCreate
@@ -247,6 +247,11 @@ class CourseResponse(BaseModel):
     latest_published_release_version: Optional[int] = None
     created_at: datetime.datetime
     updated_at: datetime.datetime
+
+
+class StudentCourseResponse(CourseResponse):
+    author_name: str
+    latest_release: dict[str, Any]
 
 
 class CourseDraftResponse(CourseResponse):
@@ -526,6 +531,31 @@ def course_payload(course: Course, *, include_lessons: bool = False) -> dict[str
     }
     if include_lessons:
         payload["lessons"] = [lesson_payload(item) for item in course.lessons if not item.archived]
+    return payload
+
+
+def release_course_payload(course: Course, release: CourseRelease) -> dict[str, Any]:
+    payload = course_payload(course)
+    snapshot_course = release.snapshot["course"]
+    payload.update({
+        "title": snapshot_course["title"],
+        "description": snapshot_course["description"],
+        "learning_objectives": snapshot_course["learningObjectives"],
+        "visibility": snapshot_course["visibility"],
+        "cover_image_url": snapshot_course.get("coverImageUrl"),
+        "age_range": snapshot_course.get("ageRange"),
+        "difficulty": snapshot_course.get("difficulty"),
+        "estimated_duration_minutes": snapshot_course.get("estimatedDurationMinutes"),
+        "prerequisites": snapshot_course.get("prerequisites"),
+        "tags": snapshot_course.get("tags"),
+        "author_name": f"{course.author.firstname} {course.author.lastname}".strip() or course.author.username,
+        "latest_release": {
+            "id": release.id,
+            "version": release.version,
+            "published_at": release.published_at,
+            "lessons": release.snapshot["lessons"],
+        },
+    })
     return payload
 
 
@@ -881,28 +911,300 @@ def list_releases(course_id: int, user: User = Depends(get_current_user), db: Se
     return [release_payload(release) for release in releases]
 
 
-@router.get("/courses", response_model=list[CourseResponse])
-def list_public_courses(db: Session = Depends(get_db)):
-    courses = (
-        db.query(Course)
-        .filter(Course.status == "published", Course.visibility == "public", Course.latest_published_release_id.is_not(None))
-        .order_by(Course.updated_at.desc())
-        .all()
+@router.get("/courses", response_model=list[StudentCourseResponse])
+def list_public_courses(
+    search: Optional[str] = Query(default=None, max_length=100),
+    difficulty: Optional[str] = Query(default=None, max_length=50),
+    age_range: Optional[str] = Query(default=None, max_length=50),
+    db: Session = Depends(get_db),
+):
+    query = db.query(Course).filter(
+        Course.status == "published",
+        Course.visibility == "public",
+        Course.latest_published_release_id.is_not(None),
     )
-    return [course_payload(course) for course in courses]
+    if search:
+        term = f"%{search.strip()}%"
+        query = query.filter((Course.title.ilike(term)) | (Course.description.ilike(term)))
+    if difficulty:
+        query = query.filter(Course.difficulty == difficulty)
+    if age_range:
+        query = query.filter(Course.age_range == age_range)
+    courses = query.order_by(Course.updated_at.desc()).all()
+    releases = {release.id: release for release in db.query(CourseRelease).filter(
+        CourseRelease.id.in_([course.latest_published_release_id for course in courses])
+    ).all()} if courses else {}
+    return [release_course_payload(course, releases[course.latest_published_release_id]) for course in courses]
 
 
-@router.get("/courses/{course_id}", response_model=CourseResponse)
-def read_published_course(course_id: int, db: Session = Depends(get_db)):
+@router.get("/courses/{course_id}", response_model=StudentCourseResponse)
+def read_published_course(course_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    course = db.query(Course).filter(Course.id == course_id).first()
+    if course is None:
+        raise HTTPException(status_code=404, detail="Course not found")
+    enrollment = db.query(Enrollment).filter(Enrollment.course_id == course_id, Enrollment.student_id == user.id).first()
+    if enrollment:
+        release_id = enrollment.active_release_id
+    elif course.status == "published" and course.latest_published_release_id:
+        release_id = course.latest_published_release_id
+    else:
+        raise HTTPException(status_code=404, detail="Course not found")
+    release = db.query(CourseRelease).filter(CourseRelease.id == release_id).one()
+    return release_course_payload(course, release)
+
+
+def require_student(user: User) -> None:
+    if user.role != UserRole.USER:
+        raise HTTPException(status_code=403, detail="Student role required")
+
+
+def owned_enrollment_or_404(db: Session, user: User, enrollment_id: int) -> Enrollment:
+    enrollment = db.query(Enrollment).filter(
+        Enrollment.id == enrollment_id,
+        Enrollment.student_id == user.id,
+    ).first()
+    if enrollment is None:
+        raise HTTPException(status_code=404, detail="Enrollment not found")
+    return enrollment
+
+
+def release_lessons(release: CourseRelease) -> list[dict[str, Any]]:
+    return sorted(release.snapshot.get("lessons", []), key=lambda lesson: lesson["position"])
+
+
+def lesson_for_release_or_404(release: CourseRelease, lesson_key: str) -> dict[str, Any]:
+    lesson = next((item for item in release_lessons(release) if item["lessonKey"] == lesson_key), None)
+    if lesson is None:
+        raise HTTPException(status_code=404, detail="Lesson not found in active release")
+    return lesson
+
+
+def progress_row(db: Session, enrollment: Enrollment, lesson_key: str) -> Optional[LessonProgress]:
+    return db.query(LessonProgress).filter(
+        LessonProgress.enrollment_id == enrollment.id,
+        LessonProgress.release_id == enrollment.active_release_id,
+        LessonProgress.lesson_key == lesson_key,
+    ).first()
+
+
+def refresh_course_completion(db: Session, enrollment: Enrollment, release: CourseRelease) -> None:
+    db.flush()
+    lesson_keys = [lesson["lessonKey"] for lesson in release_lessons(release)]
+    completed = db.query(LessonProgress).filter(
+        LessonProgress.enrollment_id == enrollment.id,
+        LessonProgress.release_id == release.id,
+        LessonProgress.lesson_key.in_(lesson_keys),
+        LessonProgress.state == "completed",
+    ).count() if lesson_keys else 0
+    enrollment.completed_at = datetime.datetime.utcnow() if lesson_keys and completed == len(lesson_keys) else None
+
+
+def enrollment_payload(db: Session, enrollment: Enrollment) -> dict[str, Any]:
+    course = db.query(Course).filter(Course.id == enrollment.course_id).one()
+    release = db.query(CourseRelease).filter(CourseRelease.id == enrollment.active_release_id).one()
+    stored = {item.lesson_key: item for item in db.query(LessonProgress).filter(
+        LessonProgress.enrollment_id == enrollment.id,
+        LessonProgress.release_id == release.id,
+    ).all()}
+    lessons = release_lessons(release)
+    progress = [{
+        "lesson_key": lesson["lessonKey"],
+        "state": stored[lesson["lessonKey"]].state if lesson["lessonKey"] in stored else "not_started",
+        "started_at": stored[lesson["lessonKey"]].started_at if lesson["lessonKey"] in stored else None,
+        "completed_at": stored[lesson["lessonKey"]].completed_at if lesson["lessonKey"] in stored else None,
+        "completion_method": stored[lesson["lessonKey"]].completion_method if lesson["lessonKey"] in stored else None,
+    } for lesson in lessons]
+    completed_count = sum(item["state"] == "completed" for item in progress)
+    resume = next((item["lessonKey"] for item, state in zip(lessons, progress) if state["state"] != "completed"), None)
+    if resume is None and lessons:
+        resume = lessons[0]["lessonKey"]
+    latest = db.query(CourseRelease).filter(CourseRelease.id == course.latest_published_release_id).first()
+    snapshot_course = release.snapshot["course"]
+    return {
+        "id": enrollment.id,
+        "course_id": course.id,
+        "course": {
+            "title": snapshot_course["title"],
+            "description": snapshot_course["description"],
+            "author_name": f"{course.author.firstname} {course.author.lastname}".strip() or course.author.username,
+            "learning_objectives": snapshot_course["learningObjectives"],
+            "cover_image_url": snapshot_course.get("coverImageUrl"),
+            "age_range": snapshot_course.get("ageRange"),
+            "difficulty": snapshot_course.get("difficulty"),
+            "estimated_duration_minutes": snapshot_course.get("estimatedDurationMinutes"),
+            "prerequisites": snapshot_course.get("prerequisites"),
+            "tags": snapshot_course.get("tags"),
+            "visibility": snapshot_course["visibility"],
+        },
+        "active_release": {"id": release.id, "version": release.version, "published_at": release.published_at, "lessons": lessons},
+        "progress": progress,
+        "completed_count": completed_count,
+        "lesson_count": len(lessons),
+        "progress_percent": round(completed_count * 100 / len(lessons)) if lessons else 0,
+        "resume_lesson_key": resume,
+        "enrolled_at": enrollment.enrolled_at,
+        "completed_at": enrollment.completed_at,
+        "release_updated_at": enrollment.release_updated_at,
+        "update_available": bool(latest and latest.version > release.version),
+    }
+
+
+@router.post("/courses/{course_id}/enroll", status_code=status.HTTP_201_CREATED)
+def enroll_in_course(course_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    require_student(user)
     course = db.query(Course).filter(
         Course.id == course_id,
         Course.status == "published",
-        Course.visibility == "public",
         Course.latest_published_release_id.is_not(None),
     ).first()
     if course is None:
         raise HTTPException(status_code=404, detail="Course not found")
-    return course_payload(course)
+    existing = db.query(Enrollment).filter(Enrollment.student_id == user.id, Enrollment.course_id == course_id).first()
+    if existing:
+        return enrollment_payload(db, existing)
+    enrollment = Enrollment(student_id=user.id, course_id=course.id, active_release_id=course.latest_published_release_id)
+    db.add(enrollment)
+    safe_commit(db)
+    db.refresh(enrollment)
+    return enrollment_payload(db, enrollment)
+
+
+@router.get("/enrollments/mine")
+def list_my_enrollments(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    require_student(user)
+    enrollments = db.query(Enrollment).filter(Enrollment.student_id == user.id).order_by(Enrollment.enrolled_at.desc()).all()
+    return [enrollment_payload(db, item) for item in enrollments]
+
+
+@router.get("/enrollments/{enrollment_id}")
+def read_enrollment(enrollment_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    require_student(user)
+    return enrollment_payload(db, owned_enrollment_or_404(db, user, enrollment_id))
+
+
+@router.post("/enrollments/{enrollment_id}/lessons/{lesson_key}/start")
+def start_lesson(enrollment_id: int, lesson_key: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    require_student(user)
+    enrollment = owned_enrollment_or_404(db, user, enrollment_id)
+    release = db.query(CourseRelease).filter(CourseRelease.id == enrollment.active_release_id).one()
+    lesson_for_release_or_404(release, lesson_key)
+    progress = progress_row(db, enrollment, lesson_key)
+    if progress is None:
+        progress = LessonProgress(
+            enrollment_id=enrollment.id,
+            release_id=release.id,
+            lesson_key=lesson_key,
+            state="in_progress",
+            started_at=datetime.datetime.utcnow(),
+        )
+        db.add(progress)
+        safe_commit(db)
+    return enrollment_payload(db, enrollment)
+
+
+@router.post("/enrollments/{enrollment_id}/lessons/{lesson_key}/complete")
+def complete_lesson(enrollment_id: int, lesson_key: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    require_student(user)
+    enrollment = owned_enrollment_or_404(db, user, enrollment_id)
+    release = db.query(CourseRelease).filter(CourseRelease.id == enrollment.active_release_id).one()
+    lesson = lesson_for_release_or_404(release, lesson_key)
+    if lesson["completionPolicy"] not in ("self", "hybrid"):
+        raise HTTPException(status_code=409, detail="This lesson cannot be self-completed")
+    progress = progress_row(db, enrollment, lesson_key)
+    now = datetime.datetime.utcnow()
+    if progress is None:
+        progress = LessonProgress(enrollment_id=enrollment.id, release_id=release.id, lesson_key=lesson_key, started_at=now)
+        db.add(progress)
+    if progress.state != "completed":
+        progress.state = "completed"
+        progress.completed_at = now
+        progress.completion_method = "self"
+    refresh_course_completion(db, enrollment, release)
+    safe_commit(db)
+    return enrollment_payload(db, enrollment)
+
+
+@router.delete("/enrollments/{enrollment_id}/lessons/{lesson_key}/complete")
+def uncomplete_lesson(enrollment_id: int, lesson_key: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    require_student(user)
+    enrollment = owned_enrollment_or_404(db, user, enrollment_id)
+    release = db.query(CourseRelease).filter(CourseRelease.id == enrollment.active_release_id).one()
+    lesson = lesson_for_release_or_404(release, lesson_key)
+    progress = progress_row(db, enrollment, lesson_key)
+    if lesson["completionPolicy"] not in ("self", "hybrid") or progress is None or progress.completion_method != "self":
+        raise HTTPException(status_code=409, detail="This completion cannot be undone")
+    progress.state = "in_progress"
+    progress.completed_at = None
+    progress.completion_method = None
+    enrollment.completed_at = None
+    safe_commit(db)
+    return enrollment_payload(db, enrollment)
+
+
+def release_update_payload(active: CourseRelease, latest: CourseRelease) -> dict[str, Any]:
+    active_by_key = {lesson["lessonKey"]: lesson for lesson in release_lessons(active)}
+    latest_by_key = {lesson["lessonKey"]: lesson for lesson in release_lessons(latest)}
+    shared = set(active_by_key) & set(latest_by_key)
+    changed = [key for key in shared if active_by_key[key]["definitionHash"] != latest_by_key[key]["definitionHash"]]
+    stage_changed = any(
+        active_by_key[key].get("stageReference") != latest_by_key[key].get("stageReference") for key in shared
+    )
+    return {
+        "available": latest.version > active.version,
+        "current": {"id": active.id, "version": active.version, "published_at": active.published_at},
+        "latest": {"id": latest.id, "version": latest.version, "published_at": latest.published_at},
+        "added_lessons": len(set(latest_by_key) - set(active_by_key)),
+        "removed_lessons": len(set(active_by_key) - set(latest_by_key)),
+        "changed_lessons": len(changed),
+        "unchanged_lessons": len(shared) - len(changed),
+        "stage_revisions_changed": stage_changed,
+    }
+
+
+@router.get("/enrollments/{enrollment_id}/updates")
+def read_enrollment_updates(enrollment_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    require_student(user)
+    enrollment = owned_enrollment_or_404(db, user, enrollment_id)
+    active = db.query(CourseRelease).filter(CourseRelease.id == enrollment.active_release_id).one()
+    course = db.query(Course).filter(Course.id == enrollment.course_id).one()
+    latest = db.query(CourseRelease).filter(CourseRelease.id == course.latest_published_release_id).one()
+    return release_update_payload(active, latest)
+
+
+@router.post("/enrollments/{enrollment_id}/update-release")
+def update_enrollment_release(enrollment_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    require_student(user)
+    enrollment = owned_enrollment_or_404(db, user, enrollment_id)
+    active = db.query(CourseRelease).filter(CourseRelease.id == enrollment.active_release_id).one()
+    course = db.query(Course).filter(Course.id == enrollment.course_id).one()
+    latest = db.query(CourseRelease).filter(CourseRelease.id == course.latest_published_release_id).one()
+    if latest.version <= active.version:
+        raise HTTPException(status_code=409, detail="Enrollment already uses the latest release")
+    active_by_key = {lesson["lessonKey"]: lesson for lesson in release_lessons(active)}
+    old_progress = {item.lesson_key: item for item in db.query(LessonProgress).filter(
+        LessonProgress.enrollment_id == enrollment.id,
+        LessonProgress.release_id == active.id,
+    ).all()}
+    for lesson in release_lessons(latest):
+        key = lesson["lessonKey"]
+        previous = active_by_key.get(key)
+        progress = old_progress.get(key)
+        if previous and progress and previous["definitionHash"] == lesson["definitionHash"]:
+            db.add(LessonProgress(
+                enrollment_id=enrollment.id,
+                release_id=latest.id,
+                lesson_key=key,
+                state=progress.state,
+                started_at=progress.started_at,
+                completed_at=progress.completed_at,
+                completion_method=progress.completion_method,
+            ))
+    enrollment.active_release_id = latest.id
+    enrollment.release_updated_at = datetime.datetime.utcnow()
+    enrollment.completed_at = None
+    refresh_course_completion(db, enrollment, latest)
+    safe_commit(db)
+    return enrollment_payload(db, enrollment)
 
 
 def optional_current_user(token: Optional[str] = Depends(optional_oauth2), db: Session = Depends(get_db)) -> Optional[User]:

@@ -22,6 +22,9 @@ const StageGitHubTestPage = Loadable(
 const StagesPage = Loadable(lazy(() => import('../views/stages-page/StagesPage')));
 const TeacherCoursesPage = Loadable(lazy(() => import('../views/courses-teacher-page/TeacherCoursesPage')));
 const CourseEditorPage = Loadable(lazy(() => import('../views/course-editor-page/CourseEditorPage')));
+const CoursesPage = Loadable(lazy(() => import('../views/courses-page/CoursesPage')));
+const CoursePage = Loadable(lazy(() => import('../views/course-page/CoursePage')));
+const LessonPage = Loadable(lazy(() => import('../views/lesson-page/LessonPage')));
 
 //const BlocklyPage = Loadable(lazy(() => import('../views/blockly-page/BlocklyPage')));
 //const BlocklyPage =  '../views/blockly-page/BlocklyPage';
@@ -133,6 +136,24 @@ const Router = [
       </PrivateRoute>
     ),
     children: [{ path: '', exact: true, element: <StagesPage /> }],
+  },
+  {
+    path: '/courses',
+    title: 'Courses',
+    element: <PrivateRoute><FullLayout /></PrivateRoute>,
+    children: [{ path: '', exact: true, element: <CoursesPage /> }],
+  },
+  {
+    path: '/courses/:courseId',
+    title: 'Course',
+    element: <PrivateRoute><FullLayout /></PrivateRoute>,
+    children: [{ path: '', exact: true, element: <CoursePage /> }],
+  },
+  {
+    path: '/courses/:courseId/learn/:lessonKey',
+    title: 'Lesson',
+    element: <PrivateRoute><FullLayout /></PrivateRoute>,
+    children: [{ path: '', exact: true, element: <LessonPage /> }],
   },
   {
     path: '/teach/courses',

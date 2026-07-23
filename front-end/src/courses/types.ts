@@ -1,3 +1,5 @@
+import type { JSONContent } from '@tiptap/core';
+
 export type CourseStatus = 'draft' | 'published' | 'archived';
 export type CourseVisibility = 'public' | 'unlisted';
 export type LessonEditorType = 'none' | 'python' | 'blockly';
@@ -43,6 +45,77 @@ export interface CourseSummary {
   latest_published_release_version?: number | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface ReleaseLesson {
+  lessonKey: string;
+  title: string;
+  position: number;
+  activities: RichTextActivity[];
+  completionPolicy: CompletionPolicy;
+  startMode: LessonStartMode;
+  editorType: LessonEditorType;
+  starterContent?: string | Record<string, unknown> | null;
+  simulatorSettings?: Record<string, unknown> | null;
+  stageReference?: StageReference | null;
+  definitionHash: string;
+}
+
+export interface StudentCourse extends CourseSummary {
+  author_name: string;
+  latest_release: {
+    id: number;
+    version: number;
+    published_at: string;
+    lessons: ReleaseLesson[];
+  };
+}
+
+export interface LessonProgress {
+  lesson_key: string;
+  state: 'not_started' | 'in_progress' | 'completed';
+  started_at?: string | null;
+  completed_at?: string | null;
+  completion_method?: 'self' | null;
+}
+
+export interface Enrollment {
+  id: number;
+  course_id: number;
+  course: {
+    title: string;
+    description: string;
+    author_name: string;
+    learning_objectives: string[];
+    cover_image_url?: string | null;
+    age_range?: string | null;
+    difficulty?: string | null;
+    estimated_duration_minutes?: number | null;
+    prerequisites?: string | null;
+    tags?: string[] | null;
+    visibility: CourseVisibility;
+  };
+  active_release: { id: number; version: number; published_at: string; lessons: ReleaseLesson[] };
+  progress: LessonProgress[];
+  completed_count: number;
+  lesson_count: number;
+  progress_percent: number;
+  resume_lesson_key?: string | null;
+  enrolled_at: string;
+  completed_at?: string | null;
+  release_updated_at?: string | null;
+  update_available: boolean;
+}
+
+export interface ReleaseUpdate {
+  available: boolean;
+  current: { id: number; version: number; published_at: string };
+  latest: { id: number; version: number; published_at: string };
+  added_lessons: number;
+  removed_lessons: number;
+  changed_lessons: number;
+  unchanged_lessons: number;
+  stage_revisions_changed: boolean;
 }
 
 export interface Lesson {
@@ -118,4 +191,3 @@ export interface CourseRelease {
   published_at: string;
   snapshot: Record<string, unknown>;
 }
-import type { JSONContent } from '@tiptap/core';

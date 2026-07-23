@@ -7,6 +7,7 @@ import UserGitHubStagesPanel from 'src/components/dashboard/UserGitHubStagesPane
 import { Box, Grid } from '@mui/material';
 import SlideShow from 'src/components/cards-slide-show/SlideShow';
 import { useTranslation } from 'react-i18next';
+import CourseResumeCard from 'src/components/dashboard/CourseResumeCard';
 
 const Modern = () => {
   const { t } = useTranslation();
@@ -15,6 +16,7 @@ const Modern = () => {
     <PageContainer title={t('dashboard-page.title')} description={t('dashboard-page.description')}>
       <Box>
         <Grid container spacing={3}>
+          <Grid item xs={12}><CourseResumeCard /></Grid>
         {/* <Grid item xs={8} lg={8}>
         <SlideShow />
         </Grid> */}
