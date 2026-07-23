@@ -30,7 +30,7 @@ const SidebarItems = () => {
   const { user } = useAuth(); // Access user info
 
   // Modify menu items based on beta tester status
-  const modifiedMenuItems = Menuitems.map(item => {
+  const modifiedMenuItems = Menuitems.filter((item) => !item.allowedRoles || (user && item.allowedRoles.includes(user.role))).map(item => {
 
     if (betaFeatures.includes(item.href) && !user?.beta_tester && user?.role != UserRole.ADMIN) {
       return { ...item, disabled: true };

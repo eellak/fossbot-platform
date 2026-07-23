@@ -74,7 +74,8 @@
     "externalLinks": "External Links",
     "tutorials": "Tutorials",
     "stageBuilder": "Stage Builder",
-    "stageBuilderBased": "Create simulator stages"
+    "stageBuilderBased": "Create simulator stages",
+    "teacherCourses": "My courses"
   },
   "stage-builder": {
     "title": "Stage Builder",
@@ -324,6 +325,32 @@
     "codeStopped": "Your code just stopped being executed.",
     "emptyCodeBlockly": "Your code is empty. Please add some blocks before clicking the play button.",
     "emptyCodeMonaco": "Your code is empty. Please add at least one command before clicking the play button."
+  },
+  "education": {
+    "copy": "copy",
+    "status": { "draft": "Draft", "published": "Published", "archived": "Archived" },
+    "courseList": { "title": "My courses", "subtitle": "Create lessons, preview the student experience, and publish releases.", "create": "Create course", "search": "Search your courses", "empty": "Create your first course", "emptyHelp": "Start with a title, description, and one learning objective.", "noResults": "No courses match your search", "latestRelease": "Latest release: {{version}}", "noRelease": "Not published yet", "actions": "Course actions", "edit": "Resume editing", "duplicate": "Duplicate", "archive": "Archive", "archiveConfirm": "Archive “{{title}}”? Published releases will remain unchanged." },
+    "create": { "title": "Create a course", "requiredHelp": "These three fields are required. You can add optional details later." },
+    "fields": { "title": "Title", "description": "Description", "firstObjective": "First learning objective", "author": "Author", "objectives": "Learning objectives", "addObjective": "Add objective", "visibility": "Visibility", "cover": "Cover image URL", "ageRange": "Age range", "difficulty": "Difficulty", "duration": "Estimated duration (minutes)", "prerequisites": "Prerequisites", "tags": "Tags (comma separated)" },
+    "details": { "title": "Details", "optional": "Optional — these never block publication" },
+    "visibility": { "public": "Public", "unlisted": "Unlisted" },
+    "panels": { "outline": "Outline", "content": "Content", "settings": "Settings", "resize": "Resize {{panel}} panel", "resizeHelp": "Drag to resize. Double-click to reset." },
+    "settings": { "course": "Course", "lesson": "Lesson", "simulator": "Simulator", "completion": "Completion", "validation": "Validation" },
+    "save": { "saved": "Saved", "unsaved": "Unsaved changes", "saving": "Saving…", "failed": "Save failed" },
+    "lesson": { "untitled": "Untitled lesson", "add": "Add lesson", "duplicate": "Duplicate", "deleteConfirm": "Remove “{{title}}” from the next release?", "count_one": "{{count}} lesson", "count_other": "{{count}} lessons", "number": "Lesson {{position}}", "title": "Lesson title", "content": "Explanation and instructions", "empty": "No lessons yet", "emptyHelp": "Add a lesson to begin shaping the course.", "moveUp": "Move lesson up", "moveDown": "Move lesson down", "drag": "Move {{title}}", "dragHelp": "Drag near an edge to insert, or over the center to swap.", "drop": { "before": "Insert above", "replace": "Swap places", "after": "Insert below" }, "select": "Select a lesson to edit its settings.", "editorType": "Editor type", "startMode": "Lesson start", "starterPython": "Starter Python code", "starterBlockly": "Starter Blockly workspace (JSON)", "blocklyHelp": "Only valid structured Blockly workspace JSON is saved." },
+    "editor": { "none": "No code", "python": "Python", "blockly": "Blockly" },
+    "start": { "fresh": "Start fresh", "inherit": "Continue previous lesson’s code" },
+    "inheritance": { "first": "The first lesson cannot continue previous code because there is no previous lesson.", "changed": "Reordering changed which lesson supplies this lesson’s starting code." },
+    "richText": { "bold": "Bold", "italic": "Italic", "heading": "Heading", "bullets": "Bulleted list", "numbered": "Numbered list" },
+    "code": { "title": "Starter code", "instructions": "Instructions", "help": "This exact workspace is restored whenever a student starts or resets the lesson.", "chooseEditor": "Choose Python or Blockly in Lesson settings to add starter code.", "openWorkspace": "Edit and check starter code from the Starter code tab in the center workspace.", "reset": "Reset changes", "test": "Check starter", "valid": "Starter code has valid syntax and can be restored reproducibly. It was not executed.", "invalid": "Starter code could not be validated.", "emptyBlockly": "The Blockly workspace is valid but does not generate any commands yet.", "checkUnavailable": "The syntax checker could not be loaded. Try again when online.", "fingerprint": "Content ID {{fingerprint}}", "stageVersion": "Stage: {{status}}" },
+    "stage": { "label": "Stage", "none": "No stage", "optional": "Optional", "builtIn": "Built-in", "builtInHelp": "A platform stage with a stable built-in version.", "github": "Your stages", "marketplace": "Marketplace", "loading": "Loading available stages…", "unavailable": "Some remote stages could not be loaded. Cached, built-in, and no-stage options remain available.", "pinned": "Reproducible", "pinOnSave": "Pinned when saved", "choose": "Choose", "chooseTitle": "Choose a lesson stage", "search": "Search stages", "refresh": "Refresh", "selected": "Selected", "select": "Use stage", "noResults": "No matching stages in the cached list.", "clear": "Use no stage", "close": "Close" },
+    "simulator": { "show": "Show the simulator in the lesson workspace", "reset": "The simulator always starts from the stage’s initial state.", "noTransient": "Code can continue from a previous lesson; robot position and other transient physics never do." },
+    "completion": { "label": "Completion policy", "self": "Student marks it finished", "activity": "Required activities", "teacherReview": "Teacher review", "hybrid": "Activities plus student confirmation", "selfHelp": "This is the simple default: the student decides when the lesson is finished.", "futureHelp": "This policy is stored now; its student workflow arrives in a later phase." },
+    "preview": { "action": "Preview as student", "title": "Student preview", "close": "Close preview" },
+    "publish": { "first": "Publish", "update": "Publish update", "confirmFirst": "Publish the first release?", "confirmUpdate": "Publish a new immutable release?", "immutable": "Publication captures the current course and ordered lessons as an immutable release.", "studentChoice": "Existing students stay on their current release and choose when to update.", "confirm": "Publish release", "success": "Release {{version}} published", "done": "Done" },
+    "validation": { "help": "Publish checks required course fields, every lesson, starter content, and optional stage references.", "go": "Go to issue", "titleRequired": "Add a course title.", "descriptionRequired": "Add a course description.", "objectiveRequired": "Add at least one learning objective.", "lessonRequired": "Add at least one lesson.", "lessonTitleRequired": "Add a lesson title.", "firstFresh": "The first lesson must start fresh.", "groups": { "Course": "Course", "Lesson": "Lesson", "Stage": "Stage", "Starter content": "Starter content" } },
+    "conflict": { "message": "This draft changed in another tab. Reload the server version or review and deliberately overwrite it with this version.", "reload": "Reload server version", "overwrite": "Review and overwrite" },
+    "errors": { "load": "Could not load courses.", "create": "Could not create the course.", "duplicate": "Could not duplicate the course.", "archive": "Could not archive the course.", "save": "Could not save this draft.", "validate": "Could not validate this course.", "publish": "Could not publish this course." }
   },
   "accountSettings": {
     "blocklyProjects": "Blockly projects",

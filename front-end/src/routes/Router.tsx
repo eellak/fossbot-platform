@@ -18,6 +18,8 @@ const StageBuilderPage = Loadable(lazy(() => import('../views/stage-builder-page
 const StageBuilderTestPage = Loadable(lazy(() => import('../views/stage-builder-test-page/StageBuilderTestPage')));
 const StageGitHubTestPage = Loadable(lazy(() => import('../views/stage-github-test-page/StageGitHubTestPage')));
 const StagesPage = Loadable(lazy(() => import('../views/stages-page/StagesPage')));
+const TeacherCoursesPage = Loadable(lazy(() => import('../views/courses-teacher-page/TeacherCoursesPage')));
+const CourseEditorPage = Loadable(lazy(() => import('../views/course-editor-page/CourseEditorPage')));
 
 //const BlocklyPage = Loadable(lazy(() => import('../views/blockly-page/BlocklyPage')));
 //const BlocklyPage =  '../views/blockly-page/BlocklyPage';
@@ -124,6 +126,26 @@ const Router = [
     title: 'Stages',
     element: <PrivateRoute><FullLayout /></PrivateRoute>,
     children: [{ path: '', exact: true, element: <StagesPage /> }],
+  },
+  {
+    path: '/teach/courses',
+    title: 'Teacher courses',
+    element: (
+      <PrivateRoute>
+        <RoleBasedRoute roles={['tutor', 'admin']}><FullLayout /></RoleBasedRoute>
+      </PrivateRoute>
+    ),
+    children: [{ path: '', exact: true, element: <TeacherCoursesPage /> }],
+  },
+  {
+    path: '/teach/courses/:courseId',
+    title: 'Course editor',
+    element: (
+      <PrivateRoute>
+        <RoleBasedRoute roles={['tutor', 'admin']}><FullFillLayout /></RoleBasedRoute>
+      </PrivateRoute>
+    ),
+    children: [{ path: '', exact: true, element: <CourseEditorPage /> }],
   },
   {
     path: '/stage-builder',
