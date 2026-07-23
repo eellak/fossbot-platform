@@ -7,6 +7,9 @@ import type {
   Lesson,
   LessonSaveRequest,
   PublicationValidation,
+  Enrollment,
+  ReleaseUpdate,
+  StudentCourse,
 } from './types';
 
 const backendUrl: string = process.env.REACT_APP_BACKEND_URL;
@@ -90,4 +93,44 @@ export async function validateCourse(token: string, courseId: number): Promise<P
 
 export async function publishCourse(token: string, courseId: number): Promise<CourseRelease> {
   return parse(await fetch(`${backendUrl}/courses/${courseId}/publish`, { method: 'POST', headers: headers(token) }));
+}
+
+export async function listPublishedCourses(token: string): Promise<StudentCourse[]> {
+  return parse(await fetch(`${backendUrl}/courses`, { headers: headers(token) }));
+}
+
+export async function readPublishedCourse(token: string, courseId: number): Promise<StudentCourse> {
+  return parse(await fetch(`${backendUrl}/courses/${courseId}`, { headers: headers(token) }));
+}
+
+export async function enrollInCourse(token: string, courseId: number): Promise<Enrollment> {
+  return parse(await fetch(`${backendUrl}/courses/${courseId}/enroll`, { method: 'POST', headers: headers(token) }));
+}
+
+export async function listMyEnrollments(token: string): Promise<Enrollment[]> {
+  return parse(await fetch(`${backendUrl}/enrollments/mine`, { headers: headers(token) }));
+}
+
+export async function readEnrollment(token: string, enrollmentId: number): Promise<Enrollment> {
+  return parse(await fetch(`${backendUrl}/enrollments/${enrollmentId}`, { headers: headers(token) }));
+}
+
+export async function startLesson(token: string, enrollmentId: number, lessonKey: string): Promise<Enrollment> {
+  return parse(await fetch(`${backendUrl}/enrollments/${enrollmentId}/lessons/${encodeURIComponent(lessonKey)}/start`, { method: 'POST', headers: headers(token) }));
+}
+
+export async function completeLesson(token: string, enrollmentId: number, lessonKey: string): Promise<Enrollment> {
+  return parse(await fetch(`${backendUrl}/enrollments/${enrollmentId}/lessons/${encodeURIComponent(lessonKey)}/complete`, { method: 'POST', headers: headers(token) }));
+}
+
+export async function uncompleteLesson(token: string, enrollmentId: number, lessonKey: string): Promise<Enrollment> {
+  return parse(await fetch(`${backendUrl}/enrollments/${enrollmentId}/lessons/${encodeURIComponent(lessonKey)}/complete`, { method: 'DELETE', headers: headers(token) }));
+}
+
+export async function readReleaseUpdate(token: string, enrollmentId: number): Promise<ReleaseUpdate> {
+  return parse(await fetch(`${backendUrl}/enrollments/${enrollmentId}/updates`, { headers: headers(token) }));
+}
+
+export async function updateEnrollmentRelease(token: string, enrollmentId: number): Promise<Enrollment> {
+  return parse(await fetch(`${backendUrl}/enrollments/${enrollmentId}/update-release`, { method: 'POST', headers: headers(token) }));
 }

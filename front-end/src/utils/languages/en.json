@@ -75,7 +75,8 @@
     "tutorials": "Tutorials",
     "stageBuilder": "Stage Builder",
     "stageBuilderBased": "Create simulator stages",
-    "teacherCourses": "My courses"
+    "teacherCourses": "My teaching courses",
+    "studentCourses": "Courses"
   },
   "stage-builder": {
     "title": "Stage Builder",
@@ -350,6 +351,11 @@
     "publish": { "first": "Publish", "update": "Publish update", "confirmFirst": "Publish the first release?", "confirmUpdate": "Publish a new immutable release?", "immutable": "Publication captures the current course and ordered lessons as an immutable release.", "studentChoice": "Existing students stay on their current release and choose when to update.", "confirm": "Publish release", "success": "Release {{version}} published", "done": "Done" },
     "validation": { "help": "Publish checks required course fields, every lesson, starter content, and optional stage references.", "go": "Go to issue", "titleRequired": "Add a course title.", "descriptionRequired": "Add a course description.", "objectiveRequired": "Add at least one learning objective.", "lessonRequired": "Add at least one lesson.", "lessonTitleRequired": "Add a lesson title.", "firstFresh": "The first lesson must start fresh.", "groups": { "Course": "Course", "Lesson": "Lesson", "Stage": "Stage", "Starter content": "Starter content" } },
     "conflict": { "message": "This draft changed in another tab. Reload the server version or review and deliberately overwrite it with this version.", "reload": "Reload server version", "overwrite": "Review and overwrite" },
+    "student": {
+      "difficulty": "Difficulty", "allDifficulties": "All difficulties",
+      "coursesTitle": "Courses", "coursesSubtitle": "Learn at your pace and return whenever you are ready.", "myCourses": "My courses", "explore": "Explore", "search": "Search courses", "noEnrollments": "You have not started a course yet. Explore published courses or open a shared course link.", "noPublicCourses": "No public courses are available yet. Teachers can publish courses when they are ready.", "noResults": "No courses match your search.", "viewCourse": "View course", "startCourse": "Start course", "continueCourse": "Continue course", "reviewCourse": "Review course", "backToCourses": "Back to courses", "byAuthor": "By {{author}}", "minutes": "{{count}} min", "progress": "{{completed}} of {{total}} lessons complete", "version": "Version {{version}}", "objectives": "Learning objectives", "prerequisites": "Prerequisites", "outline": "Course outline", "completed": "Completed", "finished": "I'm finished", "undoCompletion": "Undo completion", "previous": "Previous", "next": "Next", "saving": "Saving…", "retry": "Retry", "updateAvailable": "Update available", "continueCurrent": "Continue current version", "updateCourse": "Update course", "updateSummary": "{{added}} added, {{changed}} changed, and {{removed}} removed lessons.", "resumeLearning": "Continue learning", "resumeHelp": "Pick up from your next lesson.", "allCourses": "All courses", "noActiveCourses": "Start a course to see it here.",
+      "errors": { "load": "Could not load courses.", "enroll": "Could not start this course.", "progress": "Your progress could not be saved. Retry when you are ready.", "update": "The course was not updated. You can continue the current version.", "lesson": "This lesson is unavailable." }
+    },
     "errors": { "load": "Could not load courses.", "create": "Could not create the course.", "duplicate": "Could not duplicate the course.", "archive": "Could not archive the course.", "save": "Could not save this draft.", "validate": "Could not validate this course.", "publish": "Could not publish this course." }
   },
   "accountSettings": {

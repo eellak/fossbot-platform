@@ -1,6 +1,7 @@
 from unittest.mock import patch
 
-from database.database import Course, CourseRelease, Lesson
+from database.database import Course, CourseRelease, Enrollment, Lesson, LessonProgress, User
+from models.models import UserRole
 
 
 REQUIRED_COURSE = {
@@ -298,3 +299,122 @@ def test_stale_course_and_lesson_autosaves_are_rejected(client_for, users):
     )
     assert stale_lesson.status_code == 409
     assert stale_lesson.json()["detail"]["error"] == "stale_draft"
+
+
+def test_student_enrollment_progress_resume_and_ownership(client_for, users, db):
+    tutor, _, student, _ = users
+    teacher = client_for(tutor)
+    course = create_course(teacher)
+    lessons = [add_lesson(teacher, course["id"], title) for title in ("One", "Two", "Three")]
+    assert teacher.post(f"/courses/{course['id']}/publish").status_code == 201
+
+    learner = client_for(student)
+    enrolled = learner.post(f"/courses/{course['id']}/enroll")
+    assert enrolled.status_code == 201
+    enrollment = enrolled.json()
+    assert enrollment["lesson_count"] == 3
+    assert enrollment["resume_lesson_key"] == lessons[0]["lesson_key"]
+    assert [item["state"] for item in enrollment["progress"]] == ["not_started"] * 3
+    assert learner.get("/enrollments/mine").json()[0]["id"] == enrollment["id"]
+
+    started = learner.post(f"/enrollments/{enrollment['id']}/lessons/{lessons[0]['lesson_key']}/start").json()
+    assert started["progress"][0]["state"] == "in_progress"
+    completed = learner.post(f"/enrollments/{enrollment['id']}/lessons/{lessons[0]['lesson_key']}/complete").json()
+    assert completed["progress"][0]["completion_method"] == "self"
+    assert completed["resume_lesson_key"] == lessons[1]["lesson_key"]
+    persisted = learner.get(f"/enrollments/{enrollment['id']}").json()
+    assert persisted["progress_percent"] == 33
+
+    undone = learner.delete(f"/enrollments/{enrollment['id']}/lessons/{lessons[0]['lesson_key']}/complete").json()
+    assert undone["progress"][0]["state"] == "in_progress"
+    assert undone["progress"][0]["completion_method"] is None
+
+    other_student = User(
+        username="other-student", firstname="Other", lastname="Student", email="other-student@example.test",
+        hashed_password="unused", role=UserRole.USER, activated=True,
+    )
+    db.add(other_student)
+    db.commit()
+    assert client_for(other_student).get(f"/enrollments/{enrollment['id']}").status_code == 404
+    assert teacher.post(f"/courses/{course['id']}/enroll").status_code == 403
+
+
+def test_unlisted_course_is_link_accessible_but_not_discoverable(client_for, users):
+    tutor, _, student, _ = users
+    teacher = client_for(tutor)
+    course = create_course(teacher, visibility="unlisted")
+    add_lesson(teacher, course["id"])
+    teacher.post(f"/courses/{course['id']}/publish")
+
+    learner = client_for(student)
+    assert all(item["id"] != course["id"] for item in learner.get("/courses").json())
+    overview = learner.get(f"/courses/{course['id']}")
+    assert overview.status_code == 200
+    assert overview.json()["latest_release"]["lessons"][0]["title"] == "First move"
+    assert learner.post(f"/courses/{course['id']}/enroll").status_code == 201
+
+
+def test_release_update_preserves_only_unchanged_progress_and_history(client_for, users, db):
+    tutor, _, student, _ = users
+    teacher = client_for(tutor)
+    course = create_course(teacher)
+    unchanged = add_lesson(teacher, course["id"], "Unchanged")
+    changed = add_lesson(teacher, course["id"], "Will change")
+    removed = add_lesson(teacher, course["id"], "Will be removed")
+    release_one = teacher.post(f"/courses/{course['id']}/publish").json()
+
+    learner = client_for(student)
+    enrollment = learner.post(f"/courses/{course['id']}/enroll").json()
+    for lesson in (unchanged, changed, removed):
+        assert learner.post(f"/enrollments/{enrollment['id']}/lessons/{lesson['lesson_key']}/complete").status_code == 200
+    assert learner.get(f"/enrollments/{enrollment['id']}").json()["completed_at"] is not None
+
+    assert teacher.put(f"/courses/{course['id']}/lessons/{changed['id']}", json={"title": "Changed"}).status_code == 200
+    assert teacher.delete(f"/courses/{course['id']}/lessons/{removed['id']}").status_code == 204
+    added = add_lesson(teacher, course["id"], "New lesson")
+    release_two = teacher.post(f"/courses/{course['id']}/publish").json()
+
+    comparison = learner.get(f"/enrollments/{enrollment['id']}/updates").json()
+    assert comparison["available"] is True
+    assert comparison["current"]["version"] == 1
+    assert comparison["latest"]["version"] == 2
+    assert comparison["added_lessons"] == comparison["removed_lessons"] == comparison["changed_lessons"] == 1
+    assert learner.get(f"/enrollments/{enrollment['id']}").json()["active_release"]["id"] == release_one["id"]
+
+    updated = learner.post(f"/enrollments/{enrollment['id']}/update-release").json()
+    states = {item["lesson_key"]: item for item in updated["progress"]}
+    assert updated["active_release"]["id"] == release_two["id"]
+    assert states[unchanged["lesson_key"]]["state"] == "completed"
+    assert states[changed["lesson_key"]]["state"] == "not_started"
+    assert states[added["lesson_key"]]["state"] == "not_started"
+    assert removed["lesson_key"] not in states
+    assert updated["completed_at"] is None
+    assert updated["release_updated_at"] is not None
+    assert db.query(LessonProgress).filter(
+        LessonProgress.enrollment_id == enrollment["id"], LessonProgress.release_id == release_one["id"]
+    ).count() == 3
+
+
+def test_self_completion_rejects_non_self_policy(client_for, users):
+    tutor, _, student, _ = users
+    teacher = client_for(tutor)
+    course = create_course(teacher)
+    lesson = add_lesson(teacher, course["id"], completion_policy="teacher_review")
+    teacher.post(f"/courses/{course['id']}/publish")
+    learner = client_for(student)
+    enrollment = learner.post(f"/courses/{course['id']}/enroll").json()
+    assert learner.post(
+        f"/enrollments/{enrollment['id']}/lessons/{lesson['lesson_key']}/complete"
+    ).status_code == 409
+
+
+def test_archived_course_remains_available_to_enrolled_student(client_for, users):
+    tutor, _, student, _ = users
+    teacher = client_for(tutor)
+    course = create_course(teacher)
+    add_lesson(teacher, course["id"])
+    teacher.post(f"/courses/{course['id']}/publish")
+    learner = client_for(student)
+    assert learner.post(f"/courses/{course['id']}/enroll").status_code == 201
+    assert teacher.delete(f"/courses/{course['id']}").status_code == 204
+    assert learner.get(f"/courses/{course['id']}").status_code == 200

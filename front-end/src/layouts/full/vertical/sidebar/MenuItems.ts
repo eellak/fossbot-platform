@@ -102,6 +102,13 @@ const Menuitems: MenuitemsType[] = [
   },
   {
     id: uniqueId(),
+    title: 'menu.studentCourses',
+    icon: IconBooks,
+    href: '/courses',
+    allowedRoles: ['user'],
+  },
+  {
+    id: uniqueId(),
     title: 'menu.teacherCourses',
     icon: IconBooks,
     href: '/teach/courses',

@@ -90,6 +90,16 @@ def migrate_schema():
                     conn.execute(text(f"ALTER TABLE lessons ADD COLUMN {column} {column_type}"))
                     conn.commit()
 
+    if 'enrollments' in table_columns and 'release_updated_at' not in table_columns['enrollments']:
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE enrollments ADD COLUMN release_updated_at TIMESTAMP"))
+            conn.commit()
+
+    if 'lesson_progress' in table_columns and 'completion_method' not in table_columns['lesson_progress']:
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE lesson_progress ADD COLUMN completion_method VARCHAR"))
+            conn.commit()
+
 def create_db_tables():
     Base.metadata.create_all(bind=engine)
 
@@ -327,6 +337,7 @@ class Enrollment(Base):
     active_release_id = Column(Integer, ForeignKey('course_releases.id'), nullable=False)
     enrolled_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
     completed_at = Column(DateTime)
+    release_updated_at = Column(DateTime)
 
 
 class LessonProgress(Base):
@@ -343,6 +354,7 @@ class LessonProgress(Base):
     state = Column(String, nullable=False, default='not_started')
     started_at = Column(DateTime)
     completed_at = Column(DateTime)
+    completion_method = Column(String)
     created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow, nullable=False)
 
