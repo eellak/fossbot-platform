@@ -742,7 +742,7 @@ async def list_stages(current_user: User = Depends(get_current_user), db: Sessio
 
 
 @router.get("/api/stages/load/{owner}/{repo_name}")
-async def load_stage(owner: str, repo_name: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+async def load_stage(owner: str, repo_name: str, commit_sha: Optional[str] = Query(default=None), current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     ensure_repo_allowed(repo_name)
     try:
         connection, user_token = require_connection(db, current_user)
@@ -754,8 +754,8 @@ async def load_stage(owner: str, repo_name: str, current_user: User = Depends(ge
 
         installation_token = provider.create_installation_token(create_github_app_jwt(), connection.installation_id, repo.get("id"))
         probe_installation_repo_access(provider, installation_token, owner, repo_name)
-        record, stage_sha = provider.read_json_file(installation_token, owner, repo_name, "stage.json")
-        manifest, manifest_sha = provider.read_json_file(installation_token, owner, repo_name, "fossbot.json")
+        record, stage_sha = provider.read_json_file(installation_token, owner, repo_name, "stage.json", ref=commit_sha)
+        manifest, manifest_sha = provider.read_json_file(installation_token, owner, repo_name, "fossbot.json", ref=commit_sha)
         verify_stage_manifest(manifest, owner, repo_name)
     except HTTPException:
         raise
@@ -774,7 +774,7 @@ async def load_stage(owner: str, repo_name: str, current_user: User = Depends(ge
         "repoUrl": f"https://github.com/{owner}/{repo_name}",
         "stageJsonSha": stage_sha,
         "manifestSha": manifest_sha,
-        "rawBaseUrl": None if repo.get("private") else github_raw_base_url(owner, repo_name, repo.get("default_branch")),
+        "rawBaseUrl": None if repo.get("private") else github_raw_base_url(owner, repo_name, commit_sha or repo.get("default_branch")),
         "private": bool(repo.get("private")),
         "visibility": repo_visibility(repo),
     }

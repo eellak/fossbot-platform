@@ -22,7 +22,7 @@ const TeacherCoursesPage = Loadable(lazy(() => import('../views/courses-teacher-
 const CourseEditorPage = Loadable(lazy(() => import('../views/course-editor-page/CourseEditorPage')));
 const CoursesPage = Loadable(lazy(() => import('../views/courses-page/CoursesPage')));
 const CoursePage = Loadable(lazy(() => import('../views/course-page/CoursePage')));
-const LessonPage = Loadable(lazy(() => import('../views/lesson-page/LessonPage')));
+const LessonWorkspacePage = Loadable(lazy(() => import('../views/lesson-workspace-page/LessonWorkspacePage')));
 
 //const BlocklyPage = Loadable(lazy(() => import('../views/blockly-page/BlocklyPage')));
 //const BlocklyPage =  '../views/blockly-page/BlocklyPage';
@@ -146,7 +146,7 @@ const Router = [
     path: '/courses/:courseId/learn/:lessonKey',
     title: 'Lesson',
     element: <PrivateRoute><FullLayout /></PrivateRoute>,
-    children: [{ path: '', exact: true, element: <LessonPage /> }],
+    children: [{ path: '', exact: true, element: <LessonWorkspacePage /> }],
   },
   {
     path: '/teach/courses',

@@ -373,6 +373,8 @@ class LessonWorkspace(Base):
     editor_type = Column(String, nullable=False)
     saved_content = Column(JSON)
     origin = Column(JSON)
+    revision = Column(Integer, nullable=False, default=1)
+    initialized_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
     created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow, nullable=False)
 

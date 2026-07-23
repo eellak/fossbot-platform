@@ -118,6 +118,19 @@ export interface ReleaseUpdate {
   stage_revisions_changed: boolean;
 }
 
+export interface LessonWorkspace {
+  id: number;
+  enrollment_id: number;
+  release_id: number;
+  lesson_key: string;
+  editor_type: LessonEditorType;
+  content?: string | Record<string, unknown> | null;
+  origin: { type: 'fresh' | 'inherited'; sourceLessonKey?: string; sourceWorkspaceRevision?: number };
+  revision: number;
+  initialized_at: string;
+  updated_at: string;
+}
+
 export interface Lesson {
   id: number;
   lesson_key: string;
