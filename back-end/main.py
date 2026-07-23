@@ -8,15 +8,15 @@ from typing import Any, List, Optional
 
 import uvicorn
 from database.database import (
-    Curriculum,
-    Lesson,
     MarketplaceRoleAssignment,
     Projects,
     User,
     create_db_tables,
     getSessionLocal,
     migrate_schema,
+    run_tracked_migrations,
 )
+from database.dev_seed import seed_dev_data
 from fastapi import Body, Depends, FastAPI, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer
@@ -24,8 +24,6 @@ from jose import JWTError, jwt
 from models.models import (
     EmailVerificationRequest,
     FirebaseTokenRequest,
-    LessonCreate,
-    LessonUpdate,
     LoginRequest,
     ProjectsCreate,
     RegisterRequest,
@@ -51,6 +49,7 @@ from routers.stage_sources import (
     stage_repo_list_item,
 )
 from routers.marketplace import cached_public_marketplace_index, router as marketplace_router
+from routers.courses import router as courses_router
 from utils.github_app_auth import create_github_app_jwt
 from utils.marketplace_schema import marketplace_entry_path
 from utils.source_providers import get_provider
@@ -78,6 +77,7 @@ app.add_middleware(
 )
 app.include_router(stage_sources_router)
 app.include_router(marketplace_router)
+app.include_router(courses_router)
 
 # Security
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
@@ -187,8 +187,19 @@ def initialize_database(max_attempts: int = 30, delay_seconds: float = 1.0):
     for attempt in range(1, max_attempts + 1):
         try:
             create_db_tables()
+            run_tracked_migrations()
             migrate_schema()
             create_admin_user()
+            if os.getenv("SEED_DEV_SAMPLE_COURSE", "false").lower() in {"1", "true", "yes"}:
+                db = SessionLocal()
+                try:
+                    seed_dev_data(
+                        db,
+                        os.getenv("ADMIN_USERNAME", "admin"),
+                        os.getenv("DEV_TEST_USER_PASSWORD", "dev"),
+                    )
+                finally:
+                    db.close()
             return
         except OperationalError as error:
             if attempt == max_attempts:
@@ -782,34 +793,9 @@ def project_payload(project: Projects) -> dict[str, Any]:
     }
 
 
-def user_curriculum_or_404(db: SessionLocal, current_user: User, curriculum_id: int) -> Curriculum:
-    curriculum = db.query(Curriculum).filter(Curriculum.id == curriculum_id, Curriculum.user_id == current_user.id).first()
-    if curriculum is None:
-        raise HTTPException(status_code=404, detail="Curriculum not found")
-    return curriculum
-
-
-def user_lesson_or_404(db: SessionLocal, current_user: User, lesson_id: int) -> Lesson:
-    lesson = db.query(Lesson).join(Curriculum).filter(Lesson.id == lesson_id, Curriculum.user_id == current_user.id).first()
-    if lesson is None:
-        raise HTTPException(status_code=404, detail="Lesson not found")
-    return lesson
-
-
 def stage_reference_was_provided(payload: Any) -> bool:
     fields = getattr(payload, "model_fields_set", getattr(payload, "__fields_set__", set()))
     return "stageReference" in fields
-
-
-def clear_lesson_stage_reference(lesson: Lesson) -> None:
-    lesson.stage_source_type = None
-    lesson.stage_repo_owner = None
-    lesson.stage_repo_name = None
-    lesson.stage_repo_visibility = None
-    lesson.stage_marketplace_entry_path = None
-    lesson.stage_title = None
-    lesson.stage_url = None
-    lesson.stage_commit_sha = None
 
 
 def published_marketplace_entry(owner: Optional[str], repo: Optional[str], entry_path: Optional[str]) -> dict[str, Any]:
@@ -894,98 +880,6 @@ def normalize_stage_reference(reference: Any, current_user: User, db: SessionLoc
             "commitSha": entry.get("commitSha"),
         }
     raise stage_error(400, "validation_failed", "stageReference.sourceType must be default, github, or marketplace.")
-
-
-def set_lesson_stage_reference(lesson: Lesson, reference: Optional[dict[str, Any]]) -> None:
-    clear_lesson_stage_reference(lesson)
-    if not reference:
-        return
-    lesson.stage_source_type = reference.get("sourceType")
-    lesson.stage_repo_owner = reference.get("repoOwner")
-    lesson.stage_repo_name = reference.get("repoName")
-    lesson.stage_repo_visibility = reference.get("visibility")
-    lesson.stage_marketplace_entry_path = reference.get("marketplaceEntryPath")
-    lesson.stage_title = reference.get("title")
-    lesson.stage_url = reference.get("url")
-    lesson.stage_commit_sha = reference.get("commitSha")
-
-
-def lesson_payload(lesson: Lesson) -> dict[str, Any]:
-    stage_reference = None
-    if lesson.stage_source_type:
-        stage_reference = stage_reference_payload(lesson)
-    return {
-        "id": lesson.id,
-        "title": lesson.title,
-        "description": lesson.description,
-        "image_url": lesson.image_url,
-        "video_url": lesson.video_url,
-        "curriculum_id": lesson.curriculum_id,
-        "stage_source_type": lesson.stage_source_type,
-        "stage_repo_owner": lesson.stage_repo_owner,
-        "stage_repo_name": lesson.stage_repo_name,
-        "stage_repo_visibility": lesson.stage_repo_visibility,
-        "stage_marketplace_entry_path": lesson.stage_marketplace_entry_path,
-        "stage_title": lesson.stage_title,
-        "stage_url": lesson.stage_url,
-        "stage_commit_sha": lesson.stage_commit_sha,
-        "stageReference": stage_reference,
-    }
-
-
-@app.get("/curriculums/{curriculum_id}/lessons")
-async def read_curriculum_lessons(curriculum_id: int, current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):
-    user_curriculum_or_404(db, current_user, curriculum_id)
-    lessons = db.query(Lesson).filter(Lesson.curriculum_id == curriculum_id).all()
-    return [lesson_payload(lesson) for lesson in lessons]
-
-
-@app.post("/lessons/")
-@app.post("/lectures/")
-async def create_lesson(lesson: LessonCreate, current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):
-    user_curriculum_or_404(db, current_user, lesson.curriculum_id)
-    db_lesson = Lesson(
-        title=lesson.title,
-        description=lesson.description,
-        image_url=lesson.image_url,
-        video_url=lesson.video_url,
-        curriculum_id=lesson.curriculum_id,
-    )
-    set_lesson_stage_reference(db_lesson, normalize_stage_reference(lesson.stageReference, current_user, db))
-    db.add(db_lesson)
-    db.commit()
-    db.refresh(db_lesson)
-    return lesson_payload(db_lesson)
-
-
-@app.get("/lessons/{lesson_id}")
-@app.get("/lectures/{lesson_id}")
-async def read_lesson(lesson_id: int, current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):
-    return lesson_payload(user_lesson_or_404(db, current_user, lesson_id))
-
-
-@app.put("/lessons/{lesson_id}")
-@app.put("/lectures/{lesson_id}")
-async def update_lesson(lesson_id: int, lesson_update: LessonUpdate, current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):
-    db_lesson = user_lesson_or_404(db, current_user, lesson_id)
-    db_lesson.title = lesson_update.title
-    db_lesson.description = lesson_update.description
-    db_lesson.image_url = lesson_update.image_url
-    db_lesson.video_url = lesson_update.video_url
-    if stage_reference_was_provided(lesson_update):
-        set_lesson_stage_reference(db_lesson, normalize_stage_reference(lesson_update.stageReference, current_user, db))
-    db.commit()
-    db.refresh(db_lesson)
-    return lesson_payload(db_lesson)
-
-
-@app.delete("/lessons/{lesson_id}")
-@app.delete("/lectures/{lesson_id}")
-async def delete_lesson(lesson_id: int, current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):
-    db_lesson = user_lesson_or_404(db, current_user, lesson_id)
-    db.delete(db_lesson)
-    db.commit()
-    return {"detail": "Lesson deleted"}
 
 
 # Run the application

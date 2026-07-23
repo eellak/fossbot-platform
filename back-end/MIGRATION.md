@@ -1,20 +1,18 @@
-## How to make changes in the DB schema
+## Database migrations
 
-1. Before you make any changes (only the first time)
+Tracked migrations live in `alembic/versions` and run automatically during backend startup after `create_all()` bootstraps a completely new database.
 
-```
-alembic init alembic
-```
-
-2. After change the main.py or the file with the db schema
+Create a revision from the backend directory:
 
 ```
 alembic revision --autogenerate -m "Description of the migration"
+```
+
+Apply or roll back migrations manually:
+
+```
 alembic upgrade head
-```
-
-3. If you are not happy with the result
-
-```
 alembic downgrade -1
 ```
+
+The legacy additive `migrate_schema()` helper remains for pre-Alembic user/project/stage columns only. New domain changes must use Alembic revisions.

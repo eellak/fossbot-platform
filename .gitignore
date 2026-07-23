@@ -14,6 +14,9 @@ data/
 **/alembic/
 **/old*
 **/versions/*.py
+!/back-end/alembic.ini
+!/back-end/alembic/
+!/back-end/alembic/**
 **/node_modules/
 
 /secrets/
