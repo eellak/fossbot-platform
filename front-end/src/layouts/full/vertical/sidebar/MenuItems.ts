@@ -12,6 +12,7 @@ import {
   IconDeviceGamepad2,
   IconMap,
   IconWorld,
+  IconBooks,
 } from '@tabler/icons-react';
 
 interface MenuitemsType {
@@ -27,6 +28,7 @@ interface MenuitemsType {
   chipColor?: string;
   variant?: string;
   external?: boolean;
+  allowedRoles?: string[];
 }
 
 const Menuitems: MenuitemsType[] = [
@@ -104,6 +106,13 @@ const Menuitems: MenuitemsType[] = [
   {
     navlabel: true,
     subheader: 'menu.educationalMaterial',
+  },
+  {
+    id: uniqueId(),
+    title: 'menu.teacherCourses',
+    icon: IconBooks,
+    href: '/teach/courses',
+    allowedRoles: ['tutor', 'admin'],
   },
   {
     id: uniqueId(),
