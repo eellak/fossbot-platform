@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { useAuth } from 'src/authentication/AuthProvider';
 import { listMyEnrollments } from 'src/courses/CoursesApi';
 import type { Enrollment } from 'src/courses/types';
+import BetaBadge from 'src/components/shared/BetaBadge';
 
 export default function CourseResumeCard() {
   const { t } = useTranslation();
@@ -21,7 +22,7 @@ export default function CourseResumeCard() {
     <Card variant="outlined">
       <CardContent>
         <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
-          <Box><Typography variant="h5">{t('education.student.resumeLearning')}</Typography><Typography variant="body2" color="text.secondary">{t('education.student.resumeHelp')}</Typography></Box>
+          <Box><Stack direction="row" spacing={1} alignItems="center"><Typography variant="h5">{t('education.student.resumeLearning')}</Typography><BetaBadge feature="education" /></Stack><Typography variant="body2" color="text.secondary">{t('education.student.resumeHelp')}</Typography></Box>
           <Button onClick={() => navigate('/courses')}>{t('education.student.allCourses')}</Button>
         </Stack>
         {failed ? <Alert severity="warning">{t('education.student.errors.load')}</Alert> : courses.length ? <Stack spacing={2}>{courses.map((course) => (

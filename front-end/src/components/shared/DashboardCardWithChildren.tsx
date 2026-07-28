@@ -5,7 +5,8 @@ import { useSelector } from 'src/store/Store';
 import { AppState } from 'src/store/Store';
 
 type Props = {
-  title?: string;
+  title?: React.ReactNode;
+  titleAdornment?: React.ReactNode;
   subtitle?: string;
   action?: JSX.Element | any;
   footer?: JSX.Element;
@@ -19,6 +20,7 @@ type Props = {
 
 const DashboardCard = ({
   title,
+  titleAdornment,
   subtitle,
   children,
   action,
@@ -58,7 +60,7 @@ const DashboardCard = ({
               mb={compact ? 2 : 3}
             >
               <Box>
-                {title ? <Typography variant="h5">{title}</Typography> : ''}
+                {title ? <Stack direction="row" spacing={1} alignItems="center"><Typography variant="h5">{title}</Typography>{titleAdornment}</Stack> : ''}
 
                 {subtitle ? (
                   <Typography variant="subtitle2" color="textSecondary">

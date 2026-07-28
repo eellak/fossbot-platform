@@ -37,6 +37,7 @@ import { invalidateMarketplaceFirstPage, invalidateUserStages, marketplaceFirstP
 import { formatStageDate, formatStageRelativeTime, GitHubIdentity, StageCard, StageCardSkeleton, StagePreview } from 'src/stages/StageCard';
 import { MARKETPLACE_COPY, MARKETPLACE_REPORT_CATEGORIES } from 'src/stages/marketplaceCopy';
 import DashboardCard from 'src/components/shared/DashboardCardWithChildren';
+import BetaBadge from 'src/components/shared/BetaBadge';
 
 const validationBadges: Record<MarketplaceValidationState, { label: string; color: 'success' | 'warning' | 'error'; description: string }> = {
   validated: {
@@ -127,13 +128,13 @@ function MarketplaceStageCard({ entry, onSelect, embedded = false }: { entry: Ma
 function MarketplacePanelFrame({ preview, action, children }: { preview: boolean; action: React.ReactNode; children: React.ReactNode }) {
   const subtitle = preview ? 'Discover community stages for FOSSBot simulations.' : 'Browse public stages for FOSSBot simulations.';
   if (preview) {
-    return <DashboardCard title={MARKETPLACE_COPY.stageLibrary} subtitle={subtitle} action={action} compact>{children}</DashboardCard>;
+    return <DashboardCard title={MARKETPLACE_COPY.stageLibrary} titleAdornment={<BetaBadge feature="stages" />} subtitle={subtitle} action={action} compact>{children}</DashboardCard>;
   }
   return (
     <>
       <Stack direction={{ xs: 'column', md: 'row' }} justifyContent="space-between" spacing={2} sx={{ mb: 2 }}>
         <Box>
-          <Typography variant="h5" fontWeight={850}>{MARKETPLACE_COPY.stageLibrary}</Typography>
+          <Stack direction="row" spacing={1} alignItems="center"><Typography variant="h5" fontWeight={850}>{MARKETPLACE_COPY.stageLibrary}</Typography><BetaBadge feature="stages" /></Stack>
           <Typography variant="body2" color="text.secondary">{subtitle}</Typography>
         </Box>
         {action}

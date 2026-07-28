@@ -39,6 +39,7 @@ import {
 import { formatStageRelativeTime, GitHubIdentity } from 'src/stages/StageCard';
 import { MARKETPLACE_COPY } from 'src/stages/marketplaceCopy';
 import { useFeatureFlags } from 'src/config/FeatureFlags';
+import BetaBadge from 'src/components/shared/BetaBadge';
 
 interface MyStageRow {
   stage: ProviderStageListItem;
@@ -217,6 +218,7 @@ export default function UserGitHubStagesPanel({ embedded = false, preview = fals
     <Box sx={embedded ? undefined : { mt: 3 }}>
       <DashboardCard
         title={MARKETPLACE_COPY.myStages}
+        titleAdornment={<BetaBadge feature="stages" />}
         subtitle="GitHub projects connected to FOSSBot."
         action={shouldShowConnectAction ? (
           <Button variant="contained" startIcon={connecting ? <CircularProgress size={18} color="inherit" /> : <GitHubIcon />} onClick={handleConnect} disabled={connecting} sx={{ flexShrink: 0 }}>
