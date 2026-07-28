@@ -63,6 +63,7 @@ export function createActivity(type: Activity['type']): Activity {
     }],
     retryLimit: null,
     feedbackMode: 'immediate',
+    scoreConfig: { version: 1, enabled: false, rankFailedAttempts: false, components: [], starThresholds: [0.5, 0.75, 0.9] },
   };
   return {
     ...common, type, prompt: '', allowedSensors: ['ultrasonic-front'], sensorHelperMode: 'student_toggle', presentations: ['live', 'chart'], capturedStatistics: ['minimum', 'maximum', 'average', 'finalValue'], visibleStatistics: ['maximum', 'average', 'finalValue'],

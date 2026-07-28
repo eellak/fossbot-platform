@@ -14,7 +14,7 @@ sys.path.insert(0, str(BACKEND_DIR))
 
 from database.database import Base, User  # noqa: E402
 from models.models import UserRole  # noqa: E402
-from routers import courses  # noqa: E402
+from routers import classrooms, courses  # noqa: E402
 
 
 @pytest.fixture()
@@ -83,6 +83,7 @@ def client_for(db):
     def build(user):
         app = FastAPI()
         app.include_router(courses.router)
+        app.include_router(classrooms.router)
 
         def override_db():
             yield db
@@ -90,6 +91,8 @@ def client_for(db):
         app.dependency_overrides[courses.get_db] = override_db
         app.dependency_overrides[courses.get_current_user] = lambda: user
         app.dependency_overrides[courses.optional_current_user] = lambda: user
+        app.dependency_overrides[classrooms.get_db] = override_db
+        app.dependency_overrides[classrooms.get_current_user] = lambda: user
         client = TestClient(app)
         clients.append(client)
         return client

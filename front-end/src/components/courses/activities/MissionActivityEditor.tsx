@@ -7,6 +7,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { sensorCatalog, sensorStatistics } from 'src/courses/activitySchema';
 import type { MissionActivity, MissionCondition, MissionObjective, MissionObjectiveRole, StageReference } from 'src/courses/types';
 import { loadStageFromProvider } from 'src/stages/StagesApi';
+import ScoreConfigEditor from './ScoreConfigEditor';
 
 type MarkerKind = 'target' | 'checkpoint' | 'danger_zone' | 'sensor_region' | 'collectible' | 'push_object' | 'target_zone';
 type DiscoveredMarkerKind = MarkerKind | 'spawn';
@@ -117,6 +118,7 @@ export default function MissionActivityEditor({ activity, onChange, stageReferen
     </Paper>)}
     <Button startIcon={<IconPlus size={17} />} onClick={addObjective}>{t('education.mission.addObjective')}</Button>
     <Alert severity="info">{t('education.mission.movementDefinition')}</Alert>
+    <ScoreConfigEditor activity={activity} onChange={onChange} t={t} />
   </Stack>;
 }
 

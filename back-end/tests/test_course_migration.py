@@ -79,8 +79,11 @@ def test_legacy_curriculum_and_lesson_survive_upgrade(tmp_path):
 
     inspector = inspect(engine)
     assert "curriculums" not in inspector.get_table_names()
-    assert {"courses", "course_releases", "enrollments", "lesson_progress", "lesson_workspaces", "activity_answers", "mission_attempts"}.issubset(
+    assert {"courses", "course_releases", "enrollments", "lesson_progress", "lesson_workspaces", "activity_answers", "mission_attempts", "class_groups", "class_memberships", "course_assignments", "class_challenges"}.issubset(
         inspector.get_table_names()
+    )
+    assert {"score_config_version", "score_config_hash", "score_result"}.issubset(
+        {column["name"] for column in inspector.get_columns("mission_attempts")}
     )
     with engine.connect() as connection:
         course = connection.execute(text("SELECT * FROM courses WHERE id = 41")).mappings().one()

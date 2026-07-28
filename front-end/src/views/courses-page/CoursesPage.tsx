@@ -6,6 +6,7 @@ import PageContainer from 'src/components/container/PageContainer';
 import { useAuth } from 'src/authentication/AuthProvider';
 import { listMyEnrollments, listPublishedCourses } from 'src/courses/CoursesApi';
 import type { Enrollment, StudentCourse } from 'src/courses/types';
+import ClassGroupsStudentPage from '../class-groups-student-page/ClassGroupsStudentPage';
 
 export default function CoursesPage() {
   const { t } = useTranslation();
@@ -34,20 +35,23 @@ export default function CoursesPage() {
     && `${course.title} ${course.description} ${course.author_name} ${course.tags?.join(' ') || ''}`.toLowerCase().includes(search.toLowerCase())
   )), [courses, difficulty, search]);
   const enrolledIds = new Set(enrollments.map((item) => item.course_id));
+  const pageTitle = tab === 2 ? t('education.classrooms.studentTitle') : t('education.student.coursesTitle');
+  const pageSubtitle = tab === 2 ? t('education.classrooms.studentSubtitle') : t('education.student.coursesSubtitle');
 
   return (
-    <PageContainer title={t('education.student.coursesTitle')} description={t('education.student.coursesSubtitle')}>
+    <PageContainer title={pageTitle} description={pageSubtitle}>
       <Stack spacing={3}>
         <Box>
-          <Typography variant="h3">{t('education.student.coursesTitle')}</Typography>
-          <Typography color="text.secondary">{t('education.student.coursesSubtitle')}</Typography>
+          <Typography variant="h3">{pageTitle}</Typography>
+          <Typography color="text.secondary">{pageSubtitle}</Typography>
         </Box>
-        <Tabs value={tab} onChange={(_, value) => setTab(value)} aria-label={t('education.student.coursesTitle')}>
+        <Tabs value={tab} onChange={(_, value) => setTab(value)} aria-label={t('education.student.coursesTitle')} variant="scrollable" scrollButtons="auto" allowScrollButtonsMobile>
           <Tab label={t('education.student.myCourses')} />
           <Tab label={t('education.student.explore')} />
+          <Tab label={t('education.classrooms.studentTitle')} />
         </Tabs>
-        {error ? <Alert severity="error" action={<Button color="inherit" onClick={() => window.location.reload()}>{t('education.student.retry')}</Button>}>{error}</Alert> : null}
-        {loading ? <Box sx={{ py: 8, textAlign: 'center' }}><CircularProgress /></Box> : null}
+        {tab !== 2 && error ? <Alert severity="error" action={<Button color="inherit" onClick={() => window.location.reload()}>{t('education.student.retry')}</Button>}>{error}</Alert> : null}
+        {tab !== 2 && loading ? <Box sx={{ py: 8, textAlign: 'center' }}><CircularProgress /></Box> : null}
         {!loading && tab === 0 && (enrollments.length ? (
           <Grid container spacing={2}>{enrollments.map((enrollment) => (
             <Grid item xs={12} md={6} lg={4} key={enrollment.id}>
@@ -90,6 +94,7 @@ export default function CoursesPage() {
             </Grid>
           ))}</Grid> : <Alert severity="info">{courses.length ? t('education.student.noResults') : t('education.student.noPublicCourses')}</Alert>}
         </Stack>}
+        {tab === 2 && <ClassGroupsStudentPage embedded />}
       </Stack>
     </PageContainer>
   );

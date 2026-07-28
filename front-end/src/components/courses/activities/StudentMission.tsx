@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Alert, Box, Button, Chip, LinearProgress, Paper, Stack, Typography } from '@mui/material';
 import { IconCircleCheck, IconCircleX, IconRefresh } from '@tabler/icons-react';
-import { readMissionAttempts, submitMissionAttempt } from 'src/courses/CoursesApi';
-import type { MissionActivity, MissionAttemptSubmission } from 'src/courses/types';
+import { readMissionAttempts, readMissionSummary, submitMissionAttempt } from 'src/courses/CoursesApi';
+import type { MissionActivity, MissionAttemptSubmission, MissionPersonalFeedback, ScoreResult } from 'src/courses/types';
 import { createMissionState, evaluateMissionEvent, finalizeMissionState, missionAttemptTermination, objectiveResults } from 'src/simulator/missions/evaluatorCore';
 import type { AttemptSummary, MissionEvent } from 'src/simulator/missions/types';
 import { attemptTimeout, finishAttempt, stopMotion, subscribeMissionEvents } from 'src/simulator-adapter/Simulator';
@@ -26,6 +26,7 @@ export default function StudentMission({ activity, token, enrollmentId, lessonKe
   const [attempts, setAttempts] = useState(0);
   const [attemptActive, setAttemptActive] = useState(false);
   const [attemptFinished, setAttemptFinished] = useState(false);
+  const [personalFeedback, setPersonalFeedback] = useState<MissionPersonalFeedback | null>(null);
   const stateRef = useRef(missionState);
   const settling = useRef(false);
   const startedAt = useRef('');
@@ -36,8 +37,11 @@ export default function StudentMission({ activity, token, enrollmentId, lessonKe
   useEffect(() => {
     if (preview || !token || enrollmentId === undefined) return;
     let cancelled = false;
-    readMissionAttempts(token, enrollmentId, lessonKey, activity.key)
-      .then((records) => { if (!cancelled) setAttempts(records.length); })
+    Promise.all([
+      readMissionAttempts(token, enrollmentId, lessonKey, activity.key),
+      readMissionSummary(token, enrollmentId, lessonKey, activity.key),
+    ])
+      .then(([records, feedback]) => { if (!cancelled) { setAttempts(records.length); setPersonalFeedback(feedback); } })
       .catch(() => undefined);
     return () => { cancelled = true; };
   }, [activity.key, enrollmentId, lessonKey, preview, token]);
@@ -124,7 +128,8 @@ export default function StudentMission({ activity, token, enrollmentId, lessonKe
       mission_definition_hash: activity.definitionHash,
     };
     try {
-      await submitMissionAttempt(token, enrollmentId, lessonKey, activity.key, request);
+      const response = await submitMissionAttempt(token, enrollmentId, lessonKey, activity.key, request);
+      setPersonalFeedback(response.personal_feedback);
       if (summary.outcome === 'succeeded') onProgressChange();
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : t('education.mission.saveFailed'));
@@ -179,11 +184,36 @@ export default function StudentMission({ activity, token, enrollmentId, lessonKe
       })}
       {visibleOutcome === 'succeeded' && <Alert severity="success">{t('education.mission.success')}</Alert>}
       {visibleOutcome === 'failed' && <Alert severity="error">{t('education.mission.failed')}</Alert>}
+      {personalFeedback?.latest_completed?.score && <ScoreResultView score={personalFeedback.latest_completed.score} feedback={personalFeedback} t={t} />}
       {saveError && <Alert severity="warning">{saveError}</Alert>}
       {!attemptActive && !attemptFinished && missionState.outcome === 'running' && <Typography variant="body2" color="text.secondary">{t(allowManualFinish ? 'education.mission.manualStartHelp' : 'education.mission.codeStartHelp')}</Typography>}
       {allowManualFinish && attemptActive && <Button variant="contained" startIcon={<IconCircleCheck size={17} />} onClick={finish}>{t('education.mission.finishAttempt')}</Button>}
-      {allowManualFinish && (attemptActive || attemptFinished) && missionState.outcome !== 'succeeded' && <Button variant="outlined" startIcon={<IconRefresh size={17} />} onClick={retry} disabled={activity.retryLimit !== null && activity.retryLimit !== undefined && attempts >= activity.retryLimit + 1}>{t(attemptActive ? 'education.mission.restartAttempt' : 'education.mission.tryAgain')}</Button>}
+      {allowManualFinish && (attemptActive || attemptFinished) && <Button variant="outlined" startIcon={<IconRefresh size={17} />} onClick={retry} disabled={activity.retryLimit !== null && activity.retryLimit !== undefined && attempts >= activity.retryLimit + 1}>{t(attemptActive ? 'education.mission.restartAttempt' : 'education.mission.tryAgain')}</Button>}
       <Typography variant="caption" color="text.secondary">{t('education.mission.metricsHelp')}</Typography>
+    </Stack>
+  </Paper>;
+}
+
+function ScoreResultView({ score, feedback, t }: { score: ScoreResult; feedback: MissionPersonalFeedback; t: any }) {
+  const best = feedback.best_score?.score?.total;
+  const improvement = feedback.improvement;
+  return <Paper variant="outlined" sx={{ p: 1.5, bgcolor: 'action.hover' }}>
+    <Stack spacing={1}>
+      <Stack direction="row" justifyContent="space-between" gap={2}>
+        <Box><Typography fontWeight={700}>{t('education.scoring.result')}</Typography><Typography variant="h5">{t('education.scoring.total', { score: score.total, maximum: score.maximum })}</Typography></Box>
+        <Chip color={score.mastery ? 'success' : 'default'} label={t('education.scoring.starsResult', { count: score.stars })} />
+      </Stack>
+      {score.breakdown.map((item) => <Stack key={item.key} direction="row" justifyContent="space-between" gap={2}>
+        <Typography variant="body2">{item.label}</Typography>
+        <Typography variant="body2" fontWeight={650}>{item.earned >= 0 ? '+' : ''}{item.earned}{item.maximum > 0 ? ` / ${item.maximum}` : ''}</Typography>
+      </Stack>)}
+      <Stack direction={{ xs: 'column', sm: 'row' }} gap={1} flexWrap="wrap">
+        {best !== undefined && <Chip size="small" variant="outlined" label={t('education.scoring.personalBest', { score: best })} />}
+        {feedback.best_time_ms !== null && feedback.best_time_ms !== undefined && <Chip size="small" variant="outlined" label={t('education.scoring.bestTime', { seconds: (feedback.best_time_ms / 1000).toFixed(1) })} />}
+        {feedback.best_movement_actions !== null && feedback.best_movement_actions !== undefined && <Chip size="small" variant="outlined" label={t('education.scoring.bestMoves', { count: feedback.best_movement_actions })} />}
+        {feedback.best_path_distance !== null && feedback.best_path_distance !== undefined && <Chip size="small" variant="outlined" label={t('education.scoring.bestPath', { distance: feedback.best_path_distance.toFixed(2) })} />}
+      </Stack>
+      {improvement && <Alert severity={improvement.score_delta > 0 ? 'success' : 'info'}>{t('education.scoring.improvement', { delta: improvement.score_delta })}</Alert>}
     </Stack>
   </Paper>;
 }

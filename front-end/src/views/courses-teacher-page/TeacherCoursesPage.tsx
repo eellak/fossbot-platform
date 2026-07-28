@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, InputAdornment, Menu, MenuItem, Paper, Skeleton, Stack, TextField, Typography } from '@mui/material';
+import { Alert, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, InputAdornment, Menu, MenuItem, Paper, Skeleton, Stack, Tab, Tabs, TextField, Typography } from '@mui/material';
 import { IconDotsVertical, IconPlus, IconSearch } from '@tabler/icons-react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from 'src/authentication/AuthProvider';
 import { addLesson, archiveCourse, createCourse, listAuthoredCourses, readCourseDraft } from 'src/courses/CoursesApi';
 import type { CourseSummary } from 'src/courses/types';
+import ClassGroupsTeacherPage from '../class-groups-teacher-page/ClassGroupsTeacherPage';
 
 export default function TeacherCoursesPage() {
   const { t } = useTranslation();
@@ -19,6 +20,7 @@ export default function TeacherCoursesPage() {
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState({ title: '', description: '', objective: '' });
   const [menu, setMenu] = useState<{ anchor: HTMLElement; course: CourseSummary } | null>(null);
+  const [tab, setTab] = useState(0);
 
   const load = async () => {
     setLoading(true); setError('');
@@ -28,6 +30,8 @@ export default function TeacherCoursesPage() {
   useEffect(() => { load(); }, [token]);
 
   const filtered = useMemo(() => courses.filter((course) => `${course.title} ${course.description}`.toLowerCase().includes(search.toLowerCase())), [courses, search]);
+  const pageTitle = tab === 1 ? t('education.classrooms.teacherTitle') : t('education.courseList.title');
+  const pageSubtitle = tab === 1 ? t('education.classrooms.teacherSubtitle') : t('education.courseList.subtitle');
 
   const submitCreate = async () => {
     if (!form.title.trim() || !form.description.trim() || !form.objective.trim()) return;
@@ -66,10 +70,14 @@ export default function TeacherCoursesPage() {
   return (
     <Box sx={{ maxWidth: 1160, mx: 'auto', p: { xs: 2, md: 3 } }}>
       <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ sm: 'center' }} gap={2} mb={3}>
-        <Box><Typography variant="h3" component="h1">{t('education.courseList.title')}</Typography><Typography color="text.secondary">{t('education.courseList.subtitle')}</Typography></Box>
-        <Button variant="contained" startIcon={<IconPlus size={18} />} onClick={() => setCreateOpen(true)}>{t('education.courseList.create')}</Button>
+        <Box><Typography variant="h3" component="h1">{pageTitle}</Typography><Typography color="text.secondary">{pageSubtitle}</Typography></Box>
+        {tab === 0 && <Button variant="contained" startIcon={<IconPlus size={18} />} onClick={() => setCreateOpen(true)}>{t('education.courseList.create')}</Button>}
       </Stack>
-      <TextField fullWidth value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t('education.courseList.search')} inputProps={{ 'aria-label': t('education.courseList.search') }} InputProps={{ startAdornment: <InputAdornment position="start"><IconSearch size={18} /></InputAdornment> }} sx={{ mb: 2 }} />
+      <Tabs value={tab} onChange={(_, value) => setTab(value)} aria-label={t('education.courseList.title')} variant="scrollable" scrollButtons="auto" allowScrollButtonsMobile sx={{ mb: 2 }}>
+        <Tab label={t('education.courseList.title')} />
+        <Tab label={t('education.classrooms.teacherTitle')} />
+      </Tabs>
+      {tab === 0 && <><TextField fullWidth value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t('education.courseList.search')} inputProps={{ 'aria-label': t('education.courseList.search') }} InputProps={{ startAdornment: <InputAdornment position="start"><IconSearch size={18} /></InputAdornment> }} sx={{ mb: 2 }} />
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
       {loading ? <Stack spacing={1}>{[1, 2, 3].map((item) => <Skeleton key={item} variant="rounded" height={92} />)}</Stack> : filtered.length === 0 ? (
         <Paper variant="outlined" sx={{ py: 7, px: 3, textAlign: 'center' }}><Typography variant="h5">{search ? t('education.courseList.noResults') : t('education.courseList.empty')}</Typography><Typography color="text.secondary" sx={{ mt: 1 }}>{t('education.courseList.emptyHelp')}</Typography></Paper>
@@ -84,9 +92,11 @@ export default function TeacherCoursesPage() {
             <IconButton aria-label={t('education.courseList.actions')} onClick={(event) => setMenu({ anchor: event.currentTarget, course })}><IconDotsVertical size={20} /></IconButton>
           </Stack>
         </Paper>)}
-      </Stack>}
+      </Stack>}</>}
+      {tab === 1 && <ClassGroupsTeacherPage embedded />}
       <Menu anchorEl={menu?.anchor} open={!!menu} onClose={() => setMenu(null)}>
         <MenuItem onClick={() => menu && navigate(`/teach/courses/${menu.course.id}`)}>{t('education.courseList.edit')}</MenuItem>
+        <MenuItem onClick={() => menu && navigate(`/teach/courses/${menu.course.id}/progress`)}>{t('education.analytics.title')}</MenuItem>
         <MenuItem onClick={() => menu && duplicate(menu.course)}>{t('education.courseList.duplicate')}</MenuItem>
         <MenuItem onClick={() => menu && archive(menu.course)}>{t('education.courseList.archive')}</MenuItem>
       </Menu>

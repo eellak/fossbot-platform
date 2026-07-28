@@ -98,6 +98,42 @@ export interface MissionObjective {
   condition: MissionCondition;
 }
 
+export type ScoreComponentType =
+  | 'objective'
+  | 'collectibles'
+  | 'checkpoints'
+  | 'time_bonus'
+  | 'movement_efficiency'
+  | 'path_efficiency'
+  | 'numeric_accuracy'
+  | 'collision_penalty'
+  | 'fall_penalty'
+  | 'reset_penalty'
+  | 'hint_adjustment';
+
+export interface ScoreComponent {
+  key: string;
+  label: string;
+  type: ScoreComponentType;
+  weight: number;
+  objectiveKey?: string;
+  points?: number;
+  pointsPerUnit?: number;
+  maximumUnits?: number;
+  target?: number;
+  tolerance?: number;
+  pointsPerIncident?: number;
+  maximumPenalty?: number;
+}
+
+export interface ScoreConfig {
+  version: 1;
+  enabled: boolean;
+  rankFailedAttempts: boolean;
+  components: ScoreComponent[];
+  starThresholds: [number, number, number];
+}
+
 export interface MissionActivity extends ActivityBase {
   type: 'mission';
   title: string;
@@ -105,6 +141,7 @@ export interface MissionActivity extends ActivityBase {
   objectives: MissionObjective[];
   retryLimit?: number | null;
   feedbackMode: 'immediate' | 'after_attempt';
+  scoreConfig?: ScoreConfig;
 }
 
 export type Activity = RichTextActivity | MultipleChoiceActivity | MultipleSelectActivity | NumericAnswerActivity | ShortReflectionActivity | SimulatorObservationActivity | MissionActivity | HintActivity;
@@ -348,6 +385,9 @@ export interface MissionAttemptMetrics {
   falls: number;
   resets: number;
   collectibles: number;
+  checkpoints_completed?: number;
+  hints_used?: number;
+  numeric_answer_accuracy?: number;
   sensor_summaries: Record<string, Record<string, number | string>>;
 }
 
@@ -363,6 +403,28 @@ export interface MissionAttemptSubmission {
   simulator_revision: string;
   stage_revision: string;
   mission_definition_hash: string;
+  client_total?: number;
+}
+
+export interface ScoreBreakdownItem {
+  key: string;
+  label: string;
+  type: ScoreComponentType;
+  earned: number;
+  maximum: number;
+  measured?: number | null;
+}
+
+export interface ScoreResult {
+  config_version: number;
+  config_hash: string;
+  total: number;
+  maximum: number;
+  ratio: number;
+  stars: number;
+  mastery: boolean;
+  rank_eligible: boolean;
+  breakdown: ScoreBreakdownItem[];
 }
 
 export interface MissionAttemptRecord extends MissionAttemptSubmission {
@@ -372,5 +434,152 @@ export interface MissionAttemptRecord extends MissionAttemptSubmission {
   lesson_key: string;
   activity_key: string;
   attempt_number: number;
+  score?: ScoreResult | null;
   created_at: string;
+}
+
+export interface MissionPersonalFeedback {
+  latest_completed?: MissionAttemptRecord | null;
+  best_score?: MissionAttemptRecord | null;
+  best_time_ms?: number | null;
+  best_movement_actions?: number | null;
+  best_path_distance?: number | null;
+  improvement?: {
+    score_delta: number;
+    time_delta_ms: number;
+    movement_delta: number;
+    path_delta: number;
+  } | null;
+}
+
+export interface MissionAttemptResponse extends MissionAttemptRecord {
+  activity_state: ActivityState;
+  lesson_completed: boolean;
+  personal_feedback: MissionPersonalFeedback;
+}
+
+export type LeaderboardType = 'highest_score' | 'fastest' | 'fewest_movements' | 'shortest_path' | 'most_optional';
+
+export interface ClassChallenge {
+  id: number;
+  assignment_id: number;
+  release_id: number;
+  release_version: number;
+  lesson_key: string;
+  lesson_title: string;
+  activity_key: string;
+  activity_title: string;
+  score_enabled: boolean;
+  enabled: boolean;
+  board_type: LeaderboardType;
+  tie_tolerance: number;
+  season: number;
+}
+
+export interface CourseAssignment {
+  id: number;
+  group_id: number;
+  course_id: number;
+  course_title: string;
+  release_id: number;
+  release_version: number;
+  latest_release_id?: number | null;
+  update_available: boolean;
+  update_policy: 'pinned' | 'student_choice' | 'latest';
+  due_at?: string | null;
+  missions: Array<{
+    lesson_key: string;
+    lesson_title: string;
+    activity_key: string;
+    activity_title: string;
+    score_enabled: boolean;
+  }>;
+  challenges: ClassChallenge[];
+}
+
+export interface TeacherClassGroup {
+  id: number;
+  name: string;
+  status: 'active' | 'archived';
+  join_code: string;
+  leaderboards_enabled: boolean;
+  challenge_season: number;
+  created_at: string;
+  members: Array<{
+    id: number;
+    student_username: string;
+    display_alias: string;
+    leaderboard_opt_in: boolean;
+    joined_at: string;
+  }>;
+  assignments: CourseAssignment[];
+}
+
+export interface StudentClassGroup {
+  id: number;
+  name: string;
+  status: 'active' | 'archived';
+  leaderboards_enabled: boolean;
+  challenge_season: number;
+  membership: {
+    display_alias: string;
+    leaderboard_opt_in: boolean;
+    joined_at: string;
+  };
+  assignments: CourseAssignment[];
+}
+
+export interface ClassLeaderboard {
+  challenge_id: number;
+  group_name: string;
+  activity_title: string;
+  board_type: LeaderboardType;
+  tie_tolerance: number;
+  release_id: number;
+  release_version: number;
+  season: number;
+  friendly_competition: true;
+  entries: Array<{ rank: number; alias: string; value: number }>;
+}
+
+export interface ClassChallengeStatistics {
+  challenge_id: number;
+  activity_title: string;
+  board_type: LeaderboardType;
+  release_version: number;
+  season: number;
+  member_count: number;
+  opted_in_count: number;
+  participant_count: number;
+  successful_participant_count: number;
+  attempt_count: number;
+  successful_attempt_count: number;
+  success_rate: number;
+  average_value?: number | null;
+  best_value?: number | null;
+  outcomes: Record<string, number>;
+}
+
+export interface CourseProgressAnalytics {
+  course: { id: number; title: string };
+  enrollment_count: number;
+  completed_count: number;
+  awaiting_review_count: number;
+  common_outcome_reasons: Record<string, number>;
+  students: Array<{
+    enrollment_id: number;
+    student: { username: string; display_name: string };
+    active_release: { id: number; version: number };
+    update_available: boolean;
+    enrolled_at: string;
+    last_activity_at: string;
+    completion: { completed_lessons: number; total_lessons: number; percent: number; course_completed_at?: string | null };
+    attempt_count: number;
+    latest_mission_result?: { outcome: string; reason: string; score?: ScoreResult | null } | null;
+    best_mission_result?: { score: ScoreResult; lesson_key: string; activity_key: string } | null;
+    question_accuracy: { correct: number; answered: number };
+    awaiting_review: boolean;
+    outcome_reasons: Record<string, number>;
+  }>;
+  retention: { includes: string[]; excludes: string[] };
 }

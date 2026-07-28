@@ -51,6 +51,7 @@ from routers.stage_sources import (
 from routers.marketplace import cached_public_marketplace_index, router as marketplace_router
 from routers.features import router as features_router
 from routers.courses import router as courses_router
+from routers.classrooms import router as classrooms_router
 from utils.github_app_auth import create_github_app_jwt
 from utils.feature_flags import require_marketplace_enabled
 from utils.marketplace_schema import marketplace_entry_path
@@ -81,6 +82,7 @@ app.include_router(stage_sources_router)
 app.include_router(features_router)
 app.include_router(marketplace_router)
 app.include_router(courses_router)
+app.include_router(classrooms_router)
 
 # Security
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")

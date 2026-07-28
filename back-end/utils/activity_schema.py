@@ -4,6 +4,8 @@ import copy
 import math
 from typing import Any, Optional
 
+from utils.scoring import validate_score_config
+
 
 ACTIVITY_SCHEMA_VERSION = 1
 ACTIVITY_TYPES = {
@@ -252,6 +254,7 @@ def _validate_mission(activity: dict[str, Any]) -> None:
         raise ValueError("mission retryLimit must be between 0 and 100")
     if activity.get("feedbackMode", "immediate") not in {"immediate", "after_attempt"}:
         raise ValueError("mission feedbackMode must be immediate or after_attempt")
+    validate_score_config(activity.get("scoreConfig"), objectives)
 
 
 def validate_activities(activities: Optional[list[dict[str, Any]]]) -> None:

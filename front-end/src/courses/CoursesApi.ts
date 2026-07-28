@@ -16,6 +16,16 @@ import type {
   CompactSensorSummary,
   MissionAttemptSubmission,
   MissionAttemptRecord,
+  MissionAttemptResponse,
+  MissionPersonalFeedback,
+  TeacherClassGroup,
+  StudentClassGroup,
+  ClassChallenge,
+  ClassLeaderboard,
+  ClassChallengeStatistics,
+  CourseAssignment,
+  CourseProgressAnalytics,
+  LeaderboardType,
 } from './types';
 
 const backendUrl: string = process.env.REACT_APP_BACKEND_URL;
@@ -179,7 +189,7 @@ export async function submitMissionAttempt(
   lessonKey: string,
   activityKey: string,
   attempt: MissionAttemptSubmission,
-): Promise<Record<string, unknown>> {
+): Promise<MissionAttemptResponse> {
   return parse(await fetch(`${backendUrl}/enrollments/${enrollmentId}/lessons/${encodeURIComponent(lessonKey)}/missions/${encodeURIComponent(activityKey)}/attempts`, {
     method: 'POST',
     headers: headers(token),
@@ -196,4 +206,134 @@ export async function readMissionAttempts(
   return parse(await fetch(`${backendUrl}/enrollments/${enrollmentId}/lessons/${encodeURIComponent(lessonKey)}/missions/${encodeURIComponent(activityKey)}/attempts`, {
     headers: headers(token),
   }));
+}
+
+export async function readMissionSummary(
+  token: string,
+  enrollmentId: number,
+  lessonKey: string,
+  activityKey: string,
+): Promise<MissionPersonalFeedback> {
+  return parse(await fetch(`${backendUrl}/enrollments/${enrollmentId}/lessons/${encodeURIComponent(lessonKey)}/missions/${encodeURIComponent(activityKey)}/summary`, {
+    headers: headers(token),
+  }));
+}
+
+export async function readCourseProgress(token: string, courseId: number): Promise<CourseProgressAnalytics> {
+  return parse(await fetch(`${backendUrl}/teach/courses/${courseId}/progress`, { headers: headers(token) }));
+}
+
+export async function listTeacherClassGroups(token: string): Promise<TeacherClassGroup[]> {
+  return parse(await fetch(`${backendUrl}/class-groups/mine`, { headers: headers(token) }));
+}
+
+export async function createClassGroup(token: string, name: string): Promise<TeacherClassGroup> {
+  return parse(await fetch(`${backendUrl}/class-groups`, {
+    method: 'POST', headers: headers(token), body: JSON.stringify({ name }),
+  }));
+}
+
+export async function updateClassGroup(
+  token: string,
+  groupId: number,
+  request: Partial<Pick<TeacherClassGroup, 'name' | 'status' | 'leaderboards_enabled'>>,
+): Promise<TeacherClassGroup> {
+  return parse(await fetch(`${backendUrl}/class-groups/${groupId}`, {
+    method: 'PUT', headers: headers(token), body: JSON.stringify(request),
+  }));
+}
+
+export async function regenerateClassJoinCode(token: string, groupId: number): Promise<TeacherClassGroup> {
+  return parse(await fetch(`${backendUrl}/class-groups/${groupId}/join-code`, {
+    method: 'POST', headers: headers(token),
+  }));
+}
+
+export async function resetClassChallengeSeason(token: string, groupId: number): Promise<TeacherClassGroup> {
+  return parse(await fetch(`${backendUrl}/class-groups/${groupId}/reset-season`, {
+    method: 'POST', headers: headers(token),
+  }));
+}
+
+export async function removeClassMember(token: string, groupId: number, membershipId: number): Promise<void> {
+  const response = await fetch(`${backendUrl}/class-groups/${groupId}/members/${membershipId}`, {
+    method: 'DELETE', headers: headers(token),
+  });
+  if (!response.ok) await parse(response);
+}
+
+export async function assignCourseToClass(
+  token: string,
+  groupId: number,
+  courseId: number,
+  updatePolicy: CourseAssignment['update_policy'] = 'student_choice',
+): Promise<CourseAssignment> {
+  return parse(await fetch(`${backendUrl}/class-groups/${groupId}/assignments`, {
+    method: 'POST', headers: headers(token), body: JSON.stringify({ course_id: courseId, update_policy: updatePolicy }),
+  }));
+}
+
+export async function updateCourseAssignment(
+  token: string,
+  assignmentId: number,
+  request: Partial<Pick<CourseAssignment, 'release_id' | 'update_policy' | 'due_at'>>,
+): Promise<CourseAssignment> {
+  return parse(await fetch(`${backendUrl}/course-assignments/${assignmentId}`, {
+    method: 'PUT', headers: headers(token), body: JSON.stringify(request),
+  }));
+}
+
+export async function createClassChallenge(
+  token: string,
+  assignmentId: number,
+  request: { lesson_key: string; activity_key: string; board_type: LeaderboardType; tie_tolerance: number; enabled: boolean },
+): Promise<ClassChallenge> {
+  return parse(await fetch(`${backendUrl}/course-assignments/${assignmentId}/challenges`, {
+    method: 'POST', headers: headers(token), body: JSON.stringify(request),
+  }));
+}
+
+export async function updateClassChallenge(
+  token: string,
+  challengeId: number,
+  request: Partial<Pick<ClassChallenge, 'board_type' | 'tie_tolerance' | 'enabled'>>,
+): Promise<ClassChallenge> {
+  return parse(await fetch(`${backendUrl}/class-challenges/${challengeId}`, {
+    method: 'PUT', headers: headers(token), body: JSON.stringify(request),
+  }));
+}
+
+export async function listJoinedClassGroups(token: string): Promise<StudentClassGroup[]> {
+  return parse(await fetch(`${backendUrl}/class-groups/joined`, { headers: headers(token) }));
+}
+
+export async function joinClassGroup(token: string, joinCode: string): Promise<StudentClassGroup> {
+  return parse(await fetch(`${backendUrl}/class-groups/join`, {
+    method: 'POST', headers: headers(token), body: JSON.stringify({ join_code: joinCode }),
+  }));
+}
+
+export async function updateClassMembership(
+  token: string,
+  groupId: number,
+  request: Partial<StudentClassGroup['membership']>,
+): Promise<StudentClassGroup> {
+  return parse(await fetch(`${backendUrl}/class-groups/${groupId}/membership`, {
+    method: 'PUT', headers: headers(token), body: JSON.stringify(request),
+  }));
+}
+
+export async function leaveClassGroup(token: string, groupId: number): Promise<void> {
+  const response = await fetch(`${backendUrl}/class-groups/${groupId}/membership`, {
+    method: 'DELETE', headers: headers(token),
+  });
+  if (!response.ok) await parse(response);
+}
+
+export async function readClassLeaderboard(token: string, challengeId: number): Promise<ClassLeaderboard> {
+  return parse(await fetch(`${backendUrl}/class-challenges/${challengeId}/leaderboard`, { headers: headers(token) }));
+}
+
+export async function readClassChallengeStatistics(token: string, challengeId: number): Promise<ClassChallengeStatistics> {
+  return parse(await fetch(`${backendUrl}/class-challenges/${challengeId}/statistics`, { headers: headers(token) }));
 }

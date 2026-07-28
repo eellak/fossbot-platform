@@ -5,6 +5,7 @@ from sqlalchemy import (
     Column,
     DateTime,
     Enum,
+    Float,
     ForeignKey,
     Integer,
     String,
@@ -439,7 +440,89 @@ class MissionAttempt(Base):
     stage_revision = Column(String, nullable=False)
     mission_definition_hash = Column(String, nullable=False)
     schema_version = Column(Integer, nullable=False)
+    score_config_version = Column(Integer)
+    score_config_hash = Column(String)
+    score_result = Column(JSON)
     created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+
+
+class ClassGroup(Base):
+    __tablename__ = "class_groups"
+    __table_args__ = (
+        CheckConstraint("status IN ('active', 'archived')", name="ck_class_groups_status"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    teacher_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    name = Column(String, nullable=False)
+    status = Column(String, nullable=False, default="active")
+    join_code = Column(String, nullable=False, unique=True, index=True)
+    leaderboards_enabled = Column(Boolean, nullable=False, default=False)
+    challenge_season = Column(Integer, nullable=False, default=1)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow, nullable=False)
+
+
+class ClassMembership(Base):
+    __tablename__ = "class_memberships"
+    __table_args__ = (
+        UniqueConstraint('group_id', 'student_id', name='uq_class_membership_student'),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    group_id = Column(Integer, ForeignKey('class_groups.id'), nullable=False)
+    student_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    display_alias = Column(String, nullable=False)
+    leaderboard_opt_in = Column(Boolean, nullable=False, default=False)
+    joined_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow, nullable=False)
+    removed_at = Column(DateTime)
+
+
+class CourseAssignment(Base):
+    __tablename__ = "course_assignments"
+    __table_args__ = (
+        UniqueConstraint('group_id', 'course_id', name='uq_course_assignment_group_course'),
+        CheckConstraint(
+            "update_policy IN ('pinned', 'student_choice', 'latest')",
+            name="ck_course_assignments_update_policy",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    group_id = Column(Integer, ForeignKey('class_groups.id'), nullable=False)
+    course_id = Column(Integer, ForeignKey('courses.id'), nullable=False)
+    release_id = Column(Integer, ForeignKey('course_releases.id'), nullable=False)
+    update_policy = Column(String, nullable=False, default="student_choice")
+    due_at = Column(DateTime)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow, nullable=False)
+
+
+class ClassChallenge(Base):
+    __tablename__ = "class_challenges"
+    __table_args__ = (
+        UniqueConstraint(
+            'assignment_id', 'release_id', 'lesson_key', 'activity_key', 'season',
+            name='uq_class_challenge_context',
+        ),
+        CheckConstraint(
+            "board_type IN ('highest_score', 'fastest', 'fewest_movements', 'shortest_path', 'most_optional')",
+            name="ck_class_challenges_board_type",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    assignment_id = Column(Integer, ForeignKey('course_assignments.id'), nullable=False)
+    release_id = Column(Integer, ForeignKey('course_releases.id'), nullable=False)
+    lesson_key = Column(String, nullable=False)
+    activity_key = Column(String, nullable=False)
+    enabled = Column(Boolean, nullable=False, default=False)
+    board_type = Column(String, nullable=False, default="highest_score")
+    tie_tolerance = Column(Float, nullable=False, default=0)
+    season = Column(Integer, nullable=False, default=1)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow, nullable=False)
 
 
 # Import compatibility for code that has not yet adopted canonical product naming.

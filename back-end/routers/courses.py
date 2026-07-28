@@ -43,6 +43,7 @@ from utils.activity_schema import (
     validate_activities,
 )
 from utils.marketplace_schema import MarketplaceSchemaError, marketplace_entry_path
+from utils.scoring import evaluate_score
 from utils.source_providers import get_provider
 from utils.source_providers.github_app import GitHubApiError
 from utils.utils_jwt import verify_access_token
@@ -255,6 +256,8 @@ class MissionAttemptMetricsRequest(BaseModel):
     falls: int = Field(default=0, ge=0, le=100_000)
     resets: int = Field(default=0, ge=0, le=10_000)
     collectibles: int = Field(default=0, ge=0, le=10_000)
+    checkpoints_completed: int = Field(default=0, ge=0, le=10_000)
+    hints_used: int = Field(default=0, ge=0, le=1_000)
     sensor_summaries: dict[str, dict[str, Any]] = Field(default_factory=dict)
 
     @field_validator("path_distance")
@@ -307,6 +310,7 @@ class MissionAttemptRequest(BaseModel):
     simulator_revision: str = Field(min_length=1, max_length=200)
     stage_revision: str = Field(min_length=1, max_length=500)
     mission_definition_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    client_total: Optional[float] = None
 
     @model_validator(mode="after")
     def valid_lifecycle(self):
@@ -1631,7 +1635,42 @@ def mission_attempt_payload(attempt: MissionAttempt) -> dict[str, Any]:
         "stage_revision": attempt.stage_revision,
         "mission_definition_hash": attempt.mission_definition_hash,
         "schema_version": attempt.schema_version,
+        "score": attempt.score_result,
         "created_at": attempt.created_at,
+    }
+
+
+def mission_personal_feedback(db: Session, attempt: MissionAttempt) -> dict[str, Any]:
+    successful = db.query(MissionAttempt).filter(
+        MissionAttempt.enrollment_id == attempt.enrollment_id,
+        MissionAttempt.release_id == attempt.release_id,
+        MissionAttempt.lesson_key == attempt.lesson_key,
+        MissionAttempt.activity_key == attempt.activity_key,
+        MissionAttempt.outcome == "succeeded",
+    ).order_by(MissionAttempt.attempt_number).all()
+    scored = [item for item in successful if item.score_result is not None]
+    previous = next(
+        (item for item in reversed(scored) if item.attempt_number < attempt.attempt_number),
+        None,
+    )
+
+    improvement = None
+    if attempt.outcome == "succeeded" and previous and attempt.score_result:
+        improvement = {
+            "score_delta": round(attempt.score_result["total"] - previous.score_result["total"], 2),
+            "time_delta_ms": attempt.metrics["elapsed_ms"] - previous.metrics["elapsed_ms"],
+            "movement_delta": attempt.metrics["movement_actions"] - previous.metrics["movement_actions"],
+            "path_delta": round(attempt.metrics["path_distance"] - previous.metrics["path_distance"], 3),
+        }
+
+    best_score = max(scored, key=lambda item: item.score_result["total"]) if scored else None
+    return {
+        "latest_completed": mission_attempt_payload(successful[-1]) if successful else None,
+        "best_score": mission_attempt_payload(best_score) if best_score else None,
+        "best_time_ms": min((item.metrics["elapsed_ms"] for item in successful), default=None),
+        "best_movement_actions": min((item.metrics["movement_actions"] for item in successful), default=None),
+        "best_path_distance": min((item.metrics["path_distance"] for item in successful), default=None),
+        "improvement": improvement,
     }
 
 
@@ -1688,6 +1727,42 @@ def read_mission_attempts(
     return [mission_attempt_payload(attempt) for attempt in attempts]
 
 
+@router.get("/enrollments/{enrollment_id}/lessons/{lesson_key}/missions/{activity_key}/summary")
+def read_mission_summary(
+    enrollment_id: int,
+    lesson_key: str,
+    activity_key: str,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    require_student(user)
+    enrollment = owned_enrollment_or_404(db, user, enrollment_id)
+    release = db.query(CourseRelease).filter(CourseRelease.id == enrollment.active_release_id).one()
+    lesson = lesson_for_release_or_404(release, lesson_key)
+    try:
+        activity = activity_by_key(lesson, activity_key)
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    if activity.get("type") != "mission":
+        raise HTTPException(status_code=404, detail="Mission activity not found")
+    latest = db.query(MissionAttempt).filter(
+        MissionAttempt.enrollment_id == enrollment.id,
+        MissionAttempt.release_id == release.id,
+        MissionAttempt.lesson_key == lesson_key,
+        MissionAttempt.activity_key == activity_key,
+    ).order_by(MissionAttempt.attempt_number.desc()).first()
+    if latest is None:
+        return {
+            "latest_completed": None,
+            "best_score": None,
+            "best_time_ms": None,
+            "best_movement_actions": None,
+            "best_path_distance": None,
+            "improvement": None,
+        }
+    return mission_personal_feedback(db, latest)
+
+
 @router.post(
     "/enrollments/{enrollment_id}/lessons/{lesson_key}/missions/{activity_key}/attempts",
     status_code=status.HTTP_201_CREATED,
@@ -1728,9 +1803,54 @@ def submit_mission_attempt(
         MissionAttempt.client_attempt_id == request.client_attempt_id,
     ).first()
     if duplicate:
-        return mission_attempt_payload(duplicate)
+        answer = activity_answer_row(db, enrollment, lesson_key, activity_key)
+        progress = progress_row(db, enrollment, lesson_key)
+        return {
+            **mission_attempt_payload(duplicate),
+            "activity_state": activity_state_payload(activity, answer),
+            "lesson_completed": bool(progress and progress.state == "completed"),
+            "personal_feedback": mission_personal_feedback(db, duplicate),
+        }
 
     satisfied_now = mission_result_satisfied(activity, request)
+    objective_results = [item.model_dump() for item in request.objective_results]
+    metrics = request.metrics.model_dump()
+    linked_hint_keys = {
+        item["key"] for item in lesson.get("activities", [])
+        if item.get("type") == "hint" and item.get("forActivityKey") == activity_key
+    }
+    if linked_hint_keys:
+        metrics["hints_used"] = db.query(ActivityAnswer).filter(
+            ActivityAnswer.enrollment_id == enrollment.id,
+            ActivityAnswer.release_id == release.id,
+            ActivityAnswer.lesson_key == lesson_key,
+            ActivityAnswer.activity_key.in_(linked_hint_keys),
+            ActivityAnswer.satisfied.is_(True),
+        ).count()
+    else:
+        metrics["hints_used"] = 0
+    numeric_keys = {
+        item["key"] for item in lesson.get("activities", [])
+        if item.get("type") == "numeric_answer"
+    }
+    numeric_answers = db.query(ActivityAnswer).filter(
+        ActivityAnswer.enrollment_id == enrollment.id,
+        ActivityAnswer.release_id == release.id,
+        ActivityAnswer.lesson_key == lesson_key,
+        ActivityAnswer.activity_key.in_(numeric_keys),
+        ActivityAnswer.correctness.is_not(None),
+    ).all() if numeric_keys else []
+    metrics["numeric_answer_accuracy"] = (
+        sum(item.correctness is True for item in numeric_answers) / len(numeric_answers)
+        if numeric_answers else 0
+    )
+    score_result = evaluate_score(
+        activity.get("scoreConfig"),
+        activity,
+        request.outcome,
+        objective_results,
+        metrics,
+    )
     attempt_number = (db.query(func.max(MissionAttempt.attempt_number)).filter(
         MissionAttempt.enrollment_id == enrollment.id,
         MissionAttempt.release_id == release.id,
@@ -1748,12 +1868,15 @@ def submit_mission_attempt(
         ended_at=request.ended_at.replace(tzinfo=None),
         outcome=request.outcome,
         completion_reason=request.completion_reason,
-        objective_results=[item.model_dump() for item in request.objective_results],
-        metrics=request.metrics.model_dump(),
+        objective_results=objective_results,
+        metrics=metrics,
         simulator_revision=request.simulator_revision,
         stage_revision=request.stage_revision,
         mission_definition_hash=request.mission_definition_hash,
         schema_version=MISSION_ATTEMPT_SCHEMA_VERSION,
+        score_config_version=score_result["config_version"] if score_result else None,
+        score_config_hash=score_result["config_hash"] if score_result else None,
+        score_result=score_result,
     )
     db.add(attempt)
 
@@ -1799,6 +1922,7 @@ def submit_mission_attempt(
         **mission_attempt_payload(attempt),
         "activity_state": activity_state_payload(activity, answer),
         "lesson_completed": bool(progress and progress.state == "completed"),
+        "personal_feedback": mission_personal_feedback(db, attempt),
     }
 
 

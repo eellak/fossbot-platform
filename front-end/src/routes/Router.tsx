@@ -25,6 +25,9 @@ const CourseEditorPage = Loadable(lazy(() => import('../views/course-editor-page
 const CoursesPage = Loadable(lazy(() => import('../views/courses-page/CoursesPage')));
 const CoursePage = Loadable(lazy(() => import('../views/course-page/CoursePage')));
 const LessonWorkspacePage = Loadable(lazy(() => import('../views/lesson-workspace-page/LessonWorkspacePage')));
+const CourseProgressPage = Loadable(lazy(() => import('../views/course-progress-page/CourseProgressPage')));
+const ClassGroupsTeacherPage = Loadable(lazy(() => import('../views/class-groups-teacher-page/ClassGroupsTeacherPage')));
+const ClassGroupsStudentPage = Loadable(lazy(() => import('../views/class-groups-student-page/ClassGroupsStudentPage')));
 
 //const BlocklyPage = Loadable(lazy(() => import('../views/blockly-page/BlocklyPage')));
 //const BlocklyPage =  '../views/blockly-page/BlocklyPage';
@@ -166,6 +169,22 @@ const Router = [
     children: [{ path: '', exact: true, element: <TeacherCoursesPage /> }],
   },
   {
+    path: '/teach/classrooms',
+    title: 'Class groups',
+    element: (
+      <PrivateRoute>
+        <RoleBasedRoute roles={['tutor', 'admin']} betaTesterOnly><FullLayout /></RoleBasedRoute>
+      </PrivateRoute>
+    ),
+    children: [{ path: '', exact: true, element: <ClassGroupsTeacherPage /> }],
+  },
+  {
+    path: '/classrooms',
+    title: 'Class groups',
+    element: <PrivateRoute><RoleBasedRoute roles={['user']} betaTesterOnly><FullLayout /></RoleBasedRoute></PrivateRoute>,
+    children: [{ path: '', exact: true, element: <ClassGroupsStudentPage /> }],
+  },
+  {
     path: '/teach/courses/:courseId',
     title: 'Course editor',
     element: (
@@ -174,6 +193,16 @@ const Router = [
       </PrivateRoute>
     ),
     children: [{ path: '', exact: true, element: <CourseEditorPage /> }],
+  },
+  {
+    path: '/teach/courses/:courseId/progress',
+    title: 'Course progress',
+    element: (
+      <PrivateRoute>
+        <RoleBasedRoute roles={['tutor', 'admin']} betaTesterOnly><FullLayout /></RoleBasedRoute>
+      </PrivateRoute>
+    ),
+    children: [{ path: '', exact: true, element: <CourseProgressPage /> }],
   },
   {
     path: '/stage-builder',
