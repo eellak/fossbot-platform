@@ -252,7 +252,7 @@
     },
     {
         "type": "floor",
-        "dimensions": [0.8, 0.8],
+        "dimensions": [10, 10],
         "material": {"color": "white"},
         "name": "floor",
         "texture": "/js-simulator/textures/white_rect.png",
