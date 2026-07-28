@@ -9,6 +9,8 @@ import { createStageAudioRuntime, type StageAudioEntry } from './audio'
 import { applyStageSkybox } from './skybox'
 import { log } from '../util/log'
 import { syncObjectToBody } from '../physics/mesh-sync'
+import type { ChallengeMarker } from '../missions/types'
+import { challengeForEntry } from '../missions/stageChallengeCore.js'
 
 interface StageDynamicObject {
   body: RAPIER.RigidBody
@@ -28,6 +30,7 @@ export interface StageHandle {
   colliderCount: number
   lineSegmentCount: number
   dynamicCount: number
+  missionMarkers: ChallengeMarker[]
   /** Stage-level LDR baseline (0..1). Mutable so a debug knob can adjust live. */
   ambientFloor: number
   /** Optional start camera captured from a `camera` stage entry. */
@@ -45,6 +48,23 @@ export interface LoadStageOptions {
 
 const DEFAULT_SPAWN = new THREE.Vector3(0, 0, 0)
 const DEFAULT_ORIENT = new THREE.Euler(0, 0, 0)
+
+function markerBounds(entry: RawStageEntry, object?: THREE.Object3D): ChallengeMarker['bounds'] {
+  if (object) {
+    object.updateMatrixWorld(true)
+    const box = new THREE.Box3().setFromObject(object)
+    if (!box.isEmpty()) return { min: [box.min.x, box.min.y, box.min.z], max: [box.max.x, box.max.y, box.max.z] }
+  }
+  const position = entry.position as number[] | undefined
+  const dimensions = entry.dimensions as number[] | undefined
+  const x = Number(position?.[0] || 0)
+  const y = entry.type === 'base' ? 0 : Number(position?.[1] || 0)
+  const z = entry.type === 'base' ? Number(position?.[1] || 0) : Number(position?.[2] || 0)
+  const width = Number(dimensions?.[0] || 0.2)
+  const height = entry.type === 'base' ? 0.1 : Number(dimensions?.[1] || dimensions?.[0] || 0.2)
+  const depth = entry.type === 'base' ? Number(dimensions?.[1] || 0.2) : Number(dimensions?.[2] || dimensions?.[0] || 0.2)
+  return { min: [x - width / 2, y - height / 2, z - depth / 2], max: [x + width / 2, y + height / 2, z + depth / 2] }
+}
 
 function resolveStageEntryAssets(entry: RawStageEntry, resolveAssetUrl: (url: string) => string): RawStageEntry {
   const next: RawStageEntry = { ...entry }
@@ -134,7 +154,17 @@ export async function loadStageEntries(
   const dynamicObjects: StageDynamicObject[] = []
   const lineSegments: LineSegment[] = []
   const audioEntries: StageAudioEntry[] = []
+  const missionMarkers: ChallengeMarker[] = []
+  const markerIds = new Set<string>()
   let startCamera: StageHandle['startCamera']
+
+  const configuredMarkerIds = new Set<string>()
+  entries.forEach((entry, index) => {
+    const challenge = challengeForEntry(entry, index)
+    if (!challenge) return
+    if (configuredMarkerIds.has(challenge.markerId)) throw new Error(`Duplicate challenge marker ID: ${challenge.markerId}`)
+    configuredMarkerIds.add(challenge.markerId)
+  })
 
   const stgCollidersGrp = new THREE.Group()
   stgCollidersGrp.name = 'stage_colliders'
@@ -143,8 +173,24 @@ export async function loadStageEntries(
 
   const resolveAssetUrl = opts.resolveAssetUrl ?? ((url: string) => url)
 
-  for (const rawEntry of entries) {
+  for (const [entryIndex, rawEntry] of entries.entries()) {
     const entry = resolveStageEntryAssets(rawEntry, resolveAssetUrl)
+    const challenge = challengeForEntry(entry, entryIndex)
+    const registerMarker = (object?: THREE.Object3D, body?: RAPIER.RigidBody) => {
+      if (!challenge) return
+      if (markerIds.has(challenge.markerId)) throw new Error(`Duplicate challenge marker ID: ${challenge.markerId}`)
+      markerIds.add(challenge.markerId)
+      missionMarkers.push({
+        id: challenge.markerId,
+        kind: challenge.kind,
+        name: String(entry.name || challenge.markerId),
+        order: challenge.order,
+        pickupRadius: challenge.pickupRadius,
+        bounds: markerBounds(entry, object),
+        object,
+        body,
+      })
+    }
     const type = entry.type as string
     log.world(
       `dimensions: ${JSON.stringify((entry as any).dimensions)}, position: ${JSON.stringify((entry as any).position)}, orientation: ${JSON.stringify((entry as any).orientation)}`
@@ -164,6 +210,7 @@ export async function loadStageEntries(
         const vis = buildBaseVisual(entry as any)
         scene.add(vis.object)
         objects.push(vis.object)
+        registerMarker(vis.object)
         break
       }
       case 'cube': {
@@ -172,6 +219,7 @@ export async function loadStageEntries(
         scene.add(vis.object)
         objects.push(vis.object)
         attachColliders(vis, col, world, stageBody, stgCollidersGrp, dynamicObjects)
+        registerMarker(vis.object, dynamicObjects[dynamicObjects.length - 1]?.object === vis.object ? dynamicObjects[dynamicObjects.length - 1].body : undefined)
         break
       }
       case 'cylinder': {
@@ -180,6 +228,7 @@ export async function loadStageEntries(
         scene.add(vis.object)
         objects.push(vis.object)
         attachColliders(vis, col, world, stageBody, stgCollidersGrp, dynamicObjects)
+        registerMarker(vis.object, dynamicObjects[dynamicObjects.length - 1]?.object === vis.object ? dynamicObjects[dynamicObjects.length - 1].body : undefined)
         break
       }
       case 'sphere': {
@@ -188,6 +237,7 @@ export async function loadStageEntries(
         scene.add(vis.object)
         objects.push(vis.object)
         attachColliders(vis, col, world, stageBody, stgCollidersGrp, dynamicObjects)
+        registerMarker(vis.object, dynamicObjects[dynamicObjects.length - 1]?.object === vis.object ? dynamicObjects[dynamicObjects.length - 1].body : undefined)
         break
       }
       case 'wedge': {
@@ -196,6 +246,7 @@ export async function loadStageEntries(
         scene.add(vis.object)
         objects.push(vis.object)
         attachColliders(vis, col, world, stageBody, stgCollidersGrp, dynamicObjects)
+        registerMarker(vis.object, dynamicObjects[dynamicObjects.length - 1]?.object === vis.object ? dynamicObjects[dynamicObjects.length - 1].body : undefined)
         break
       }
       case 'arrow': {
@@ -209,6 +260,7 @@ export async function loadStageEntries(
         const ori = entry.orientation as [number, number, number] | undefined
         if (pos) spawnPosition.set(pos[0], pos[1], pos[2])
         if (ori) spawnOrientation.set(ori[0], ori[1], ori[2])
+        registerMarker()
         break
       }
       case 'model': {
@@ -218,6 +270,7 @@ export async function loadStageEntries(
             scene.add(vis.object)
             objects.push(vis.object)
             attachColliders(vis, col, world, stageBody, stgCollidersGrp, dynamicObjects)
+            registerMarker(vis.object, dynamicObjects[dynamicObjects.length - 1]?.object === vis.object ? dynamicObjects[dynamicObjects.length - 1].body : undefined)
           })
           .catch((err) => {
             console.warn(`[stage] model load failed: ${(entry as any).filename}`, err)
@@ -303,6 +356,7 @@ export async function loadStageEntries(
     colliderCount,
     lineSegmentCount,
     dynamicCount,
+    missionMarkers,
     ambientFloor: 0.05,
     startCamera,
     get disposed() { return disposed },

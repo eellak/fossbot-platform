@@ -3,6 +3,7 @@ import { SimEngine } from './engine/SimEngine'
 import type { SimEngineConfig } from './engine/types'
 import type { RawStageConfig } from './stages'
 import type { SensorRunSummary, SensorTelemetryListener, SensorTelemetrySnapshot } from './sensors/telemetry'
+import type { AttemptSummary, ChallengeMarker, MissionEventListener } from './missions/types'
 
 export interface FossbotSimulatorHandle {
   moveStep(distance: number): Promise<void>
@@ -25,6 +26,7 @@ export interface FossbotSimulatorHandle {
   getLightSensor(): number
   rgbSetColor(color: string): void
   rcDrive(throttle: number, steering: number): void
+  buzzerBeep(frequencyHz: number, durationMs: number): Promise<void>
   justMove(direction: 'forward' | 'backward' | string): void
   justRotate(direction: 'left' | 'right' | string): void
   drawLine(status: boolean): void
@@ -34,6 +36,14 @@ export interface FossbotSimulatorHandle {
   resumeSensorRun(): string
   getSensorTelemetrySnapshot(): SensorTelemetrySnapshot
   subscribeSensorTelemetry(listener: SensorTelemetryListener): () => void
+  startAttempt(): string
+  ensureAttempt(): string
+  finishAttempt(outcome: AttemptSummary['outcome'], reason: string): AttemptSummary | null
+  programCompleted(): void
+  programRuntimeError(message: string): void
+  attemptTimeout(): void
+  getMissionMarkers(): Omit<ChallengeMarker, 'object' | 'body'>[]
+  subscribeMissionEvents(listener: MissionEventListener): () => void
 }
 
 export interface FossbotSimulatorProps {
@@ -52,6 +62,8 @@ export const FossbotSimulator = forwardRef<FossbotSimulatorHandle, FossbotSimula
     const engineRef = useRef<SimEngine | null>(null)
     const telemetryListenersRef = useRef(new Set<SensorTelemetryListener>())
     const telemetrySubscriptionsRef = useRef(new Map<SensorTelemetryListener, () => void>())
+    const missionListenersRef = useRef(new Set<MissionEventListener>())
+    const missionSubscriptionsRef = useRef(new Map<MissionEventListener, () => void>())
 
     useImperativeHandle(ref, () => ({
       moveStep: (distance) => engineRef.current?.moveStep(distance) ?? Promise.resolve(),
@@ -74,6 +86,7 @@ export const FossbotSimulator = forwardRef<FossbotSimulatorHandle, FossbotSimula
       getLightSensor: () => engineRef.current?.getLightSensor() ?? 0,
       rgbSetColor: (color) => engineRef.current?.rgbSetColor(color),
       rcDrive: (throttle, steering) => engineRef.current?.rcDrive(throttle, steering),
+      buzzerBeep: (frequencyHz, durationMs) => engineRef.current?.buzzerBeep(frequencyHz, durationMs) ?? Promise.resolve(),
       justMove: (direction) => engineRef.current?.justMove(direction),
       justRotate: (direction) => engineRef.current?.justRotate(direction),
       drawLine: (status) => engineRef.current?.drawLine(status),
@@ -97,6 +110,23 @@ export const FossbotSimulator = forwardRef<FossbotSimulatorHandle, FossbotSimula
           telemetrySubscriptionsRef.current.delete(listener)
         }
       },
+      startAttempt: () => engineRef.current?.startAttempt() ?? '',
+      ensureAttempt: () => engineRef.current?.ensureAttempt() ?? '',
+      finishAttempt: (outcome, reason) => engineRef.current?.finishAttempt(outcome, reason) ?? null,
+      programCompleted: () => engineRef.current?.programCompleted(),
+      programRuntimeError: (message) => engineRef.current?.programRuntimeError(message),
+      attemptTimeout: () => engineRef.current?.attemptTimeout(),
+      getMissionMarkers: () => engineRef.current?.getMissionMarkers() ?? [],
+      subscribeMissionEvents: (listener) => {
+        missionListenersRef.current.add(listener)
+        missionSubscriptionsRef.current.get(listener)?.()
+        if (engineRef.current) missionSubscriptionsRef.current.set(listener, engineRef.current.subscribeMissionEvents(listener))
+        return () => {
+          missionListenersRef.current.delete(listener)
+          missionSubscriptionsRef.current.get(listener)?.()
+          missionSubscriptionsRef.current.delete(listener)
+        }
+      },
     }), [])
 
     useEffect(() => {
@@ -107,6 +137,10 @@ export const FossbotSimulator = forwardRef<FossbotSimulatorHandle, FossbotSimula
       for (const listener of telemetryListenersRef.current) {
         telemetrySubscriptionsRef.current.get(listener)?.()
         telemetrySubscriptionsRef.current.set(listener, engine.subscribeSensorTelemetry(listener))
+      }
+      for (const listener of missionListenersRef.current) {
+        missionSubscriptionsRef.current.get(listener)?.()
+        missionSubscriptionsRef.current.set(listener, engine.subscribeMissionEvents(listener))
       }
       let disposed = false
 
@@ -119,6 +153,8 @@ export const FossbotSimulator = forwardRef<FossbotSimulatorHandle, FossbotSimula
         onMountChange?.(false)
         for (const unsubscribe of telemetrySubscriptionsRef.current.values()) unsubscribe()
         telemetrySubscriptionsRef.current.clear()
+        for (const unsubscribe of missionSubscriptionsRef.current.values()) unsubscribe()
+        missionSubscriptionsRef.current.clear()
         engine.stop()
         if (engineRef.current === engine) engineRef.current = null
       }

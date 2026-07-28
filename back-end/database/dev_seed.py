@@ -44,6 +44,7 @@ DEV_TEST_USERS = (
 )
 DEV_VERIFIER_USERNAME = "dev_teacher_verifier"
 DEV_SAMPLE_PHASE_5_TAG = "education-phase-5"
+DEV_SAMPLE_PHASE_6_TAG = "education-phase-6"
 
 
 def seed_dev_test_users(db: Session, password: str) -> list[User]:
@@ -398,6 +399,320 @@ def phase_five_sample_lessons(course_id: int, start_position: int = 4) -> list[L
     ]
 
 
+def phase_six_sample_lessons(course_id: int, start_position: int = 8) -> list[Lesson]:
+    """Return evaluation lessons covering every Phase 6 mission primitive and lifecycle."""
+    stage = {
+        "stage_source_type": "default",
+        "stage_title": "Phase 6 mission lab",
+        "stage_url": "/js-simulator/stages/stage_missions_phase6.json",
+    }
+    return [
+        Lesson(
+            lesson_key="dev-mission-route",
+            course_id=course_id,
+            title="Complete an ordered mission route",
+            position=start_position,
+            activities=rich_text_activity(
+                "dev-mission-route-intro",
+                "Inspect the mission card before running: it combines an ordered checkpoint sequence, a finish target, and time and movement limits.",
+                "Try the checkpoints out of order once, then retry. Confirm immediate objective feedback, preserved code, the attempt counter, and the final metrics summary.",
+            )
+            + [
+                {
+                    "key": "dev-mission-route-rules",
+                    "type": "mission",
+                    "version": 1,
+                    "required": True,
+                    "title": "Blue route challenge",
+                    "completionMode": "all",
+                    "objectives": [
+                        {
+                            "key": "ordered-checkpoints",
+                            "role": "completion",
+                            "summary": "Visit checkpoint one, then checkpoint two.",
+                            "condition": {
+                                "type": "checkpoints",
+                                "markerIds": ["checkpoint-one", "checkpoint-two"],
+                                "ordered": True,
+                            },
+                        },
+                        {
+                            "key": "reach-route-finish",
+                            "role": "completion",
+                            "summary": "Reach the green route finish.",
+                            "condition": {"type": "reach_target", "markerId": "route-finish"},
+                        },
+                        {
+                            "key": "route-limits",
+                            "role": "failure",
+                            "summary": "Finish within 60 seconds and 12 movement actions.",
+                            "condition": {
+                                "type": "limits",
+                                "maxDurationMs": 60_000,
+                                "maxMovementActions": 12,
+                            },
+                        },
+                    ],
+                    "retryLimit": 3,
+                    "feedbackMode": "immediate",
+                }
+            ],
+            completion_policy="activity",
+            start_mode="fresh",
+            editor_type="python",
+            starter_content=(
+                "# Follow the black guide through both blue checkpoints.\n"
+                "for step in range(3):\n"
+                "    move_step('forward')\n"
+            ),
+            simulator_settings={"showSimulator": True},
+            **stage,
+        ),
+        Lesson(
+            lesson_key="dev-mission-collect",
+            course_id=course_id,
+            title="Collect safely with remote controls",
+            position=start_position + 1,
+            activities=rich_text_activity(
+                "dev-mission-collect-intro",
+                "Use the no-code movement controls to collect both tokens without entering the red danger zone.",
+                "Cause a zone failure or collision on one attempt, then reset and retry. Compare completion, failure, and optional objective states.",
+            )
+            + [
+                {
+                    "key": "dev-mission-collect-rules",
+                    "type": "mission",
+                    "version": 1,
+                    "required": True,
+                    "title": "Safe collection challenge",
+                    "completionMode": "all",
+                    "objectives": [
+                        {
+                            "key": "collect-both",
+                            "role": "completion",
+                            "summary": "Collect the yellow and orange tokens.",
+                            "condition": {
+                                "type": "collect",
+                                "markerIds": ["collectible-alpha", "collectible-beta"],
+                                "requiredCount": 2,
+                            },
+                        },
+                        {
+                            "key": "avoid-red-zone",
+                            "role": "failure",
+                            "summary": "Do not enter the red danger zone.",
+                            "condition": {"type": "avoid_zones", "markerIds": ["danger-zone"]},
+                        },
+                        {
+                            "key": "clean-run",
+                            "role": "optional",
+                            "summary": "Avoid collisions, falls, and runtime errors.",
+                            "condition": {
+                                "type": "no_incident",
+                                "incidents": ["collision", "fall", "runtime_error"],
+                            },
+                        },
+                    ],
+                    "retryLimit": 2,
+                    "feedbackMode": "immediate",
+                }
+            ],
+            completion_policy="activity",
+            start_mode="fresh",
+            editor_type="none",
+            starter_content=None,
+            simulator_settings={"showSimulator": True, "showRemoteControls": True},
+            **stage,
+        ),
+        Lesson(
+            lesson_key="dev-mission-push-stop",
+            course_id=course_id,
+            title="Push an object and stop precisely",
+            position=start_position + 2,
+            activities=rich_text_activity(
+                "dev-mission-push-intro",
+                "Push the orange crate fully into its green target zone, then finish the program while the robot is inside the purple stop target.",
+                "Confirm that merely crossing the stop target is insufficient and that collision, fall, and runtime-error incidents fail the clean-run objective.",
+            )
+            + [
+                {
+                    "key": "dev-mission-push-rules",
+                    "type": "mission",
+                    "version": 1,
+                    "required": True,
+                    "title": "Delivery and parking challenge",
+                    "completionMode": "all",
+                    "objectives": [
+                        {
+                            "key": "deliver-crate",
+                            "role": "completion",
+                            "summary": "Move the push crate into the object target zone.",
+                            "condition": {
+                                "type": "object_in_zone",
+                                "objectId": "push-crate",
+                                "zoneId": "crate-zone",
+                            },
+                        },
+                        {
+                            "key": "park-in-target",
+                            "role": "completion",
+                            "summary": "Stop in the purple precision target.",
+                            "condition": {"type": "stop_in_target", "markerId": "precision-stop"},
+                        },
+                        {
+                            "key": "no-delivery-incident",
+                            "role": "failure",
+                            "summary": "Complete the attempt without an incident.",
+                            "condition": {
+                                "type": "no_incident",
+                                "incidents": ["collision", "fall", "runtime_error"],
+                            },
+                        },
+                    ],
+                    "retryLimit": None,
+                    "feedbackMode": "after_attempt",
+                }
+            ],
+            completion_policy="activity",
+            start_mode="fresh",
+            editor_type="python",
+            starter_content=(
+                "# Plan a route to push the crate into the green zone, then park.\n"
+                "move_step('forward')\n"
+            ),
+            simulator_settings={"showSimulator": True},
+            **stage,
+        ),
+        Lesson(
+            lesson_key="dev-mission-sensor-actuator",
+            course_id=course_id,
+            title="Evaluate sensors and actuators",
+            position=start_position + 3,
+            activities=rich_text_activity(
+                "dev-mission-sensor-intro",
+                "Approach the grey wall until the minimum front-ultrasonic reading is at most one metre, set the LED to green, and sound the buzzer.",
+                "Confirm sensor evidence is finalized when the program ends and that the summary reports elapsed time, path distance, actions, incidents, collectibles, and sensor statistics.",
+            )
+            + [
+                {
+                    "key": "dev-mission-sensor-rules",
+                    "type": "mission",
+                    "version": 1,
+                    "required": True,
+                    "title": "Sense and signal challenge",
+                    "completionMode": "all",
+                    "objectives": [
+                        {
+                            "key": "sense-wall",
+                            "role": "completion",
+                            "summary": "Record a minimum front distance of 1 m or less.",
+                            "condition": {
+                                "type": "sensor_threshold",
+                                "sensorId": "ultrasonic-front",
+                                "statistic": "minimum",
+                                "operator": "lte",
+                                "threshold": 1,
+                            },
+                        },
+                        {
+                            "key": "green-led",
+                            "role": "completion",
+                            "summary": "Set the RGB LED to green.",
+                            "condition": {"type": "actuator_state", "actuator": "led", "state": "green"},
+                        },
+                        {
+                            "key": "sound-buzzer",
+                            "role": "optional",
+                            "summary": "Sound the buzzer during the run.",
+                            "condition": {"type": "actuator_state", "actuator": "buzzer", "state": "on"},
+                        },
+                    ],
+                    "retryLimit": 2,
+                    "feedbackMode": "after_attempt",
+                }
+            ],
+            completion_policy="activity",
+            start_mode="fresh",
+            editor_type="python",
+            starter_content=(
+                "rgb_set_color('green')\n"
+                "buzzer_beep(440, 300)\n"
+                "for step in range(8):\n"
+                "    move_step('forward')\n"
+            ),
+            simulator_settings={"showSimulator": True},
+            **stage,
+        ),
+        Lesson(
+            lesson_key="dev-mission-lifecycle",
+            course_id=course_id,
+            title="Audit attempts, retries, and preview",
+            position=start_position + 4,
+            activities=rich_text_activity(
+                "dev-mission-lifecycle-intro",
+                "This non-gating mission succeeds by reaching the finish or collecting either token. Use it to check any-mode composition and self-completion.",
+                "Run success, timeout, reset, manual stop, runtime-error, fall, and navigation-away cases. Verify one terminal attempt per start, preserved code on retry, no duplicate saves, and no persisted attempt from teacher preview.",
+                "In the teacher editor, inspect the mission summary and marker picker: every stable mission-lab marker should be discoverable, including the cyan sensor region.",
+            )
+            + [
+                {
+                    "key": "dev-mission-lifecycle-rules",
+                    "type": "mission",
+                    "version": 1,
+                    "required": False,
+                    "title": "Attempt lifecycle audit",
+                    "completionMode": "any",
+                    "objectives": [
+                        {
+                            "key": "quick-finish",
+                            "role": "completion",
+                            "summary": "Reach the route finish.",
+                            "condition": {"type": "reach_target", "markerId": "route-finish"},
+                        },
+                        {
+                            "key": "quick-collect",
+                            "role": "completion",
+                            "summary": "Collect either token.",
+                            "condition": {
+                                "type": "collect",
+                                "markerIds": ["collectible-alpha", "collectible-beta"],
+                                "requiredCount": 1,
+                            },
+                        },
+                        {
+                            "key": "audit-danger-zone",
+                            "role": "failure",
+                            "summary": "Do not enter the danger zone.",
+                            "condition": {"type": "avoid_zones", "markerIds": ["danger-zone"]},
+                        },
+                        {
+                            "key": "audit-limits",
+                            "role": "failure",
+                            "summary": "Finish within 15 seconds and four movement actions.",
+                            "condition": {
+                                "type": "limits",
+                                "maxDurationMs": 15_000,
+                                "maxMovementActions": 4,
+                            },
+                        },
+                    ],
+                    "retryLimit": 1,
+                    "feedbackMode": "after_attempt",
+                }
+            ],
+            completion_policy="self",
+            start_mode="fresh",
+            editor_type="python",
+            starter_content=(
+                "# Change this program to exercise each terminal attempt path.\n"
+                "move_step('forward')\n"
+            ),
+            simulator_settings={"showSimulator": True},
+            **stage,
+        ),
+    ]
+
+
 def add_missing_phase_five_lessons(db: Session, course: Course) -> int:
     existing_lessons = db.query(Lesson).filter(Lesson.course_id == course.id).all()
     existing_keys = {lesson.lesson_key for lesson in existing_lessons}
@@ -410,6 +725,26 @@ def add_missing_phase_five_lessons(db: Session, course: Course) -> int:
     )
     added = 0
     for lesson in phase_five_sample_lessons(course.id, next_position):
+        if lesson.lesson_key in existing_keys:
+            continue
+        lesson.position = next_position + added
+        db.add(lesson)
+        added += 1
+    return added
+
+
+def add_missing_phase_six_lessons(db: Session, course: Course) -> int:
+    existing_lessons = db.query(Lesson).filter(Lesson.course_id == course.id).all()
+    existing_keys = {lesson.lesson_key for lesson in existing_lessons}
+    next_position = (
+        max(
+            (lesson.position for lesson in existing_lessons if lesson.position > 0),
+            default=0,
+        )
+        + 1
+    )
+    added = 0
+    for lesson in phase_six_sample_lessons(course.id, next_position):
         if lesson.lesson_key in existing_keys:
             continue
         lesson.position = next_position + added
@@ -439,14 +774,20 @@ def seed_dev_sample_course(db: Session, admin_username: str) -> Course:
         None,
     )
     if existing:
-        added = add_missing_phase_five_lessons(db, existing)
+        phase_five_added = add_missing_phase_five_lessons(db, existing)
+        phase_six_added = add_missing_phase_six_lessons(db, existing)
         if DEV_SAMPLE_PHASE_5_TAG not in (existing.tags or []):
             existing.tags = [*(existing.tags or []), DEV_SAMPLE_PHASE_5_TAG]
+        if DEV_SAMPLE_PHASE_6_TAG not in (existing.tags or []):
+            existing.tags = [*(existing.tags or []), DEV_SAMPLE_PHASE_6_TAG]
         if (
             existing.description
-            == "A compact development course for exercising the Phase 2 teacher authoring workflow."
+            in {
+                "A compact development course for exercising the Phase 2 teacher authoring workflow.",
+                "A development course covering education authoring, activities, completion policies, and simulator sensor observations.",
+            }
         ):
-            existing.description = "A development course covering education authoring, activities, completion policies, and simulator sensor observations."
+            existing.description = "A development course covering education authoring, activities, sensor observations, and simulator mission evaluation."
         if existing.learning_objectives == [
             "Author structured lesson instructions",
             "Configure reproducible starter code and simulator stages",
@@ -457,20 +798,36 @@ def seed_dev_sample_course(db: Session, admin_username: str) -> Course:
                 "Author graded questions, reflections, and hints",
                 "Build no-code sensor observations with compact run summaries",
             ]
+        if existing.learning_objectives == [
+            "Author structured lesson instructions",
+            "Configure reproducible starter code and simulator stages",
+            "Test fresh and inherited lesson workspaces",
+            "Author graded questions, reflections, and hints",
+            "Build no-code sensor observations with compact run summaries",
+        ]:
+            existing.learning_objectives = [
+                *existing.learning_objectives,
+                "Compose simulator missions from safe declarative rules",
+                "Evaluate mission retries, feedback, evidence, and lifecycle outcomes",
+            ]
         if existing.estimated_duration_minutes == 25:
             existing.estimated_duration_minutes = 70
+        if existing.estimated_duration_minutes == 70:
+            existing.estimated_duration_minutes = 125
         if existing.status == "archived":
             existing.status = "draft"
         db.commit()
         db.refresh(existing)
         logger.info(
-            "Development education sample ready (%s Phase 5 lessons added)", added
+            "Development education sample ready (%s Phase 5 and %s Phase 6 lessons added)",
+            phase_five_added,
+            phase_six_added,
         )
         return existing
 
     course = Course(
         title="Education authoring playground",
-        description="A development course covering education authoring, activities, completion policies, and simulator sensor observations.",
+        description="A development course covering education authoring, activities, sensor observations, and simulator mission evaluation.",
         author_id=admin.id,
         learning_objectives=[
             "Author structured lesson instructions",
@@ -478,14 +835,22 @@ def seed_dev_sample_course(db: Session, admin_username: str) -> Course:
             "Test fresh and inherited lesson workspaces",
             "Author graded questions, reflections, and hints",
             "Build no-code sensor observations with compact run summaries",
+            "Compose simulator missions from safe declarative rules",
+            "Evaluate mission retries, feedback, evidence, and lifecycle outcomes",
         ],
         status="draft",
         visibility="unlisted",
         age_range="10–16",
         difficulty="Beginner",
-        estimated_duration_minutes=70,
+        estimated_duration_minutes=125,
         prerequisites="No prior robotics experience required.",
-        tags=[DEV_SAMPLE_TAG, DEV_SAMPLE_PHASE_5_TAG, "education", "development"],
+        tags=[
+            DEV_SAMPLE_TAG,
+            DEV_SAMPLE_PHASE_5_TAG,
+            DEV_SAMPLE_PHASE_6_TAG,
+            "education",
+            "development",
+        ],
     )
     db.add(course)
     db.flush()
@@ -549,6 +914,7 @@ def seed_dev_sample_course(db: Session, admin_username: str) -> Course:
         ),
     ]
     lessons.extend(phase_five_sample_lessons(course.id, len(lessons) + 1))
+    lessons.extend(phase_six_sample_lessons(course.id, len(lessons) + 1))
     db.add_all(lessons)
     db.commit()
     db.refresh(course)

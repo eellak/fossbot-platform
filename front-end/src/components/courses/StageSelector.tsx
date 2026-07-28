@@ -13,6 +13,7 @@ const builtIns: StageReference[] = [
   { sourceType: 'default', title: 'White field', url: '/js-simulator/stages/stage_white_rect.json' },
   { sourceType: 'default', title: 'Object field', url: '/js-simulator/stages/stage_object.json' },
   { sourceType: 'default', title: 'Maze', url: '/js-simulator/stages/stage_maze.json' },
+  { sourceType: 'default', title: 'Phase 6 mission lab', url: '/js-simulator/stages/stage_missions_phase6.json' },
   { sourceType: 'default', title: 'Numbers', url: '/js-simulator/stages/stage_numbers.json' },
   { sourceType: 'default', title: 'Eiffel', url: '/js-simulator/stages/stage_eiffel.json' },
   { sourceType: 'default', title: 'Animals', url: '/js-simulator/stages/stage_animals.json' },

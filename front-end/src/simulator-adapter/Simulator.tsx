@@ -31,6 +31,7 @@ import CardDialog from 'src/components/stage-select-popup/CardDialog';
 import type { RawStageConfig } from 'src/simulator/stages';
 import type { FossbotSimulatorHandle } from 'src/simulator/FossbotSimulator';
 import type { SensorRunSummary, SensorTelemetryListener, SensorTelemetrySnapshot } from 'src/simulator/sensors/telemetry';
+import type { AttemptSummary, ChallengeMarker, MissionEventListener } from 'src/simulator/missions/types';
 
 type SimulatorVersion = 'v1' | 'v2';
 
@@ -43,6 +44,7 @@ type WebGLAppProps = {
   /** Base URL for assets referenced by initialStageConfig, such as GitHub stage assets. */
   initialStageAssetBaseUrl?: string | null;
   showControls?: boolean;
+  autoStartMissionAttempt?: boolean;
   allowStageSelection?: boolean;
   sensorHelpersVisible?: boolean;
   sensorTelemetryAutoStart?: boolean;
@@ -60,6 +62,8 @@ const LazyFossbotSimulator = lazy(() =>
 );
 
 let activeV2Handle: FossbotSimulatorHandle | null = null;
+const missionListeners = new Set<MissionEventListener>();
+const missionSubscriptions = new Map<MissionEventListener, () => void>();
 
 function isSimulatorVersion(value: string | null | undefined): value is SimulatorVersion {
   return value === 'v1' || value === 'v2';
@@ -210,6 +214,11 @@ const V2WebGLApp = forwardRef<unknown, WebGLAppProps>((props, ref) => {
       telemetryUnsubscribeRef.current = null;
       handleRef.current = handle;
       activeV2Handle = handle;
+      for (const unsubscribe of missionSubscriptions.values()) unsubscribe();
+      missionSubscriptions.clear();
+      if (handle) {
+        for (const listener of missionListeners) missionSubscriptions.set(listener, handle.subscribeMissionEvents(listener));
+      }
       if (handle) telemetryUnsubscribeRef.current = handle.subscribeSensorTelemetry((snapshot) => onTelemetryRef.current?.(snapshot));
       setForwardedRef(ref, handle);
     },
@@ -245,18 +254,22 @@ const V2WebGLApp = forwardRef<unknown, WebGLAppProps>((props, ref) => {
   }, [currentURL, props.initialStageConfig, props.initialStageUrl]);
 
   const handleForward = async () => {
+    if (props.autoStartMissionAttempt) handleRef.current?.ensureAttempt();
     await handleRef.current?.moveStep(-0.4);
   };
 
   const handleBackward = async () => {
+    if (props.autoStartMissionAttempt) handleRef.current?.ensureAttempt();
     await handleRef.current?.moveStep(0.4);
   };
 
   const handleRotateLeft = async () => {
+    if (props.autoStartMissionAttempt) handleRef.current?.ensureAttempt();
     await handleRef.current?.rotateStep(0.0174533 * 10);
   };
 
   const handleRotateRight = async () => {
+    if (props.autoStartMissionAttempt) handleRef.current?.ensureAttempt();
     await handleRef.current?.rotateStep(-0.0174533 * 10);
   };
 
@@ -427,6 +440,10 @@ export function rgb_set_color(color: string): void {
   else if (getSimulatorVersion() !== 'v2') legacyRgbSetColor(color);
 }
 
+export function buzzer_beep(frequencyHz: number, durationMs: number): Promise<void> {
+  return getActiveV2Handle()?.buzzerBeep(frequencyHz, durationMs) ?? Promise.resolve();
+}
+
 export function get_acceleration(axis: string): any {
   const handle = getActiveV2Handle();
   if (handle) return handle.getAcceleration(axis);
@@ -502,6 +519,42 @@ export function getSensorTelemetrySnapshot(): SensorTelemetrySnapshot | null {
 
 export function setSensorHelpersVisible(visible: boolean): void {
   getActiveV2Handle()?.setSensorHelpersVisible(visible);
+}
+
+export function startAttempt(): string {
+  return getActiveV2Handle()?.startAttempt() ?? '';
+}
+
+export function finishAttempt(outcome: AttemptSummary['outcome'], reason: string): AttemptSummary | null {
+  return getActiveV2Handle()?.finishAttempt(outcome, reason) ?? null;
+}
+
+export function programCompleted(): void {
+  getActiveV2Handle()?.programCompleted();
+}
+
+export function programRuntimeError(message: string): void {
+  getActiveV2Handle()?.programRuntimeError(message);
+}
+
+export function attemptTimeout(): void {
+  getActiveV2Handle()?.attemptTimeout();
+}
+
+export function getMissionMarkers(): Omit<ChallengeMarker, 'object' | 'body'>[] {
+  return getActiveV2Handle()?.getMissionMarkers() ?? [];
+}
+
+export function subscribeMissionEvents(listener: MissionEventListener): () => void {
+  missionListeners.add(listener);
+  missionSubscriptions.get(listener)?.();
+  const handle = getActiveV2Handle();
+  if (handle) missionSubscriptions.set(listener, handle.subscribeMissionEvents(listener));
+  return () => {
+    missionListeners.delete(listener);
+    missionSubscriptions.get(listener)?.();
+    missionSubscriptions.delete(listener);
+  };
 }
 
 export { WebGLApp };

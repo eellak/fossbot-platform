@@ -5,12 +5,13 @@ import {
 import { IconArrowDown, IconArrowUp, IconCopy, IconPlus, IconTrash } from '@tabler/icons-react';
 import { v4 as uuidv4 } from 'uuid';
 import { activityTypes, activityValidation, createActivity, duplicateActivity, sensorCatalog, sensorGroups, sensorPresentations, sensorStatistics } from 'src/courses/activitySchema';
-import type { Activity, ChoiceOption, HintActivity, SensorPresentation, SensorStatistic, TiptapNode } from 'src/courses/types';
+import type { Activity, ChoiceOption, HintActivity, SensorPresentation, SensorStatistic, StageReference, TiptapNode } from 'src/courses/types';
 import RichTextEditor from '../RichTextEditor';
+import MissionActivityEditor from './MissionActivityEditor';
 
-type Props = { activities: Activity[]; onChange: (activities: Activity[]) => void; t: any };
+type Props = { activities: Activity[]; onChange: (activities: Activity[]) => void; stageReference?: StageReference | null; token?: string; t: any };
 
-export default function ActivityComposer({ activities, onChange, t }: Props) {
+export default function ActivityComposer({ activities, onChange, stageReference, token, t }: Props) {
   const [newType, setNewType] = useState<Activity['type']>('rich_text');
   const groups = activityGroups(activities);
   const update = (key: string, activity: Activity) => onChange(activities.map((item) => item.key === key ? activity : item));
@@ -45,6 +46,8 @@ export default function ActivityComposer({ activities, onChange, t }: Props) {
         onChange(next.flatMap((group) => [group.activity, ...group.linkedHints]));
       }}
       onDelete={() => onChange(activities.filter((item) => item.key !== activity.key && !(item.type === 'hint' && item.forActivityKey === activity.key)))}
+      stageReference={stageReference}
+      token={token}
       t={t}
     />)}
     <Paper variant="outlined" sx={{ p: 1.5 }}><Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
@@ -54,7 +57,7 @@ export default function ActivityComposer({ activities, onChange, t }: Props) {
   </Stack>;
 }
 
-function ActivityCard({ activity, linkedHints, index, count, onChange, onHintsChange, onMove, onDuplicate, onDelete, t }: { activity: Activity; linkedHints: HintActivity[]; index: number; count: number; onChange: (activity: Activity) => void; onHintsChange: (hints: HintActivity[]) => void; onMove: (direction: -1 | 1) => void; onDuplicate: () => void; onDelete: () => void; t: any }) {
+function ActivityCard({ activity, linkedHints, index, count, onChange, onHintsChange, onMove, onDuplicate, onDelete, stageReference, token, t }: { activity: Activity; linkedHints: HintActivity[]; index: number; count: number; onChange: (activity: Activity) => void; onHintsChange: (hints: HintActivity[]) => void; onMove: (direction: -1 | 1) => void; onDuplicate: () => void; onDelete: () => void; stageReference?: StageReference | null; token?: string; t: any }) {
   const errors = activityValidation(activity);
   const patch = (value: Partial<Activity>) => onChange({ ...activity, ...value } as Activity);
   const cannotRequire = activity.type === 'hint' || (activity.type === 'short_reflection' && !activity.collectResponse);
@@ -68,13 +71,13 @@ function ActivityCard({ activity, linkedHints, index, count, onChange, onHintsCh
     </Stack>
     <Divider sx={{ my: 1.5 }} />
     <FormControlLabel control={<Switch disabled={cannotRequire} checked={cannotRequire ? false : activity.required} onChange={(event) => patch({ required: event.target.checked } as Partial<Activity>)} />} label={cannotRequire ? t('education.activities.optional') : t('education.activities.required')} />
-    <ActivityFields activity={activity} onChange={onChange} t={t} />
+    <ActivityFields activity={activity} onChange={onChange} stageReference={stageReference} token={token} t={t} />
     {supportsLinkedHint(activity) && <ActivityHintFields activityKey={activity.key} hints={linkedHints} onChange={onHintsChange} t={t} />}
     {errors.length > 0 && <Alert severity="warning" sx={{ mt: 1.5 }}>{t('education.activities.validation')}</Alert>}
   </Paper>;
 }
 
-function ActivityFields({ activity, onChange, t }: { activity: Activity; onChange: (activity: Activity) => void; t: any }) {
+function ActivityFields({ activity, onChange, stageReference, token, t }: { activity: Activity; onChange: (activity: Activity) => void; stageReference?: StageReference | null; token?: string; t: any }) {
   if (activity.type === 'rich_text') return <RichTextEditor value={activity.content as TiptapNode} onChange={(content) => onChange({ ...activity, content })} labels={richTextLabels(t)} />;
   if (activity.type === 'hint') {
     return <Stack spacing={1.5}>
@@ -91,6 +94,7 @@ function ActivityFields({ activity, onChange, t }: { activity: Activity; onChang
     <FeedbackFields activity={activity} onChange={onChange} t={t} />
   </Stack>;
   if (activity.type === 'short_reflection') return <Stack spacing={1.5}><TextField required fullWidth multiline label={t('education.activities.prompt')} value={activity.prompt} onChange={(event) => onChange({ ...activity, prompt: event.target.value })} /><FormControlLabel control={<Switch checked={activity.collectResponse} onChange={(event) => onChange({ ...activity, collectResponse: event.target.checked, required: event.target.checked ? activity.required : false })} />} label={t('education.activities.collectReflection')} />{!activity.collectResponse && <Alert severity="info">{t('education.activities.privateReflectionHelp')}</Alert>}</Stack>;
+  if (activity.type === 'mission') return <MissionActivityEditor activity={activity} onChange={onChange} stageReference={stageReference} token={token} t={t} />;
   return <ObservationFields activity={activity} onChange={onChange} t={t} />;
 }
 

@@ -51,6 +51,8 @@ import { createBuzzer, type BuzzerHandle } from '../actuators/buzzer'
 import type { BenchmarkPanelHandle } from '../bench/BenchmarkPanel'
 import type { StageCounts } from '../bench/types'
 import type { BenchmarkRunnerHandle } from '../bench/runner'
+import type { AttemptSummary, ChallengeMarker, MissionEvent, MissionEventListener } from '../missions/types'
+import { isMissionIncidentCollision } from '../missions/stageChallengeCore.js'
 
 function resolveConfig(cfg: Partial<SimEngineConfig> | undefined): Required<SimEngineConfig> {
   const publicAssetBaseUrl = cfg?.publicAssetBaseUrl ?? '/js-simulator'
@@ -89,6 +91,24 @@ const API_DRIVE_TOLERANCE_M = 0.005
 const API_TURN_TOLERANCE_RAD = 0.02
 const TRACE_MIN_DISTANCE_M = 0.005
 const TRACE_Y = 0.004
+
+type ActiveAttempt = {
+  id: string
+  startedAt: string
+  startedPerf: number
+  movementActions: number
+  pathDistance: number
+  collisions: number
+  falls: number
+  resets: number
+  collectibles: number
+  enteredMarkers: Set<string>
+  collectedMarkers: Set<string>
+  objectZones: Set<string>
+  lastPosition: THREE.Vector3 | null
+  continuousCommand: string | null
+  fell: boolean
+}
 
 /**
  * SimEngine owns the full simulation lifecycle: scene, world, robot, stage,
@@ -182,6 +202,10 @@ export class SimEngine {
   private traceLine: THREE.Line | null = null
   private tracePoints: THREE.Vector3[] = []
   private lastTracePosition: THREE.Vector3 | null = null
+  private readonly missionListeners = new Set<MissionEventListener>()
+  private activeAttempt: ActiveAttempt | null = null
+  private finishingAttempt = false
+  private attemptSequence = 0
 
   // ── Temp vectors (reused, never allocated per frame) ──
   private readonly tmpFollowTarget = new THREE.Vector3()
@@ -327,6 +351,7 @@ export class SimEngine {
   /** Cancel the render loop and dispose all resources. */
   stop(): void {
     this.cancelled = true
+    this.finishAttempt('stopped', 'navigation')
     this.sensorTelemetry.endRun()
     this.resolvePendingMotion()
     cancelAnimationFrame(this.rafId)
@@ -353,6 +378,7 @@ export class SimEngine {
     this.resetBtn?.remove()
     this.resetBtn = null
     this.frameListeners.clear()
+    this.missionListeners.clear()
     this.benchDrive = null
     if (this.sceneHandle) disposeScene(this.sceneHandle)
     this.worldHandle?.dispose()
@@ -411,12 +437,115 @@ export class SimEngine {
 
   // ── Public platform/student controls ──
 
+  startAttempt(): string {
+    if (this.activeAttempt) this.finishAttempt('stopped', 'reset')
+    this.resetPhysicalAttemptState()
+    this.attemptSequence += 1
+    const randomId = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.round(performance.now())}`
+    const id = `attempt-${this.attemptSequence}-${randomId}`
+    this.activeAttempt = {
+      id,
+      startedAt: new Date().toISOString(),
+      startedPerf: performance.now(),
+      movementActions: 0,
+      pathDistance: 0,
+      collisions: 0,
+      falls: 0,
+      resets: 0,
+      collectibles: 0,
+      enteredMarkers: new Set(),
+      collectedMarkers: new Set(),
+      objectZones: new Set(),
+      lastPosition: null,
+      continuousCommand: null,
+      fell: false,
+    }
+    this.sensorTelemetry.startRun()
+    this.emitMissionEvent({ type: 'attempt_started', attemptId: id, elapsedMs: 0 })
+    return id
+  }
+
+  ensureAttempt(): string {
+    return this.activeAttempt?.id ?? this.startAttempt()
+  }
+
+  finishAttempt(outcome: AttemptSummary['outcome'], reason: string): AttemptSummary | null {
+    const attempt = this.activeAttempt
+    if (!attempt || this.finishingAttempt) return null
+    this.finishingAttempt = true
+    try {
+      const elapsedMs = this.attemptElapsedMs()
+      const sensorSummary = this.sensorTelemetry.endRun()
+      const sensorSummaries: AttemptSummary['metrics']['sensorSummaries'] = {}
+      for (const [sensorId, summary] of Object.entries(sensorSummary?.sensors || {})) {
+        const statistics = {
+          minimum: summary.minimum,
+          maximum: summary.maximum,
+          average: summary.average,
+          finalValue: summary.finalValue,
+        }
+        sensorSummaries[sensorId] = { ...statistics, unit: summary.unit, sampleCount: summary.sampleCount }
+        this.emitMissionEvent({ type: 'sensor_statistic_finalized', attemptId: attempt.id, elapsedMs, sensorId, statistics })
+      }
+      const result: AttemptSummary = {
+        attemptId: attempt.id,
+        startedAt: attempt.startedAt,
+        endedAt: new Date().toISOString(),
+        outcome,
+        completionReason: reason,
+        metrics: {
+          elapsedMs,
+          movementActions: attempt.movementActions,
+          pathDistance: Number(attempt.pathDistance.toFixed(4)),
+          collisions: attempt.collisions,
+          falls: attempt.falls,
+          resets: attempt.resets,
+          collectibles: attempt.collectibles,
+          sensorSummaries,
+        },
+      }
+      this.emitMissionEvent({ type: 'attempt_stopped', attemptId: attempt.id, elapsedMs, outcome, reason, summary: result })
+      this.activeAttempt = null
+      return result
+    } finally {
+      this.finishingAttempt = false
+    }
+  }
+
+  programCompleted(): void {
+    if (!this.activeAttempt) return
+    this.emitMissionEvent({ type: 'program_completed', attemptId: this.activeAttempt.id, elapsedMs: this.attemptElapsedMs() })
+  }
+
+  programRuntimeError(message: string): void {
+    if (!this.activeAttempt) return
+    this.emitMissionEvent({ type: 'runtime_error', attemptId: this.activeAttempt.id, elapsedMs: this.attemptElapsedMs(), message: message.slice(0, 500) })
+  }
+
+  attemptTimeout(): void {
+    if (!this.activeAttempt) return
+    this.emitMissionEvent({ type: 'timeout', attemptId: this.activeAttempt.id, elapsedMs: this.attemptElapsedMs() })
+  }
+
+  getMissionMarkers(): Omit<ChallengeMarker, 'object' | 'body'>[] {
+    return (this.currentStage?.missionMarkers || []).map(({ object: _object, body: _body, ...marker }) => ({
+      ...marker,
+      bounds: { min: [...marker.bounds.min], max: [...marker.bounds.max] },
+    }))
+  }
+
+  subscribeMissionEvents(listener: MissionEventListener): () => void {
+    this.missionListeners.add(listener)
+    return () => this.missionListeners.delete(listener)
+  }
+
   /** V1-compatible step movement: resolve after the body travels `distance`. */
   moveStep(distance: number): Promise<void> {
     if (!this.robotPhysics || !Number.isFinite(distance) || distance === 0) {
       return Promise.resolve()
     }
 
+    this.recordMovementAction('move_step')
     this.stopMotion()
     const pos = this.robotPhysics.body.translation()
     const targetDistanceM = Math.abs(distance)
@@ -439,6 +568,7 @@ export class SimEngine {
       return Promise.resolve()
     }
 
+    this.recordMovementAction('rotate_step')
     this.stopMotion()
     this.apiTurnMotion = {
       targetAngle: angle,
@@ -452,6 +582,7 @@ export class SimEngine {
   }
 
   stopMotion(): void {
+    const hadMotion = Boolean(this.benchDrive || this.apiDriveMotion || this.apiTurnMotion || this.lineFollowActive || this.presetRemainingSec > 0)
     this.benchDrive = null
     this.presetRemainingSec = 0
     this.presetLeftInput = 0
@@ -466,13 +597,28 @@ export class SimEngine {
       this.robotPhysics.body.setAngvel({ x: 0, y: 0, z: 0 }, true)
     }
     this.resolvePendingMotion()
+    if (hadMotion) {
+      if (this.activeAttempt) this.activeAttempt.continuousCommand = null
+      this.emitMovementEvent('stop')
+    }
   }
 
   reset(): void {
+    if (this.activeAttempt) {
+      const attemptId = this.activeAttempt.id
+      this.activeAttempt.resets += 1
+      this.emitMissionEvent({ type: 'attempt_reset', attemptId, elapsedMs: this.attemptElapsedMs() })
+      this.finishAttempt('stopped', 'reset')
+    }
+    this.resetPhysicalAttemptState()
+  }
+
+  private resetPhysicalAttemptState(): void {
     this.sensorTelemetry.endRun()
     this.stopMotion()
     this.drawLine(false)
     if (this.currentStage) this.applySpawnPose(this.currentStage)
+    for (const marker of this.currentStage?.missionMarkers || []) marker.object && (marker.object.visible = true)
     this.sensorSystem?.resetOdometer()
     if (this.config.sensorTelemetryAutoStart) this.sensorTelemetry.startRun()
   }
@@ -598,6 +744,17 @@ export class SimEngine {
   rgbSetColor(color: string): void {
     const rgb = RGB_COLOR[color] ?? RGB_COLOR.off
     this.topRgb?.setColor(rgb[0], rgb[1], rgb[2])
+    if (this.activeAttempt) this.emitMissionEvent({ type: 'actuator_state_changed', attemptId: this.activeAttempt.id, elapsedMs: this.attemptElapsedMs(), actuator: 'led', state: color })
+  }
+
+  async buzzerBeep(frequencyHz: number, durationMs: number): Promise<void> {
+    if (!this.buzzer || !Number.isFinite(frequencyHz) || !Number.isFinite(durationMs)) return
+    const attemptId = this.activeAttempt?.id
+    if (attemptId) this.emitMissionEvent({ type: 'actuator_state_changed', attemptId, elapsedMs: this.attemptElapsedMs(), actuator: 'buzzer', state: 'on' })
+    await this.buzzer.beep(Math.max(1, frequencyHz), Math.max(0, durationMs))
+    if (attemptId && this.activeAttempt?.id === attemptId) {
+      this.emitMissionEvent({ type: 'actuator_state_changed', attemptId, elapsedMs: this.attemptElapsedMs(), actuator: 'buzzer', state: 'off' })
+    }
   }
 
   rcDrive(throttle: number, steering: number): void {
@@ -614,6 +771,10 @@ export class SimEngine {
       this.stopMotion()
       return
     }
+    if (this.activeAttempt?.continuousCommand !== `move:${direction}`) {
+      if (this.activeAttempt) this.activeAttempt.continuousCommand = `move:${direction}`
+      this.recordMovementAction('continuous_move')
+    }
     const input = direction === 'backward' ? -API_DRIVE_INPUT : API_DRIVE_INPUT
     this.setBenchmarkDrive(input, input)
   }
@@ -623,6 +784,10 @@ export class SimEngine {
     if (direction !== 'left' && direction !== 'right') {
       this.stopMotion()
       return
+    }
+    if (this.activeAttempt?.continuousCommand !== `rotate:${direction}`) {
+      if (this.activeAttempt) this.activeAttempt.continuousCommand = `rotate:${direction}`
+      this.recordMovementAction('continuous_rotate')
     }
     const input = direction === 'right' ? 0.55 : -0.55
     this.setBenchmarkDrive(input, -input)
@@ -639,6 +804,114 @@ export class SimEngine {
 
     this.traceEnabled = false
     this.clearTracePoints()
+  }
+
+  private attemptElapsedMs(): number {
+    return this.activeAttempt ? Math.max(0, Math.round(performance.now() - this.activeAttempt.startedPerf)) : 0
+  }
+
+  private emitMissionEvent(event: MissionEvent): void {
+    for (const listener of this.missionListeners) listener(event)
+  }
+
+  private recordMovementAction(action: 'move_step' | 'rotate_step' | 'continuous_move' | 'continuous_rotate'): void {
+    if (!this.activeAttempt) return
+    this.activeAttempt.movementActions += 1
+    this.emitMovementEvent(action)
+  }
+
+  private emitMovementEvent(action: 'move_step' | 'rotate_step' | 'continuous_move' | 'continuous_rotate' | 'stop'): void {
+    if (!this.activeAttempt) return
+    this.emitMissionEvent({
+      type: 'movement_action',
+      attemptId: this.activeAttempt.id,
+      elapsedMs: this.attemptElapsedMs(),
+      action,
+      movementActions: this.activeAttempt.movementActions,
+    })
+  }
+
+  private markerContains(marker: ChallengeMarker, x: number, y: number, z: number): boolean {
+    const { min, max } = marker.bounds
+    const verticalMargin = marker.kind === 'target' || marker.kind === 'checkpoint' || marker.kind === 'danger_zone' || marker.kind === 'sensor_region' || marker.kind === 'target_zone' ? 2 : 0.1
+    return x >= min[0] && x <= max[0] && y >= min[1] - verticalMargin && y <= max[1] + verticalMargin && z >= min[2] && z <= max[2]
+  }
+
+  private markerPosition(marker: ChallengeMarker): THREE.Vector3 {
+    if (marker.body) {
+      const position = marker.body.translation()
+      return new THREE.Vector3(position.x, position.y, position.z)
+    }
+    if (marker.object) {
+      const position = new THREE.Vector3()
+      marker.object.getWorldPosition(position)
+      return position
+    }
+    return new THREE.Vector3(
+      (marker.bounds.min[0] + marker.bounds.max[0]) / 2,
+      (marker.bounds.min[1] + marker.bounds.max[1]) / 2,
+      (marker.bounds.min[2] + marker.bounds.max[2]) / 2,
+    )
+  }
+
+  private updateAttemptRuntime(position: { x: number; y: number; z: number }): void {
+    const attempt = this.activeAttempt
+    if (!attempt || !this.currentStage) return
+    const current = new THREE.Vector3(position.x, position.y, position.z)
+    if (attempt.lastPosition) {
+      const segment = Math.hypot(current.x - attempt.lastPosition.x, current.z - attempt.lastPosition.z)
+      if (segment < 1) attempt.pathDistance += segment
+    }
+    attempt.lastPosition = current
+
+    for (const marker of this.currentStage.missionMarkers) {
+      if (marker.kind === 'spawn' || marker.kind === 'push_object') continue
+      const inside = this.markerContains(marker, position.x, position.y, position.z)
+      const entered = attempt.enteredMarkers.has(marker.id)
+      if (inside && !entered) {
+        attempt.enteredMarkers.add(marker.id)
+        this.emitMissionEvent({ type: 'marker_entered', attemptId: attempt.id, elapsedMs: this.attemptElapsedMs(), markerId: marker.id, markerKind: marker.kind })
+      } else if (!inside && entered) {
+        attempt.enteredMarkers.delete(marker.id)
+        this.emitMissionEvent({ type: 'marker_exited', attemptId: attempt.id, elapsedMs: this.attemptElapsedMs(), markerId: marker.id, markerKind: marker.kind })
+      }
+      if (marker.kind === 'collectible' && !attempt.collectedMarkers.has(marker.id)) {
+        const markerPosition = this.markerPosition(marker)
+        if (Math.hypot(position.x - markerPosition.x, position.z - markerPosition.z) <= (marker.pickupRadius || 0.28)) {
+          attempt.collectedMarkers.add(marker.id)
+          attempt.collectibles += 1
+          if (marker.object) marker.object.visible = false
+          this.emitMissionEvent({ type: 'collectible_picked_up', attemptId: attempt.id, elapsedMs: this.attemptElapsedMs(), markerId: marker.id, collected: attempt.collectibles })
+        }
+      }
+    }
+
+    const zones = this.currentStage.missionMarkers.filter((marker) => marker.kind === 'target_zone')
+    const objects = this.currentStage.missionMarkers.filter((marker) => marker.kind === 'push_object')
+    for (const object of objects) {
+      const objectPosition = this.markerPosition(object)
+      for (const zone of zones) {
+        const pair = `${object.id}:${zone.id}`
+        if (this.markerContains(zone, objectPosition.x, objectPosition.y, objectPosition.z) && !attempt.objectZones.has(pair)) {
+          attempt.objectZones.add(pair)
+          this.emitMissionEvent({ type: 'object_entered_target', attemptId: attempt.id, elapsedMs: this.attemptElapsedMs(), objectId: object.id, zoneId: zone.id })
+        }
+      }
+    }
+
+    if (position.y < -0.5 && !attempt.fell) {
+      attempt.fell = true
+      attempt.falls += 1
+      this.emitMissionEvent({ type: 'robot_fell', attemptId: attempt.id, elapsedMs: this.attemptElapsedMs() })
+    }
+  }
+
+  private recordCollision(otherColliderHandle: number): void {
+    if (!this.activeAttempt) return
+    const otherBodyHandle = this.worldHandle?.world.getCollider(otherColliderHandle)?.parent()?.handle
+    if (!isMissionIncidentCollision(otherBodyHandle, this.currentStage?.missionMarkers || [])) return
+    this.activeAttempt.collisions += 1
+    this.emitMissionEvent({ type: 'collision_detected', attemptId: this.activeAttempt.id, elapsedMs: this.attemptElapsedMs() })
   }
 
   private beginPendingMotion(): Promise<void> {
@@ -855,6 +1128,7 @@ export class SimEngine {
         scene: this.sceneHandle!.scene,
         getStageAmbientFloor: () => this.currentStage?.ambientFloor ?? 0,
         getStageLineSegments: () => this.currentStage?.lineSegments ?? [],
+        onCollision: (otherColliderHandle) => this.recordCollision(otherColliderHandle),
       })
       if (this.config.sensorTelemetryAutoStart) this.sensorTelemetry.startRun()
       if (this.config.devMode && this.robotRoot) {
@@ -1167,6 +1441,7 @@ export class SimEngine {
 
         const pos = this.robotPhysics.body.translation()
         const rot = this.robotPhysics.body.rotation()
+        this.updateAttemptRuntime(pos)
 
         const posFinite = Number.isFinite(pos.x) && Number.isFinite(pos.y) && Number.isFinite(pos.z)
         const rotFinite = Number.isFinite(rot.x) && Number.isFinite(rot.y) && Number.isFinite(rot.z) && Number.isFinite(rot.w)

@@ -16,6 +16,9 @@ export const STAGE_OBJECT_CATALOG: StageObjectCatalogItem[] = [
   { id: 'robotSpawn', label: 'Robot spawn', shortLabel: 'Spawn', description: 'Where FOSSBot starts the simulation.', category: 'mission', placeable: true },
   { id: 'target', label: 'Target', shortLabel: 'Target', description: 'A goal marker for the robot challenge.', category: 'mission', placeable: true },
   { id: 'checkpoint', label: 'Checkpoint', shortLabel: 'Check', description: 'A waypoint marker for route-based challenges.', category: 'mission', placeable: true },
+  { id: 'collectible', label: 'Collectible', shortLabel: 'Collect', description: 'A platform collectible with a configurable pickup radius.', category: 'mission', placeable: true },
+  { id: 'pushObject', label: 'Push object', shortLabel: 'Push', description: 'A movable object that mission rules can track.', category: 'mission', placeable: true },
+  { id: 'targetZone', label: 'Object target zone', shortLabel: 'Zone', description: 'A floor region for a tracked push object.', category: 'mission', placeable: true },
   { id: 'line', label: 'Line path', shortLabel: 'Line', description: 'A floor line for line-following tests.', category: 'path', placeable: true },
   { id: 'baseTile', label: 'Floor marker', shortLabel: 'Marker', description: 'A colored no-collision marker on the floor.', category: 'path', placeable: true },
   { id: 'dangerZone', label: 'No-go zone', shortLabel: 'No-go', description: 'A no-go floor region for challenge rules.', category: 'path', placeable: true },
@@ -94,23 +97,32 @@ export function createCatalogObject(kind: StageSemanticKind, id: string, positio
   if (kind === 'sphere') {
     return { id, kind: 'sphere', semanticKind: kind, name: 'sphere', position: [p[0], 0.15, p[2]], dimensions: [0.3], color: '#26a69a', mass: 0, immovable: true };
   }
+  if (kind === 'collectible') {
+    return { id, kind: 'sphere', semanticKind: kind, challenge: { markerId: id, kind: 'collectible', pickupRadius: 0.28 }, name: 'collectible', position: [p[0], 0.08, p[2]], dimensions: [0.12], color: '#f4c430', mass: 0, immovable: true, collision: 'none' };
+  }
+  if (kind === 'pushObject') {
+    return { id, kind: 'cube', semanticKind: kind, challenge: { markerId: id, kind: 'push_object' }, name: 'push object', position: [p[0], 0.15, p[2]], rotationY: 0, dimensions: [0.3, 0.3, 0.3], color: '#7e57c2', mass: 0.4, immovable: false };
+  }
   if (kind === 'wedge') {
     return { id, kind: 'wedge', semanticKind: kind, name: 'wedge', position: [p[0], 0.15, p[2]], rotationY: 0, dimensions: [0.5, 0.3, 0.6], color: '#ec407a', mass: 0, immovable: true };
   }
   if (kind === 'robotSpawn') {
-    return { id, kind: 'fossbot', semanticKind: kind, name: 'robot spawn', position: [p[0], 0, p[2]], rotationY: 0 };
+    return { id, kind: 'fossbot', semanticKind: kind, challenge: { markerId: id, kind: 'spawn' }, name: 'robot spawn', position: [p[0], 0, p[2]], rotationY: 0 };
   }
   if (kind === 'target') {
-    return { id, kind: 'base', semanticKind: kind, name: 'target', position: [p[0], 0, p[2]], dimensions: [0.5, 0.5], color: '#43a047' };
+    return { id, kind: 'base', semanticKind: kind, challenge: { markerId: id, kind: 'target' }, name: 'target', position: [p[0], 0, p[2]], dimensions: [0.5, 0.5], color: '#43a047' };
   }
   if (kind === 'checkpoint') {
-    return { id, kind: 'base', semanticKind: kind, name: 'checkpoint', position: [p[0], 0, p[2]], dimensions: [0.45, 0.45], color: '#1e88e5' };
+    return { id, kind: 'base', semanticKind: kind, challenge: { markerId: id, kind: 'checkpoint', order: 1 }, name: 'checkpoint', position: [p[0], 0, p[2]], dimensions: [0.45, 0.45], color: '#1e88e5' };
   }
   if (kind === 'dangerZone') {
-    return { id, kind: 'base', semanticKind: kind, name: 'no-go zone', position: [p[0], 0, p[2]], dimensions: [0.8, 0.8], color: '#e53935' };
+    return { id, kind: 'base', semanticKind: kind, challenge: { markerId: id, kind: 'danger_zone' }, name: 'no-go zone', position: [p[0], 0, p[2]], dimensions: [0.8, 0.8], color: '#e53935' };
   }
   if (kind === 'sensorZone') {
-    return { id, kind: 'base', semanticKind: kind, name: 'sensor region', position: [p[0], 0, p[2]], dimensions: [0.8, 0.8], color: '#00acc1' };
+    return { id, kind: 'base', semanticKind: kind, challenge: { markerId: id, kind: 'sensor_region' }, name: 'sensor region', position: [p[0], 0, p[2]], dimensions: [0.8, 0.8], color: '#00acc1' };
+  }
+  if (kind === 'targetZone') {
+    return { id, kind: 'base', semanticKind: kind, challenge: { markerId: id, kind: 'target_zone' }, name: 'object target zone', position: [p[0], 0, p[2]], dimensions: [0.8, 0.8], color: '#8e7cc3' };
   }
   if (kind === 'directionArrow') {
     return { id, kind: 'arrow', semanticKind: kind, name: 'direction arrow', position: [p[0], 0.03, p[2]], rotationY: 0, dimensions: [0.75, 0.42, 0.04], color: '#111827' };
@@ -136,6 +148,8 @@ export function createCatalogObject(kind: StageSemanticKind, id: string, positio
 export function inferSemanticKindFromConfig(type: string, name?: string, color?: string | number): StageSemanticKind | undefined {
   const lower = (name || '').toLowerCase();
   if (type === 'fossbot') return 'robotSpawn';
+  if (lower.includes('collectible') || lower.includes('gem')) return 'collectible';
+  if (lower.includes('push object') || lower.includes('pushable')) return 'pushObject';
   if (type === 'light') return 'light';
   if (type === 'camera') return 'camera';
   if (type === 'audio') return 'audio';

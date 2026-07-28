@@ -47,6 +47,7 @@ export interface SensorSystemOptions {
   getStageAmbientFloor: () => number
   /** Current stage line segments — used by ir-floor sensors to set `triggered`. */
   getStageLineSegments: () => readonly LineSegment[]
+  onCollision?: (otherColliderHandle: number) => void
 }
 
 export class SensorSystem {
@@ -99,6 +100,7 @@ export class SensorSystem {
             eventColliders: opts.micEventColliders,
             eventQueue: opts.eventQueue,
             layout: micLayout,
+            onCollision: opts.onCollision,
           })
         : null
 

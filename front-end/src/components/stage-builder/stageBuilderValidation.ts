@@ -59,6 +59,28 @@ export function validateStageBuilderStage(stage: EditorStage): StageBuilderValid
     results.push(result(stage, 'stage:target-missing', 'error', [], 'Target is missing.', 'Place a Target marker to define the minimum valid challenge goal.', false));
   }
 
+  const challengeObjects = stage.objects.filter((object) => !object.hidden && object.challenge);
+  const markerOwners = new Map<string, EditorStageObject[]>();
+  for (const object of challengeObjects) {
+    const markerId = object.challenge?.markerId.trim() || '';
+    if (!markerId || !/^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$/.test(markerId)) {
+      results.push(result(stage, `object:${object.id}:challenge-id`, 'error', [object.id], `${labelFor(object)} needs a valid stable mission ID.`, 'Mission IDs use letters, numbers, underscores, and hyphens and must survive stage revisions.', false));
+      continue;
+    }
+    markerOwners.set(markerId, [...(markerOwners.get(markerId) || []), object]);
+    if (object.challenge?.kind === 'checkpoint' && object.challenge.order !== undefined && (!Number.isInteger(object.challenge.order) || object.challenge.order < 1)) {
+      results.push(result(stage, `object:${object.id}:checkpoint-order`, 'error', [object.id], `${labelFor(object)} has an invalid checkpoint order.`, 'Checkpoint order must be a positive whole number.', false));
+    }
+    if (object.challenge?.kind === 'collectible' && (!Number.isFinite(object.challenge.pickupRadius) || (object.challenge.pickupRadius || 0) <= 0)) {
+      results.push(result(stage, `object:${object.id}:pickup-radius`, 'error', [object.id], `${labelFor(object)} has an invalid pickup radius.`, 'Collectible pickup radius must be greater than zero.', false));
+    }
+  }
+  for (const [markerId, owners] of markerOwners) {
+    if (owners.length > 1) {
+      results.push(result(stage, `challenge:duplicate:${markerId}`, 'error', owners.map((object) => object.id), `Mission ID “${markerId}” is duplicated.`, 'Every enabled mission marker and tracked object needs a unique stable ID.', false));
+    }
+  }
+
   const physicalObjectCount = stage.objects.filter((object) => (object.kind === 'cube' || object.kind === 'cylinder' || object.kind === 'sphere' || object.kind === 'wedge' || object.kind === 'model') && object.collision !== 'none').length;
   if (physicalObjectCount > 50) {
     results.push(result(stage, 'stage:many-objects', 'warning', [], 'Obstacle count is above 50.', 'Large stages may be slow on older machines.'));

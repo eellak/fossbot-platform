@@ -3,11 +3,12 @@ import copy
 import datetime
 import hashlib
 import json
+import math
 import uuid
 import xml.etree.ElementTree as ElementTree
 from typing import Any, Literal, Optional
 
-from database.database import ActivityAnswer, Course, CourseRelease, Enrollment, Lesson, LessonProgress, LessonWorkspace, User
+from database.database import ActivityAnswer, Course, CourseRelease, Enrollment, Lesson, LessonProgress, LessonWorkspace, MissionAttempt, User
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError
@@ -34,6 +35,7 @@ from routers.stage_sources import (
 from utils.github_app_auth import create_github_app_jwt
 from utils.activity_schema import (
     ACTIVITY_SCHEMA_VERSION,
+    SENSOR_CATALOG,
     activity_by_key,
     compact_sensor_summary,
     grade_submission,
@@ -48,11 +50,13 @@ from utils.utils_jwt import verify_access_token
 
 router = APIRouter(tags=["courses"])
 optional_oauth2 = OAuth2PasswordBearer(tokenUrl="token", auto_error=False)
-RELEASE_SCHEMA_VERSION = 2
+RELEASE_SCHEMA_VERSION = 3
+MISSION_ATTEMPT_SCHEMA_VERSION = 1
 DEFAULT_STAGE_URLS = {
     "/js-simulator/stages/stage_white_rect.json",
     "/js-simulator/stages/stage_object.json",
     "/js-simulator/stages/stage_maze.json",
+    "/js-simulator/stages/stage_missions_phase6.json",
     "/js-simulator/stages/stage_numbers.json",
     "/js-simulator/stages/stage_eiffel.json",
     "/js-simulator/stages/stage_animals.json",
@@ -231,6 +235,89 @@ class ActivitySubmissionRequest(BaseModel):
     submission_id: str = Field(min_length=1, max_length=100)
     value: Any = None
     sensor_summary: Optional[dict[str, Any]] = None
+
+
+class MissionObjectiveResultRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    key: str = Field(min_length=1, max_length=100)
+    role: Literal["completion", "failure", "optional"]
+    status: Literal["pending", "succeeded", "failed"]
+
+
+class MissionAttemptMetricsRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    elapsed_ms: int = Field(ge=0, le=86_400_000)
+    movement_actions: int = Field(ge=0, le=100_000)
+    path_distance: float = Field(ge=0, le=100_000)
+    collisions: int = Field(default=0, ge=0, le=100_000)
+    falls: int = Field(default=0, ge=0, le=100_000)
+    resets: int = Field(default=0, ge=0, le=10_000)
+    collectibles: int = Field(default=0, ge=0, le=10_000)
+    sensor_summaries: dict[str, dict[str, Any]] = Field(default_factory=dict)
+
+    @field_validator("path_distance")
+    @classmethod
+    def finite_distance(cls, value: float) -> float:
+        if not math.isfinite(value):
+            raise ValueError("path_distance must be finite")
+        return value
+
+    @field_validator("sensor_summaries")
+    @classmethod
+    def compact_sensors(cls, value: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
+        if len(value) > 30:
+            raise ValueError("too many sensor summaries")
+        compact: dict[str, dict[str, Any]] = {}
+        for sensor_id, summary in value.items():
+            if sensor_id not in SENSOR_CATALOG:
+                raise ValueError("sensor_summaries contains an unsupported sensor")
+            if not isinstance(summary, dict) or "samples" in summary:
+                raise ValueError("sensor_summaries must not contain raw samples")
+            item: dict[str, Any] = {"unit": SENSOR_CATALOG[sensor_id]["unit"]}
+            for field in ("minimum", "maximum", "average", "finalValue"):
+                reading = summary.get(field)
+                if reading is not None:
+                    if not isinstance(reading, (int, float)) or isinstance(reading, bool) or not math.isfinite(reading):
+                        raise ValueError("sensor summary readings must be finite")
+                    item[field] = reading
+            sample_count = summary.get("sampleCount", 0)
+            if not isinstance(sample_count, int) or isinstance(sample_count, bool) or not 0 <= sample_count <= 1_000_000:
+                raise ValueError("sensor summary sampleCount is out of range")
+            item["sampleCount"] = sample_count
+            compact[sensor_id] = item
+        return compact
+
+
+class MissionAttemptRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: Literal[1] = 1
+    client_attempt_id: str = Field(min_length=1, max_length=100)
+    started_at: datetime.datetime
+    ended_at: datetime.datetime
+    outcome: Literal["succeeded", "failed", "stopped", "runtime_error"]
+    completion_reason: Literal[
+        "objectives_met", "failure_objective", "program_completed", "stop",
+        "reset", "runtime_error", "fall", "timeout", "navigation",
+    ]
+    objective_results: list[MissionObjectiveResultRequest] = Field(min_length=1, max_length=50)
+    metrics: MissionAttemptMetricsRequest
+    simulator_revision: str = Field(min_length=1, max_length=200)
+    stage_revision: str = Field(min_length=1, max_length=500)
+    mission_definition_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+    @model_validator(mode="after")
+    def valid_lifecycle(self):
+        if self.ended_at < self.started_at:
+            raise ValueError("ended_at cannot be before started_at")
+        if (self.ended_at - self.started_at).total_seconds() > 86_400:
+            raise ValueError("attempt duration is out of range")
+        keys = [item.key for item in self.objective_results]
+        if len(keys) != len(set(keys)):
+            raise ValueError("objective result keys must be unique")
+        return self
 
 
 class LessonResponse(BaseModel):
@@ -690,6 +777,9 @@ def validate_publication(course: Course, lessons: list[Lesson]) -> None:
         has_observation = any(activity.get("type") == "simulator_observation" for activity in lesson.activities)
         if has_observation and (stage_payload(lesson) is None or (lesson.simulator_settings or {}).get("showSimulator") is False):
             raise HTTPException(status_code=422, detail=f"Lesson {lesson.lesson_key}: simulator observations require a visible simulator stage")
+        has_mission = any(activity.get("type") == "mission" for activity in lesson.activities)
+        if has_mission and (stage_payload(lesson) is None or (lesson.simulator_settings or {}).get("showSimulator") is False):
+            raise HTTPException(status_code=422, detail=f"Lesson {lesson.lesson_key}: missions require a visible simulator stage")
     for previous, lesson in zip(lessons, lessons[1:]):
         if lesson.start_mode == "inherit_previous_code" and lesson.editor_type != previous.editor_type:
             raise HTTPException(status_code=422, detail=f"Lesson {lesson.lesson_key}: inherited workspaces require the same editor type as the previous lesson")
@@ -939,6 +1029,9 @@ def validate_course_for_publication(course_id: int, user: User = Depends(get_cur
         has_observation = any(activity.get("type") == "simulator_observation" for activity in lesson.activities)
         if has_observation and (stage_payload(lesson) is None or (lesson.simulator_settings or {}).get("showSimulator") is False):
             issues.append(PublicationIssue(group="Stage", code="observation_stage", message="Simulator observations require a visible simulator stage.", lesson_id=lesson.id, field="stageReference"))
+        has_mission = any(activity.get("type") == "mission" for activity in lesson.activities)
+        if has_mission and (stage_payload(lesson) is None or (lesson.simulator_settings or {}).get("showSimulator") is False):
+            issues.append(PublicationIssue(group="Stage", code="mission_stage", message="Simulator missions require a visible simulator stage.", lesson_id=lesson.id, field="stageReference"))
         try:
             validate_starter_for_publication(lesson.editor_type, lesson.starter_content)
         except ValueError as error:
@@ -1510,6 +1603,201 @@ def submit_activity(
         "state": activity_state_payload(activity, answer),
         "feedback": feedback,
         "duplicate": False,
+        "lesson_completed": bool(progress and progress.state == "completed"),
+    }
+
+
+def mission_stage_revision(lesson: dict[str, Any]) -> str:
+    stage = lesson.get("stageReference") or {}
+    return str(stage.get("commitSha") or stage.get("url") or "built-in:none")
+
+
+def mission_attempt_payload(attempt: MissionAttempt) -> dict[str, Any]:
+    return {
+        "id": attempt.id,
+        "enrollment_id": attempt.enrollment_id,
+        "release_id": attempt.release_id,
+        "lesson_key": attempt.lesson_key,
+        "activity_key": attempt.activity_key,
+        "attempt_number": attempt.attempt_number,
+        "client_attempt_id": attempt.client_attempt_id,
+        "started_at": attempt.started_at,
+        "ended_at": attempt.ended_at,
+        "outcome": attempt.outcome,
+        "completion_reason": attempt.completion_reason,
+        "objective_results": attempt.objective_results,
+        "metrics": attempt.metrics,
+        "simulator_revision": attempt.simulator_revision,
+        "stage_revision": attempt.stage_revision,
+        "mission_definition_hash": attempt.mission_definition_hash,
+        "schema_version": attempt.schema_version,
+        "created_at": attempt.created_at,
+    }
+
+
+def mission_result_satisfied(activity: dict[str, Any], request: MissionAttemptRequest) -> bool:
+    configured = {objective["key"]: objective for objective in activity["objectives"]}
+    received = {result.key: result for result in request.objective_results}
+    if set(configured) != set(received):
+        raise HTTPException(status_code=422, detail="objective_results must match the released mission objectives")
+    for key, objective in configured.items():
+        if received[key].role != objective["role"]:
+            raise HTTPException(status_code=422, detail="objective result roles must match the released mission")
+
+    completion = [
+        received[objective["key"]].status == "succeeded"
+        for objective in activity["objectives"]
+        if objective["role"] == "completion"
+    ]
+    completion_met = all(completion) if activity.get("completionMode", "all") == "all" else any(completion)
+    failure_triggered = any(
+        received[objective["key"]].status == "failed"
+        for objective in activity["objectives"]
+        if objective["role"] == "failure"
+    )
+    reported_success = request.outcome == "succeeded"
+    if reported_success != (completion_met and not failure_triggered):
+        raise HTTPException(status_code=422, detail="attempt outcome does not match its objective results")
+    return reported_success
+
+
+@router.get("/enrollments/{enrollment_id}/lessons/{lesson_key}/missions/{activity_key}/attempts")
+def read_mission_attempts(
+    enrollment_id: int,
+    lesson_key: str,
+    activity_key: str,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    require_student(user)
+    enrollment = owned_enrollment_or_404(db, user, enrollment_id)
+    release = db.query(CourseRelease).filter(CourseRelease.id == enrollment.active_release_id).one()
+    lesson = lesson_for_release_or_404(release, lesson_key)
+    try:
+        activity = activity_by_key(lesson, activity_key)
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    if activity.get("type") != "mission":
+        raise HTTPException(status_code=404, detail="Mission activity not found")
+    attempts = db.query(MissionAttempt).filter(
+        MissionAttempt.enrollment_id == enrollment.id,
+        MissionAttempt.release_id == release.id,
+        MissionAttempt.lesson_key == lesson_key,
+        MissionAttempt.activity_key == activity_key,
+    ).order_by(MissionAttempt.attempt_number).all()
+    return [mission_attempt_payload(attempt) for attempt in attempts]
+
+
+@router.post(
+    "/enrollments/{enrollment_id}/lessons/{lesson_key}/missions/{activity_key}/attempts",
+    status_code=status.HTTP_201_CREATED,
+)
+def submit_mission_attempt(
+    enrollment_id: int,
+    lesson_key: str,
+    activity_key: str,
+    request: MissionAttemptRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    require_student(user)
+    enrollment = owned_enrollment_or_404(db, user, enrollment_id)
+    release = db.query(CourseRelease).filter(CourseRelease.id == enrollment.active_release_id).one()
+    lesson = lesson_for_release_or_404(release, lesson_key)
+    try:
+        activity = activity_by_key(lesson, activity_key)
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    if activity.get("type") != "mission":
+        raise HTTPException(status_code=404, detail="Mission activity not found")
+    if request.mission_definition_hash != activity.get("definitionHash"):
+        raise HTTPException(status_code=409, detail={
+            "error": "mission_version_mismatch",
+            "detail": "The attempt does not match the active mission release.",
+        })
+    expected_stage_revision = mission_stage_revision(lesson)
+    if request.stage_revision != expected_stage_revision:
+        raise HTTPException(status_code=409, detail={
+            "error": "stage_version_mismatch",
+            "detail": "The attempt does not match the active stage revision.",
+        })
+
+    duplicate = db.query(MissionAttempt).filter(
+        MissionAttempt.enrollment_id == enrollment.id,
+        MissionAttempt.release_id == release.id,
+        MissionAttempt.client_attempt_id == request.client_attempt_id,
+    ).first()
+    if duplicate:
+        return mission_attempt_payload(duplicate)
+
+    satisfied_now = mission_result_satisfied(activity, request)
+    attempt_number = (db.query(func.max(MissionAttempt.attempt_number)).filter(
+        MissionAttempt.enrollment_id == enrollment.id,
+        MissionAttempt.release_id == release.id,
+        MissionAttempt.lesson_key == lesson_key,
+        MissionAttempt.activity_key == activity_key,
+    ).scalar() or 0) + 1
+    attempt = MissionAttempt(
+        enrollment_id=enrollment.id,
+        release_id=release.id,
+        lesson_key=lesson_key,
+        activity_key=activity_key,
+        attempt_number=attempt_number,
+        client_attempt_id=request.client_attempt_id,
+        started_at=request.started_at.replace(tzinfo=None),
+        ended_at=request.ended_at.replace(tzinfo=None),
+        outcome=request.outcome,
+        completion_reason=request.completion_reason,
+        objective_results=[item.model_dump() for item in request.objective_results],
+        metrics=request.metrics.model_dump(),
+        simulator_revision=request.simulator_revision,
+        stage_revision=request.stage_revision,
+        mission_definition_hash=request.mission_definition_hash,
+        schema_version=MISSION_ATTEMPT_SCHEMA_VERSION,
+    )
+    db.add(attempt)
+
+    now = datetime.datetime.utcnow()
+    answer = activity_answer_row(db, enrollment, lesson_key, activity_key)
+    if answer is None:
+        answer = ActivityAnswer(
+            enrollment_id=enrollment.id,
+            release_id=release.id,
+            lesson_key=lesson_key,
+            activity_key=activity_key,
+            attempt_count=0,
+            last_submission_id=request.client_attempt_id,
+            first_submitted_at=now,
+            last_submitted_at=now,
+        )
+        db.add(answer)
+    answer.submitted_value = [item.model_dump() for item in request.objective_results]
+    answer.correctness = satisfied_now
+    answer.satisfied = answer.satisfied or satisfied_now
+    answer.attempt_count += 1
+    answer.last_submission_id = request.client_attempt_id
+    answer.last_submitted_at = now
+    answer.sensor_summary = {"sensors": request.metrics.sensor_summaries}
+    if satisfied_now and answer.satisfied_at is None:
+        answer.satisfied_at = now
+    db.flush()
+
+    if lesson["completionPolicy"] == "activity" and required_activities_satisfied(db, enrollment, lesson):
+        complete_progress(db, enrollment, release, lesson_key, "activity")
+    elif progress_row(db, enrollment, lesson_key) is None:
+        db.add(LessonProgress(
+            enrollment_id=enrollment.id,
+            release_id=release.id,
+            lesson_key=lesson_key,
+            state="in_progress",
+            started_at=now,
+        ))
+    safe_commit(db)
+    db.refresh(attempt)
+    progress = progress_row(db, enrollment, lesson_key)
+    return {
+        **mission_attempt_payload(attempt),
+        "activity_state": activity_state_payload(activity, answer),
         "lesson_completed": bool(progress and progress.state == "completed"),
     }
 

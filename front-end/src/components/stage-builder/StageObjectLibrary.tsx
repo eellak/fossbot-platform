@@ -15,8 +15,8 @@ export type StageBuilderLibraryGroup = {
 };
 
 export const STAGE_BUILDER_LIBRARY_GROUPS: StageBuilderLibraryGroup[] = [
-  { id: 'robot', label: 'Mission setup', items: ['robotSpawn', 'target', 'checkpoint'] },
-  { id: 'floorPaths', label: 'Paths and floor markers', items: ['line', 'baseTile', 'dangerZone', 'sensorZone', 'directionArrow'] },
+  { id: 'robot', label: 'Mission setup', items: ['robotSpawn', 'target', 'checkpoint', 'collectible', 'pushObject'] },
+  { id: 'floorPaths', label: 'Paths and floor markers', items: ['line', 'baseTile', 'dangerZone', 'sensorZone', 'targetZone', 'directionArrow'] },
   { id: 'structures', label: 'Build shapes', items: ['block', 'wall', 'ramp', 'platform', 'cylinder', 'obstacle', 'sphere'] },
   { id: 'labels', label: 'Annotations', items: ['label'] },
   { id: 'lighting', label: 'Scene setup', items: ['camera', 'light', 'audio'] },

@@ -5,6 +5,7 @@ import type { Activity, SensorPresentation, SensorStatistic } from './types';
 export const activityTypes: Activity['type'][] = [
   'rich_text', 'multiple_choice', 'multiple_select', 'numeric_answer',
   'short_reflection', 'simulator_observation', 'hint',
+  'mission',
 ];
 
 export const sensorCatalog = [
@@ -49,6 +50,20 @@ export function createActivity(type: Activity['type']): Activity {
     ...common, type, prompt: '', expectedValue: 0, unit: 'm', tolerance: { mode: 'absolute', value: 0 }, validRange: null, feedbackCorrect: '', feedbackIncorrect: '',
   };
   if (type === 'short_reflection') return { ...common, type, prompt: '', collectResponse: false };
+  if (type === 'mission') return {
+    ...common,
+    type,
+    title: 'Reach the target',
+    completionMode: 'all',
+    objectives: [{
+      key: `objective-${uuidv4()}`,
+      role: 'completion',
+      summary: 'Reach the selected target.',
+      condition: { type: 'reach_target', markerId: '' },
+    }],
+    retryLimit: null,
+    feedbackMode: 'immediate',
+  };
   return {
     ...common, type, prompt: '', allowedSensors: ['ultrasonic-front'], sensorHelperMode: 'student_toggle', presentations: ['live', 'chart'], capturedStatistics: ['minimum', 'maximum', 'average', 'finalValue'], visibleStatistics: ['maximum', 'average', 'finalValue'],
   };
@@ -72,5 +87,19 @@ export function activityValidation(activity: Activity): string[] {
   }
   if (activity.type === 'simulator_observation' && (!activity.allowedSensors.length || !activity.presentations.length)) errors.push('sensors');
   if (activity.type === 'short_reflection' && !activity.collectResponse && activity.required) errors.push('private-reflection-required');
+  if (activity.type === 'mission') {
+    if (!activity.title.trim() || !activity.objectives.length || !activity.objectives.some((objective) => objective.role === 'completion')) errors.push('mission');
+    if (activity.objectives.some((objective) => !objective.summary.trim() || missionConditionIncomplete(objective.condition))) errors.push('mission');
+  }
   return errors;
+}
+
+function missionConditionIncomplete(condition: import('./types').MissionCondition): boolean {
+  if (condition.type === 'reach_target' || condition.type === 'stop_in_target') return !condition.markerId;
+  if (condition.type === 'checkpoints' || condition.type === 'collect' || condition.type === 'avoid_zones') return condition.markerIds.length === 0;
+  if (condition.type === 'object_in_zone') return !condition.objectId || !condition.zoneId;
+  if (condition.type === 'no_incident') return condition.incidents.length === 0;
+  if (condition.type === 'sensor_threshold') return !condition.sensorId || !Number.isFinite(condition.threshold);
+  if (condition.type === 'actuator_state') return !condition.state;
+  return condition.maxDurationMs === undefined && condition.maxMovementActions === undefined;
 }

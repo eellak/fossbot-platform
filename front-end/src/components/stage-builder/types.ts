@@ -3,6 +3,23 @@ export type StageEntryMaterial = {
   opacity?: number;
 };
 
+export type StageChallengeKind =
+  | 'spawn'
+  | 'target'
+  | 'checkpoint'
+  | 'danger_zone'
+  | 'sensor_region'
+  | 'collectible'
+  | 'push_object'
+  | 'target_zone';
+
+export type StageChallengeMetadata = {
+  markerId: string;
+  kind: StageChallengeKind;
+  order?: number;
+  pickupRadius?: number;
+};
+
 export type StageFloorEntry = {
   type: 'floor';
   dimensions: [number, number];
@@ -33,6 +50,7 @@ export type StageBaseEntry = {
   material?: StageEntryMaterial;
   position: [number, number];
   name?: string;
+  challenge?: StageChallengeMetadata;
 };
 
 export type StagePrimitiveCollisionMode = 'auto' | 'none';
@@ -49,6 +67,7 @@ export type StageCubeEntry = {
   immovable?: boolean;
   mass?: number;
   collision?: StagePrimitiveCollisionMode;
+  challenge?: StageChallengeMetadata;
 };
 
 export type StageCylinderEntry = {
@@ -61,6 +80,7 @@ export type StageCylinderEntry = {
   immovable?: boolean;
   mass?: number;
   collision?: StagePrimitiveCollisionMode;
+  challenge?: StageChallengeMetadata;
 };
 
 export type StageSphereEntry = {
@@ -73,6 +93,7 @@ export type StageSphereEntry = {
   immovable?: boolean;
   mass?: number;
   collision?: StagePrimitiveCollisionMode;
+  challenge?: StageChallengeMetadata;
 };
 
 export type StageWedgeEntry = {
@@ -86,6 +107,7 @@ export type StageWedgeEntry = {
   immovable?: boolean;
   mass?: number;
   collision?: StagePrimitiveCollisionMode;
+  challenge?: StageChallengeMetadata;
 };
 
 export type StageArrowEntry = {
@@ -150,6 +172,7 @@ export type StageFossbotEntry = {
   type: 'fossbot';
   position: [number, number, number];
   orientation: [number, number, number];
+  challenge?: StageChallengeMetadata;
 };
 
 export type StageModelFormat = 'obj' | 'stl' | 'glb';
@@ -169,6 +192,7 @@ export type StageModelEntry = {
   mass?: number;
   immovable?: boolean;
   collision?: StageModelCollisionMode | { mode?: StageModelCollisionMode; source?: string };
+  challenge?: StageChallengeMetadata;
 };
 
 export type StageLightSubtype = 'point' | 'directional' | 'spot' | 'ambient';
@@ -246,6 +270,9 @@ export type StageSemanticKind =
   | 'checkpoint'
   | 'dangerZone'
   | 'sensorZone'
+  | 'collectible'
+  | 'pushObject'
+  | 'targetZone'
   | 'line'
   | 'label'
   | 'light'
@@ -305,6 +332,7 @@ export type EditorObjectCommon = {
   prefabSourceId?: string;
   locked?: boolean;
   hidden?: boolean;
+  challenge?: StageChallengeMetadata;
 };
 
 export type EditorBaseObject = EditorObjectCommon & {

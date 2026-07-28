@@ -2,7 +2,7 @@ from unittest.mock import patch
 
 import pytest
 
-from database.database import ActivityAnswer, Course, CourseRelease, Enrollment, Lesson, LessonProgress, LessonWorkspace, User
+from database.database import ActivityAnswer, Course, CourseRelease, Enrollment, Lesson, LessonProgress, LessonWorkspace, MissionAttempt, User
 from models.models import UserRole
 from utils.activity_schema import grade_submission, validate_activities
 
@@ -107,7 +107,7 @@ def test_publish_snapshot_is_immutable_after_draft_edit(client_for, users, db):
     published = client.post(f"/courses/{course['id']}/publish")
     assert published.status_code == 201, published.text
     release = published.json()
-    assert release["schema_version"] == 2
+    assert release["schema_version"] == 3
     assert release["version"] == 1
     assert len(release["snapshot"]["lessons"][0]["definitionHash"]) == 64
     assert len(release["snapshot"]["lessons"][0]["activities"][0]["definitionHash"]) == 64
@@ -253,6 +253,26 @@ def test_stage_variants_are_normalized_and_remote_references_are_pinned(client_f
         },
     )
     assert built_in["stageReference"]["commitSha"] is None
+    mission_lab = add_lesson(
+        client,
+        built_in_course["id"],
+        title="Mission lab",
+        stageReference={
+            "sourceType": "default",
+            "title": "Phase 6 mission lab",
+            "url": "/js-simulator/stages/stage_missions_phase6.json",
+        },
+    )
+    assert mission_lab["stageReference"] == {
+        "sourceType": "default",
+        "repoOwner": None,
+        "repoName": None,
+        "visibility": None,
+        "marketplaceEntryPath": None,
+        "title": "Phase 6 mission lab",
+        "url": "/js-simulator/stages/stage_missions_phase6.json",
+        "commitSha": None,
+    }
     assert client.post(f"/courses/{built_in_course['id']}/publish").status_code == 201
 
     def normalized(reference, _user, _db):
@@ -689,7 +709,7 @@ def test_phase_five_activity_schema_and_student_payload_are_safe(client_for, use
         "short_reflection", "simulator_observation", "hint",
     ]
     release = teacher.post(f"/courses/{course['id']}/publish").json()
-    assert release["schema_version"] == 2
+    assert release["schema_version"] == 3
     assert release["snapshot"]["lessons"][0]["activities"][1]["correctOptionKey"] == "yes"
 
     learner = client_for(student)
@@ -796,3 +816,197 @@ def test_self_hybrid_reflection_and_activity_authorization(client_for, users, db
     assert client_for(other).get(
         f"/enrollments/{hybrid_enrollment['id']}/lessons/{hybrid_lesson['lesson_key']}/activities"
     ).status_code == 404
+
+
+def phase_six_mission(required=True):
+    return {
+        "key": "drive-mission",
+        "type": "mission",
+        "version": 1,
+        "required": required,
+        "title": "Drive to the green target",
+        "completionMode": "all",
+        "objectives": [{
+            "key": "reach-green",
+            "role": "completion",
+            "summary": "Reach the green target.",
+            "condition": {"type": "reach_target", "markerId": "green-target"},
+        }],
+        "retryLimit": 3,
+        "feedbackMode": "immediate",
+    }
+
+
+def mission_attempt_payload(definition_hash, stage_revision, *, client_id="attempt-1", succeeded=False):
+    return {
+        "schema_version": 1,
+        "client_attempt_id": client_id,
+        "started_at": "2026-07-27T10:00:00Z",
+        "ended_at": "2026-07-27T10:00:04Z",
+        "outcome": "succeeded" if succeeded else "failed",
+        "completion_reason": "objectives_met" if succeeded else "failure_objective",
+        "objective_results": [{
+            "key": "reach-green",
+            "role": "completion",
+            "status": "succeeded" if succeeded else "pending",
+        }],
+        "metrics": {
+            "elapsed_ms": 4000,
+            "movement_actions": 2,
+            "path_distance": 0.84,
+            "collisions": 0,
+            "falls": 0,
+            "resets": 0,
+            "collectibles": 0,
+            "sensor_summaries": {
+                "ultrasonic-front": {
+                    "minimum": 0.2,
+                    "maximum": 1.1,
+                    "average": 0.6,
+                    "finalValue": 0.2,
+                    "sampleCount": 12,
+                },
+            },
+        },
+        "simulator_revision": "sim-v2-phase-6",
+        "stage_revision": stage_revision,
+        "mission_definition_hash": definition_hash,
+    }
+
+
+def test_phase_six_mission_schema_and_publication_require_visible_stage(client_for, users):
+    tutor, _, _, _ = users
+    teacher = client_for(tutor)
+    mission = phase_six_mission()
+    validate_activities([mission])
+
+    executable = phase_six_mission()
+    executable["objectives"][0]["condition"]["expression"] = "robot.x > 1"
+    with pytest.raises(ValueError, match="executable"):
+        validate_activities([executable])
+
+    course = create_course(teacher, title="Mission validation")
+    lesson = add_lesson(teacher, course["id"], activities=[mission])
+    validation = teacher.post(f"/courses/{course['id']}/validate").json()
+    assert validation["valid"] is False
+    assert any(issue["code"] == "mission_stage" for issue in validation["errors"])
+    assert teacher.post(f"/courses/{course['id']}/publish").status_code == 422
+
+    repaired = teacher.put(
+        f"/courses/{course['id']}/lessons/{lesson['id']}",
+        json={"stageReference": observation_stage()},
+    )
+    assert repaired.status_code == 200
+    assert teacher.post(f"/courses/{course['id']}/publish").status_code == 201
+
+
+def test_phase_six_mission_attempt_lifecycle_versions_and_activity_completion(client_for, users, db):
+    tutor, _, student, _ = users
+    teacher = client_for(tutor)
+    course = create_course(teacher, title="Mission attempts")
+    stage = observation_stage()
+    lesson = add_lesson(
+        teacher,
+        course["id"],
+        activities=[phase_six_mission()],
+        completion_policy="activity",
+        stageReference=stage,
+    )
+    first_release = teacher.post(f"/courses/{course['id']}/publish").json()
+    released_mission = first_release["snapshot"]["lessons"][0]["activities"][0]
+
+    learner = client_for(student)
+    enrollment = learner.post(f"/courses/{course['id']}/enroll").json()
+    path = f"/enrollments/{enrollment['id']}/lessons/{lesson['lesson_key']}/missions/drive-mission/attempts"
+    payload = mission_attempt_payload(released_mission["definitionHash"], stage["url"])
+
+    malformed = dict(payload, schema_version=2, client_attempt_id="malformed")
+    assert learner.post(path, json=malformed).status_code == 422
+    raw_samples = {
+        **payload,
+        "client_attempt_id": "raw-samples",
+        "metrics": {
+            **payload["metrics"],
+            "sensor_summaries": {"ultrasonic-front": {"samples": [0.1, 0.2]}},
+        },
+    }
+    assert learner.post(path, json=raw_samples).status_code == 422
+
+    other_student = User(
+        username="phase-six-other",
+        firstname="Other",
+        lastname="Learner",
+        email="phase-six-other@example.test",
+        hashed_password="unused",
+        role=UserRole.USER,
+        beta_tester=True,
+        activated=True,
+    )
+    db.add(other_student)
+    db.commit()
+    assert client_for(other_student).post(path, json=payload).status_code == 404
+
+    changed = phase_six_mission()
+    changed["title"] = "Changed mission release"
+    assert teacher.put(
+        f"/courses/{course['id']}/lessons/{lesson['id']}",
+        json={"activities": [changed]},
+    ).status_code == 200
+    second_release = teacher.post(f"/courses/{course['id']}/publish").json()
+    second_hash = second_release["snapshot"]["lessons"][0]["activities"][0]["definitionHash"]
+    wrong_release = mission_attempt_payload(second_hash, stage["url"], client_id="wrong-release")
+    mismatch = learner.post(path, json=wrong_release)
+    assert mismatch.status_code == 409
+    assert mismatch.json()["detail"]["error"] == "mission_version_mismatch"
+
+    wrong_stage = mission_attempt_payload(released_mission["definitionHash"], "other-stage", client_id="wrong-stage")
+    assert learner.post(path, json=wrong_stage).status_code == 409
+    inconsistent = mission_attempt_payload(released_mission["definitionHash"], stage["url"], client_id="inconsistent", succeeded=True)
+    inconsistent["objective_results"][0]["status"] = "pending"
+    assert learner.post(path, json=inconsistent).status_code == 422
+
+    failed = learner.post(path, json=payload)
+    assert failed.status_code == 201, failed.text
+    assert failed.json()["attempt_number"] == 1
+    assert failed.json()["lesson_completed"] is False
+    duplicate = learner.post(path, json=payload)
+    assert duplicate.status_code == 201
+    assert duplicate.json()["id"] == failed.json()["id"]
+
+    success_payload = mission_attempt_payload(
+        released_mission["definitionHash"],
+        stage["url"],
+        client_id="attempt-2",
+        succeeded=True,
+    )
+    succeeded = learner.post(path, json=success_payload)
+    assert succeeded.status_code == 201, succeeded.text
+    assert succeeded.json()["attempt_number"] == 2
+    assert succeeded.json()["activity_state"]["satisfied"] is True
+    assert succeeded.json()["lesson_completed"] is True
+    assert succeeded.json()["metrics"]["sensor_summaries"]["ultrasonic-front"]["sampleCount"] == 12
+
+    attempts = learner.get(path).json()
+    assert [attempt["attempt_number"] for attempt in attempts] == [1, 2]
+    assert db.query(MissionAttempt).filter(MissionAttempt.enrollment_id == enrollment["id"]).count() == 2
+    answer = db.query(ActivityAnswer).filter(ActivityAnswer.activity_key == "drive-mission").one()
+    assert answer.attempt_count == 2
+
+
+def test_phase_six_mission_does_not_replace_self_completion(client_for, users):
+    tutor, _, student, _ = users
+    teacher = client_for(tutor)
+    course = create_course(teacher, title="Self-paced mission")
+    lesson = add_lesson(
+        teacher,
+        course["id"],
+        activities=[phase_six_mission(required=False)],
+        completion_policy="self",
+        stageReference=observation_stage(),
+    )
+    teacher.post(f"/courses/{course['id']}/publish")
+    learner = client_for(student)
+    enrollment = learner.post(f"/courses/{course['id']}/enroll").json()
+    completed = learner.post(f"/enrollments/{enrollment['id']}/lessons/{lesson['lesson_key']}/complete")
+    assert completed.status_code == 200
+    assert completed.json()["progress"][0]["completion_method"] == "self"

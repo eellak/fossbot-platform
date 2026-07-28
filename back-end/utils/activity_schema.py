@@ -13,12 +13,30 @@ ACTIVITY_TYPES = {
     "numeric_answer",
     "short_reflection",
     "simulator_observation",
+    "mission",
     "hint",
 }
 OBJECTIVE_ACTIVITY_TYPES = {"multiple_choice", "multiple_select", "numeric_answer"}
 SENSOR_HELPER_MODES = {"hidden", "student_toggle", "always_visible"}
 SENSOR_PRESENTATIONS = {"live", "chart", "summary"}
 SENSOR_STATISTICS = {"minimum", "maximum", "average", "finalValue"}
+MISSION_ROLES = {"completion", "failure", "optional"}
+MISSION_COMPLETION_MODES = {"all", "any"}
+MISSION_CONDITION_TYPES = {
+    "reach_target",
+    "checkpoints",
+    "collect",
+    "avoid_zones",
+    "stop_in_target",
+    "object_in_zone",
+    "no_incident",
+    "sensor_threshold",
+    "actuator_state",
+    "limits",
+}
+MISSION_OPERATORS = {"lt", "lte", "eq", "gte", "gt"}
+MISSION_INCIDENTS = {"collision", "fall", "runtime_error"}
+FORBIDDEN_EXECUTABLE_FIELDS = {"code", "script", "expression", "javascript", "python", "regex"}
 
 # Stable student-facing channels. Teachers select these IDs; getter names are
 # deliberately not part of the authored activity schema.
@@ -131,6 +149,111 @@ def _validate_observation(activity: dict[str, Any]) -> None:
         raise ValueError("visibleStatistics must be captured statistics")
 
 
+def _mission_ids(condition: dict[str, Any], field: str) -> list[str]:
+    values = condition.get(field)
+    if not isinstance(values, list) or not values:
+        raise ValueError(f"mission {field} must contain at least one stable marker ID")
+    normalized = [_required_text(value, f"mission {field}") for value in values]
+    if len(normalized) != len(set(normalized)):
+        raise ValueError(f"mission {field} must contain unique stable marker IDs")
+    return normalized
+
+
+def _reject_executable_fields(value: Any) -> None:
+    if isinstance(value, dict):
+        if FORBIDDEN_EXECUTABLE_FIELDS.intersection(key.lower() for key in value):
+            raise ValueError("mission activities cannot contain executable rules or expressions")
+        for nested in value.values():
+            _reject_executable_fields(nested)
+    elif isinstance(value, list):
+        for nested in value:
+            _reject_executable_fields(nested)
+
+
+def _validate_mission_condition(condition: Any) -> None:
+    if not isinstance(condition, dict):
+        raise ValueError("mission condition must be an object")
+    condition_type = condition.get("type")
+    if condition_type not in MISSION_CONDITION_TYPES:
+        raise ValueError("mission condition type is not supported")
+    if condition_type in {"reach_target", "stop_in_target"}:
+        _required_text(condition.get("markerId"), "mission markerId")
+    elif condition_type == "checkpoints":
+        _mission_ids(condition, "markerIds")
+        if not isinstance(condition.get("ordered", False), bool):
+            raise ValueError("mission checkpoint ordered must be true or false")
+    elif condition_type == "collect":
+        marker_ids = _mission_ids(condition, "markerIds")
+        required_count = condition.get("requiredCount", len(marker_ids))
+        if not isinstance(required_count, int) or isinstance(required_count, bool) or not 1 <= required_count <= len(marker_ids):
+            raise ValueError("mission collectible requiredCount is out of range")
+    elif condition_type == "avoid_zones":
+        _mission_ids(condition, "markerIds")
+    elif condition_type == "object_in_zone":
+        _required_text(condition.get("objectId"), "mission objectId")
+        _required_text(condition.get("zoneId"), "mission zoneId")
+    elif condition_type == "no_incident":
+        incidents = condition.get("incidents")
+        if not isinstance(incidents, list) or not incidents or len(incidents) != len(set(incidents)) or not set(incidents).issubset(MISSION_INCIDENTS):
+            raise ValueError("mission incidents must use collision, fall, or runtime_error")
+    elif condition_type == "sensor_threshold":
+        if condition.get("sensorId") not in SENSOR_CATALOG:
+            raise ValueError("mission sensorId must be a platform sensor ID")
+        if condition.get("statistic") not in SENSOR_STATISTICS:
+            raise ValueError("mission sensor statistic is not supported")
+        if condition.get("operator") not in MISSION_OPERATORS:
+            raise ValueError("mission sensor operator is not supported")
+        threshold = condition.get("threshold")
+        if not isinstance(threshold, (int, float)) or isinstance(threshold, bool) or not math.isfinite(threshold):
+            raise ValueError("mission sensor threshold must be finite")
+    elif condition_type == "actuator_state":
+        actuator = condition.get("actuator")
+        if actuator not in {"led", "buzzer"}:
+            raise ValueError("mission actuator must be led or buzzer")
+        state = _required_text(condition.get("state"), "mission actuator state")
+        supported = {"led": {"red", "green", "blue", "yellow", "violet", "white", "off"}, "buzzer": {"on", "off"}}
+        if state not in supported[actuator]:
+            raise ValueError("mission actuator state is not supported")
+    elif condition_type == "limits":
+        duration = condition.get("maxDurationMs")
+        movements = condition.get("maxMovementActions")
+        if duration is None and movements is None:
+            raise ValueError("mission limits need a time or movement limit")
+        if duration is not None and (not isinstance(duration, int) or isinstance(duration, bool) or not 1 <= duration <= 86_400_000):
+            raise ValueError("mission maxDurationMs is out of range")
+        if movements is not None and (not isinstance(movements, int) or isinstance(movements, bool) or not 1 <= movements <= 100_000):
+            raise ValueError("mission maxMovementActions is out of range")
+
+
+def _validate_mission(activity: dict[str, Any]) -> None:
+    _reject_executable_fields(activity)
+    _required_text(activity.get("title"), "mission title")
+    if activity.get("completionMode", "all") not in MISSION_COMPLETION_MODES:
+        raise ValueError("mission completionMode must be all or any")
+    objectives = activity.get("objectives")
+    if not isinstance(objectives, list) or not objectives or len(objectives) > 50:
+        raise ValueError("mission needs between 1 and 50 objectives")
+    keys: set[str] = set()
+    for objective in objectives:
+        if not isinstance(objective, dict):
+            raise ValueError("mission objectives must be objects")
+        key = _required_text(objective.get("key"), "mission objective key")
+        if key in keys:
+            raise ValueError("mission objective keys must be unique")
+        keys.add(key)
+        if objective.get("role") not in MISSION_ROLES:
+            raise ValueError("mission objective role must be completion, failure, or optional")
+        _required_text(objective.get("summary"), "mission objective summary")
+        _validate_mission_condition(objective.get("condition"))
+    if not any(objective.get("role") == "completion" for objective in objectives):
+        raise ValueError("mission needs at least one completion objective")
+    retry_limit = activity.get("retryLimit")
+    if retry_limit is not None and (not isinstance(retry_limit, int) or isinstance(retry_limit, bool) or not 0 <= retry_limit <= 100):
+        raise ValueError("mission retryLimit must be between 0 and 100")
+    if activity.get("feedbackMode", "immediate") not in {"immediate", "after_attempt"}:
+        raise ValueError("mission feedbackMode must be immediate or after_attempt")
+
+
 def validate_activities(activities: Optional[list[dict[str, Any]]]) -> None:
     if activities is None:
         return
@@ -175,6 +298,8 @@ def validate_activities(activities: Optional[list[dict[str, Any]]]) -> None:
                 raise ValueError("a private reflection cannot be required")
         elif activity_type == "simulator_observation":
             _validate_observation(activity)
+        elif activity_type == "mission":
+            _validate_mission(activity)
 
     linkable_keys = {
         activity["key"] for activity in activities
@@ -243,6 +368,8 @@ def grade_submission(activity: dict[str, Any], value: Any) -> tuple[Optional[boo
     elif activity_type in {"rich_text", "hint", "simulator_observation"}:
         if value not in (None, True):
             raise ValueError("This activity only needs acknowledgement")
+    elif activity_type == "mission":
+        raise ValueError("Mission activities are completed by a simulator attempt")
     else:
         raise ValueError("Activity type is not supported")
 

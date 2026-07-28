@@ -417,6 +417,15 @@ export function StageInspector({ object, selectedCount = object ? 1 : 0, advance
   const set = (patch: Partial<EditorStageObject>) => onChange({ ...object, ...patch } as EditorStageObject);
   const locked = !!object.locked;
   const role = object.semanticKind || (object.kind === 'fossbot' ? 'robotSpawn' : undefined);
+  const challengeKind = role === 'robotSpawn' ? 'spawn'
+    : role === 'target' ? 'target'
+      : role === 'checkpoint' ? 'checkpoint'
+        : role === 'dangerZone' ? 'danger_zone'
+          : role === 'sensorZone' ? 'sensor_region'
+            : role === 'collectible' ? 'collectible'
+              : role === 'pushObject' ? 'push_object'
+                : role === 'targetZone' ? 'target_zone'
+                  : null;
 
   const setRotationY = (degrees: number) => {
     const rotationY = rad(degrees);
@@ -442,11 +451,40 @@ export function StageInspector({ object, selectedCount = object ? 1 : 0, advance
           </Stack>
         </FieldRow>
         <FieldRow label="Role">
-          <TextField {...commonFieldProps} select value={role || ''} disabled={locked} inputProps={{ 'aria-label': 'Category or role' }} onChange={(event) => set({ semanticKind: event.target.value as StageSemanticKind } as Partial<EditorStageObject>)}>
+          <TextField {...commonFieldProps} select value={role || ''} disabled={locked} inputProps={{ 'aria-label': 'Category or role' }} onChange={(event) => {
+            const semanticKind = event.target.value as StageSemanticKind;
+            const kind = semanticKind === 'robotSpawn' ? 'spawn'
+              : semanticKind === 'target' ? 'target'
+                : semanticKind === 'checkpoint' ? 'checkpoint'
+                  : semanticKind === 'dangerZone' ? 'danger_zone'
+                    : semanticKind === 'sensorZone' ? 'sensor_region'
+                      : semanticKind === 'collectible' ? 'collectible'
+                        : semanticKind === 'pushObject' ? 'push_object'
+                          : semanticKind === 'targetZone' ? 'target_zone'
+                            : null;
+            set({
+              semanticKind,
+              challenge: kind ? {
+                markerId: object.challenge?.markerId || object.id,
+                kind,
+                order: kind === 'checkpoint' ? object.challenge?.order ?? 1 : undefined,
+                pickupRadius: kind === 'collectible' ? object.challenge?.pickupRadius ?? 0.28 : undefined,
+              } : undefined,
+            } as Partial<EditorStageObject>);
+          }}>
             <MenuItem value="">Object</MenuItem>
             {STAGE_OBJECT_CATALOG.filter((item) => item.placeable).map((item) => <MenuItem key={item.id} value={item.id}>{item.label}</MenuItem>)}
           </TextField>
         </FieldRow>
+        {challengeKind && <FieldRow label="Mission ID">
+          <TextField {...commonFieldProps} value={object.challenge?.markerId || object.id} disabled={locked} inputProps={{ 'aria-label': 'Stable mission ID' }} onChange={(event) => set({ challenge: { markerId: event.target.value, kind: challengeKind, order: object.challenge?.order, pickupRadius: object.challenge?.pickupRadius } } as Partial<EditorStageObject>)} />
+        </FieldRow>}
+        {challengeKind === 'checkpoint' && <FieldRow label="Order">
+          <StageBuilderNumberField {...commonNumberProps} disabled={locked} inputProps={{ min: 1, step: 1, 'aria-label': 'Checkpoint order' }} value={object.challenge?.order ?? 1} onChange={(event) => set({ challenge: { markerId: object.challenge?.markerId || object.id, kind: 'checkpoint', order: Math.max(1, Math.round(num(event.target.value, object.challenge?.order || 1))) } } as Partial<EditorStageObject>)} />
+        </FieldRow>}
+        {challengeKind === 'collectible' && <FieldRow label="Pickup radius">
+          <StageBuilderNumberField {...commonNumberProps} disabled={locked} inputProps={{ min: 0.05, step: 0.05, 'aria-label': 'Collectible pickup radius' }} value={object.challenge?.pickupRadius ?? 0.28} onChange={(event) => set({ challenge: { markerId: object.challenge?.markerId || object.id, kind: 'collectible', pickupRadius: minPositive(event.target.value, object.challenge?.pickupRadius || 0.28, 0.05) } } as Partial<EditorStageObject>)} />
+        </FieldRow>}
       </Section>
 
       <Section title="Transform">
@@ -518,7 +556,7 @@ export function StageInspector({ object, selectedCount = object ? 1 : 0, advance
                 <StageBuilderNumberField axis="Z" {...commonNumberProps} disabled={locked} value={object.dimensions[1]} onChange={(event) => onChange({ ...object, dimensions: [object.dimensions[0], minPositive(event.target.value, object.dimensions[1])] })} />
               </InlineFields>
             </FieldRow>
-            {['target', 'checkpoint', 'dangerZone', 'sensorZone'].includes(object.semanticKind || '') && <FullRow><Alert severity="info">Challenge markers export as visible floor regions plus metadata-style naming for simulator logic.</Alert></FullRow>}
+            {['target', 'checkpoint', 'dangerZone', 'sensorZone', 'targetZone'].includes(object.semanticKind || '') && <FullRow><Alert severity="info">Challenge markers export with stable IDs and world-coordinate bounds for mission rules.</Alert></FullRow>}
           </>
         )}
 

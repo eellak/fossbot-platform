@@ -60,6 +60,7 @@ export interface MicProviderOptions {
   /** Drained per-tick by the provider — exclusively owned here. */
   eventQueue: RAPIER.EventQueue
   layout: readonly MicrophoneLayoutEntry[]
+  onCollision?: (otherColliderHandle: number) => void
 }
 
 export interface MicDebugSnapshot {
@@ -80,6 +81,7 @@ export class MicProvider implements SensorProvider {
   private readonly selfHandles: ReadonlySet<number>
   private readonly eventColliderHandles: Set<number>
   private readonly eventQueue: RAPIER.EventQueue
+  private readonly onCollision?: (otherColliderHandle: number) => void
   private readonly layout: readonly MicrophoneLayoutEntry[]
   private readonly restoreActiveEvents: Array<{ collider: RAPIER.Collider; prev: number }> = []
 
@@ -114,6 +116,7 @@ export class MicProvider implements SensorProvider {
     this.eventColliderHandles = new Set(opts.eventColliders.map((c) => c.handle))
     this.eventQueue = opts.eventQueue
     this.layout = opts.layout
+    this.onCollision = opts.onCollision
 
     // Enable COLLISION_EVENTS on the listening colliders. Preserve the
     // previous mask so dispose() can restore it; matters if anything else
@@ -141,6 +144,7 @@ export class MicProvider implements SensorProvider {
       const pairKey = h1 < h2 ? h1 * 0x100000000 + h2 : h2 * 0x100000000 + h1
       if (seenPairs.has(pairKey)) return
       seenPairs.add(pairKey)
+      this.onCollision?.(other)
       // Sample pre-resolution speed; impulse magnitude scales with it.
       const sample = Math.min(1, this.prevLinvelMag * IMPULSE_GAIN)
       this.impulse = Math.min(1, this.impulse + sample)

@@ -9,6 +9,7 @@ import type { Activity, ActivityState, CompactSensorSummary, HintActivity, Numer
 import type { SensorRunSummary, SensorTelemetrySnapshot } from 'src/simulator/sensors/telemetry';
 import RichTextContent from '../RichTextContent';
 import SensorNotebook from '../sensors/SensorNotebook';
+import StudentMission from './StudentMission';
 
 type Props = {
   token?: string;
@@ -21,12 +22,15 @@ type Props = {
   onHelpersVisible: (visible: boolean) => void;
   onReadingsRunning: (running: boolean) => void;
   onProgressChange: () => void;
+  stageRevision?: string;
+  allowManualMissionFinish?: boolean;
+  onMissionRetry?: () => void;
   preview?: boolean;
   t: any;
 };
 
 export default function StudentActivities(props: Props) {
-  const { token, enrollmentId, lessonKey, activities, telemetry, previousSummary, helpersVisible, onHelpersVisible, onReadingsRunning, onProgressChange, preview = false, t } = props;
+  const { token, enrollmentId, lessonKey, activities, telemetry, previousSummary, helpersVisible, onHelpersVisible, onReadingsRunning, onProgressChange, stageRevision = 'built-in:none', allowManualMissionFinish = false, onMissionRetry = () => undefined, preview = false, t } = props;
   const [states, setStates] = useState<Record<string, ActivityState>>({});
   const [answers, setAnswers] = useState<Record<string, any>>({});
   const [feedback, setFeedback] = useState<Record<string, string>>({});
@@ -117,12 +121,20 @@ export default function StudentActivities(props: Props) {
       onReadingsRunning={onReadingsRunning}
       visibleSources={visibleSources}
       sensorSummary={sensorSummary}
+      token={token}
+      enrollmentId={enrollmentId}
+      lessonKey={lessonKey}
+      preview={preview}
+      stageRevision={stageRevision}
+      allowManualMissionFinish={allowManualMissionFinish}
+      onMissionRetry={onMissionRetry}
+      onProgressChange={onProgressChange}
       t={t}
     />)}
   </Stack>;
 }
 
-function ActivityView({ activity, linkedHints, hintStates, onHintSubmit, submittingKey, state, answer, onAnswer, onSubmit, submitting, feedback, error, telemetry, previousSummary, helpersVisible, onHelpersVisible, onReadingsRunning, visibleSources, sensorSummary, t }: any) {
+function ActivityView({ activity, linkedHints, hintStates, onHintSubmit, submittingKey, state, answer, onAnswer, onSubmit, submitting, feedback, error, telemetry, previousSummary, helpersVisible, onHelpersVisible, onReadingsRunning, visibleSources, sensorSummary, token, enrollmentId, lessonKey, preview, stageRevision, allowManualMissionFinish, onMissionRetry, onProgressChange, t }: any) {
   const heading = `student-activity-${activity.key}`;
   const privateReflection = activity.type === 'short_reflection' && !activity.collectResponse;
   const status = privateReflection
@@ -134,6 +146,8 @@ function ActivityView({ activity, linkedHints, hintStates, onHintSubmit, submitt
     : onSubmit(privateReflection ? true : answer);
   const feedbackText = privateReflection ? '' : feedback;
   const response = <>{feedbackText && <Alert severity={privateReflection || state?.correctness === false ? 'info' : 'success'} sx={{ mt: 1 }}>{feedbackText}</Alert>}{error && <Alert severity="error" sx={{ mt: 1 }} action={<Button color="inherit" onClick={retry}>{t('education.student.retry')}</Button>}>{error}</Alert>}</>;
+
+  if (activity.type === 'mission') return <StudentMission activity={activity} token={token} enrollmentId={enrollmentId} lessonKey={lessonKey} preview={preview} stageRevision={stageRevision} allowManualFinish={allowManualMissionFinish} onRetry={onMissionRetry} onProgressChange={onProgressChange} t={t} />;
 
   if (activity.type === 'rich_text') return <Box component="section" aria-labelledby={heading}><Typography id={heading} sx={visuallyHidden}>{t('education.activities.types.rich_text')}</Typography><RichTextContent content={activity.content} />{activity.required && !state?.satisfied && <Button size="small" onClick={() => onSubmit(true)} disabled={submitting}>{t('education.activities.markRead')}</Button>}{response}</Box>;
   if (activity.type === 'hint') return <HintPanel hint={activity} state={state} submitting={submitting} onSubmit={() => onSubmit(true)} t={t} />;

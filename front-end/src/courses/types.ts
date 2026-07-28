@@ -78,7 +78,36 @@ export interface HintActivity extends ActivityBase {
   forActivityKey?: string | null;
 }
 
-export type Activity = RichTextActivity | MultipleChoiceActivity | MultipleSelectActivity | NumericAnswerActivity | ShortReflectionActivity | SimulatorObservationActivity | HintActivity;
+export type MissionObjectiveRole = 'completion' | 'failure' | 'optional';
+export type MissionCondition =
+  | { type: 'reach_target'; markerId: string }
+  | { type: 'checkpoints'; markerIds: string[]; ordered: boolean }
+  | { type: 'collect'; markerIds: string[]; requiredCount: number }
+  | { type: 'avoid_zones'; markerIds: string[] }
+  | { type: 'stop_in_target'; markerId: string }
+  | { type: 'object_in_zone'; objectId: string; zoneId: string }
+  | { type: 'no_incident'; incidents: Array<'collision' | 'fall' | 'runtime_error'> }
+  | { type: 'sensor_threshold'; sensorId: string; statistic: SensorStatistic; operator: 'lt' | 'lte' | 'eq' | 'gte' | 'gt'; threshold: number }
+  | { type: 'actuator_state'; actuator: 'led' | 'buzzer'; state: string }
+  | { type: 'limits'; maxDurationMs?: number; maxMovementActions?: number };
+
+export interface MissionObjective {
+  key: string;
+  role: MissionObjectiveRole;
+  summary: string;
+  condition: MissionCondition;
+}
+
+export interface MissionActivity extends ActivityBase {
+  type: 'mission';
+  title: string;
+  completionMode: 'all' | 'any';
+  objectives: MissionObjective[];
+  retryLimit?: number | null;
+  feedbackMode: 'immediate' | 'after_attempt';
+}
+
+export type Activity = RichTextActivity | MultipleChoiceActivity | MultipleSelectActivity | NumericAnswerActivity | ShortReflectionActivity | SimulatorObservationActivity | MissionActivity | HintActivity;
 
 export interface StageReference {
   sourceType: StageSourceType;
@@ -309,4 +338,39 @@ export interface ActivitySubmissionResponse {
   feedback?: string | null;
   duplicate: boolean;
   lesson_completed: boolean;
+}
+
+export interface MissionAttemptMetrics {
+  elapsed_ms: number;
+  movement_actions: number;
+  path_distance: number;
+  collisions: number;
+  falls: number;
+  resets: number;
+  collectibles: number;
+  sensor_summaries: Record<string, Record<string, number | string>>;
+}
+
+export interface MissionAttemptSubmission {
+  schema_version: 1;
+  client_attempt_id: string;
+  started_at: string;
+  ended_at: string;
+  outcome: 'succeeded' | 'failed' | 'stopped' | 'runtime_error';
+  completion_reason: 'objectives_met' | 'failure_objective' | 'program_completed' | 'stop' | 'reset' | 'runtime_error' | 'fall' | 'timeout' | 'navigation';
+  objective_results: Array<{ key: string; role: MissionObjectiveRole; status: 'pending' | 'succeeded' | 'failed' }>;
+  metrics: MissionAttemptMetrics;
+  simulator_revision: string;
+  stage_revision: string;
+  mission_definition_hash: string;
+}
+
+export interface MissionAttemptRecord extends MissionAttemptSubmission {
+  id: number;
+  enrollment_id: number;
+  release_id: number;
+  lesson_key: string;
+  activity_key: string;
+  attempt_number: number;
+  created_at: string;
 }

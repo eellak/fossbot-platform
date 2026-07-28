@@ -13,6 +13,7 @@ import { completeLesson, CourseRequestError, listMyEnrollments, readEnrollment, 
 import type { Enrollment, LessonWorkspace } from 'src/courses/types';
 import { loadStageFromProvider } from 'src/stages/StagesApi';
 import type { RawStageConfig } from 'src/simulator/stages';
+import { CAMERA_MODES } from 'src/simulator/ui/cameraTypes';
 import { changeCameraView, endSensorRun, pauseSensorRun, resumeSensorRun, WebGLApp } from 'src/simulator-adapter/Simulator';
 import type { SensorRunSummary, SensorTelemetrySnapshot } from 'src/simulator/sensors/telemetry';
 
@@ -119,26 +120,32 @@ export default function LessonWorkspacePage() {
   const lessonIndex = enrollment?.active_release.lessons.findIndex((item) => item.lessonKey === lessonKey) ?? -1;
   const lesson = lessonIndex >= 0 ? enrollment?.active_release.lessons[lessonIndex] : undefined;
   const stage = lesson?.stageReference || null;
+  const stageSourceType = stage?.sourceType;
+  const stageVisibility = stage?.visibility;
+  const stageRepoOwner = stage?.repoOwner;
+  const stageRepoName = stage?.repoName;
+  const stageCommitSha = stage?.commitSha;
+  const stageUrl = stage?.url;
   useEffect(() => {
     setTelemetry(null); setPreviousSummary(null); hasRun.current = false;
     setSensorHelpersVisible(Boolean(lesson?.activities.some((activity) => activity.type === 'simulator_observation' && activity.sensorHelperMode === 'always_visible')));
   }, [lessonKey]);
 
   useEffect(() => {
-    if (!stage) { setStageConfig(null); setStageAssetBase(null); setStageError(''); return; }
+    if (!stageSourceType) { setStageConfig(null); setStageAssetBase(null); setStageError(''); return; }
     let cancelled = false;
     setStageConfig(undefined); setStageAssetBase(null); setStageError('');
-    const request = stage.sourceType === 'github' && stage.visibility === 'private' && stage.repoOwner && stage.repoName
-      ? loadStageFromProvider(token, stage.repoOwner, stage.repoName, stage.commitSha).then((loaded) => ({ config: loaded.record.config, base: loaded.rawBaseUrl || null }))
-      : fetch(stage.url || '').then(async (response) => {
+    const request = stageSourceType === 'github' && stageVisibility === 'private' && stageRepoOwner && stageRepoName
+      ? loadStageFromProvider(token, stageRepoOwner, stageRepoName, stageCommitSha).then((loaded) => ({ config: loaded.record.config, base: loaded.rawBaseUrl || null }))
+      : fetch(stageUrl || '').then(async (response) => {
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const payload = await response.json();
-        return { config: (Array.isArray(payload) ? payload : payload.config) as RawStageConfig, base: stage.url ? new URL('.', new URL(stage.url, window.location.origin)).toString() : null };
+        return { config: (Array.isArray(payload) ? payload : payload.config) as RawStageConfig, base: stageUrl ? new URL('.', new URL(stageUrl, window.location.origin)).toString() : null };
       });
     request.then(({ config, base }) => { if (!cancelled) { setStageConfig(config); setStageAssetBase(base); } })
       .catch((reason) => { if (!cancelled) { setStageConfig(null); setStageError(reason instanceof Error ? reason.message : String(reason)); } });
     return () => { cancelled = true; };
-  }, [simulatorKey, stage, token]);
+  }, [simulatorKey, stageCommitSha, stageRepoName, stageRepoOwner, stageSourceType, stageUrl, stageVisibility, token]);
 
   useEffect(() => {
     if (!workspace || contentKey(content) === lastSaved.current) return;
@@ -183,7 +190,7 @@ export default function LessonWorkspacePage() {
       hasRun.current = true;
     } else run();
   };
-  const changeCamera = () => { changeCameraView(); setCameraStep((value) => (value + 1) % 3); };
+  const changeCamera = () => { changeCameraView(); setCameraStep((value) => (value + 1) % CAMERA_MODES.length); };
   const beginResize = (target: ResizeTarget) => (event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return;
     event.preventDefault();
@@ -211,6 +218,8 @@ export default function LessonWorkspacePage() {
   const progress = enrollment.progress.find((item) => item.lesson_key === lessonKey);
   const hasEditor = lesson.editorType !== 'none';
   const hasStage = Boolean(stage) && lesson.simulatorSettings?.showSimulator !== false;
+  const hasMission = lesson.activities.some((activity) => activity.type === 'mission');
+  const stageRevision = stage?.commitSha || stage?.url || 'built-in:none';
   const code = lesson.editorType === 'python' ? (typeof content === 'string' ? content : '') : generatedPython;
   const panes = [
     { key: 'instructions' as Pane, label: t('education.workspace.instructions'), show: true },
@@ -220,10 +229,10 @@ export default function LessonWorkspacePage() {
   ];
   const saveLabel = saveState === 'conflict' ? t('education.workspace.conflict') : t(`education.save.${saveState === 'unsaved' ? 'unsaved' : saveState}`);
   const refreshProgress = async () => { setEnrollment(await readEnrollment(token, enrollment.id)); };
-  const instructions = <Stack spacing={2} sx={{ width: '100%', maxWidth: '76ch', mx: 'auto' }}><Typography variant="h4">{lesson.title}</Typography><StudentActivities token={token} enrollmentId={enrollment.id} lessonKey={lessonKey} activities={lesson.activities} telemetry={telemetry} previousSummary={previousSummary || telemetry?.previousSummary || null} helpersVisible={sensorHelpersVisible} onHelpersVisible={setSensorHelpersVisible} onReadingsRunning={(running) => { if (running) resumeSensorRun(); else pauseSensorRun(); }} onProgressChange={() => void refreshProgress()} t={t} /></Stack>;
+  const instructions = <Stack spacing={2} sx={{ width: '100%', maxWidth: '76ch', mx: 'auto' }}><Typography variant="h4">{lesson.title}</Typography><StudentActivities token={token} enrollmentId={enrollment.id} lessonKey={lessonKey} activities={lesson.activities} telemetry={telemetry} previousSummary={previousSummary || telemetry?.previousSummary || null} helpersVisible={sensorHelpersVisible} onHelpersVisible={setSensorHelpersVisible} onReadingsRunning={(running) => { if (running) resumeSensorRun(); else pauseSensorRun(); }} stageRevision={stageRevision} allowManualMissionFinish={!hasEditor} onMissionRetry={() => resetSimulation(true)} onProgressChange={() => void refreshProgress()} t={t} /></Stack>;
   const editor = <LessonEditor editorType={lesson.editorType} content={content} onChange={setContent} onPythonChange={setGeneratedPython} />;
-  const simulator = stageConfig === undefined ? <Stack spacing={1} sx={{ p: 2 }}><Skeleton variant="rounded" height={320} /><Typography variant="caption">{t('education.workspace.loadingStage')}</Typography></Stack> : stageError ? <Alert severity="warning" action={<Button onClick={() => setSimulatorKey((value) => value + 1)}>{t('education.student.retry')}</Button>}>{stage?.visibility === 'private' ? t('education.workspace.privateStageFailed') : t('education.workspace.stageFailed')}</Alert> : <Box sx={{ height: '100%', minHeight: 0 }}><WebGLApp key={simulatorKey} appsessionId={sessionId} initialStageUrl={stage?.url} initialStageConfig={stageConfig} initialStageAssetBaseUrl={stageAssetBase} showControls={!hasEditor || lesson.simulatorSettings?.showRemoteControls === true} allowStageSelection={false} sensorHelpersVisible={sensorHelpersVisible} sensorTelemetryAutoStart={false} onTelemetry={setTelemetry} onMountChange={(mounted) => { if (!mounted) return; if (cameraAppliedKey.current !== simulatorKey) { cameraAppliedKey.current = simulatorKey; for (let step = 0; step < cameraStep; step += 1) changeCameraView(); } if (pendingRun.current) { const run = pendingRun.current; pendingRun.current = null; run(); } }} /></Box>;
-  const results = <LessonExecution code={code} sessionId={sessionId} hasStage={hasStage} showCommandHelper={lesson.editorType === 'python'} onBeforeRun={runAfterReset} onResetSimulation={() => resetSimulation(true)} onChangeCamera={changeCamera} />;
+  const simulator = stageConfig === undefined ? <Stack spacing={1} sx={{ p: 2 }}><Skeleton variant="rounded" height={320} /><Typography variant="caption">{t('education.workspace.loadingStage')}</Typography></Stack> : stageError ? <Alert severity="warning" action={<Button onClick={() => setSimulatorKey((value) => value + 1)}>{t('education.student.retry')}</Button>}>{stage?.visibility === 'private' ? t('education.workspace.privateStageFailed') : t('education.workspace.stageFailed')}</Alert> : <Box sx={{ height: '100%', minHeight: 0 }}><WebGLApp key={simulatorKey} appsessionId={sessionId} initialStageUrl={stage?.url} initialStageConfig={stageConfig} initialStageAssetBaseUrl={stageAssetBase} showControls={!hasEditor || lesson.simulatorSettings?.showRemoteControls === true} autoStartMissionAttempt={!hasEditor && hasMission} allowStageSelection={false} sensorHelpersVisible={sensorHelpersVisible} sensorTelemetryAutoStart={false} onTelemetry={setTelemetry} onMountChange={(mounted) => { if (!mounted) return; if (cameraAppliedKey.current !== simulatorKey) { cameraAppliedKey.current = simulatorKey; for (let step = 0; step < cameraStep; step += 1) changeCameraView(); } if (pendingRun.current) { const run = pendingRun.current; pendingRun.current = null; run(); } }} /></Box>;
+  const results = <LessonExecution code={code} sessionId={sessionId} hasStage={hasStage} hasMission={hasMission} showCommandHelper={lesson.editorType === 'python'} onBeforeRun={runAfterReset} onResetSimulation={() => resetSimulation(true)} onChangeCamera={changeCamera} />;
   const highlightedResize = resizing?.target ?? hoveredResize;
   const highlightColumns = highlightedResize === 'columns' || highlightedResize === 'corner';
   const highlightRows = highlightedResize === 'rows' || highlightedResize === 'corner';

@@ -405,5 +405,42 @@ class ActivityAnswer(Base):
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow, nullable=False)
 
 
+class MissionAttempt(Base):
+    __tablename__ = "mission_attempts"
+    __table_args__ = (
+        UniqueConstraint(
+            'enrollment_id', 'release_id', 'lesson_key', 'activity_key', 'attempt_number',
+            name='uq_mission_attempt_number',
+        ),
+        UniqueConstraint(
+            'enrollment_id', 'release_id', 'client_attempt_id',
+            name='uq_mission_attempt_client_id',
+        ),
+        CheckConstraint(
+            "outcome IN ('succeeded', 'failed', 'stopped', 'runtime_error')",
+            name='ck_mission_attempt_outcome',
+        ),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    enrollment_id = Column(Integer, ForeignKey('enrollments.id'), nullable=False)
+    release_id = Column(Integer, ForeignKey('course_releases.id'), nullable=False)
+    lesson_key = Column(String, nullable=False)
+    activity_key = Column(String, nullable=False)
+    attempt_number = Column(Integer, nullable=False)
+    client_attempt_id = Column(String, nullable=False)
+    started_at = Column(DateTime, nullable=False)
+    ended_at = Column(DateTime, nullable=False)
+    outcome = Column(String, nullable=False)
+    completion_reason = Column(String, nullable=False)
+    objective_results = Column(JSON, nullable=False)
+    metrics = Column(JSON, nullable=False)
+    simulator_revision = Column(String, nullable=False)
+    stage_revision = Column(String, nullable=False)
+    mission_definition_hash = Column(String, nullable=False)
+    schema_version = Column(Integer, nullable=False)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+
+
 # Import compatibility for code that has not yet adopted canonical product naming.
 Curriculum = Course

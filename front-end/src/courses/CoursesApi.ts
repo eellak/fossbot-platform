@@ -14,6 +14,8 @@ import type {
   ActivityState,
   ActivitySubmissionResponse,
   CompactSensorSummary,
+  MissionAttemptSubmission,
+  MissionAttemptRecord,
 } from './types';
 
 const backendUrl: string = process.env.REACT_APP_BACKEND_URL;
@@ -168,5 +170,30 @@ export async function submitActivity(
     method: 'POST',
     headers: headers(token),
     body: JSON.stringify({ submission_id: submissionId, value, sensor_summary: sensorSummary || null }),
+  }));
+}
+
+export async function submitMissionAttempt(
+  token: string,
+  enrollmentId: number,
+  lessonKey: string,
+  activityKey: string,
+  attempt: MissionAttemptSubmission,
+): Promise<Record<string, unknown>> {
+  return parse(await fetch(`${backendUrl}/enrollments/${enrollmentId}/lessons/${encodeURIComponent(lessonKey)}/missions/${encodeURIComponent(activityKey)}/attempts`, {
+    method: 'POST',
+    headers: headers(token),
+    body: JSON.stringify(attempt),
+  }));
+}
+
+export async function readMissionAttempts(
+  token: string,
+  enrollmentId: number,
+  lessonKey: string,
+  activityKey: string,
+): Promise<MissionAttemptRecord[]> {
+  return parse(await fetch(`${backendUrl}/enrollments/${enrollmentId}/lessons/${encodeURIComponent(lessonKey)}/missions/${encodeURIComponent(activityKey)}/attempts`, {
+    headers: headers(token),
   }));
 }

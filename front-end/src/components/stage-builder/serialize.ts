@@ -20,6 +20,9 @@ import type {
   StageModelEntry,
   StageLineEntry,
   StageTextEntry,
+  StageChallengeKind,
+  StageChallengeMetadata,
+  StageSemanticKind,
 } from './types';
 import { makeLocalStageId } from './localStages';
 import { inferSemanticKindFromConfig } from './stageBuilderCatalog';
@@ -61,6 +64,57 @@ function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value));
 }
 
+const CHALLENGE_BY_SEMANTIC: Partial<Record<StageSemanticKind, StageChallengeKind>> = {
+  robotSpawn: 'spawn',
+  target: 'target',
+  checkpoint: 'checkpoint',
+  dangerZone: 'danger_zone',
+  sensorZone: 'sensor_region',
+  collectible: 'collectible',
+  pushObject: 'push_object',
+  targetZone: 'target_zone',
+};
+
+const SEMANTIC_BY_CHALLENGE: Record<StageChallengeKind, StageSemanticKind> = {
+  spawn: 'robotSpawn',
+  target: 'target',
+  checkpoint: 'checkpoint',
+  danger_zone: 'dangerZone',
+  sensor_region: 'sensorZone',
+  collectible: 'collectible',
+  push_object: 'pushObject',
+  target_zone: 'targetZone',
+};
+
+function challengeForObject(object: EditorStageObject): StageChallengeMetadata | undefined {
+  const kind = object.semanticKind ? CHALLENGE_BY_SEMANTIC[object.semanticKind] : undefined;
+  if (!kind) return undefined;
+  return {
+    markerId: object.challenge?.markerId?.trim() || object.id,
+    kind,
+    order: kind === 'checkpoint' ? object.challenge?.order : undefined,
+    pickupRadius: kind === 'collectible' ? object.challenge?.pickupRadius ?? 0.28 : undefined,
+  };
+}
+
+function legacyMarkerId(entry: StageJsonEntry, index: number): string {
+  const name = 'name' in entry ? entry.name : entry.type === 'fossbot' ? 'robot-spawn' : entry.type;
+  const slug = String(name || entry.type).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || entry.type;
+  return `${slug}-${index + 1}`;
+}
+
+function challengeFromEntry(entry: StageJsonEntry, semanticKind: StageSemanticKind | undefined, index: number): StageChallengeMetadata | undefined {
+  if ('challenge' in entry && entry.challenge) return clone(entry.challenge);
+  const kind = semanticKind ? CHALLENGE_BY_SEMANTIC[semanticKind] : undefined;
+  if (!kind) return undefined;
+  return {
+    markerId: legacyMarkerId(entry, index),
+    kind,
+    order: kind === 'checkpoint' ? index + 1 : undefined,
+    pickupRadius: kind === 'collectible' ? 0.28 : undefined,
+  };
+}
+
 function skyboxToConfig(stage: EditorStage): StageSkyboxEntry | null {
   const skybox = normalizeStageBuilderSkybox(stage.metadata?.skybox);
   if (skybox.mode === 'default') return null;
@@ -85,7 +139,7 @@ function floorToConfig(floor: EditorStageFloorSettings): StageFloorEntry {
 
 function markerTextFor(object: EditorStageObject): StageTextEntry | null {
   if (object.kind !== 'base') return null;
-  if (!['target', 'checkpoint', 'dangerZone', 'sensorZone'].includes(object.semanticKind || '')) return null;
+  if (!['target', 'checkpoint', 'dangerZone', 'sensorZone', 'targetZone'].includes(object.semanticKind || '')) return null;
   return {
     type: 'text',
     name: `${object.name || object.semanticKind}_label`,
@@ -114,6 +168,7 @@ export function editorStageToConfig(stage: EditorStage): StageJsonEntry[] {
         material: { color: object.color },
         position: [object.position[0], object.position[2]],
         name: object.name || object.semanticKind || 'base',
+        challenge: challengeForObject(object),
       });
       const label = markerTextFor(object);
       if (label) entries.push(label);
@@ -132,6 +187,7 @@ export function editorStageToConfig(stage: EditorStage): StageJsonEntry[] {
         mass: object.immovable ? 0 : object.mass,
         immovable: object.immovable,
         collision: object.collision,
+        challenge: challengeForObject(object),
       });
     } else if (object.kind === 'cylinder') {
       entries.push({
@@ -144,6 +200,7 @@ export function editorStageToConfig(stage: EditorStage): StageJsonEntry[] {
         mass: object.immovable ? 0 : object.mass,
         immovable: object.immovable,
         collision: object.collision,
+        challenge: challengeForObject(object),
       });
     } else if (object.kind === 'sphere') {
       entries.push({
@@ -156,6 +213,7 @@ export function editorStageToConfig(stage: EditorStage): StageJsonEntry[] {
         mass: object.immovable ? 0 : object.mass,
         immovable: object.immovable,
         collision: object.collision,
+        challenge: challengeForObject(object),
       });
     } else if (object.kind === 'wedge') {
       entries.push({
@@ -169,6 +227,7 @@ export function editorStageToConfig(stage: EditorStage): StageJsonEntry[] {
         mass: object.immovable ? 0 : object.mass,
         immovable: object.immovable,
         collision: object.collision,
+        challenge: challengeForObject(object),
       });
     } else if (object.kind === 'arrow') {
       entries.push({
@@ -224,6 +283,7 @@ export function editorStageToConfig(stage: EditorStage): StageJsonEntry[] {
         mass: object.immovable ? 0 : object.mass,
         immovable: object.immovable,
         collision: object.collision,
+        challenge: challengeForObject(object),
       });
     } else if (object.kind === 'light') {
       entries.push({
@@ -269,6 +329,7 @@ export function editorStageToConfig(stage: EditorStage): StageJsonEntry[] {
       type: 'fossbot',
       position: robotStart.position,
       orientation: [0, robotStart.rotationY, 0],
+      challenge: challengeForObject(robotStart),
     });
   }
 
@@ -293,15 +354,16 @@ export function editorStageToRecord(stage: EditorStage): LocalStageRecord {
   };
 }
 
-function configEntryToEditorObject(entry: StageJsonEntry): EditorStageObject | null {
+function configEntryToEditorObject(entry: StageJsonEntry, index: number): EditorStageObject | null {
   if (entry.type === 'floor') return null;
   if (entry.type === 'base') {
     const base = entry as StageBaseEntry;
-    const semanticKind = inferSemanticKindFromConfig('base', base.name, base.material?.color);
+    const semanticKind = base.challenge ? SEMANTIC_BY_CHALLENGE[base.challenge.kind] : inferSemanticKindFromConfig('base', base.name, base.material?.color);
     return {
       id: makeLocalStageId(),
       kind: 'base',
       semanticKind,
+      challenge: challengeFromEntry(entry, semanticKind, index),
       name: base.name || 'floor tile',
       position: [base.position[0], 0, base.position[1]],
       dimensions: base.dimensions,
@@ -310,12 +372,13 @@ function configEntryToEditorObject(entry: StageJsonEntry): EditorStageObject | n
   }
   if (entry.type === 'cube') {
     const cube = entry as StageCubeEntry;
-    const inferred = inferSemanticKindFromConfig('cube', cube.name, cube.material?.color);
+    const inferred = cube.challenge ? SEMANTIC_BY_CHALLENGE[cube.challenge.kind] : inferSemanticKindFromConfig('cube', cube.name, cube.material?.color);
     const semanticKind = inferred === 'block' && Math.abs(cube.orientation?.[0] || 0) > 0.001 ? 'ramp' : inferred;
     return {
       id: makeLocalStageId(),
       kind: 'cube',
       semanticKind,
+      challenge: challengeFromEntry(entry, semanticKind, index),
       name: cube.name || (semanticKind === 'wall' ? 'wall' : semanticKind === 'ramp' ? 'ramp' : 'block'),
       position: cube.position,
       rotationY: cube.orientation?.[1] || 0,
@@ -330,11 +393,12 @@ function configEntryToEditorObject(entry: StageJsonEntry): EditorStageObject | n
   }
   if (entry.type === 'cylinder') {
     const cylinder = entry as StageCylinderEntry;
-    const semanticKind = inferSemanticKindFromConfig('cylinder', cylinder.name, cylinder.material?.color);
+    const semanticKind = cylinder.challenge ? SEMANTIC_BY_CHALLENGE[cylinder.challenge.kind] : inferSemanticKindFromConfig('cylinder', cylinder.name, cylinder.material?.color);
     return {
       id: makeLocalStageId(),
       kind: 'cylinder',
       semanticKind,
+      challenge: challengeFromEntry(entry, semanticKind, index),
       name: cylinder.name || (semanticKind === 'obstacle' ? 'cone obstacle' : 'cylinder'),
       position: cylinder.position,
       dimensions: [cylinder.dimensions[0], cylinder.dimensions[1], cylinder.dimensions[2], cylinder.dimensions[3] || 32],
@@ -346,10 +410,12 @@ function configEntryToEditorObject(entry: StageJsonEntry): EditorStageObject | n
   }
   if (entry.type === 'sphere') {
     const sphere = entry as StageSphereEntry;
+    const semanticKind = sphere.challenge ? SEMANTIC_BY_CHALLENGE[sphere.challenge.kind] : inferSemanticKindFromConfig('sphere', sphere.name, sphere.material?.color);
     return {
       id: makeLocalStageId(),
       kind: 'sphere',
-      semanticKind: inferSemanticKindFromConfig('sphere', sphere.name, sphere.material?.color),
+      semanticKind,
+      challenge: challengeFromEntry(entry, semanticKind, index),
       name: sphere.name || 'sphere',
       position: sphere.position,
       dimensions: [sphere.dimensions[0]],
@@ -361,10 +427,12 @@ function configEntryToEditorObject(entry: StageJsonEntry): EditorStageObject | n
   }
   if (entry.type === 'wedge') {
     const wedge = entry as StageWedgeEntry;
+    const semanticKind = wedge.challenge ? SEMANTIC_BY_CHALLENGE[wedge.challenge.kind] : inferSemanticKindFromConfig('wedge', wedge.name, wedge.material?.color);
     return {
       id: makeLocalStageId(),
       kind: 'wedge',
-      semanticKind: inferSemanticKindFromConfig('wedge', wedge.name, wedge.material?.color),
+      semanticKind,
+      challenge: challengeFromEntry(entry, semanticKind, index),
       name: wedge.name || 'wedge',
       position: wedge.position,
       rotationY: wedge.orientation?.[1] || 0,
@@ -426,6 +494,7 @@ function configEntryToEditorObject(entry: StageJsonEntry): EditorStageObject | n
       id: makeLocalStageId(),
       kind: 'fossbot',
       semanticKind: 'robotSpawn',
+      challenge: challengeFromEntry(entry, 'robotSpawn', index),
       name: 'robot spawn',
       position: spawn.position || [0, 0, 0],
       rotationY: spawn.orientation?.[1] || 0,
@@ -433,10 +502,12 @@ function configEntryToEditorObject(entry: StageJsonEntry): EditorStageObject | n
   }
   if (entry.type === 'model') {
     const model = entry as StageModelEntry;
+    const semanticKind = model.challenge ? SEMANTIC_BY_CHALLENGE[model.challenge.kind] : 'customObject';
     return {
       id: makeLocalStageId(),
       kind: 'model',
-      semanticKind: 'customObject',
+      semanticKind,
+      challenge: challengeFromEntry(entry, semanticKind, index),
       name: model.name || 'custom object',
       filename: model.filename,
       format: modelFormatFrom(model.filename, model.format),
