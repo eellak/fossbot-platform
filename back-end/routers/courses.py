@@ -7,6 +7,7 @@ import math
 import uuid
 import xml.etree.ElementTree as ElementTree
 from typing import Any, Literal, Optional
+from urllib.parse import urlsplit
 
 from database.database import ActivityAnswer, Course, CourseRelease, Enrollment, Lesson, LessonProgress, LessonWorkspace, MissionAttempt, User
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
@@ -64,6 +65,18 @@ DEFAULT_STAGE_URLS = {
 }
 
 
+def validate_optional_web_url(value: Optional[str]) -> Optional[str]:
+    if value is None:
+        return None
+    value = value.strip()
+    if not value:
+        return None
+    parsed = urlsplit(value)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise ValueError("must use an http or https URL")
+    return value
+
+
 class StageReference(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
@@ -114,6 +127,11 @@ class CourseMetadata(BaseModel):
             return None
         return list(dict.fromkeys(item.strip() for item in value if item.strip()))
 
+    @field_validator("cover_image_url")
+    @classmethod
+    def cover_url(cls, value: Optional[str]) -> Optional[str]:
+        return validate_optional_web_url(value)
+
 
 class CourseCreate(CourseMetadata):
     pass
@@ -160,6 +178,11 @@ class CourseUpdate(BaseModel):
         if value is None:
             return None
         return list(dict.fromkeys(item.strip() for item in value if item.strip()))
+
+    @field_validator("cover_image_url")
+    @classmethod
+    def cover_url(cls, value: Optional[str]) -> Optional[str]:
+        return validate_optional_web_url(value)
 
 
 class LessonCreate(BaseModel):
@@ -228,6 +251,13 @@ class ReorderRequest(BaseModel):
 class WorkspaceSaveRequest(BaseModel):
     content: Any = None
     revision: int = Field(ge=1)
+
+
+class ReleaseUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    current_release_id: int = Field(ge=1)
+    target_release_id: int = Field(ge=1)
 
 
 class ActivitySubmissionRequest(BaseModel):
@@ -346,6 +376,7 @@ class UnpublishedChangeSummary(BaseModel):
     course: bool = False
     outline: bool = False
     lesson_keys: list[str] = Field(default_factory=list)
+    remote_stage_changes: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class CourseResponse(BaseModel):
@@ -612,7 +643,7 @@ def lesson_payload(lesson: Lesson) -> dict[str, Any]:
 
 
 def course_unpublished_change_summary(course: Course, release: Optional[CourseRelease]) -> dict[str, Any]:
-    summary = {"course": False, "outline": False, "lesson_keys": []}
+    summary = {"course": False, "outline": False, "lesson_keys": [], "remote_stage_changes": []}
     if release is None:
         return summary
     snapshot = release.snapshot
@@ -641,8 +672,18 @@ def course_unpublished_change_summary(course: Course, release: Optional[CourseRe
 
     for lesson in current_lessons:
         released = released_by_key.get(lesson.lesson_key)
+        current_stage = stage_payload(lesson) or None
         if released is None:
             summary["lesson_keys"].append(lesson.lesson_key)
+            if (current_stage or {}).get("sourceType") in {"github", "marketplace"}:
+                summary["remote_stage_changes"].append({
+                    "lesson_key": lesson.lesson_key,
+                    "lesson_title": lesson.title,
+                    "source_type": current_stage["sourceType"],
+                    "previous_commit": None,
+                    "current_commit": current_stage.get("commitSha"),
+                    "changed": True,
+                })
             continue
         current_activities = []
         for activity in lesson.activities:
@@ -664,10 +705,33 @@ def course_unpublished_change_summary(course: Course, release: Optional[CourseRe
         }
         released_definition = {key: released.get(key) for key in current_definition}
         released_definition["activities"] = released_activities
-        current_stage = stage_payload(lesson) or None
         released_stage = released.get("stageReference") or None
+        remote_stage = current_stage if (current_stage or {}).get("sourceType") in {"github", "marketplace"} else released_stage
+        if remote_stage and remote_stage.get("sourceType") in {"github", "marketplace"}:
+            summary["remote_stage_changes"].append({
+                "lesson_key": lesson.lesson_key,
+                "lesson_title": lesson.title,
+                "source_type": remote_stage["sourceType"],
+                "previous_commit": (released_stage or {}).get("commitSha"),
+                "current_commit": (current_stage or {}).get("commitSha"),
+                "changed": current_stage != released_stage,
+            })
         if current_definition != released_definition or current_stage != released_stage:
             summary["lesson_keys"].append(lesson.lesson_key)
+
+    for released in released_lessons:
+        if released["lessonKey"] in current_order:
+            continue
+        released_stage = released.get("stageReference") or None
+        if (released_stage or {}).get("sourceType") in {"github", "marketplace"}:
+            summary["remote_stage_changes"].append({
+                "lesson_key": released["lessonKey"],
+                "lesson_title": released["title"],
+                "source_type": released_stage["sourceType"],
+                "previous_commit": released_stage.get("commitSha"),
+                "current_commit": None,
+                "changed": True,
+            })
     return summary
 
 
@@ -720,7 +784,7 @@ def release_course_payload(course: Course, release: CourseRelease) -> dict[str, 
         "prerequisites": snapshot_course.get("prerequisites"),
         "tags": snapshot_course.get("tags"),
         "has_unpublished_changes": False,
-        "unpublished_change_summary": {"course": False, "outline": False, "lesson_keys": []},
+        "unpublished_change_summary": {"course": False, "outline": False, "lesson_keys": [], "remote_stage_changes": []},
         "author_name": f"{course.author.firstname} {course.author.lastname}".strip() or course.author.username,
         "latest_release": {
             "id": release.id,
@@ -1966,9 +2030,35 @@ def release_update_payload(active: CourseRelease, latest: CourseRelease) -> dict
     latest_by_key = {lesson["lessonKey"]: lesson for lesson in release_lessons(latest)}
     shared = set(active_by_key) & set(latest_by_key)
     changed = [key for key in shared if active_by_key[key]["definitionHash"] != latest_by_key[key]["definitionHash"]]
-    stage_changed = any(
-        active_by_key[key].get("stageReference") != latest_by_key[key].get("stageReference") for key in shared
-    )
+    lesson_changes = []
+    for lesson in release_lessons(latest):
+        key = lesson["lessonKey"]
+        previous = active_by_key.get(key)
+        if previous is None:
+            change = "added"
+        elif previous["definitionHash"] != lesson["definitionHash"]:
+            change = "changed"
+        else:
+            change = "unchanged"
+        lesson_changes.append({
+            "lesson_key": key,
+            "title": lesson["title"],
+            "change": change,
+            "stage_changed": bool(previous and previous.get("stageReference") != lesson.get("stageReference")),
+            "progress_preserved": change == "unchanged",
+            "workspace_preserved": change == "unchanged" and lesson.get("editorType") != "none",
+        })
+    for lesson in release_lessons(active):
+        if lesson["lessonKey"] not in latest_by_key:
+            lesson_changes.append({
+                "lesson_key": lesson["lessonKey"],
+                "title": lesson["title"],
+                "change": "removed",
+                "stage_changed": False,
+                "progress_preserved": False,
+                "workspace_preserved": False,
+            })
+    stage_changed = any(item["stage_changed"] for item in lesson_changes)
     return {
         "available": latest.version > active.version,
         "current": {"id": active.id, "version": active.version, "published_at": active.published_at},
@@ -1978,6 +2068,7 @@ def release_update_payload(active: CourseRelease, latest: CourseRelease) -> dict
         "changed_lessons": len(changed),
         "unchanged_lessons": len(shared) - len(changed),
         "stage_revisions_changed": stage_changed,
+        "lesson_changes": lesson_changes,
     }
 
 
@@ -1992,14 +2083,24 @@ def read_enrollment_updates(enrollment_id: int, user: User = Depends(get_current
 
 
 @router.post("/enrollments/{enrollment_id}/update-release")
-def update_enrollment_release(enrollment_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def update_enrollment_release(enrollment_id: int, request: ReleaseUpdateRequest, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     require_student(user)
     enrollment = owned_enrollment_or_404(db, user, enrollment_id)
     active = db.query(CourseRelease).filter(CourseRelease.id == enrollment.active_release_id).one()
-    course = db.query(Course).filter(Course.id == enrollment.course_id).one()
-    latest = db.query(CourseRelease).filter(CourseRelease.id == course.latest_published_release_id).one()
+    if request.current_release_id != active.id:
+        raise HTTPException(status_code=409, detail={
+            "error": "active_release_changed",
+            "detail": "This enrollment changed after you reviewed the update. Review the available update again.",
+            "currentReleaseId": active.id,
+        })
+    latest = db.query(CourseRelease).filter(
+        CourseRelease.id == request.target_release_id,
+        CourseRelease.course_id == enrollment.course_id,
+    ).first()
+    if latest is None:
+        raise HTTPException(status_code=404, detail="Release not found")
     if latest.version <= active.version:
-        raise HTTPException(status_code=409, detail="Enrollment already uses the latest release")
+        raise HTTPException(status_code=409, detail="Enrollment already uses this or a newer release")
     active_by_key = {lesson["lessonKey"]: lesson for lesson in release_lessons(active)}
     old_progress = {item.lesson_key: item for item in db.query(LessonProgress).filter(
         LessonProgress.enrollment_id == enrollment.id,
@@ -2069,6 +2170,30 @@ def update_enrollment_release(enrollment_id: int, user: User = Depends(get_curre
     refresh_course_completion(db, enrollment, latest)
     safe_commit(db)
     return enrollment_payload(db, enrollment)
+
+
+@router.get("/enrollments/{enrollment_id}/lessons/{lesson_key}/workspace-history")
+def read_lesson_workspace_history(enrollment_id: int, lesson_key: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    require_student(user)
+    enrollment = owned_enrollment_or_404(db, user, enrollment_id)
+    rows = db.query(LessonWorkspace, CourseRelease).join(
+        CourseRelease, CourseRelease.id == LessonWorkspace.release_id,
+    ).filter(
+        LessonWorkspace.enrollment_id == enrollment.id,
+        LessonWorkspace.lesson_key == lesson_key,
+        LessonWorkspace.release_id != enrollment.active_release_id,
+        CourseRelease.course_id == enrollment.course_id,
+    ).order_by(CourseRelease.version.desc()).all()
+    return [{
+        "workspace_id": workspace.id,
+        "release_id": release.id,
+        "release_version": release.version,
+        "editor_type": workspace.editor_type,
+        "content": workspace.saved_content,
+        "revision": workspace.revision,
+        "updated_at": workspace.updated_at,
+        "read_only": True,
+    } for workspace, release in rows]
 
 
 def optional_current_user(token: Optional[str] = Depends(optional_oauth2), db: Session = Depends(get_db)) -> Optional[User]:

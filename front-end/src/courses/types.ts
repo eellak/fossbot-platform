@@ -178,6 +178,14 @@ export interface CourseSummary {
     course: boolean;
     outline: boolean;
     lesson_keys: string[];
+    remote_stage_changes?: Array<{
+      lesson_key: string;
+      lesson_title: string;
+      source_type: 'github' | 'marketplace';
+      previous_commit?: string | null;
+      current_commit?: string | null;
+      changed: boolean;
+    }>;
   };
   created_at: string;
   updated_at: string;
@@ -252,6 +260,14 @@ export interface ReleaseUpdate {
   changed_lessons: number;
   unchanged_lessons: number;
   stage_revisions_changed: boolean;
+  lesson_changes: Array<{
+    lesson_key: string;
+    title: string;
+    change: 'added' | 'removed' | 'changed' | 'unchanged';
+    stage_changed: boolean;
+    progress_preserved: boolean;
+    workspace_preserved: boolean;
+  }>;
 }
 
 export interface LessonWorkspace {
@@ -265,6 +281,17 @@ export interface LessonWorkspace {
   revision: number;
   initialized_at: string;
   updated_at: string;
+}
+
+export interface LessonWorkspaceHistory {
+  workspace_id: number;
+  release_id: number;
+  release_version: number;
+  editor_type: LessonEditorType;
+  content?: string | Record<string, unknown> | null;
+  revision: number;
+  updated_at: string;
+  read_only: true;
 }
 
 export interface Lesson {

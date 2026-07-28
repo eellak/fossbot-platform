@@ -11,6 +11,7 @@ import type {
   ReleaseUpdate,
   StudentCourse,
   LessonWorkspace,
+  LessonWorkspaceHistory,
   ActivityState,
   ActivitySubmissionResponse,
   CompactSensorSummary,
@@ -147,8 +148,10 @@ export async function readReleaseUpdate(token: string, enrollmentId: number): Pr
   return parse(await fetch(`${backendUrl}/enrollments/${enrollmentId}/updates`, { headers: headers(token) }));
 }
 
-export async function updateEnrollmentRelease(token: string, enrollmentId: number): Promise<Enrollment> {
-  return parse(await fetch(`${backendUrl}/enrollments/${enrollmentId}/update-release`, { method: 'POST', headers: headers(token) }));
+export async function updateEnrollmentRelease(token: string, enrollmentId: number, currentReleaseId: number, targetReleaseId: number): Promise<Enrollment> {
+  return parse(await fetch(`${backendUrl}/enrollments/${enrollmentId}/update-release`, {
+    method: 'POST', headers: headers(token), body: JSON.stringify({ current_release_id: currentReleaseId, target_release_id: targetReleaseId }),
+  }));
 }
 
 export async function readLessonWorkspace(token: string, enrollmentId: number, lessonKey: string): Promise<LessonWorkspace> {
@@ -161,6 +164,10 @@ export async function saveLessonWorkspace(token: string, enrollmentId: number, l
 
 export async function resetLessonWorkspace(token: string, enrollmentId: number, lessonKey: string, revision: number): Promise<LessonWorkspace> {
   return parse(await fetch(`${backendUrl}/enrollments/${enrollmentId}/lessons/${encodeURIComponent(lessonKey)}/workspace/reset`, { method: 'POST', headers: headers(token), body: JSON.stringify({ revision }) }));
+}
+
+export async function readLessonWorkspaceHistory(token: string, enrollmentId: number, lessonKey: string): Promise<LessonWorkspaceHistory[]> {
+  return parse(await fetch(`${backendUrl}/enrollments/${enrollmentId}/lessons/${encodeURIComponent(lessonKey)}/workspace-history`, { headers: headers(token) }));
 }
 
 export async function readActivityStates(token: string, enrollmentId: number, lessonKey: string): Promise<ActivityState[]> {

@@ -505,7 +505,10 @@ def test_release_update_preserves_only_unchanged_progress_and_history(client_for
     assert comparison["added_lessons"] == comparison["removed_lessons"] == comparison["changed_lessons"] == 1
     assert learner.get(f"/enrollments/{enrollment['id']}").json()["active_release"]["id"] == release_one["id"]
 
-    updated = learner.post(f"/enrollments/{enrollment['id']}/update-release").json()
+    updated = learner.post(f"/enrollments/{enrollment['id']}/update-release", json={
+        "current_release_id": release_one["id"],
+        "target_release_id": release_two["id"],
+    }).json()
     states = {item["lesson_key"]: item for item in updated["progress"]}
     assert updated["active_release"]["id"] == release_two["id"]
     assert states[unchanged["lesson_key"]]["state"] == "completed"
@@ -517,6 +520,115 @@ def test_release_update_preserves_only_unchanged_progress_and_history(client_for
     assert db.query(LessonProgress).filter(
         LessonProgress.enrollment_id == enrollment["id"], LessonProgress.release_id == release_one["id"]
     ).count() == 3
+
+
+def test_phase_eight_update_review_targets_release_and_exposes_owned_read_only_code(client_for, users):
+    tutor, _, student, admin = users
+    teacher = client_for(tutor)
+    learner = client_for(student)
+    outsider = client_for(admin)
+    course = create_course(teacher)
+    lesson = add_lesson(teacher, course["id"], editor_type="python", starter_content="print('one')")
+    release_one = teacher.post(f"/courses/{course['id']}/publish").json()
+    enrollment = learner.post(f"/courses/{course['id']}/enroll").json()
+    workspace_path = f"/enrollments/{enrollment['id']}/lessons/{lesson['lesson_key']}/workspace"
+    workspace = learner.get(workspace_path).json()
+    learner.put(workspace_path, json={"content": "print('student work')", "revision": workspace["revision"]})
+
+    teacher.put(f"/courses/{course['id']}/lessons/{lesson['id']}", json={"title": "Changed lesson"})
+    release_two = teacher.post(f"/courses/{course['id']}/publish").json()
+    comparison = learner.get(f"/enrollments/{enrollment['id']}/updates").json()
+    changed = next(item for item in comparison["lesson_changes"] if item["lesson_key"] == lesson["lesson_key"])
+    assert changed == {
+        "lesson_key": lesson["lesson_key"],
+        "title": "Changed lesson",
+        "change": "changed",
+        "stage_changed": False,
+        "progress_preserved": False,
+        "workspace_preserved": False,
+    }
+
+    teacher.put(f"/courses/{course['id']}", json={"description": "A later update released after review."})
+    release_three = teacher.post(f"/courses/{course['id']}/publish").json()
+    updated = learner.post(f"/enrollments/{enrollment['id']}/update-release", json={
+        "current_release_id": release_one["id"],
+        "target_release_id": release_two["id"],
+    }).json()
+    assert updated["active_release"]["id"] == release_two["id"]
+    assert updated["update_available"] is True
+
+    current_workspace = learner.get(workspace_path).json()
+    assert current_workspace["content"] == "print('one')"
+    history = learner.get(f"{workspace_path}-history").json()
+    assert history[0]["release_version"] == 1
+    assert history[0]["content"] == "print('student work')"
+    assert history[0]["read_only"] is True
+    assert outsider.get(f"{workspace_path}-history").status_code == 403
+
+    stale = learner.post(f"/enrollments/{enrollment['id']}/update-release", json={
+        "current_release_id": release_one["id"],
+        "target_release_id": release_three["id"],
+    })
+    assert stale.status_code == 409
+    assert stale.json()["detail"]["error"] == "active_release_changed"
+
+
+def test_phase_eight_rejects_unsafe_urls_and_rich_text_embeds(client_for, users):
+    tutor, *_ = users
+    teacher = client_for(tutor)
+    assert teacher.post("/courses", json=REQUIRED_COURSE | {"cover_image_url": "javascript:alert(1)"}).status_code == 422
+    course = create_course(teacher, cover_image_url="https://example.test/cover.png")
+    unsafe_content = {
+        "type": "doc",
+        "content": [{
+            "type": "paragraph",
+            "content": [{"type": "text", "text": "Open me", "marks": [{"type": "link", "attrs": {"href": "javascript:alert(1)"}}]}],
+        }],
+    }
+    response = teacher.post(f"/courses/{course['id']}/lessons", json={
+        "title": "Unsafe content",
+        "activities": [{"key": "unsafe", "type": "rich_text", "content": unsafe_content}],
+    })
+    assert response.status_code == 422
+    assert "unsupported formatting" in response.text
+
+
+def test_phase_eight_teacher_to_student_core_regression(client_for, users):
+    tutor, _, student, _ = users
+    teacher = client_for(tutor)
+    learner = client_for(student)
+    course = create_course(teacher)
+    first = add_lesson(teacher, course["id"], "Move", editor_type="python", starter_content="move_step('forward')")
+    second = add_lesson(teacher, course["id"], "Loop", editor_type="python", start_mode="inherit_previous_code")
+    third = add_lesson(teacher, course["id"], "Reflect", editor_type="none", start_mode="fresh")
+    release_one = teacher.post(f"/courses/{course['id']}/publish").json()
+
+    enrollment = learner.post(f"/courses/{course['id']}/enroll").json()
+    first_path = f"/enrollments/{enrollment['id']}/lessons/{first['lesson_key']}"
+    first_workspace = learner.get(f"{first_path}/workspace").json()
+    learner.put(f"{first_path}/workspace", json={"content": "for step in range(3):\n    move_step('forward')", "revision": first_workspace["revision"]})
+    learner.post(f"{first_path}/complete")
+
+    second_path = f"/enrollments/{enrollment['id']}/lessons/{second['lesson_key']}"
+    inherited = learner.get(f"{second_path}/workspace").json()
+    assert inherited["content"].startswith("for step in range(3)")
+    assert inherited["origin"]["sourceLessonKey"] == first["lesson_key"]
+    learner.post(f"{second_path}/complete")
+    learner.post(f"/enrollments/{enrollment['id']}/lessons/{third['lesson_key']}/complete")
+    completed = learner.get(f"/enrollments/{enrollment['id']}").json()
+    assert completed["completed_at"] is not None
+    assert completed["progress_percent"] == 100
+
+    teacher.put(f"/courses/{course['id']}", json={"description": "Clearer course description."})
+    release_two = teacher.post(f"/courses/{course['id']}/publish").json()
+    comparison = learner.get(f"/enrollments/{enrollment['id']}/updates").json()
+    assert comparison["unchanged_lessons"] == 3
+    updated = learner.post(f"/enrollments/{enrollment['id']}/update-release", json={
+        "current_release_id": release_one["id"],
+        "target_release_id": release_two["id"],
+    }).json()
+    assert updated["progress_percent"] == 100
+    assert learner.get(f"{first_path}/workspace").json()["content"].startswith("for step in range(3)")
 
 
 def test_self_completion_rejects_non_self_policy(client_for, users):
@@ -615,8 +727,13 @@ def test_unchanged_workspace_is_carried_to_new_release_without_deleting_history(
     workspace = learner.get(path).json()
     learner.put(path, json={"content": "student", "revision": workspace["revision"]})
 
-    teacher.post(f"/courses/{course['id']}/publish")
-    updated = learner.post(f"/enrollments/{enrollment['id']}/update-release").json()
+    teacher.put(f"/courses/{course['id']}", json={"description": "A metadata-only update."})
+    release_one_id = enrollment["active_release"]["id"]
+    release_two = teacher.post(f"/courses/{course['id']}/publish").json()
+    updated = learner.post(f"/enrollments/{enrollment['id']}/update-release", json={
+        "current_release_id": release_one_id,
+        "target_release_id": release_two["id"],
+    }).json()
     carried = learner.get(path).json()
     assert carried["content"] == "student"
     assert carried["release_id"] == updated["active_release"]["id"]

@@ -45,6 +45,7 @@ DEV_TEST_USERS = (
 DEV_VERIFIER_USERNAME = "dev_teacher_verifier"
 DEV_SAMPLE_PHASE_5_TAG = "education-phase-5"
 DEV_SAMPLE_PHASE_6_TAG = "education-phase-6"
+PHASE_8_EXAMPLE_TAG = "education-phase-8-example"
 
 
 def seed_dev_test_users(db: Session, password: str) -> list[User]:
@@ -713,6 +714,253 @@ def phase_six_sample_lessons(course_id: int, start_position: int = 8) -> list[Le
     ]
 
 
+def phase_eight_example_definitions() -> list[dict]:
+    """Return the three public Phase 8 examples (eight lessons total)."""
+    mission_stage = {
+        "sourceType": "default",
+        "title": "Mission challenge field",
+        "url": "/js-simulator/stages/stage_missions_phase6.json",
+    }
+    return [
+        {
+            "course": {
+                "title": "Getting Started with FOSSBot",
+                "description": "Learn how FOSSBot moves, repeats commands, and observes distance.",
+                "learning_objectives": ["Move and turn safely", "Use a loop", "Read a distance sensor"],
+                "visibility": "public",
+                "tags": [PHASE_8_EXAMPLE_TAG, "getting-started"],
+            },
+            "lessons": [
+                {
+                    "lessonKey": "getting-started-move",
+                    "title": "Make your first move",
+                    "activities": rich_text_activity(
+                        "getting-started-move-intro",
+                        "Run the starter program, then change the number of forward steps.",
+                        "Reset simulation returns the robot to the starting position without deleting your code.",
+                    ),
+                    "completion_policy": "self",
+                    "editor_type": "python",
+                    "starter_content": "move_step('forward')\nturn_left(90)\n",
+                    "simulator_settings": {"showSimulator": True},
+                    "stageReference": {"sourceType": "default", "title": "White field", "url": "/js-simulator/stages/stage_white_rect.json"},
+                },
+                {
+                    "lessonKey": "getting-started-loop",
+                    "title": "Repeat with a loop",
+                    "activities": rich_text_activity(
+                        "getting-started-loop-intro",
+                        "Start with the previous lesson's saved code, then replace repeated movement commands with a loop.",
+                    ),
+                    "completion_policy": "self",
+                    "start_mode": "inherit_previous_code",
+                    "editor_type": "python",
+                    "simulator_settings": {"showSimulator": True},
+                    "stageReference": {"sourceType": "default", "title": "White field", "url": "/js-simulator/stages/stage_white_rect.json"},
+                },
+                {
+                    "lessonKey": "getting-started-distance",
+                    "title": "Watch distance change",
+                    "activities": rich_text_activity(
+                        "getting-started-distance-intro",
+                        "Use the movement controls to approach the wall. Watch how the front distance changes; no code is required.",
+                    ) + [
+                        {
+                            "key": "getting-started-distance-run",
+                            "type": "simulator_observation",
+                            "version": 1,
+                            "required": True,
+                            "prompt": "Move toward the wall and record a sensor run.",
+                            "allowedSensors": ["ultrasonic-front"],
+                            "sensorHelperMode": "student_toggle",
+                            "presentations": ["live", "chart", "summary"],
+                            "capturedStatistics": ["minimum", "maximum", "average", "finalValue"],
+                            "visibleStatistics": ["minimum", "maximum", "average", "finalValue"],
+                        },
+                        {
+                            "key": "getting-started-distance-answer",
+                            "type": "multiple_choice",
+                            "version": 1,
+                            "required": True,
+                            "prompt": "What happens to the front distance as the robot approaches the wall?",
+                            "options": [{"key": "smaller", "label": "It gets smaller"}, {"key": "larger", "label": "It gets larger"}],
+                            "correctOptionKey": "smaller",
+                            "feedbackCorrect": "Correct. A nearby wall gives a smaller distance.",
+                            "feedbackIncorrect": "Try another run and compare the first and final readings.",
+                        },
+                    ],
+                    "completion_policy": "hybrid",
+                    "editor_type": "none",
+                    "simulator_settings": {"showSimulator": True, "showRemoteControls": True},
+                    "stageReference": {"sourceType": "default", "title": "Maze", "url": "/js-simulator/stages/stage_maze.json"},
+                },
+            ],
+        },
+        {
+            "course": {
+                "title": "Obstacle Navigation",
+                "description": "Use collisions, ultrasonic sensing, and checkpoints to plan safe routes.",
+                "learning_objectives": ["Explain safe obstacle detection", "Navigate checkpoints", "Design a wall-following strategy"],
+                "visibility": "public",
+                "tags": [PHASE_8_EXAMPLE_TAG, "navigation"],
+            },
+            "lessons": [
+                {
+                    "lessonKey": "obstacle-collision-reading",
+                    "title": "Plan before contact",
+                    "activities": rich_text_activity(
+                        "obstacle-collision-reading-content",
+                        "A distance sensor lets a robot react before a collision. Read the route and decide where the robot should slow down.",
+                        "This reading lesson has no code and no stage. Mark it finished when your route plan is ready.",
+                    ),
+                    "completion_policy": "self",
+                    "editor_type": "none",
+                    "simulator_settings": {"showSimulator": False},
+                },
+                {
+                    "lessonKey": "obstacle-checkpoint-mission",
+                    "title": "Navigate checkpoints",
+                    "activities": rich_text_activity(
+                        "obstacle-checkpoint-intro",
+                        "The robot starts at Spawn. Visit both checkpoints in order, then reach the Target.",
+                    ) + [{
+                        "key": "obstacle-checkpoint-rules",
+                        "type": "mission",
+                        "version": 1,
+                        "required": True,
+                        "title": "Checkpoint route",
+                        "completionMode": "all",
+                        "objectives": [
+                            {"key": "route-checkpoints", "role": "completion", "summary": "Visit both checkpoints in order.", "condition": {"type": "checkpoints", "markerIds": ["checkpoint-one", "checkpoint-two"], "ordered": True}},
+                            {"key": "route-target", "role": "completion", "summary": "Reach the route target.", "condition": {"type": "reach_target", "markerId": "route-finish"}},
+                            {"key": "route-safety", "role": "failure", "summary": "Finish without a collision, fall, or runtime error.", "condition": {"type": "no_incident", "incidents": ["collision", "fall", "runtime_error"]}},
+                        ],
+                        "retryLimit": None,
+                        "feedbackMode": "immediate",
+                    }],
+                    "completion_policy": "activity",
+                    "editor_type": "python",
+                    "starter_content": "# Visit both checkpoints, then the target.\nmove_step('forward')\n",
+                    "simulator_settings": {"showSimulator": True},
+                    "stageReference": mission_stage,
+                },
+                {
+                    "lessonKey": "obstacle-wall-following",
+                    "title": "Build a wall follower",
+                    "activities": rich_text_activity(
+                        "obstacle-wall-following-content",
+                        "Start fresh. Read the front and side distances, then choose whether to move or turn.",
+                        "There is more than one good solution; explain your stopping rule before marking the lesson finished.",
+                    ),
+                    "completion_policy": "self",
+                    "start_mode": "fresh",
+                    "editor_type": "python",
+                    "starter_content": "# Start a new wall-following strategy here.\n",
+                    "simulator_settings": {"showSimulator": True},
+                    "stageReference": {"sourceType": "default", "title": "Maze", "url": "/js-simulator/stages/stage_maze.json"},
+                },
+            ],
+        },
+        {
+            "course": {
+                "title": "Advanced Challenges",
+                "description": "Combine sensor evidence with open-ended simulator challenges.",
+                "learning_objectives": ["Combine several sensor signals", "Optimize a successful mission without making score a completion barrier"],
+                "visibility": "public",
+                "tags": [PHASE_8_EXAMPLE_TAG, "advanced"],
+            },
+            "lessons": [
+                {
+                    "lessonKey": "advanced-multi-sensor",
+                    "title": "Compare several sensors",
+                    "activities": rich_text_activity(
+                        "advanced-multi-sensor-intro",
+                        "Run the robot and compare distance, floor, and odometer summaries. Use the text summary as an alternative to the chart.",
+                    ) + [{
+                        "key": "advanced-multi-sensor-run",
+                        "type": "simulator_observation",
+                        "version": 1,
+                        "required": True,
+                        "prompt": "Record a run and identify which sensor best supports your route decision.",
+                        "allowedSensors": ["ultrasonic-front", "ir-floor-center", "odometer-left", "odometer-right"],
+                        "sensorHelperMode": "always_visible",
+                        "presentations": ["live", "chart", "summary"],
+                        "capturedStatistics": ["minimum", "maximum", "average", "finalValue"],
+                        "visibleStatistics": ["minimum", "maximum", "average", "finalValue"],
+                    }],
+                    "completion_policy": "activity",
+                    "editor_type": "none",
+                    "simulator_settings": {"showSimulator": True, "showRemoteControls": True},
+                    "stageReference": {"sourceType": "default", "title": "White field", "url": "/js-simulator/stages/stage_white_rect.json"},
+                },
+                {
+                    "lessonKey": "advanced-efficient-route",
+                    "title": "Find an efficient route",
+                    "activities": rich_text_activity(
+                        "advanced-efficient-route-intro",
+                        "First complete the route. Then, if you want, improve movement actions and path distance as separate measures.",
+                    ) + [{
+                        "key": "advanced-efficient-route-rules",
+                        "type": "mission",
+                        "version": 1,
+                        "required": True,
+                        "title": "Efficient route challenge",
+                        "completionMode": "all",
+                        "objectives": [
+                            {"key": "advanced-route-target", "role": "completion", "summary": "Reach the route target.", "condition": {"type": "reach_target", "markerId": "route-finish"}},
+                            {"key": "advanced-route-clean", "role": "optional", "summary": "Avoid collisions, falls, and runtime errors.", "condition": {"type": "no_incident", "incidents": ["collision", "fall", "runtime_error"]}},
+                        ],
+                        "retryLimit": None,
+                        "feedbackMode": "after_attempt",
+                        "scoreConfig": {
+                            "version": 1,
+                            "enabled": True,
+                            "rankFailedAttempts": False,
+                            "components": [
+                                {"key": "finish-points", "label": "Reach the target", "type": "objective", "objectiveKey": "advanced-route-target", "points": 60, "weight": 1},
+                                {"key": "move-points", "label": "Movement actions", "type": "movement_efficiency", "points": 20, "target": 8, "tolerance": 8, "weight": 1},
+                                {"key": "path-points", "label": "Path distance", "type": "path_efficiency", "points": 20, "target": 4, "tolerance": 4, "weight": 1},
+                            ],
+                            "starThresholds": [0.5, 0.75, 0.9],
+                        },
+                    }],
+                    "completion_policy": "activity",
+                    "editor_type": "python",
+                    "starter_content": "# Reach the target first; optimize only after success.\nmove_step('forward')\n",
+                    "simulator_settings": {"showSimulator": True},
+                    "stageReference": mission_stage,
+                },
+            ],
+        },
+    ]
+
+
+def seed_phase_eight_example_courses(db: Session, teacher_username: str = "dev_teacher") -> list[Course]:
+    """Create and publish the examples through canonical course API functions."""
+    from routers.courses import CourseCreate, LessonCreate, add_lesson, create_course, publish_course
+
+    teacher = db.query(User).filter(User.username == teacher_username, User.role == UserRole.TUTOR).first()
+    if teacher is None:
+        raise RuntimeError(f"Education example seed requires tutor user {teacher_username!r}")
+
+    examples: list[Course] = []
+    for definition in phase_eight_example_definitions():
+        existing = next(
+            (course for course in db.query(Course).filter(Course.author_id == teacher.id).all() if PHASE_8_EXAMPLE_TAG in (course.tags or []) and course.title == definition["course"]["title"]),
+            None,
+        )
+        if existing:
+            examples.append(existing)
+            continue
+        created = create_course(CourseCreate.model_validate(definition["course"]), teacher, db)
+        for lesson in definition["lessons"]:
+            add_lesson(created["id"], LessonCreate.model_validate(lesson), teacher, db)
+        publish_course(created["id"], teacher, db)
+        examples.append(db.query(Course).filter(Course.id == created["id"]).one())
+    logger.info("Phase 8 education examples ready: %s", ", ".join(str(course.id) for course in examples))
+    return examples
+
+
 def add_missing_phase_five_lessons(db: Session, course: Course) -> int:
     existing_lessons = db.query(Lesson).filter(Lesson.course_id == course.id).all()
     existing_keys = {lesson.lesson_key for lesson in existing_lessons}
@@ -926,4 +1174,6 @@ def seed_dev_sample_course(db: Session, admin_username: str) -> Course:
 
 def seed_dev_data(db: Session, admin_username: str, test_user_password: str) -> Course:
     seed_dev_test_users(db, test_user_password)
-    return seed_dev_sample_course(db, admin_username)
+    sample = seed_dev_sample_course(db, admin_username)
+    seed_phase_eight_example_courses(db)
+    return sample

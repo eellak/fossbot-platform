@@ -1,9 +1,12 @@
-from database.database import Course, Lesson, MarketplaceRoleAssignment, User
+from database.database import Course, CourseRelease, Lesson, MarketplaceRoleAssignment, User
 from database.dev_seed import (
     DEV_SAMPLE_PHASE_5_TAG,
     DEV_SAMPLE_PHASE_6_TAG,
     DEV_SAMPLE_TAG,
     DEV_TEST_USERS,
+    PHASE_8_EXAMPLE_TAG,
+    phase_eight_example_definitions,
+    seed_phase_eight_example_courses,
     seed_dev_sample_course,
     seed_dev_test_users,
 )
@@ -122,3 +125,24 @@ def test_dev_users_include_two_teachers_one_verifier_and_two_students(db):
     verifier = next(user for user in seeded if user.username == "dev_teacher_verifier")
     assignments = db.query(MarketplaceRoleAssignment).filter(MarketplaceRoleAssignment.role == "verifier").all()
     assert [assignment.user_id for assignment in assignments] == [verifier.id]
+
+
+def test_phase_eight_examples_publish_three_courses_and_eight_lessons(db, users):
+    tutor, *_ = users
+    created = seed_phase_eight_example_courses(db, tutor.username)
+    seeded_again = seed_phase_eight_example_courses(db, tutor.username)
+
+    assert [course.id for course in seeded_again] == [course.id for course in created]
+    assert len(created) == 3
+    assert sum(db.query(Lesson).filter(Lesson.course_id == course.id).count() for course in created) == 8
+    assert all(course.status == "published" and course.latest_published_release_id for course in created)
+    assert db.query(CourseRelease).filter(CourseRelease.course_id.in_([course.id for course in created])).count() == 3
+    assert all(PHASE_8_EXAMPLE_TAG in course.tags for course in created)
+
+    lessons = db.query(Lesson).filter(Lesson.course_id.in_([course.id for course in created])).all()
+    assert any(lesson.start_mode == "inherit_previous_code" for lesson in lessons)
+    assert any(lesson.editor_type == "none" and lesson.stage_source_type is None for lesson in lessons)
+    assert any(any(activity["type"] == "simulator_observation" for activity in lesson.activities) for lesson in lessons)
+    assert any(any(activity["type"] == "mission" for activity in lesson.activities) for lesson in lessons)
+    assert any(any(activity.get("scoreConfig", {}).get("enabled") for activity in lesson.activities) for lesson in lessons)
+    assert len(phase_eight_example_definitions()) == 3

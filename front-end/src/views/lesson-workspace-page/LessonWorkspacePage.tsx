@@ -9,8 +9,8 @@ import StudentActivities from 'src/components/courses/activities/StudentActiviti
 import LessonEditor from 'src/components/courses/workspace/LessonEditor';
 import LessonExecution from 'src/components/courses/workspace/LessonExecution';
 import { useAuth } from 'src/authentication/AuthProvider';
-import { completeLesson, CourseRequestError, listMyEnrollments, readEnrollment, readLessonWorkspace, resetLessonWorkspace, saveLessonWorkspace, startLesson, uncompleteLesson } from 'src/courses/CoursesApi';
-import type { Enrollment, LessonWorkspace } from 'src/courses/types';
+import { completeLesson, CourseRequestError, listMyEnrollments, readEnrollment, readLessonWorkspace, readLessonWorkspaceHistory, resetLessonWorkspace, saveLessonWorkspace, startLesson, uncompleteLesson } from 'src/courses/CoursesApi';
+import type { Enrollment, LessonWorkspace, LessonWorkspaceHistory } from 'src/courses/types';
 import { loadStageFromProvider } from 'src/stages/StagesApi';
 import type { RawStageConfig } from 'src/simulator/stages';
 import { CAMERA_MODES } from 'src/simulator/ui/cameraTypes';
@@ -31,7 +31,8 @@ export default function LessonWorkspacePage() {
   const navigate = useNavigate();
   const { courseId: courseParam, lessonKey = '' } = useParams();
   const courseId = Number(courseParam);
-  const compact = useMediaQuery(useTheme().breakpoints.down('md'));
+  const theme = useTheme();
+  const compact = useMediaQuery(theme.breakpoints.down('md'));
   const [enrollment, setEnrollment] = useState<Enrollment | null>(null);
   const [workspace, setWorkspace] = useState<LessonWorkspace | null>(null);
   const [content, setContent] = useState<LessonWorkspace['content']>(null);
@@ -43,6 +44,8 @@ export default function LessonWorkspacePage() {
   const [outlineOpen, setOutlineOpen] = useState(true);
   const [activePane, setActivePane] = useState<Pane>('instructions');
   const [resetOpen, setResetOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [workspaceHistory, setWorkspaceHistory] = useState<LessonWorkspaceHistory[]>([]);
   const [simulatorKey, setSimulatorKey] = useState(0);
   const [stageConfig, setStageConfig] = useState<RawStageConfig | null | undefined>(null);
   const [stageAssetBase, setStageAssetBase] = useState<string | null>(null);
@@ -104,7 +107,11 @@ export default function LessonWorkspacePage() {
       if (!current) { navigate(`/courses/${courseId}`, { replace: true }); return; }
       const started = await startLesson(token, current.id, lessonKey);
       setEnrollment(started);
-      const loaded = await readLessonWorkspace(token, current.id, lessonKey);
+      const [loaded, history] = await Promise.all([
+        readLessonWorkspace(token, current.id, lessonKey),
+        readLessonWorkspaceHistory(token, current.id, lessonKey),
+      ]);
+      setWorkspaceHistory(history);
       setWorkspace(loaded); setContent(loaded.content); lastSaved.current = contentKey(loaded.content); setSaveState('saved');
     } catch (reason) {
       if (reason instanceof CourseRequestError && reason.code === 'previous_workspace_required') {
@@ -116,6 +123,15 @@ export default function LessonWorkspacePage() {
     } finally { setLoading(false); }
   }, [courseId, lessonKey, navigate, t, token]);
   useEffect(() => { void load(); }, [load]);
+
+  useEffect(() => {
+    if (!enrollment) return undefined;
+    const refreshOnFocus = async () => {
+      try { setEnrollment(await readEnrollment(token, enrollment.id)); } catch { /* Keep the open workspace usable while offline. */ }
+    };
+    window.addEventListener('focus', refreshOnFocus);
+    return () => window.removeEventListener('focus', refreshOnFocus);
+  }, [enrollment?.id, token]);
 
   const lessonIndex = enrollment?.active_release.lessons.findIndex((item) => item.lessonKey === lessonKey) ?? -1;
   const lesson = lessonIndex >= 0 ? enrollment?.active_release.lessons[lessonIndex] : undefined;
@@ -240,7 +256,7 @@ export default function LessonWorkspacePage() {
   const hasWorkPane = hasStage || hasEditor;
   const desktopAreas = hasStage && hasEditor ? '"instructions simulator" "editor results"' : hasStage ? '"instructions simulator"' : hasEditor ? '"instructions editor" "instructions results"' : '"instructions"';
 
-  return <Box sx={{ minHeight: 'calc(100vh - 64px)', display: 'flex', flexDirection: 'column', overflowX: 'clip', bgcolor: 'background.paper' }}>
+  return <Box sx={{ minHeight: 'calc(100vh - 64px)', display: 'flex', flexDirection: 'column', overflowX: 'clip', bgcolor: 'background.paper', '& .MuiButton-containedPrimary': { color: theme.palette.getContrastText(theme.palette.primary.main) }, '& .MuiButtonBase-root:focus-visible': { outline: '2px solid', outlineColor: 'text.primary', outlineOffset: 2 }, '@media (pointer: coarse), (max-width: 768px)': { '& .MuiButtonBase-root': { minHeight: 44 }, '& .MuiIconButton-root': { minWidth: 44 } } }}>
     <Stack component="header" direction="row" spacing={1.5} alignItems="center" sx={{ minHeight: 58, px: 2, borderBottom: '1px solid', borderColor: 'divider' }}>
       <Button size="small" startIcon={<IconArrowLeft size={17} />} onClick={() => navigate(`/courses/${courseId}`)}>{enrollment.course.title}</Button>
       <Typography variant="subtitle1" fontWeight={700} noWrap sx={{ flex: 1 }}>{lesson.title}</Typography>
@@ -249,6 +265,7 @@ export default function LessonWorkspacePage() {
       {saveState === 'failed' && <Button size="small" onClick={() => void retrySave()}>{t('education.student.retry')}</Button>}
     </Stack>
     <LinearProgress variant="determinate" value={enrollment.progress_percent} sx={{ height: 3 }} />
+    {enrollment.update_available && <Alert severity="info" action={<Button color="inherit" onClick={() => navigate(`/courses/${courseId}`)}>{t('education.student.reviewChanges')}</Button>}>{t('education.workspace.updateWhileOpen')}</Alert>}
     {saveState === 'conflict' && <Alert severity="error" action={<Button color="inherit" onClick={() => void load()}>{t('education.conflict.reload')}</Button>}>{t('education.workspace.staleTab')}</Alert>}
     <Box sx={{ display: 'flex', flex: 1, minHeight: 0 }}>
       {!compact && <Collapse in={outlineOpen} orientation="horizontal"><Box component="aside" sx={{ width: outlineWidth, height: '100%', p: 2, bgcolor: 'action.hover' }}><StudentCourseOutline lessons={enrollment.active_release.lessons} progress={enrollment.progress} selectedKey={lessonKey} title={t('education.student.outline')} completedLabel={t('education.student.completed')} onSelect={(key) => navigate(`/courses/${courseId}/learn/${key}`)} /></Box></Collapse>}
@@ -267,12 +284,13 @@ export default function LessonWorkspacePage() {
           </Box>}
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} justifyContent="space-between" alignItems={{ sm: 'center' }} sx={{ mt: 2, pt: 2, borderTop: '1px solid', borderColor: 'divider' }}>
           <Button startIcon={<IconArrowLeft size={18} />} disabled={!previous} onClick={() => previous && navigate(`/courses/${courseId}/learn/${previous.lessonKey}`)}>{t('education.student.previous')}</Button>
-          <Stack direction="row" spacing={1}>{hasEditor && <Button startIcon={<IconRestore size={18} />} disabled={saveState === 'saving'} onClick={() => setResetOpen(true)}>{t('education.workspace.resetWorkspace')}</Button>}{(lesson.completionPolicy === 'self' || lesson.completionPolicy === 'hybrid') && (progress?.state === 'completed' ? <Button onClick={() => void setCompletion(false)}>{t('education.student.undoCompletion')}</Button> : <Button variant="contained" startIcon={<IconCircleCheck size={18} />} onClick={() => void setCompletion(true)}>{t('education.student.finished')}</Button>)}</Stack>
+          <Stack direction="row" spacing={1} flexWrap="wrap">{workspaceHistory.length > 0 && <Button onClick={() => setHistoryOpen(true)}>{t('education.workspace.previousCode')}</Button>}{hasEditor && <Button startIcon={<IconRestore size={18} />} disabled={saveState === 'saving'} onClick={() => setResetOpen(true)}>{t('education.workspace.resetWorkspace')}</Button>}{(lesson.completionPolicy === 'self' || lesson.completionPolicy === 'hybrid') && (progress?.state === 'completed' ? <Button onClick={() => void setCompletion(false)}>{t('education.student.undoCompletion')}</Button> : <Button variant="contained" startIcon={<IconCircleCheck size={18} />} onClick={() => void setCompletion(true)}>{t('education.student.finished')}</Button>)}</Stack>
           <Button endIcon={<IconArrowRight size={18} />} disabled={!next} onClick={() => next && navigate(`/courses/${courseId}/learn/${next.lessonKey}`)}>{t('education.student.next')}</Button>
         </Stack>
       </Box>
     </Box>
     <Dialog open={resetOpen} onClose={() => setResetOpen(false)}><DialogTitle>{t('education.workspace.resetWorkspace')}</DialogTitle><DialogContent><Typography>{t('education.workspace.resetConfirm')}</Typography></DialogContent><DialogActions><Button onClick={() => setResetOpen(false)}>{t('education.workspace.cancel')}</Button><Button color="error" onClick={() => void resetCode()}>{t('education.workspace.resetWorkspace')}</Button></DialogActions></Dialog>
+    <Dialog open={historyOpen} onClose={() => setHistoryOpen(false)} fullWidth maxWidth="md" aria-labelledby="workspace-history-title"><DialogTitle id="workspace-history-title">{t('education.workspace.previousCodeTitle')}</DialogTitle><DialogContent><Alert severity="info" sx={{ mb: 2 }}>{t('education.workspace.previousCodeHelp')}</Alert><Stack spacing={2}>{workspaceHistory.map((item) => <Box key={item.workspace_id}><Typography variant="subtitle2">{t('education.student.version', { version: item.release_version })}</Typography><Box component="pre" tabIndex={0} aria-label={t('education.workspace.previousCodeVersion', { version: item.release_version })} sx={{ p: 2, overflow: 'auto', bgcolor: 'action.hover', borderRadius: 1, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{typeof item.content === 'string' ? item.content : JSON.stringify(item.content, null, 2)}</Box></Box>)}</Stack></DialogContent><DialogActions><Button onClick={() => setHistoryOpen(false)}>{t('education.workspace.close')}</Button></DialogActions></Dialog>
   </Box>;
 }
 

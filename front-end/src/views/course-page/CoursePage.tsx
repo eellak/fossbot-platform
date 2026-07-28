@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Alert, Box, Button, Chip, CircularProgress, Divider, Grid, Paper, Stack, Typography } from '@mui/material';
+import { Alert, Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Divider, Grid, List, ListItem, ListItemText, Paper, Stack, Typography, useTheme } from '@mui/material';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import PageContainer from 'src/components/container/PageContainer';
@@ -11,6 +11,7 @@ import type { Enrollment, ReleaseUpdate, StudentCourse } from 'src/courses/types
 export default function CoursePage() {
   const { t } = useTranslation();
   const { token, user } = useAuth();
+  const theme = useTheme();
   const navigate = useNavigate();
   const courseId = Number(useParams().courseId);
   const [course, setCourse] = useState<StudentCourse | null>(null);
@@ -19,6 +20,7 @@ export default function CoursePage() {
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState(false);
   const [error, setError] = useState('');
+  const [reviewOpen, setReviewOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true); setError('');
@@ -48,9 +50,13 @@ export default function CoursePage() {
   };
 
   const adoptUpdate = async () => {
-    if (!enrollment) return;
+    if (!enrollment || !update) return;
     setWorking(true); setError('');
-    try { setEnrollment(await updateEnrollmentRelease(token, enrollment.id)); setUpdate(null); }
+    try {
+      const updated = await updateEnrollmentRelease(token, enrollment.id, update.current.id, update.latest.id);
+      setEnrollment(updated); setReviewOpen(false);
+      setUpdate(updated.update_available ? await readReleaseUpdate(token, updated.id) : null);
+    }
     catch (reason) { setError(reason instanceof Error ? reason.message : t('education.student.errors.update')); }
     finally { setWorking(false); }
   };
@@ -60,10 +66,10 @@ export default function CoursePage() {
   const lessons = enrollment?.active_release.lessons || course.latest_release.lessons;
   return (
     <PageContainer title={course.title} description={course.description}>
-      <Stack spacing={3}>
+      <Stack spacing={3} sx={{ '& .MuiButton-containedPrimary': { color: theme.palette.getContrastText(theme.palette.primary.main) }, '& .MuiButtonBase-root:focus-visible': { outline: '2px solid', outlineColor: 'text.primary', outlineOffset: 2 }, '@media (pointer: coarse), (max-width: 768px)': { '& .MuiButtonBase-root': { minHeight: 44 } } }}>
         <Button sx={{ alignSelf: 'flex-start' }} onClick={() => navigate('/courses')}>{t('education.student.backToCourses')}</Button>
         {error ? <Alert severity="error">{error}</Alert> : null}
-        {update?.available ? <Alert severity="info" action={<Stack direction="row"><Button color="inherit" onClick={() => setUpdate(null)} disabled={working}>{t('education.student.continueCurrent')}</Button><Button color="inherit" onClick={adoptUpdate} disabled={working}>{t('education.student.updateCourse')}</Button></Stack>}>
+        {update?.available ? <Alert severity="info" action={<Stack direction={{ xs: 'column', sm: 'row' }}><Button color="inherit" onClick={() => setUpdate(null)} disabled={working}>{t('education.student.continueCurrent')}</Button><Button color="inherit" onClick={() => setReviewOpen(true)} disabled={working}>{t('education.student.reviewChanges')}</Button></Stack>}>
           <Typography fontWeight={700}>{t('education.student.updateAvailable')}</Typography>
           {t('education.student.updateSummary', { added: update.added_lessons, changed: update.changed_lessons, removed: update.removed_lessons })}
         </Alert> : null}
@@ -91,6 +97,25 @@ export default function CoursePage() {
           </Grid>
         </Paper>
       </Stack>
+      <Dialog open={reviewOpen} onClose={() => !working && setReviewOpen(false)} fullWidth maxWidth="sm" aria-labelledby="course-update-title">
+        <DialogTitle id="course-update-title">{t('education.student.reviewUpdateTitle', { current: update?.current.version, latest: update?.latest.version })}</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2}>
+            <Typography>{t('education.student.updateChoiceHelp')}</Typography>
+            {update?.stage_revisions_changed ? <Alert severity="info">{t('education.student.stageChanged')}</Alert> : null}
+            <List disablePadding aria-label={t('education.student.changedLessons')}>
+              {update?.lesson_changes.filter((item) => item.change !== 'unchanged').map((item) => <ListItem key={`${item.change}-${item.lesson_key}`} divider disableGutters>
+                <ListItemText primary={item.title} secondary={<>{t(`education.student.change.${item.change}`)}{item.stage_changed ? ` · ${t('education.student.stageChangedShort')}` : ''}{item.change !== 'removed' && <><br />{item.change === 'added' ? t('education.student.newLessonStartsFresh') : t('education.student.changedWorkStartsFresh')}</>}</>} />
+              </ListItem>)}
+            </List>
+            {update && update.unchanged_lessons > 0 ? <Typography color="text.secondary">{t('education.student.unchangedPreserved', { count: update.unchanged_lessons })}</Typography> : null}
+          </Stack>
+        </DialogContent>
+        <DialogActions sx={{ flexWrap: 'wrap' }}>
+          <Button onClick={() => { setReviewOpen(false); setUpdate(null); }} disabled={working}>{t('education.student.continueCurrent')}</Button>
+          <Button variant="contained" onClick={adoptUpdate} disabled={working}>{working ? t('education.student.saving') : t('education.student.updateCourse')}</Button>
+        </DialogActions>
+      </Dialog>
     </PageContainer>
   );
 }

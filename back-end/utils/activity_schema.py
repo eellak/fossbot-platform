@@ -39,6 +39,8 @@ MISSION_CONDITION_TYPES = {
 MISSION_OPERATORS = {"lt", "lte", "eq", "gte", "gt"}
 MISSION_INCIDENTS = {"collision", "fall", "runtime_error"}
 FORBIDDEN_EXECUTABLE_FIELDS = {"code", "script", "expression", "javascript", "python", "regex"}
+RICH_TEXT_NODES = {"doc", "paragraph", "heading", "bulletList", "orderedList", "listItem", "text", "hardBreak"}
+RICH_TEXT_MARKS = {"bold", "italic"}
 
 # Stable student-facing channels. Teachers select these IDs; getter names are
 # deliberately not part of the authored activity schema.
@@ -81,8 +83,48 @@ def _required_text(value: Any, field: str) -> str:
 def _validate_rich_content(content: Any, field: str = "content") -> None:
     if not isinstance(content, (str, dict)):
         raise ValueError(f"{field} must be Tiptap JSON or text")
-    if isinstance(content, dict) and content.get("type") != "doc":
+    if isinstance(content, str):
+        if len(content) > 100_000:
+            raise ValueError(f"{field} is too long")
+        return
+    if content.get("type") != "doc":
         raise ValueError(f"{field} Tiptap content must be a document")
+
+    node_count = 0
+    text_length = 0
+
+    def visit(node: Any, depth: int = 0) -> None:
+        nonlocal node_count, text_length
+        if not isinstance(node, dict) or node.get("type") not in RICH_TEXT_NODES:
+            raise ValueError(f"{field} contains unsupported rich text")
+        node_count += 1
+        if node_count > 5_000 or depth > 30:
+            raise ValueError(f"{field} is too complex")
+        node_type = node["type"]
+        allowed_fields = {"type", "content"}
+        if node_type == "text":
+            allowed_fields.update({"text", "marks"})
+            if not isinstance(node.get("text", ""), str):
+                raise ValueError(f"{field} text nodes must contain text")
+            text_length += len(node.get("text", ""))
+            marks = node.get("marks", [])
+            if not isinstance(marks, list) or any(not isinstance(mark, dict) or mark.get("type") not in RICH_TEXT_MARKS or set(mark) != {"type"} for mark in marks):
+                raise ValueError(f"{field} contains unsupported formatting")
+        elif node_type == "heading":
+            allowed_fields.add("attrs")
+            if node.get("attrs") not in ({"level": 2}, {"level": 3}):
+                raise ValueError(f"{field} contains an unsupported heading")
+        if set(node) - allowed_fields:
+            raise ValueError(f"{field} contains unsupported rich text fields")
+        children = node.get("content", [])
+        if not isinstance(children, list):
+            raise ValueError(f"{field} rich text content must be a list")
+        for child in children:
+            visit(child, depth + 1)
+
+    visit(content)
+    if text_length > 100_000:
+        raise ValueError(f"{field} is too long")
 
 
 def _validate_options(activity: dict[str, Any], multiple: bool) -> None:
