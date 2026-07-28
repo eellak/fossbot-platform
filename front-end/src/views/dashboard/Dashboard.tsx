@@ -8,9 +8,11 @@ import { Box, Grid } from '@mui/material';
 import SlideShow from 'src/components/cards-slide-show/SlideShow';
 import { useTranslation } from 'react-i18next';
 import CourseResumeCard from 'src/components/dashboard/CourseResumeCard';
+import { useFeatureFlags } from 'src/config/FeatureFlags';
 
 const Modern = () => {
   const { t } = useTranslation();
+  const { marketplace } = useFeatureFlags();
 
   return (
     <PageContainer title={t('dashboard-page.title')} description={t('dashboard-page.description')}>
@@ -23,8 +25,8 @@ const Modern = () => {
           <Grid item xs={12} lg={12} >
             <ProjectsCard />
           </Grid>
-          <Grid item xs={12} xl={5}><UserGitHubStagesPanel embedded preview /></Grid>
-          <Grid item xs={12} xl={7}><StageMarketplacePanel embedded preview /></Grid>
+          <Grid item xs={12} xl={marketplace ? 5 : 12}><UserGitHubStagesPanel embedded preview /></Grid>
+          {marketplace && <Grid item xs={12} xl={7}><StageMarketplacePanel embedded preview /></Grid>}
         </Grid>
       </Box>
     </PageContainer>

@@ -34,6 +34,7 @@ Do not ask users to select or install the marketplace repository.
 Configure these variables for marketplace publishing and browsing:
 
 ```txt
+FOSSBOT_MARKETPLACE_ENABLED=false
 FOSSBOT_MARKETPLACE_OWNER=jgenc
 FOSSBOT_MARKETPLACE_REPO=fossbot-marketplace
 FOSSBOT_MARKETPLACE_BRANCH=main
@@ -41,6 +42,8 @@ FOSSBOT_MARKETPLACE_INDEX_PATH=index.json
 FOSSBOT_MARKETPLACE_RAW_INDEX_URL=https://raw.githubusercontent.com/jgenc/fossbot-marketplace/main/index.json
 FOSSBOT_MARKETPLACE_INSTALLATION_ID=
 ```
+
+`FOSSBOT_MARKETPLACE_ENABLED` is the deployment-level launch switch. It defaults to disabled. Set it to `true` and restart the backend to expose marketplace browsing, publishing, moderation, and verification in the frontend and API. Personal GitHub stage storage remains available while the marketplace is disabled.
 
 `FOSSBOT_MARKETPLACE_INSTALLATION_ID` is optional. Leave it blank to discover the installation from the configured marketplace repository.
 

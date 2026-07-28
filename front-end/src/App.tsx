@@ -14,6 +14,7 @@ import Footer from './components/landingpage/footer/Footer';
 import DevicesPage from './components/devices-page/DevicesPage';
 import { useTranslation } from 'react-i18next';
 import { RobotConnectionProvider } from './robot/RobotConnectionContext';
+import { FeatureFlagsProvider } from './config/FeatureFlags';
 
 function App() {
   const routing = useRoutes(Router);
@@ -38,15 +39,17 @@ function App() {
 
   return (
     <AuthProvider>
-      <ThemeProvider theme={theme}>
-        <RTL direction={customizer.activeDir}>
-          <CssBaseline />
-          <MatomoTracker />
-          <RobotConnectionProvider>
-            <ScrollToTop>{routing}</ScrollToTop>
-          </RobotConnectionProvider>
-        </RTL>
-      </ThemeProvider>
+      <FeatureFlagsProvider>
+        <ThemeProvider theme={theme}>
+          <RTL direction={customizer.activeDir}>
+            <CssBaseline />
+            <MatomoTracker />
+            <RobotConnectionProvider>
+              <ScrollToTop>{routing}</ScrollToTop>
+            </RobotConnectionProvider>
+          </RTL>
+        </ThemeProvider>
+      </FeatureFlagsProvider>
     </AuthProvider>
   );
 }

@@ -29,6 +29,7 @@ export interface EditorTopBarProps {
   providerLabel?: string;
   providerConnected?: boolean;
   providerBusy?: boolean;
+  marketplaceEnabled?: boolean;
   marketplaceBusy?: boolean;
   marketplaceStatusLoading?: boolean;
   marketplacePullRequest?: { number?: number | null; url?: string | null; state?: string | null } | null;
@@ -122,6 +123,7 @@ export function EditorTopBar({
   providerLabel,
   providerConnected,
   providerBusy,
+  marketplaceEnabled = false,
   marketplaceBusy,
   marketplaceStatusLoading,
   marketplacePullRequest,
@@ -244,7 +246,7 @@ export function EditorTopBar({
         {!providerConnected && <MenuItem disabled={providerBusy} onClick={() => { github.closeMenu(); onConnectProvider(); }}>{providerBusy ? 'Connecting…' : MARKETPLACE_COPY.connectGitHub}</MenuItem>}
         <MenuItem disabled={providerBusy} onClick={() => { github.closeMenu(); onSaveProvider(); }}>{providerBusy ? 'Saving…' : MARKETPLACE_COPY.saveToGitHub}</MenuItem>
         <MenuItem disabled={providerBusy} onClick={() => { github.closeMenu(); onOpenProvider(); }}>{MARKETPLACE_COPY.openFromGitHub}</MenuItem>
-        <MenuItem
+        {marketplaceEnabled && <MenuItem
           disabled={marketplaceBusy}
           onClick={() => { github.closeMenu(); onPublishMarketplace(); }}
           sx={marketplacePublishReady ? {
@@ -259,9 +261,9 @@ export function EditorTopBar({
         >
           {marketplacePublishReady && <PublishIcon fontSize="small" sx={{ mr: 1 }} />}
           {marketplaceBusy ? 'Publishing…' : marketplacePublishLabel}
-        </MenuItem>
-        {marketplacePullRequest?.url && <Divider />}
-        {marketplacePullRequest?.url && (
+        </MenuItem>}
+        {marketplaceEnabled && marketplacePullRequest?.url && <Divider />}
+        {marketplaceEnabled && marketplacePullRequest?.url && (
           <MenuItem component="a" href={marketplacePullRequest.url} target="_blank" rel="noreferrer" onClick={github.closeMenu}>
             Marketplace PR #{marketplacePullRequest.number || '—'} · {marketplacePrStateLabel(marketplacePullRequest.state)}
           </MenuItem>

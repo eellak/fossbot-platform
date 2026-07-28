@@ -41,6 +41,7 @@ import { OpenFromProviderDialog } from 'src/stages/OpenFromProviderDialog';
 import { getMarketplaceStageStatus, publishStageToMarketplace, MarketplaceRequestError, type MarketplaceStageStatusResponse, type PublishMarketplaceResponse } from 'src/stages/MarketplaceApi';
 import { PublishToMarketplaceDialog, type PublishMarketplaceValues } from 'src/stages/PublishToMarketplaceDialog';
 import { invalidateMarketplaceFirstPage, invalidateMyMarketplaceStages, invalidateUserStages, refreshMarketplaceFirstPage, refreshMyMarketplaceStages, refreshUserStages, stageListUserKey, subscribeUserStages, userStagesSnapshot } from 'src/stages/stageListCache';
+import { useFeatureFlags } from 'src/config/FeatureFlags';
 
 function userScope(user: ReturnType<typeof useAuth>['user']): string {
   if (!user) return 'anonymous';
@@ -349,6 +350,7 @@ function GitHubStageLoadScreen({ state, onRetry, onBack, onOpenPicker }: { state
 
 const StageBuilderPage = () => {
   const { user, token } = useAuth();
+  const { marketplace: marketplaceEnabled, ready: featureFlagsReady } = useFeatureFlags();
   const navigate = useNavigate();
   const scope = useMemo(() => userScope(user), [user]);
   const [prefs, setPrefs] = useState<StageBuilderPreferences>(() => readStageBuilderPreferences(scope));
@@ -463,7 +465,7 @@ const StageBuilderPage = () => {
   };
 
   const refreshMarketplaceStatus = async ({ force = false }: RefreshCacheOptions = {}) => {
-    if (!token || !remoteStage || remoteStage.private) {
+    if (!marketplaceEnabled || !token || !remoteStage || remoteStage.private) {
       marketplaceStatusCacheRef.current = { key: '', checkedAt: 0 };
       setMarketplaceStatus(null);
       setMarketplaceStatusLoading(false);
@@ -488,7 +490,7 @@ const StageBuilderPage = () => {
   };
 
   useEffect(() => { refreshProviderStatus(); }, [token]);
-  useEffect(() => { refreshMarketplaceStatus(); }, [token, remoteStage?.repoOwner, remoteStage?.repoName, remoteStage?.private]);
+  useEffect(() => { refreshMarketplaceStatus(); }, [marketplaceEnabled, token, remoteStage?.repoOwner, remoteStage?.repoName, remoteStage?.private]);
 
   useEffect(() => {
     if (!stageListUser) {
@@ -529,7 +531,7 @@ const StageBuilderPage = () => {
   }, []);
 
   useEffect(() => {
-    if (!githubDeepLinkTarget) return undefined;
+    if (!featureFlagsReady || !githubDeepLinkTarget) return undefined;
     if (!token) {
       setGithubDeepLinkLoad({
         status: 'error',
@@ -566,7 +568,7 @@ const StageBuilderPage = () => {
           private: loaded.private,
           visibility: loaded.visibility,
         });
-        if (githubDeepLinkTarget.action === 'publish') setPublishMarketplaceOpen(true);
+        if (marketplaceEnabled && githubDeepLinkTarget.action === 'publish') setPublishMarketplaceOpen(true);
         window.history.replaceState(null, '', window.location.pathname);
         setGithubDeepLinkLoad({ status: 'idle' });
       } catch (error) {
@@ -584,7 +586,7 @@ const StageBuilderPage = () => {
 
     openDeepLinkedStage();
     return () => { cancelled = true; };
-  }, [githubDeepLinkRetry, githubDeepLinkTarget, token]);
+  }, [featureFlagsReady, githubDeepLinkRetry, githubDeepLinkTarget, marketplaceEnabled, token]);
 
   useEffect(() => {
     setPrefs(readStageBuilderPreferences(scope));
@@ -1073,6 +1075,7 @@ const StageBuilderPage = () => {
   };
 
   const handlePublishMarketplace = async ({ title, description, tags, previewDataUrl, sharingLicense, commitMessage }: PublishMarketplaceValues) => {
+    if (!marketplaceEnabled) return;
     if (!token) {
       setMarketplaceError('Sign in before publishing to the marketplace.');
       return;
@@ -1132,6 +1135,7 @@ const StageBuilderPage = () => {
   };
 
   const handleOpenMarketplaceDialog = () => {
+    if (!marketplaceEnabled) return;
     setMarketplaceError('');
     setMarketplaceResult(null);
     setPublishMarketplaceOpen(true);
@@ -1487,6 +1491,7 @@ const StageBuilderPage = () => {
         providerLabel={providerLabel}
         providerConnected={!!providerStatus?.connected}
         providerBusy={providerSaving || providerStatusLoading}
+        marketplaceEnabled={marketplaceEnabled}
         marketplaceBusy={marketplacePublishing}
         marketplaceStatusLoading={marketplaceStatusLoading}
         marketplacePullRequest={marketplacePullRequest}
@@ -1729,7 +1734,7 @@ const StageBuilderPage = () => {
         onOpenStage={handleOpenProviderStage}
       />
 
-      <PublishToMarketplaceDialog
+      {marketplaceEnabled && <PublishToMarketplaceDialog
         open={publishMarketplaceOpen}
         stageTitle={stage.title}
         stageDescription={stage.description}
@@ -1741,7 +1746,7 @@ const StageBuilderPage = () => {
         onClose={() => setPublishMarketplaceOpen(false)}
         onSaveToGitHub={() => { setPublishMarketplaceOpen(false); setSaveProviderOpen(true); }}
         onPublish={handlePublishMarketplace}
-      />
+      />}
 
       <Snackbar open={!!message} autoHideDuration={3600} onClose={() => setMessage('')} message={message} />
     </Box>

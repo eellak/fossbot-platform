@@ -9,6 +9,7 @@ import { useAuth } from 'src/authentication/AuthProvider';
 import { getModerationOverrides, getModerationReports, getMarketplacePermissions, getVerificationQueue, restoreMarketplaceStage, setModerationOverride, submitMarketplaceVerification, type MarketplaceModerationOverride, type MarketplaceReport, type MarketplaceVerificationQueueItem, type MarketplaceVerificationChecklist } from 'src/stages/MarketplaceApi';
 import { useSearchParams } from 'react-router-dom';
 import { MARKETPLACE_COPY, marketplaceReportCategoryLabel } from 'src/stages/marketplaceCopy';
+import { useFeatureFlags } from 'src/config/FeatureFlags';
 
 const emptyChecklist: MarketplaceVerificationChecklist = {
   stageRuns: false,
@@ -174,19 +175,27 @@ function ModerationWorkspace({ canModerate, canVerify }: { canModerate: boolean;
 
 export default function StagesPage() {
   const { token } = useAuth();
+  const { marketplace } = useFeatureFlags();
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedTab = searchParams.get('tab');
   const [canModerate, setCanModerate] = useState(false);
   const [canVerify, setCanVerify] = useState(false);
-  const tab = requestedTab === 'explore' || (requestedTab === 'moderation' && (canModerate || canVerify)) ? requestedTab : 'mine';
-  useEffect(() => { if (token) void getMarketplacePermissions(token).then((permissions) => { setCanModerate(permissions.roles.includes('moderator')); setCanVerify(permissions.roles.includes('verifier')); }).catch(() => { setCanModerate(false); setCanVerify(false); }); }, [token]);
+  const tab = marketplace && (requestedTab === 'explore' || (requestedTab === 'moderation' && (canModerate || canVerify))) ? requestedTab : 'mine';
+  useEffect(() => {
+    if (!marketplace || !token) {
+      setCanModerate(false);
+      setCanVerify(false);
+      return;
+    }
+    void getMarketplacePermissions(token).then((permissions) => { setCanModerate(permissions.roles.includes('moderator')); setCanVerify(permissions.roles.includes('verifier')); }).catch(() => { setCanModerate(false); setCanVerify(false); });
+  }, [marketplace, token]);
   return <PageContainer title="Stages" description="Discover, publish, and manage FOSSBot stages.">
     <Stack spacing={2}><Box><Typography variant="h4">Stages</Typography><Typography variant="body2" color="text.secondary">Discover public stages or manage your GitHub-backed work.</Typography></Box>
-      <Tabs value={tab} onChange={(_, value) => { const next = new URLSearchParams(searchParams); next.set('tab', value); next.delete('stage'); setSearchParams(next); }} aria-label="Stages sections"><Tab value="mine" label={MARKETPLACE_COPY.myStages} /><Tab value="explore" label="Explore" />{(canModerate || canVerify) && <Tab value="moderation" label="Moderation" />}</Tabs>
+      <Tabs value={tab} onChange={(_, value) => { const next = new URLSearchParams(searchParams); next.set('tab', value); next.delete('stage'); setSearchParams(next); }} aria-label="Stages sections"><Tab value="mine" label={MARKETPLACE_COPY.myStages} />{marketplace && <Tab value="explore" label="Explore" />}{marketplace && (canModerate || canVerify) && <Tab value="moderation" label="Moderation" />}</Tabs>
       <Box sx={{ pt: 1 }}>
-      {tab === 'explore' && <StageMarketplacePanel embedded />}
+      {marketplace && tab === 'explore' && <StageMarketplacePanel embedded />}
       {tab === 'mine' && <UserGitHubStagesPanel embedded />}
-      {tab === 'moderation' && (canModerate || canVerify) && <ModerationWorkspace canModerate={canModerate} canVerify={canVerify} />}
+      {marketplace && tab === 'moderation' && (canModerate || canVerify) && <ModerationWorkspace canModerate={canModerate} canVerify={canVerify} />}
       </Box>
     </Stack>
   </PageContainer>;

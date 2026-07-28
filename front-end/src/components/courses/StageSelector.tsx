@@ -5,8 +5,9 @@ import { useAuth } from 'src/authentication/AuthProvider';
 import type { StageReference } from 'src/courses/types';
 import type { MarketplaceStageEntry } from 'src/stages/MarketplaceApi';
 import type { ProviderStageListItem } from 'src/stages/StagesApi';
-import { marketplaceFirstPageSnapshot, refreshStageLists, stageListUserKey, subscribeMarketplaceFirstPage, subscribeUserStages, userStagesSnapshot } from 'src/stages/stageListCache';
+import { marketplaceFirstPageSnapshot, refreshStageLists, refreshUserStages, stageListUserKey, subscribeMarketplaceFirstPage, subscribeUserStages, userStagesSnapshot } from 'src/stages/stageListCache';
 import { GitHubIdentity, StageCard } from 'src/stages/StageCard';
+import { useFeatureFlags } from 'src/config/FeatureFlags';
 
 const builtIns: StageReference[] = [
   { sourceType: 'default', title: 'White field', url: '/js-simulator/stages/stage_white_rect.json' },
@@ -40,6 +41,7 @@ function marketplaceReference(stage: MarketplaceStageEntry): StageReference {
 
 export default function StageSelector({ token, value, onChange, labels }: StageSelectorProps) {
   const { user } = useAuth();
+  const { marketplace: marketplaceEnabled } = useFeatureFlags();
   const userKey = stageListUserKey(user);
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<'builtIn' | 'github' | 'marketplace'>('builtIn');
@@ -59,12 +61,19 @@ export default function StageSelector({ token, value, onChange, labels }: StageS
       const snapshot = userStagesSnapshot(userKey);
       setGithub(snapshot.data || []); setLoading((current) => current || snapshot.refreshing); setError((current) => snapshot.refreshError || current);
     };
-    syncMarketplace(); syncGithub();
-    const unsubMarketplace = subscribeMarketplaceFirstPage(syncMarketplace);
+    if (marketplaceEnabled) syncMarketplace();
+    else setMarketplace([]);
+    syncGithub();
+    const unsubMarketplace = marketplaceEnabled ? subscribeMarketplaceFirstPage(syncMarketplace) : () => undefined;
     const unsubGithub = userKey ? subscribeUserStages(userKey, syncGithub) : () => undefined;
-    void refreshStageLists(userKey, token);
+    if (marketplaceEnabled) void refreshStageLists(userKey, token);
+    else if (userKey && token) void refreshUserStages(userKey, token);
     return () => { unsubMarketplace(); unsubGithub(); };
-  }, [token, userKey]);
+  }, [marketplaceEnabled, token, userKey]);
+
+  useEffect(() => {
+    if (!marketplaceEnabled && tab === 'marketplace') setTab('builtIn');
+  }, [marketplaceEnabled, tab]);
 
   const references = useMemo(() => ({ builtIn: builtIns, github: github.map(githubReference), marketplace: marketplace.map(marketplaceReference) }), [github, marketplace]);
   const filtered = references[tab].filter((stage) => `${stage.title || ''} ${stage.repoOwner || ''} ${stage.repoName || ''}`.toLowerCase().includes(query.trim().toLowerCase()));
@@ -85,9 +94,9 @@ export default function StageSelector({ token, value, onChange, labels }: StageS
         <Stack spacing={2}>
           <Stack direction={{ xs: 'column', sm: 'row' }} gap={1} justifyContent="space-between">
             <TextField size="small" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={labels.search} InputProps={{ startAdornment: <IconSearch size={17} /> }} />
-            <Button size="small" startIcon={loading ? <CircularProgress size={14} /> : <IconRefresh size={16} />} disabled={loading} onClick={() => { setError(''); void refreshStageLists(userKey, token, { force: true }); }}>{labels.refresh}</Button>
+            <Button size="small" startIcon={loading ? <CircularProgress size={14} /> : <IconRefresh size={16} />} disabled={loading} onClick={() => { setError(''); if (marketplaceEnabled) void refreshStageLists(userKey, token, { force: true }); else if (userKey && token) void refreshUserStages(userKey, token, { force: true }); }}>{labels.refresh}</Button>
           </Stack>
-          <Tabs value={tab} onChange={(_, next) => setTab(next)} variant="scrollable"><Tab value="builtIn" label={labels.builtIn} /><Tab value="github" label={labels.github} /><Tab value="marketplace" label={labels.marketplace} /></Tabs>
+          <Tabs value={tab} onChange={(_, next) => setTab(next)} variant="scrollable"><Tab value="builtIn" label={labels.builtIn} /><Tab value="github" label={labels.github} />{marketplaceEnabled && <Tab value="marketplace" label={labels.marketplace} />}</Tabs>
           {error && <Alert severity="warning">{labels.unavailable}</Alert>}
           {loading && !filtered.length ? <Box sx={{ py: 8, textAlign: 'center' }}><CircularProgress size={24} /><Typography variant="body2" sx={{ mt: 1 }}>{labels.loading}</Typography></Box> : filtered.length ? <Grid container spacing={2}>{filtered.map((stage) => {
             const marketplaceEntry = stage.sourceType === 'marketplace' ? marketplace.find((entry) => keyOf(marketplaceReference(entry)) === keyOf(stage)) : null;

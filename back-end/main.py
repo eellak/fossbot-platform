@@ -49,8 +49,10 @@ from routers.stage_sources import (
     stage_repo_list_item,
 )
 from routers.marketplace import cached_public_marketplace_index, router as marketplace_router
+from routers.features import router as features_router
 from routers.courses import router as courses_router
 from utils.github_app_auth import create_github_app_jwt
+from utils.feature_flags import require_marketplace_enabled
 from utils.marketplace_schema import marketplace_entry_path
 from utils.source_providers import get_provider
 from utils.source_providers.github_app import GitHubApiError
@@ -76,6 +78,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.include_router(stage_sources_router)
+app.include_router(features_router)
 app.include_router(marketplace_router)
 app.include_router(courses_router)
 
@@ -579,6 +582,7 @@ async def update_marketplace_roles(
     current_user: User = Depends(get_current_user),
     db: SessionLocal = Depends(get_db),
 ):
+    require_marketplace_enabled()
     if current_user.role != UserRole.ADMIN:
         raise HTTPException(status_code=403, detail="Not authorized to manage marketplace roles")
     requested = set(role_update.roles)

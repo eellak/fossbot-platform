@@ -23,6 +23,7 @@ import { marketplaceFirstPageSnapshot, refreshMarketplaceFirstPage, refreshUserS
 import { GitHubIdentity, StageCard, StageCardSkeleton } from 'src/stages/StageCard';
 import { getGitHubLoginUrl, getGitHubProviderStatus, type GitHubProviderStatus } from 'src/stages/ProviderAuthApi';
 import { MARKETPLACE_COPY } from 'src/stages/marketplaceCopy';
+import { useFeatureFlags } from 'src/config/FeatureFlags';
 
 export type StageSelectionSource = 'default' | 'github' | 'marketplace';
 
@@ -143,6 +144,7 @@ function emitStageSelection(stage: StageSelection): void {
 
 const CardDialog: React.FC<CardDialogProps> = ({ open, onClose, onSelect, onSelectStage }) => {
   const { token, user } = useAuth();
+  const { marketplace: marketplaceEnabled } = useFeatureFlags();
   const userKey = stageListUserKey(user);
   const [tab, setTab] = useState<StageSelectionSource>('default');
   const [userStages, setUserStages] = useState<ProviderStageListItem[]>([]);
@@ -196,7 +198,10 @@ const CardDialog: React.FC<CardDialogProps> = ({ open, onClose, onSelect, onSele
   };
 
   useEffect(() => {
-    if (!open) return undefined;
+    if (!open || !marketplaceEnabled) {
+      setMarketplaceStages([]);
+      return undefined;
+    }
     const sync = () => {
       const snapshot = marketplaceFirstPageSnapshot();
       setMarketplaceStages(snapshot.data?.stages || []);
@@ -207,7 +212,7 @@ const CardDialog: React.FC<CardDialogProps> = ({ open, onClose, onSelect, onSele
     const unsubscribe = subscribeMarketplaceFirstPage(sync);
     void refreshMarketplaceFirstPage();
     return unsubscribe;
-  }, [open]);
+  }, [marketplaceEnabled, open]);
 
   const tabCounts = useMemo(() => ({
     default: defaultStages.length,
@@ -287,7 +292,7 @@ const CardDialog: React.FC<CardDialogProps> = ({ open, onClose, onSelect, onSele
         <Tabs value={tab} onChange={(_event, value) => setTab(value)} sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}>
           <Tab value="default" label={<span>Built-in <Typography component="span" variant="caption" color="text.secondary">{tabCounts.default}</Typography></span>} />
           <Tab value="github" label={<span>{MARKETPLACE_COPY.myStages} <Typography component="span" variant="caption" color="text.secondary">{tabCounts.github}</Typography></span>} />
-          <Tab value="marketplace" label={<span>{MARKETPLACE_COPY.marketplace} <Typography component="span" variant="caption" color="text.secondary">{tabCounts.marketplace}</Typography></span>} />
+          {marketplaceEnabled && <Tab value="marketplace" label={<span>{MARKETPLACE_COPY.marketplace} <Typography component="span" variant="caption" color="text.secondary">{tabCounts.marketplace}</Typography></span>} />}
         </Tabs>
 
         {tab === 'default' && (
@@ -329,7 +334,7 @@ const CardDialog: React.FC<CardDialogProps> = ({ open, onClose, onSelect, onSele
           </Stack>
         )}
 
-        {tab === 'marketplace' && (
+        {marketplaceEnabled && tab === 'marketplace' && (
           <Stack spacing={2}>
             {marketplaceError && <Alert severity={marketplaceStages.length ? "warning" : "error"}>{marketplaceError}</Alert>}
             {marketplaceLoading ? (

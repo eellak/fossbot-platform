@@ -27,6 +27,7 @@ import { useTranslation } from 'react-i18next';
 import { UserRole } from 'src/authentication/AuthInterfaces';
 import googleIcon from 'src/assets/images/svgs/google-icon.svg';
 import githubIcon from 'src/assets/images/svgs/github-icon.svg';
+import { useFeatureFlags } from 'src/config/FeatureFlags';
 
 interface UsersCardProps {
   onShowSuccessAlert: (message: string) => void;
@@ -38,6 +39,7 @@ const UsersCard = ({ onShowSuccessAlert, onShowErrorAlert }: UsersCardProps) => 
   const theme = useTheme();
 
   const auth = useAuth();
+  const { marketplace } = useFeatureFlags();
 
   const [users, setUsers] = useState([]);
 
@@ -268,9 +270,9 @@ const UsersCard = ({ onShowSuccessAlert, onShowErrorAlert }: UsersCardProps) => 
                     {t('edit')}
                   </Typography>
                 </TableCell>
-                <TableCell align="center">
+                {marketplace && <TableCell align="center">
                   <Typography variant="subtitle2" fontWeight={600}>Marketplace roles</Typography>
-                </TableCell>
+                </TableCell>}
                 <TableCell align="center">
                   <Typography variant="subtitle2" fontWeight={600}>
                     {t('delete')}
@@ -281,7 +283,7 @@ const UsersCard = ({ onShowSuccessAlert, onShowErrorAlert }: UsersCardProps) => 
             <TableBody>
               {users.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={11}>
+                  <TableCell colSpan={marketplace ? 11 : 10}>
                     <Typography>{t('admin-panel.noUsersFound')} </Typography>
                   </TableCell>
                 </TableRow>
@@ -340,7 +342,7 @@ const UsersCard = ({ onShowSuccessAlert, onShowErrorAlert }: UsersCardProps) => 
                         <MenuItem value={'admin'}>{t('roles.admin')}</MenuItem>
                       </Select>
                     </TableCell>
-                    <TableCell align="center">
+                    {marketplace && <TableCell align="center">
                       <Stack spacing={0} alignItems="flex-start" sx={{ minWidth: 132 }}>
                         {(['verifier', 'moderator'] as const).map((role) => (
                           <Box key={role} sx={{ display: 'flex', alignItems: 'center' }}>
@@ -354,7 +356,7 @@ const UsersCard = ({ onShowSuccessAlert, onShowErrorAlert }: UsersCardProps) => 
                           </Box>
                         ))}
                       </Stack>
-                    </TableCell>
+                    </TableCell>}
                     <TableCell align="center">
                       {isLocalAccount(user) && (
                         <Fab

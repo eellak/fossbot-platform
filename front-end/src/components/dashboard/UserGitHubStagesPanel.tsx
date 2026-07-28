@@ -38,6 +38,7 @@ import {
 } from 'src/stages/stageListCache';
 import { formatStageRelativeTime, GitHubIdentity } from 'src/stages/StageCard';
 import { MARKETPLACE_COPY } from 'src/stages/marketplaceCopy';
+import { useFeatureFlags } from 'src/config/FeatureFlags';
 
 interface MyStageRow {
   stage: ProviderStageListItem;
@@ -74,6 +75,7 @@ function providerStageFromPublication(publication: MyMarketplaceStage): Provider
 
 export default function UserGitHubStagesPanel({ embedded = false, preview = false }: { embedded?: boolean; preview?: boolean }) {
   const { token, user } = useAuth();
+  const { marketplace } = useFeatureFlags();
   const userKey = stageListUserKey(user);
   const [status, setStatus] = useState<GitHubProviderStatus | null>(null);
   const [stages, setStages] = useState<ProviderStageListItem[]>([]);
@@ -119,18 +121,19 @@ export default function UserGitHubStagesPanel({ embedded = false, preview = fals
       setPublicationsWarning(snapshot.refreshError || '');
     };
     syncStages();
-    syncPublications();
+    if (marketplace) syncPublications();
+    else setPublications([]);
     const unsubscribeStages = subscribeUserStages(userKey, syncStages);
-    const unsubscribePublications = subscribeMyMarketplaceStages(userKey, syncPublications);
+    const unsubscribePublications = marketplace ? subscribeMyMarketplaceStages(userKey, syncPublications) : () => undefined;
     return () => { unsubscribeStages(); unsubscribePublications(); };
-  }, [userKey]);
+  }, [marketplace, userKey]);
 
   useEffect(() => {
     if (!token) return undefined;
     const controller = new AbortController();
     setLoading(true);
     setError('');
-    if (userKey) void refreshMyMarketplaceStages(userKey, token);
+    if (marketplace && userKey) void refreshMyMarketplaceStages(userKey, token);
     getGitHubProviderStatus(token)
       .then(async (payload) => {
         if (controller.signal.aborted) return;
@@ -142,7 +145,7 @@ export default function UserGitHubStagesPanel({ embedded = false, preview = fals
       })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [token, userKey]);
+  }, [marketplace, token, userKey]);
 
   const rows = useMemo<MyStageRow[]>(() => {
     const byKey = new Map<string, MyStageRow>();
@@ -156,8 +159,8 @@ export default function UserGitHubStagesPanel({ embedded = false, preview = fals
   }, [publications, stages]);
   const visibleRows = preview ? rows.slice(0, 4) : rows;
   const shouldShowConnectAction = !loading && (!status?.connected || status?.needsReconnect);
-  const refreshingStages = userStagesRefreshing || publicationsRefreshing;
-  const stageListWarning = publicationsWarning || userStagesWarning;
+  const refreshingStages = userStagesRefreshing || (marketplace && publicationsRefreshing);
+  const stageListWarning = (marketplace && publicationsWarning) || userStagesWarning;
 
   const requestUnpublish = async () => {
     if (!token || !userKey || !unpublishStage) return;
@@ -244,7 +247,7 @@ export default function UserGitHubStagesPanel({ embedded = false, preview = fals
                   <Box sx={{ minWidth: 0 }}>
                     <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" sx={{ mb: 0.5 }}>
                       <Typography variant="subtitle2" fontWeight={800}>{stage.title || stage.repoName}</Typography>
-                      <Chip size="small" label={publication ? MARKETPLACE_COPY.published : MARKETPLACE_COPY.unpublished} color={publication ? 'primary' : 'default'} variant="outlined" />
+                      {marketplace && <Chip size="small" label={publication ? MARKETPLACE_COPY.published : MARKETPLACE_COPY.unpublished} color={publication ? 'primary' : 'default'} variant="outlined" />}
                     </Stack>
                     <Stack direction="row" spacing={1} alignItems="center" sx={{ minWidth: 0 }}>
                       <GitHubIdentity username={stage.repoOwner} suffix={`/${stage.repoName}`} />
@@ -256,11 +259,11 @@ export default function UserGitHubStagesPanel({ embedded = false, preview = fals
                     <Button component="a" href={stageEditorUrl(stage)} size="small" variant="contained" startIcon={<EditIcon />}>Open in editor</Button>
                     {!preview && !stage.private && <Button component="a" href={stageTestUrl(stage)} target="_blank" rel="noreferrer" size="small" variant="outlined" startIcon={<PlayArrowIcon />}>Test</Button>}
                     {!preview && <Button component="a" href={stage.repoUrl} target="_blank" rel="noreferrer" size="small" variant="outlined" endIcon={<OpenInNewIcon />}>Source</Button>}
-                    {!preview && !publication && !stage.private && <Button component="a" href={stageEditorUrl(stage, 'publish')} size="small">Publish</Button>}
-                    {!preview && publication?.lifecycle.state === 'changes_ready_to_publish' && <Button component="a" href={stageEditorUrl(stage, 'publish')} size="small">Open to publish</Button>}
-                    {!preview && reviewRequest?.url && <Button component="a" href={reviewRequest.url} target="_blank" rel="noreferrer" size="small" endIcon={<OpenInNewIcon />}>{unpublishRequested ? 'Unpublish review' : 'Publish review'} · {reviewRequest.state || 'open'}</Button>}
-                    {!preview && publication && !publication.entry.badges.verified && <Button size="small" disabled={verificationBusy === key} onClick={() => toggleVerification(publication)}>{verificationBusy === key ? 'Updating…' : publication.verificationRequest ? 'Cancel verification' : 'Request verification'}</Button>}
-                    {!preview && publication && (unpublishRequested
+                    {marketplace && !preview && !publication && !stage.private && <Button component="a" href={stageEditorUrl(stage, 'publish')} size="small">Publish</Button>}
+                    {marketplace && !preview && publication?.lifecycle.state === 'changes_ready_to_publish' && <Button component="a" href={stageEditorUrl(stage, 'publish')} size="small">Open to publish</Button>}
+                    {marketplace && !preview && reviewRequest?.url && <Button component="a" href={reviewRequest.url} target="_blank" rel="noreferrer" size="small" endIcon={<OpenInNewIcon />}>{unpublishRequested ? 'Unpublish review' : 'Publish review'} · {reviewRequest.state || 'open'}</Button>}
+                    {marketplace && !preview && publication && !publication.entry.badges.verified && <Button size="small" disabled={verificationBusy === key} onClick={() => toggleVerification(publication)}>{verificationBusy === key ? 'Updating…' : publication.verificationRequest ? 'Cancel verification' : 'Request verification'}</Button>}
+                    {marketplace && !preview && publication && (unpublishRequested
                       ? <Button size="small" disabled={verificationBusy === key} onClick={() => cancelUnpublish(publication)}>{verificationBusy === key ? 'Cancelling…' : 'Cancel unpublish request'}</Button>
                       : <Button size="small" color="error" startIcon={<DeleteOutlineIcon />} onClick={() => { setUnpublishReason(''); setUnpublishStage(publication); }}>Unpublish</Button>)}
                   </Stack>
