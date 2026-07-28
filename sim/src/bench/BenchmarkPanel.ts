@@ -1,6 +1,7 @@
 import { stringify } from 'yaml'
 import { STAGE_NAMES } from '../stages'
 import { makeDraggable } from '../ui/dragUtils'
+import { CAMERA_MODES, CAMERA_MODE_LABELS } from '../ui/cameraTypes'
 import { cloneBenchmarkPreset, loadBenchmarkPresets } from './configs'
 import { formatBenchmarkMarkdown } from './runner'
 import type { BenchmarkMode, BenchmarkPreset, BenchmarkResults } from './types'
@@ -390,10 +391,10 @@ export function createBenchmarkPanel(
 
       const cameraInput = document.createElement('select')
       styleSelect(cameraInput)
-      for (const mode of ['orbit', 'follow', 'top'] as const) {
+      for (const mode of CAMERA_MODES) {
         const option = document.createElement('option')
         option.value = mode
-        option.textContent = mode
+        option.textContent = CAMERA_MODE_LABELS[mode]
         cameraInput.appendChild(option)
       }
       cameraInput.value = draft.cameraMode

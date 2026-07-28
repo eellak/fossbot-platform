@@ -1,4 +1,4 @@
-import type { CameraMode } from './cameraTypes'
+import { CAMERA_MODE_LABELS, type CameraMode } from './cameraTypes'
 import { makeDraggable } from './dragUtils'
 
 export interface CameraControlsHandle {
@@ -40,7 +40,7 @@ export function createCameraControls(container: HTMLElement, onCycle: () => void
 
   return {
     setModeLabel(mode) {
-      button.textContent = `View: ${mode === 'orbit' ? 'Orbit' : mode === 'follow' ? 'Follow' : 'Top'}`
+      button.textContent = `View: ${CAMERA_MODE_LABELS[mode]}`
     },
     resetPosition: () => dragHandle.resetPosition(),
     dispose() {

@@ -28,7 +28,7 @@ import type { MovementPresetsHandle } from '../ui/movementPresets'
 import type { PositionPresetsHandle } from '../ui/positionPresets'
 import { createLineFollower, DEFAULT_LINE_FOLLOWER_CONFIG, type LineFollower, type LineFollowerConfig } from '../control/lineFollower'
 import type { PositionStore } from '../ui/positionStore'
-import type { CameraMode } from '../ui/cameraTypes'
+import { CAMERA_MODES, type CameraMode } from '../ui/cameraTypes'
 import type {
   SimEngineConfig,
   SimControlInterface,
@@ -1198,8 +1198,13 @@ export class SimEngine {
     if (!this.robotRoot) return
     this.sceneHandle!.camera.up.set(0, 1, 0)
     this.robotRoot.updateMatrixWorld(true)
-    this.tmpFollowPosition.set(0, 1.15, 1.9).applyMatrix4(this.robotRoot.matrixWorld)
-    this.tmpLookAt.set(0, 0.18, -1.0).applyMatrix4(this.robotRoot.matrixWorld)
+    if (this.cameraMode === 'follow-close') {
+      this.tmpFollowPosition.set(0, 0.55, 0.75).applyMatrix4(this.robotRoot.matrixWorld)
+      this.tmpLookAt.set(0, 0.18, -0.5).applyMatrix4(this.robotRoot.matrixWorld)
+    } else {
+      this.tmpFollowPosition.set(0, 1.15, 1.9).applyMatrix4(this.robotRoot.matrixWorld)
+      this.tmpLookAt.set(0, 0.18, -1.0).applyMatrix4(this.robotRoot.matrixWorld)
+    }
     this.sceneHandle!.camera.position.copy(this.tmpFollowPosition)
     this.sceneHandle!.camera.lookAt(this.tmpLookAt)
     this.sceneHandle!.controls.target.copy(this.tmpLookAt)
@@ -1230,11 +1235,8 @@ export class SimEngine {
   }
 
   private cycleCameraMode(): void {
-    this.setCameraMode(
-      this.cameraMode === 'orbit' ? 'follow'
-        : this.cameraMode === 'follow' ? 'top'
-          : 'orbit',
-    )
+    const currentIndex = CAMERA_MODES.indexOf(this.cameraMode)
+    this.setCameraMode(CAMERA_MODES[(currentIndex + 1) % CAMERA_MODES.length])
   }
 
   /** Apply the stage's optional start camera, and lock the view if configured. */

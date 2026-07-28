@@ -1,5 +1,6 @@
 import { parse } from 'yaml'
 import type { BenchmarkConfig, BenchmarkPreset, BenchmarkStageOverride } from './types'
+import { CAMERA_MODES } from '../ui/cameraTypes'
 
 // Avoiding Vite's dynamic import for support with create-react-app...
 // Although this is not ideal, it allows for the benchmark to work. I.e., if you want to
@@ -171,7 +172,7 @@ function asCameraMode(value: unknown): BenchmarkConfig['cameraMode'] | null {
 }
 
 function isCameraMode(value: string): value is BenchmarkConfig['cameraMode'] {
-  return value === 'orbit' || value === 'follow' || value === 'top'
+  return CAMERA_MODES.includes(value as BenchmarkConfig['cameraMode'])
 }
 
 function isDriveMode(value: string): value is NonNullable<BenchmarkStageOverride['driveMode']> {
