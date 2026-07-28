@@ -1,10 +1,10 @@
 from database.database import Course, Lesson, MarketplaceRoleAssignment, User
-from database.dev_seed import DEV_SAMPLE_TAG, DEV_TEST_USERS, seed_dev_sample_course, seed_dev_test_users
+from database.dev_seed import DEV_SAMPLE_PHASE_5_TAG, DEV_SAMPLE_TAG, DEV_TEST_USERS, seed_dev_sample_course, seed_dev_test_users
 from models.models import UserRole
 from utils.utils_hash import verify_hashed
 
 
-def test_dev_sample_course_is_compact_owned_and_idempotent(db, users):
+def test_dev_sample_course_covers_phase_five_and_is_idempotent(db, users):
     *_, admin = users
 
     created = seed_dev_sample_course(db, admin.username)
@@ -13,16 +13,28 @@ def test_dev_sample_course_is_compact_owned_and_idempotent(db, users):
     assert seeded_again.id == created.id
     assert db.query(Course).filter(Course.author_id == admin.id).count() == 1
     assert DEV_SAMPLE_TAG in created.tags
+    assert DEV_SAMPLE_PHASE_5_TAG in created.tags
     assert created.status == "draft"
     assert created.visibility == "unlisted"
 
     lessons = db.query(Lesson).filter(Lesson.course_id == created.id).order_by(Lesson.position).all()
-    assert len(lessons) == 3
-    assert [lesson.position for lesson in lessons] == [1, 2, 3]
-    assert [lesson.editor_type for lesson in lessons] == ["python", "python", "blockly"]
-    assert [lesson.start_mode for lesson in lessons] == ["fresh", "inherit_previous_code", "fresh"]
-    assert [lesson.stage_source_type for lesson in lessons] == ["default", None, "default"]
+    assert len(lessons) == 7
+    assert [lesson.position for lesson in lessons] == list(range(1, 8))
+    assert [lesson.editor_type for lesson in lessons] == ["python", "python", "blockly", "none", "none", "none", "none"]
+    assert [lesson.start_mode for lesson in lessons] == ["fresh", "inherit_previous_code", "fresh", "fresh", "fresh", "fresh", "fresh"]
+    assert [lesson.completion_policy for lesson in lessons] == ["self", "activity", "teacher_review", "self", "hybrid", "activity", "teacher_review"]
+    assert [lesson.stage_source_type for lesson in lessons] == ["default", None, "default", None, "default", "default", "default"]
     assert lessons[2].starter_content["xml"].startswith("<xml")
+
+    activities = [activity for lesson in lessons for activity in lesson.activities]
+    assert {activity["type"] for activity in activities} == {
+        "rich_text", "multiple_choice", "multiple_select", "numeric_answer",
+        "short_reflection", "simulator_observation", "hint",
+    }
+    observations = [activity for activity in activities if activity["type"] == "simulator_observation"]
+    assert {activity["sensorHelperMode"] for activity in observations} == {"hidden", "student_toggle", "always_visible"}
+    assert {activity["tolerance"]["mode"] for activity in activities if activity["type"] == "numeric_answer"} == {"absolute", "percentage"}
+    assert {activity["forActivityKey"] for activity in activities if activity["type"] == "hint"} == {"dev-mixed-choice", "dev-review-run"}
 
 
 def test_archived_dev_sample_is_restored_without_replacing_lessons(db, users):
@@ -37,7 +49,7 @@ def test_archived_dev_sample_is_restored_without_replacing_lessons(db, users):
     assert restored.id == course.id
     assert restored.status == "draft"
     assert restored.title == "Locally edited sample"
-    assert db.query(Lesson).filter(Lesson.course_id == course.id).count() == 3
+    assert db.query(Lesson).filter(Lesson.course_id == course.id).count() == 7
 
 
 def test_dev_users_include_two_teachers_one_verifier_and_two_students(db):

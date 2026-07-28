@@ -378,5 +378,32 @@ class LessonWorkspace(Base):
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow, nullable=False)
 
 
+class ActivityAnswer(Base):
+    __tablename__ = "activity_answers"
+    __table_args__ = (
+        UniqueConstraint(
+            'enrollment_id', 'release_id', 'lesson_key', 'activity_key',
+            name='uq_activity_answers_release_activity',
+        ),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    enrollment_id = Column(Integer, ForeignKey('enrollments.id'), nullable=False)
+    release_id = Column(Integer, ForeignKey('course_releases.id'), nullable=False)
+    lesson_key = Column(String, nullable=False)
+    activity_key = Column(String, nullable=False)
+    submitted_value = Column(JSON)
+    correctness = Column(Boolean)
+    satisfied = Column(Boolean, nullable=False, default=False)
+    attempt_count = Column(Integer, nullable=False, default=0)
+    last_submission_id = Column(String, nullable=False)
+    sensor_summary = Column(JSON)
+    first_submitted_at = Column(DateTime, nullable=False)
+    last_submitted_at = Column(DateTime, nullable=False)
+    satisfied_at = Column(DateTime)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow, nullable=False)
+
+
 # Import compatibility for code that has not yet adopted canonical product naming.
 Curriculum = Course

@@ -9,12 +9,76 @@ export type StageSourceType = 'default' | 'github' | 'marketplace';
 
 export type TiptapNode = JSONContent;
 
-export interface RichTextActivity {
+export interface ActivityBase {
   key: string;
-  type: 'rich_text';
   version: 1;
+  required: boolean;
+  definitionHash?: string;
+}
+
+export interface RichTextActivity extends ActivityBase {
+  type: 'rich_text';
   content: TiptapNode | string;
 }
+
+export interface ChoiceOption { key: string; label: string }
+
+export interface MultipleChoiceActivity extends ActivityBase {
+  type: 'multiple_choice';
+  prompt: string;
+  options: ChoiceOption[];
+  correctOptionKey?: string;
+  feedbackCorrect?: string;
+  feedbackIncorrect?: string;
+}
+
+export interface MultipleSelectActivity extends ActivityBase {
+  type: 'multiple_select';
+  prompt: string;
+  options: ChoiceOption[];
+  correctOptionKeys?: string[];
+  feedbackCorrect?: string;
+  feedbackIncorrect?: string;
+}
+
+export interface NumericAnswerActivity extends ActivityBase {
+  type: 'numeric_answer';
+  prompt: string;
+  expectedValue?: number;
+  unit: string;
+  tolerance: { mode: 'absolute' | 'percentage'; value: number };
+  validRange?: { minimum?: number | null; maximum?: number | null } | null;
+  feedbackCorrect?: string;
+  feedbackIncorrect?: string;
+}
+
+export interface ShortReflectionActivity extends ActivityBase {
+  type: 'short_reflection';
+  prompt: string;
+  collectResponse: boolean;
+}
+
+export type SensorHelperMode = 'hidden' | 'student_toggle' | 'always_visible';
+export type SensorPresentation = 'live' | 'chart' | 'summary';
+export type SensorStatistic = 'minimum' | 'maximum' | 'average' | 'finalValue';
+
+export interface SimulatorObservationActivity extends ActivityBase {
+  type: 'simulator_observation';
+  prompt: string;
+  allowedSensors: string[];
+  sensorHelperMode: SensorHelperMode;
+  presentations: SensorPresentation[];
+  capturedStatistics: SensorStatistic[];
+  visibleStatistics: SensorStatistic[];
+}
+
+export interface HintActivity extends ActivityBase {
+  type: 'hint';
+  content: TiptapNode | string;
+  forActivityKey?: string | null;
+}
+
+export type Activity = RichTextActivity | MultipleChoiceActivity | MultipleSelectActivity | NumericAnswerActivity | ShortReflectionActivity | SimulatorObservationActivity | HintActivity;
 
 export interface StageReference {
   sourceType: StageSourceType;
@@ -43,6 +107,12 @@ export interface CourseSummary {
   tags?: string[] | null;
   latest_published_release_id?: number | null;
   latest_published_release_version?: number | null;
+  has_unpublished_changes?: boolean;
+  unpublished_change_summary?: {
+    course: boolean;
+    outline: boolean;
+    lesson_keys: string[];
+  };
   created_at: string;
   updated_at: string;
 }
@@ -51,7 +121,7 @@ export interface ReleaseLesson {
   lessonKey: string;
   title: string;
   position: number;
-  activities: RichTextActivity[];
+  activities: Activity[];
   completionPolicy: CompletionPolicy;
   startMode: LessonStartMode;
   editorType: LessonEditorType;
@@ -76,7 +146,7 @@ export interface LessonProgress {
   state: 'not_started' | 'in_progress' | 'completed';
   started_at?: string | null;
   completed_at?: string | null;
-  completion_method?: 'self' | null;
+  completion_method?: 'self' | 'activity' | 'hybrid' | null;
 }
 
 export interface Enrollment {
@@ -137,7 +207,7 @@ export interface Lesson {
   course_id: number;
   title: string;
   position: number;
-  activities: RichTextActivity[];
+  activities: Activity[];
   completion_policy: CompletionPolicy;
   start_mode: LessonStartMode;
   editor_type: LessonEditorType;
@@ -172,7 +242,7 @@ export interface CourseUpdateRequest extends Partial<CourseCreateRequest> {
 
 export interface LessonSaveRequest {
   title: string;
-  activities?: RichTextActivity[];
+  activities?: Activity[];
   completion_policy?: CompletionPolicy;
   start_mode?: LessonStartMode;
   editor_type?: LessonEditorType;
@@ -203,4 +273,40 @@ export interface CourseRelease {
   created_by_id: number;
   published_at: string;
   snapshot: Record<string, unknown>;
+}
+
+export interface SensorSummaryValue {
+  unit: string;
+  minimum?: number;
+  maximum?: number;
+  average?: number;
+  finalValue?: number;
+  sampleCount: number;
+}
+
+export interface CompactSensorSummary {
+  runId: string;
+  durationMs: number;
+  sensors: Record<string, SensorSummaryValue>;
+}
+
+export interface ActivityState {
+  activity_key: string;
+  type: Activity['type'];
+  required: boolean;
+  submitted_value?: unknown;
+  correctness?: boolean | null;
+  satisfied: boolean;
+  attempt_count: number;
+  sensor_summary?: CompactSensorSummary | null;
+  first_submitted_at?: string | null;
+  last_submitted_at?: string | null;
+  satisfied_at?: string | null;
+}
+
+export interface ActivitySubmissionResponse {
+  state: ActivityState;
+  feedback?: string | null;
+  duplicate: boolean;
+  lesson_completed: boolean;
 }

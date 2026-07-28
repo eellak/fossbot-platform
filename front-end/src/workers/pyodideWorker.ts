@@ -20,6 +20,7 @@ onmessage = async function (event: MessageEvent) {
   if (data.command === 'run') {
     isStopped = false;  // Reset the stop flag
     await runPythonCode(data);
+    postMessage(JSON.stringify({ command: 'execution_complete' }));
   } else if (data.command === 'stop') {
     isStopped = true;  // Set the stop flag
     console.log('stop command received');

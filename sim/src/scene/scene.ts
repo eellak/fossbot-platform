@@ -21,6 +21,7 @@ export interface SceneHandle {
   worldAxes: THREE.AxesHelper
   resizeListener: () => void
   resizeObserver: ResizeObserver | null
+  resizeFrame: number | null
 }
 
 const LEGACY_CANVAS_FALLBACK_SIZE = 1
@@ -40,7 +41,10 @@ export function initScene(container: HTMLElement, opts?: { gizmo?: boolean }): S
   const renderer = new THREE.WebGLRenderer({ antialias: true })
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
   renderer.outputColorSpace = THREE.SRGBColorSpace
-  renderer.setSize(initialSize.width, initialSize.height)
+  renderer.setSize(initialSize.width, initialSize.height, false)
+  renderer.domElement.style.display = 'block'
+  renderer.domElement.style.width = '100%'
+  renderer.domElement.style.height = '100%'
   renderer.setClearColor(0x1a1a1a, 1)
   renderer.shadowMap.enabled = true
   renderer.shadowMap.type = THREE.PCFSoftShadowMap
@@ -112,11 +116,21 @@ export function initScene(container: HTMLElement, opts?: { gizmo?: boolean }): S
     container.appendChild(gizmoModeLabel)
   }
 
+  let renderedWidth = initialSize.width
+  let renderedHeight = initialSize.height
+  let resizeFrame: number | null = null
   const resizeListener = () => {
-    const { width: w, height: h } = getContainerSize(container)
-    renderer.setSize(w, h)
-    camera.aspect = w / h
-    camera.updateProjectionMatrix()
+    if (resizeFrame !== null) return
+    resizeFrame = window.requestAnimationFrame(() => {
+      resizeFrame = null
+      const { width: w, height: h } = getContainerSize(container)
+      if (w === renderedWidth && h === renderedHeight) return
+      renderedWidth = w
+      renderedHeight = h
+      renderer.setSize(w, h, false)
+      camera.aspect = w / h
+      camera.updateProjectionMatrix()
+    })
   }
   window.addEventListener('resize', resizeListener)
   const resizeObserver = typeof ResizeObserver !== 'undefined'
@@ -139,6 +153,7 @@ export function initScene(container: HTMLElement, opts?: { gizmo?: boolean }): S
     worldAxes,
     resizeListener,
     resizeObserver,
+    get resizeFrame() { return resizeFrame },
   }
 
   if (gizmoModeLabel) {
@@ -187,6 +202,7 @@ export function renderScene(handle: SceneHandle): void {
 export function disposeScene(h: SceneHandle) {
   window.removeEventListener('resize', h.resizeListener)
   h.resizeObserver?.disconnect()
+  if (h.resizeFrame !== null) window.cancelAnimationFrame(h.resizeFrame)
   h.controls.dispose()
   h.gizmo?.dispose()
   h.renderer.dispose()

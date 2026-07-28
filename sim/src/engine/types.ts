@@ -30,6 +30,8 @@ export interface SimEngineConfig {
   lockCamera?: boolean
   /** Show sensor ray/helper overlays without enabling the full dev UI. */
   sensorHelpersVisible?: boolean
+  /** Begin collecting lesson sensor readings immediately after stage setup. */
+  sensorTelemetryAutoStart?: boolean
   /** Show robot/stage collider wireframes without enabling the full dev UI. */
   showColliders?: boolean
 }

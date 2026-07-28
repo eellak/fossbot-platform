@@ -1,7 +1,10 @@
 from unittest.mock import patch
 
-from database.database import Course, CourseRelease, Enrollment, Lesson, LessonProgress, LessonWorkspace, User
+import pytest
+
+from database.database import ActivityAnswer, Course, CourseRelease, Enrollment, Lesson, LessonProgress, LessonWorkspace, User
 from models.models import UserRole
+from utils.activity_schema import grade_submission, validate_activities
 
 
 REQUIRED_COURSE = {
@@ -104,21 +107,68 @@ def test_publish_snapshot_is_immutable_after_draft_edit(client_for, users, db):
     published = client.post(f"/courses/{course['id']}/publish")
     assert published.status_code == 201, published.text
     release = published.json()
-    assert release["schema_version"] == 1
+    assert release["schema_version"] == 2
     assert release["version"] == 1
     assert len(release["snapshot"]["lessons"][0]["definitionHash"]) == 64
     assert len(release["snapshot"]["lessons"][0]["activities"][0]["definitionHash"]) == 64
+    draft = client.get(f"/courses/{course['id']}/draft").json()
+    assert draft["has_unpublished_changes"] is False
+    assert draft["unpublished_change_summary"] == {
+        "course": False,
+        "outline": False,
+        "lesson_keys": [],
+    }
+    unchanged = client.post(f"/courses/{course['id']}/publish")
+    assert unchanged.status_code == 409
+    assert unchanged.json()["detail"]["error"] == "no_unpublished_changes"
 
     edited = client.put(
         f"/courses/{course['id']}/lessons/{lesson['id']}",
         json={"title": "Changed draft title"},
     )
     assert edited.status_code == 200
+    draft = client.get(f"/courses/{course['id']}/draft").json()
+    assert draft["has_unpublished_changes"] is True
+    assert draft["unpublished_change_summary"] == {
+        "course": False,
+        "outline": False,
+        "lesson_keys": [lesson["lesson_key"]],
+    }
+    reverted = client.put(
+        f"/courses/{course['id']}/lessons/{lesson['id']}",
+        json={"title": "First move"},
+    )
+    assert reverted.status_code == 200
+    draft = client.get(f"/courses/{course['id']}/draft").json()
+    assert draft["has_unpublished_changes"] is False
+    assert draft["unpublished_change_summary"] == {
+        "course": False,
+        "outline": False,
+        "lesson_keys": [],
+    }
+    edited = client.put(
+        f"/courses/{course['id']}/lessons/{lesson['id']}",
+        json={"title": "Changed draft title"},
+    )
+    assert edited.status_code == 200
+    draft = client.get(f"/courses/{course['id']}/draft").json()
+    assert draft["has_unpublished_changes"] is True
+    assert draft["unpublished_change_summary"] == {
+        "course": False,
+        "outline": False,
+        "lesson_keys": [lesson["lesson_key"]],
+    }
     stored_release = db.query(CourseRelease).filter(CourseRelease.id == release["id"]).one()
     assert stored_release.snapshot["lessons"][0]["title"] == "First move"
 
     public = client.get("/courses")
     assert [item["id"] for item in public.json()] == [course["id"]]
+    assert public.json()[0]["has_unpublished_changes"] is False
+    assert public.json()[0]["unpublished_change_summary"] == {
+        "course": False,
+        "outline": False,
+        "lesson_keys": [],
+    }
     read_release = client.get(f"/courses/{course['id']}/releases/{release['id']}")
     assert read_release.status_code == 200
     assert read_release.json()["snapshot"] == stored_release.snapshot
@@ -128,6 +178,60 @@ def test_publish_snapshot_is_immutable_after_draft_edit(client_for, users, db):
     assert second_release.json()["version"] == 2
     assert second_release.json()["snapshot"]["lessons"][0]["title"] == "Changed draft title"
     assert stored_release.snapshot["lessons"][0]["title"] == "First move"
+    draft = client.get(f"/courses/{course['id']}/draft").json()
+    assert draft["has_unpublished_changes"] is False
+    assert draft["unpublished_change_summary"] == {
+        "course": False,
+        "outline": False,
+        "lesson_keys": [],
+    }
+
+
+def test_unpublished_change_summary_tracks_course_and_outline_scopes(client_for, users):
+    tutor, _, _, _ = users
+    client = client_for(tutor)
+    course = create_course(client)
+    add_lesson(client, course["id"])
+    assert client.post(f"/courses/{course['id']}/publish").status_code == 201
+
+    changed_course = client.put(
+        f"/courses/{course['id']}",
+        json={"title": "Changed course title"},
+    )
+    assert changed_course.status_code == 200
+    assert changed_course.json()["unpublished_change_summary"] == {
+        "course": True,
+        "outline": False,
+        "lesson_keys": [],
+    }
+
+    reverted_course = client.put(
+        f"/courses/{course['id']}",
+        json={"title": REQUIRED_COURSE["title"]},
+    )
+    assert reverted_course.status_code == 200
+    assert reverted_course.json()["unpublished_change_summary"] == {
+        "course": False,
+        "outline": False,
+        "lesson_keys": [],
+    }
+
+    added = add_lesson(client, course["id"], "New draft lesson")
+    draft = client.get(f"/courses/{course['id']}/draft").json()
+    assert draft["unpublished_change_summary"] == {
+        "course": False,
+        "outline": True,
+        "lesson_keys": [added["lesson_key"]],
+    }
+
+    assert client.delete(f"/courses/{course['id']}/lessons/{added['id']}").status_code == 204
+    reverted_outline = client.get(f"/courses/{course['id']}/draft").json()
+    assert reverted_outline["has_unpublished_changes"] is False
+    assert reverted_outline["unpublished_change_summary"] == {
+        "course": False,
+        "outline": False,
+        "lesson_keys": [],
+    }
 
 
 def test_stage_variants_are_normalized_and_remote_references_are_pinned(client_for, users):
@@ -331,7 +435,7 @@ def test_student_enrollment_progress_resume_and_ownership(client_for, users, db)
 
     other_student = User(
         username="other-student", firstname="Other", lastname="Student", email="other-student@example.test",
-        hashed_password="unused", role=UserRole.USER, activated=True,
+        hashed_password="unused", role=UserRole.USER, beta_tester=True, activated=True,
     )
     db.add(other_student)
     db.commit()
@@ -497,3 +601,198 @@ def test_unchanged_workspace_is_carried_to_new_release_without_deleting_history(
     assert carried["content"] == "student"
     assert carried["release_id"] == updated["active_release"]["id"]
     assert db.query(LessonWorkspace).filter(LessonWorkspace.enrollment_id == enrollment["id"]).count() == 2
+
+
+def phase_five_activities():
+    return [
+        {
+            "key": "explain-sensors", "type": "rich_text", "version": 1, "required": False,
+            "content": {"type": "doc", "content": [{"type": "paragraph"}]},
+        },
+        {
+            "key": "predict", "type": "multiple_choice", "version": 1, "required": True,
+            "prompt": "Will the distance shrink?",
+            "options": [{"key": "yes", "label": "Yes"}, {"key": "no", "label": "No"}],
+            "correctOptionKey": "yes", "feedbackCorrect": "Good observation.", "feedbackIncorrect": "Try another run.",
+        },
+        {
+            "key": "select", "type": "multiple_select", "version": 1, "required": False,
+            "prompt": "Choose both sensors.",
+            "options": [{"key": "u", "label": "Ultrasonic"}, {"key": "l", "label": "Light"}],
+            "correctOptionKeys": ["u", "l"],
+        },
+        {
+            "key": "minimum", "type": "numeric_answer", "version": 1, "required": True,
+            "prompt": "What was the minimum?", "expectedValue": 0.5, "unit": "m",
+            "tolerance": {"mode": "absolute", "value": 0.05}, "validRange": {"minimum": 0, "maximum": 4},
+        },
+        {
+            "key": "reflect", "type": "short_reflection", "version": 1, "required": False,
+            "prompt": "What changed?", "collectResponse": True,
+        },
+        {
+            "key": "observe", "type": "simulator_observation", "version": 1, "required": False,
+            "prompt": "Run and observe.", "allowedSensors": ["ultrasonic-front"],
+            "sensorHelperMode": "student_toggle", "presentations": ["live", "chart", "summary"],
+            "capturedStatistics": ["minimum", "maximum", "average", "finalValue"],
+            "visibleStatistics": ["maximum", "average", "finalValue"],
+        },
+        {
+            "key": "help", "type": "hint", "version": 1, "required": False,
+            "forActivityKey": "predict",
+            "content": "Move closer slowly.",
+        },
+    ]
+
+
+def observation_stage():
+    return {"sourceType": "default", "title": "White field", "url": "/js-simulator/stages/stage_white_rect.json"}
+
+
+def test_numeric_percentage_boundaries_and_activity_validation():
+    activity = {
+        "key": "percent", "type": "numeric_answer", "version": 1, "required": True,
+        "prompt": "Measured value", "expectedValue": 200, "unit": "cm",
+        "tolerance": {"mode": "percentage", "value": 5},
+    }
+    validate_activities([activity])
+    assert grade_submission(activity, 190)[0] is True
+    assert grade_submission(activity, 210)[0] is True
+    assert grade_submission(activity, 210.01)[0] is False
+    invalid = phase_five_activities()
+    invalid[5]["allowedSensors"] = ["teacher-entered-getter"]
+    try:
+        validate_activities(invalid)
+        assert False, "unsupported sensor ID should fail validation"
+    except ValueError as error:
+        assert "platform sensor IDs" in str(error)
+
+    invalid_hint = phase_five_activities()
+    invalid_hint[-1]["forActivityKey"] = "missing"
+    with pytest.raises(ValueError, match="forActivityKey"):
+        validate_activities(invalid_hint)
+
+    private_required = phase_five_activities()
+    private_required[4]["collectResponse"] = False
+    private_required[4]["required"] = True
+    with pytest.raises(ValueError, match="private reflection"):
+        validate_activities(private_required)
+
+
+def test_phase_five_activity_schema_and_student_payload_are_safe(client_for, users):
+    tutor, _, student, _ = users
+    teacher = client_for(tutor)
+    course = create_course(teacher)
+    lesson = add_lesson(teacher, course["id"], activities=phase_five_activities(), stageReference=observation_stage())
+    assert [item["type"] for item in lesson["activities"]] == [
+        "rich_text", "multiple_choice", "multiple_select", "numeric_answer",
+        "short_reflection", "simulator_observation", "hint",
+    ]
+    release = teacher.post(f"/courses/{course['id']}/publish").json()
+    assert release["schema_version"] == 2
+    assert release["snapshot"]["lessons"][0]["activities"][1]["correctOptionKey"] == "yes"
+
+    learner = client_for(student)
+    enrollment = learner.post(f"/courses/{course['id']}/enroll").json()
+    safe_activities = enrollment["active_release"]["lessons"][0]["activities"]
+    serialized = str(safe_activities)
+    for hidden in ("correctOptionKey", "correctOptionKeys", "expectedValue", "feedbackCorrect", "feedbackIncorrect"):
+        assert hidden not in serialized
+    safe_release = learner.get(f"/courses/{course['id']}/releases/{release['id']}").json()
+    assert "expectedValue" not in str(safe_release["snapshot"])
+    assert teacher.get(f"/courses/{course['id']}/releases/{release['id']}").json()["snapshot"]["lessons"][0]["activities"][3]["expectedValue"] == 0.5
+
+
+def test_objective_grading_tolerance_idempotency_summary_and_activity_completion(client_for, users, db):
+    tutor, _, student, _ = users
+    teacher = client_for(tutor)
+    course = create_course(teacher)
+    activities = phase_five_activities()
+    activities[1]["required"] = False
+    lesson = add_lesson(teacher, course["id"], activities=activities, completion_policy="activity", stageReference=observation_stage())
+    teacher.post(f"/courses/{course['id']}/publish")
+    learner = client_for(student)
+    enrollment = learner.post(f"/courses/{course['id']}/enroll").json()
+    path = f"/enrollments/{enrollment['id']}/lessons/{lesson['lesson_key']}/activities/minimum/submit"
+
+    wrong = learner.post(path, json={"submission_id": "numeric-1", "value": 0.551}).json()
+    assert wrong["state"]["correctness"] is False
+    assert wrong["state"]["attempt_count"] == 1
+    assert wrong["lesson_completed"] is False
+    summary = {
+        "runId": "run-1", "durationMs": 1200,
+        "sensors": {"ultrasonic-front": {"minimum": 0.45, "maximum": 1.2, "average": 0.8, "finalValue": 0.5, "sampleCount": 6}},
+    }
+    correct = learner.post(path, json={"submission_id": "numeric-2", "value": 0.55, "sensor_summary": summary}).json()
+    assert correct["state"]["correctness"] is True
+    assert correct["state"]["sensor_summary"]["sensors"]["ultrasonic-front"]["minimum"] == 0.45
+    assert correct["state"]["attempt_count"] == 2
+    assert correct["lesson_completed"] is True
+
+    duplicate = learner.post(path, json={"submission_id": "numeric-2", "value": 0.55, "sensor_summary": summary}).json()
+    assert duplicate["duplicate"] is True
+    assert duplicate["state"]["attempt_count"] == 2
+    assert db.query(ActivityAnswer).filter(ActivityAnswer.activity_key == "minimum").count() == 1
+    rejected_raw = learner.post(path, json={"submission_id": "numeric-3", "value": 0.5, "sensor_summary": {"samples": [1, 2]}})
+    assert rejected_raw.status_code == 422
+
+
+def test_self_hybrid_reflection_and_activity_authorization(client_for, users, db):
+    tutor, _, student, _ = users
+    teacher = client_for(tutor)
+
+    self_course = create_course(teacher, title="Self course")
+    self_lesson = add_lesson(teacher, self_course["id"], activities=phase_five_activities(), completion_policy="self", stageReference=observation_stage())
+    teacher.post(f"/courses/{self_course['id']}/publish")
+    learner = client_for(student)
+    self_enrollment = learner.post(f"/courses/{self_course['id']}/enroll").json()
+    assert learner.post(f"/enrollments/{self_enrollment['id']}/lessons/{self_lesson['lesson_key']}/complete").status_code == 200
+
+    hybrid_course = create_course(teacher, title="Hybrid course")
+    activities = phase_five_activities()
+    activities[3]["required"] = False
+    hybrid_lesson = add_lesson(teacher, hybrid_course["id"], activities=activities, completion_policy="hybrid", stageReference=observation_stage())
+    teacher.post(f"/courses/{hybrid_course['id']}/publish")
+    hybrid_enrollment = learner.post(f"/courses/{hybrid_course['id']}/enroll").json()
+    complete_path = f"/enrollments/{hybrid_enrollment['id']}/lessons/{hybrid_lesson['lesson_key']}/complete"
+    blocked = learner.post(complete_path)
+    assert blocked.status_code == 409
+    assert blocked.json()["detail"]["error"] == "required_activities_incomplete"
+
+    answer_path = f"/enrollments/{hybrid_enrollment['id']}/lessons/{hybrid_lesson['lesson_key']}/activities/predict/submit"
+    assert learner.post(answer_path, json={"submission_id": "choice-1", "value": "yes"}).json()["state"]["satisfied"] is True
+    completed = learner.post(complete_path).json()
+    assert completed["progress"][0]["completion_method"] == "hybrid"
+
+    reflection_path = f"/enrollments/{hybrid_enrollment['id']}/lessons/{hybrid_lesson['lesson_key']}/activities/reflect/submit"
+    reflected = learner.post(reflection_path, json={"submission_id": "reflection-1", "value": "The reading fell."}).json()
+    assert reflected["state"]["submitted_value"] == "The reading fell."
+    assert reflected["state"]["correctness"] is None
+
+    activity_base = f"/enrollments/{hybrid_enrollment['id']}/lessons/{hybrid_lesson['lesson_key']}/activities"
+    select = learner.post(f"{activity_base}/select/submit", json={"submission_id": "select-1", "value": ["u", "l"]}).json()
+    assert select["state"]["correctness"] is True
+    numeric = learner.post(f"{activity_base}/minimum/submit", json={"submission_id": "minimum-1", "value": 0.5}).json()
+    assert numeric["state"]["correctness"] is True
+    observation = learner.post(f"{activity_base}/observe/submit", json={
+        "submission_id": "observe-1", "value": True,
+        "sensor_summary": {"runId": "run-2", "durationMs": 400, "sensors": {
+            "ultrasonic-front": {"minimum": 0.4, "maximum": 0.8, "average": 0.6, "finalValue": 0.5, "sampleCount": 4},
+        }},
+    }).json()
+    assert observation["state"]["satisfied"] is True
+    for activity_key in ("explain-sensors", "help"):
+        acknowledged = learner.post(f"{activity_base}/{activity_key}/submit", json={
+            "submission_id": f"{activity_key}-1", "value": True,
+        }).json()
+        assert acknowledged["state"]["satisfied"] is True
+
+    other = User(
+        username="phase-five-other", firstname="Other", lastname="Student", email="phase-five-other@example.test",
+        hashed_password="unused", role=UserRole.USER, beta_tester=True, activated=True,
+    )
+    db.add(other)
+    db.commit()
+    assert client_for(other).get(
+        f"/enrollments/{hybrid_enrollment['id']}/lessons/{hybrid_lesson['lesson_key']}/activities"
+    ).status_code == 404

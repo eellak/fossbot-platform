@@ -19,6 +19,7 @@ type PythonExecutorProps = {
   stopMotion: () => void;
   getLightSensor: () => number;
   drawLine: (status: boolean) => void;
+  onExecutionComplete?: () => void;
 };
 
 const PythonExecutor = ({
@@ -37,7 +38,8 @@ const PythonExecutor = ({
   justMove,
   stopMotion,
   getLightSensor,
-  drawLine
+  drawLine,
+  onExecutionComplete,
 }: PythonExecutorProps) => {
   const [results, setResults] = useState<string[]>([]);
   const { t } = useTranslation();
@@ -97,6 +99,7 @@ const PythonExecutor = ({
       if (data.command === 'clear_results') {
         setResults([]);
       }
+      if (data.command === 'execution_complete') onExecutionComplete?.();
     };
 
     return worker;

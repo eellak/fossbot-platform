@@ -6,15 +6,16 @@ export const emptyTiptapDocument = (): TiptapNode => ({
 });
 
 export function richTextActivity(lesson: Pick<Lesson, 'lesson_key' | 'activities'>): RichTextActivity {
-  const activity = lesson.activities?.find((item) => item.type === 'rich_text');
+  const activity = lesson.activities?.find((item): item is RichTextActivity => item.type === 'rich_text');
   if (activity && typeof activity.content === 'object') {
-    return { ...activity, version: 1 };
+    return { ...activity, version: 1, required: activity.required ?? false };
   }
   const legacy = activity && typeof activity.content === 'string' ? activity.content : '';
   return {
     key: activity?.key || `content-${lesson.lesson_key}`,
     type: 'rich_text',
     version: 1,
+    required: activity?.required ?? false,
     content: legacy
       ? { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: legacy }] }] }
       : emptyTiptapDocument(),

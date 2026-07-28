@@ -13,7 +13,6 @@ import { completeLesson, CourseRequestError, listMyEnrollments, readEnrollment, 
 import type { Enrollment, LessonWorkspace } from 'src/courses/types';
 import { loadStageFromProvider } from 'src/stages/StagesApi';
 import type { RawStageConfig } from 'src/simulator/stages';
-import { CAMERA_MODES } from 'src/simulator/ui/cameraTypes';
 import { changeCameraView, endSensorRun, pauseSensorRun, resumeSensorRun, WebGLApp } from 'src/simulator-adapter/Simulator';
 import type { SensorRunSummary, SensorTelemetrySnapshot } from 'src/simulator/sensors/telemetry';
 
@@ -184,7 +183,7 @@ export default function LessonWorkspacePage() {
       hasRun.current = true;
     } else run();
   };
-  const changeCamera = () => { changeCameraView(); setCameraStep((value) => (value + 1) % CAMERA_MODES.length); };
+  const changeCamera = () => { changeCameraView(); setCameraStep((value) => (value + 1) % 3); };
   const beginResize = (target: ResizeTarget) => (event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return;
     event.preventDefault();

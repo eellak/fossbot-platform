@@ -40,6 +40,12 @@ import { createSensorDebugViz, type SensorDebugVizHandle } from '../sensors/debu
 import { createSensorsHud, type SensorsHudHandle } from '../sensors/sensorsHud'
 import { createLdrProbeViz, type LdrProbeVizHandle } from '../sensors/ldrProbeViz'
 import { createMicViz, type MicVizHandle } from '../sensors/mic/micViz'
+import {
+  SensorTelemetryRecorder,
+  type SensorRunSummary,
+  type SensorTelemetryListener,
+  type SensorTelemetrySnapshot,
+} from '../sensors/telemetry'
 import { createTopRgb, type TopRgbHandle } from '../actuators/topRgb'
 import { createBuzzer, type BuzzerHandle } from '../actuators/buzzer'
 import type { BenchmarkPanelHandle } from '../bench/BenchmarkPanel'
@@ -61,6 +67,7 @@ function resolveConfig(cfg: Partial<SimEngineConfig> | undefined): Required<SimE
     initialStageConfig: cfg?.initialStageConfig,
     lockCamera: cfg?.lockCamera ?? false,
     sensorHelpersVisible: cfg?.sensorHelpersVisible ?? false,
+    sensorTelemetryAutoStart: cfg?.sensorTelemetryAutoStart ?? true,
     showColliders: cfg?.showColliders ?? false,
   }
 }
@@ -99,6 +106,7 @@ export class SimEngine {
   private robotPhysics: RobotPhysicsState | null = null
   private vehicle: VehicleHandle | null = null
   private sensorSystem: SensorSystem | null = null
+  private readonly sensorTelemetry = new SensorTelemetryRecorder()
   private sensorDebugViz: SensorDebugVizHandle | null = null
   private sensorHelpersVisible = false
   private sensorsHud: SensorsHudHandle | null = null
@@ -319,6 +327,7 @@ export class SimEngine {
   /** Cancel the render loop and dispose all resources. */
   stop(): void {
     this.cancelled = true
+    this.sensorTelemetry.endRun()
     this.resolvePendingMotion()
     cancelAnimationFrame(this.rafId)
     this.keyboard?.dispose()
@@ -460,10 +469,37 @@ export class SimEngine {
   }
 
   reset(): void {
+    this.sensorTelemetry.endRun()
     this.stopMotion()
     this.drawLine(false)
     if (this.currentStage) this.applySpawnPose(this.currentStage)
     this.sensorSystem?.resetOdometer()
+    if (this.config.sensorTelemetryAutoStart) this.sensorTelemetry.startRun()
+  }
+
+  startSensorRun(): string {
+    this.sensorSystem?.resetOdometer()
+    return this.sensorTelemetry.startRun()
+  }
+
+  endSensorRun(): SensorRunSummary | null {
+    return this.sensorTelemetry.endRun()
+  }
+
+  pauseSensorRun(): void {
+    this.sensorTelemetry.pauseRun()
+  }
+
+  resumeSensorRun(): string {
+    return this.sensorTelemetry.resumeRun()
+  }
+
+  getSensorTelemetrySnapshot(): SensorTelemetrySnapshot {
+    return this.sensorTelemetry.getSnapshot()
+  }
+
+  subscribeSensorTelemetry(listener: SensorTelemetryListener): () => void {
+    return this.sensorTelemetry.subscribe(listener)
   }
 
   setLightIntensity(intensity: number): void {
@@ -820,6 +856,7 @@ export class SimEngine {
         getStageAmbientFloor: () => this.currentStage?.ambientFloor ?? 0,
         getStageLineSegments: () => this.currentStage?.lineSegments ?? [],
       })
+      if (this.config.sensorTelemetryAutoStart) this.sensorTelemetry.startRun()
       if (this.config.devMode && this.robotRoot) {
         this.ensureSensorDebugViz()
         this.sensorsHud = createSensorsHud({
@@ -1097,6 +1134,7 @@ export class SimEngine {
         this.worldHandle.step()
         this.currentStage?.syncDynamicObjects()
         this.sensorSystem?.update(dt)
+        if (this.sensorSystem) this.sensorTelemetry.sample(this.sensorSystem.getReadings(), dt)
         this.accumulator -= dt
       }
 
@@ -1371,6 +1409,8 @@ export class SimEngine {
     this.currentStage = loadedStage
     loadedStage.collidersGroup.visible = this.showColliders
     this.applySpawnPose(loadedStage)
+    this.sensorSystem?.resetOdometer()
+    if (this.config.sensorTelemetryAutoStart) this.sensorTelemetry.startRun()
     this.physicsCrashed = false
   }
 

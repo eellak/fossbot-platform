@@ -2,6 +2,7 @@ import React, { forwardRef, useEffect, useImperativeHandle, useRef } from 'react
 import { SimEngine } from './engine/SimEngine'
 import type { SimEngineConfig } from './engine/types'
 import type { RawStageConfig } from './stages'
+import type { SensorRunSummary, SensorTelemetryListener, SensorTelemetrySnapshot } from './sensors/telemetry'
 
 export interface FossbotSimulatorHandle {
   moveStep(distance: number): Promise<void>
@@ -27,6 +28,12 @@ export interface FossbotSimulatorHandle {
   justMove(direction: 'forward' | 'backward' | string): void
   justRotate(direction: 'left' | 'right' | string): void
   drawLine(status: boolean): void
+  startSensorRun(): string
+  endSensorRun(): SensorRunSummary | null
+  pauseSensorRun(): void
+  resumeSensorRun(): string
+  getSensorTelemetrySnapshot(): SensorTelemetrySnapshot
+  subscribeSensorTelemetry(listener: SensorTelemetryListener): () => void
 }
 
 export interface FossbotSimulatorProps {
@@ -43,6 +50,8 @@ export const FossbotSimulator = forwardRef<FossbotSimulatorHandle, FossbotSimula
   ({ config, onMountChange, className, style, initialStageConfig, lockCamera }, ref) => {
     const containerRef = useRef<HTMLDivElement | null>(null)
     const engineRef = useRef<SimEngine | null>(null)
+    const telemetryListenersRef = useRef(new Set<SensorTelemetryListener>())
+    const telemetrySubscriptionsRef = useRef(new Map<SensorTelemetryListener, () => void>())
 
     useImperativeHandle(ref, () => ({
       moveStep: (distance) => engineRef.current?.moveStep(distance) ?? Promise.resolve(),
@@ -68,6 +77,26 @@ export const FossbotSimulator = forwardRef<FossbotSimulatorHandle, FossbotSimula
       justMove: (direction) => engineRef.current?.justMove(direction),
       justRotate: (direction) => engineRef.current?.justRotate(direction),
       drawLine: (status) => engineRef.current?.drawLine(status),
+      startSensorRun: () => engineRef.current?.startSensorRun() ?? '',
+      endSensorRun: () => engineRef.current?.endSensorRun() ?? null,
+      pauseSensorRun: () => engineRef.current?.pauseSensorRun(),
+      resumeSensorRun: () => engineRef.current?.resumeSensorRun() ?? '',
+      getSensorTelemetrySnapshot: () => engineRef.current?.getSensorTelemetrySnapshot() ?? {
+        runId: '', running: false, elapsedMs: 0, readings: {}, samples: {}, currentSummary: null, previousSummary: null,
+      },
+      subscribeSensorTelemetry: (listener) => {
+        telemetryListenersRef.current.add(listener)
+        const existing = telemetrySubscriptionsRef.current.get(listener)
+        existing?.()
+        if (engineRef.current) {
+          telemetrySubscriptionsRef.current.set(listener, engineRef.current.subscribeSensorTelemetry(listener))
+        }
+        return () => {
+          telemetryListenersRef.current.delete(listener)
+          telemetrySubscriptionsRef.current.get(listener)?.()
+          telemetrySubscriptionsRef.current.delete(listener)
+        }
+      },
     }), [])
 
     useEffect(() => {
@@ -75,6 +104,10 @@ export const FossbotSimulator = forwardRef<FossbotSimulatorHandle, FossbotSimula
 
       const engine = new SimEngine(containerRef.current, { ...config, initialStageConfig, lockCamera })
       engineRef.current = engine
+      for (const listener of telemetryListenersRef.current) {
+        telemetrySubscriptionsRef.current.get(listener)?.()
+        telemetrySubscriptionsRef.current.set(listener, engine.subscribeSensorTelemetry(listener))
+      }
       let disposed = false
 
       engine.start().then(() => {
@@ -84,6 +117,8 @@ export const FossbotSimulator = forwardRef<FossbotSimulatorHandle, FossbotSimula
       return () => {
         disposed = true
         onMountChange?.(false)
+        for (const unsubscribe of telemetrySubscriptionsRef.current.values()) unsubscribe()
+        telemetrySubscriptionsRef.current.clear()
         engine.stop()
         if (engineRef.current === engine) engineRef.current = null
       }

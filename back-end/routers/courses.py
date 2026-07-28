@@ -1,4 +1,5 @@
 import ast
+import copy
 import datetime
 import hashlib
 import json
@@ -6,7 +7,7 @@ import uuid
 import xml.etree.ElementTree as ElementTree
 from typing import Any, Literal, Optional
 
-from database.database import Course, CourseRelease, Enrollment, Lesson, LessonProgress, LessonWorkspace, User
+from database.database import ActivityAnswer, Course, CourseRelease, Enrollment, Lesson, LessonProgress, LessonWorkspace, User
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError
@@ -31,6 +32,14 @@ from routers.stage_sources import (
     stage_repo_list_item,
 )
 from utils.github_app_auth import create_github_app_jwt
+from utils.activity_schema import (
+    ACTIVITY_SCHEMA_VERSION,
+    activity_by_key,
+    compact_sensor_summary,
+    grade_submission,
+    student_release_lessons,
+    validate_activities,
+)
 from utils.marketplace_schema import MarketplaceSchemaError, marketplace_entry_path
 from utils.source_providers import get_provider
 from utils.source_providers.github_app import GitHubApiError
@@ -39,7 +48,7 @@ from utils.utils_jwt import verify_access_token
 
 router = APIRouter(tags=["courses"])
 optional_oauth2 = OAuth2PasswordBearer(tokenUrl="token", auto_error=False)
-RELEASE_SCHEMA_VERSION = 1
+RELEASE_SCHEMA_VERSION = 2
 DEFAULT_STAGE_URLS = {
     "/js-simulator/stages/stage_white_rect.json",
     "/js-simulator/stages/stage_object.json",
@@ -216,6 +225,14 @@ class WorkspaceSaveRequest(BaseModel):
     revision: int = Field(ge=1)
 
 
+class ActivitySubmissionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    submission_id: str = Field(min_length=1, max_length=100)
+    value: Any = None
+    sensor_summary: Optional[dict[str, Any]] = None
+
+
 class LessonResponse(BaseModel):
     id: int
     lesson_key: str
@@ -234,6 +251,12 @@ class LessonResponse(BaseModel):
     updated_at: datetime.datetime
 
 
+class UnpublishedChangeSummary(BaseModel):
+    course: bool = False
+    outline: bool = False
+    lesson_keys: list[str] = Field(default_factory=list)
+
+
 class CourseResponse(BaseModel):
     id: int
     title: str
@@ -250,6 +273,8 @@ class CourseResponse(BaseModel):
     tags: Optional[list[str]] = None
     latest_published_release_id: Optional[int] = None
     latest_published_release_version: Optional[int] = None
+    has_unpublished_changes: bool = False
+    unpublished_change_summary: UnpublishedChangeSummary = Field(default_factory=UnpublishedChangeSummary)
     created_at: datetime.datetime
     updated_at: datetime.datetime
 
@@ -287,24 +312,6 @@ class PublicationIssue(BaseModel):
 class PublicationValidationResponse(BaseModel):
     valid: bool
     errors: list[PublicationIssue]
-
-
-def validate_activities(activities: Optional[list[dict[str, Any]]]) -> None:
-    if activities is None:
-        return
-    keys: set[str] = set()
-    for activity in activities:
-        if activity.get("type") != "rich_text":
-            raise ValueError("Phase 1 activities must use type 'rich_text'")
-        key = str(activity.get("key") or "").strip()
-        if not key or key in keys:
-            raise ValueError("activities need unique non-blank keys")
-        content = activity.get("content", "")
-        if not isinstance(content, (str, dict)):
-            raise ValueError("rich_text activity content must be Tiptap JSON or legacy text")
-        if isinstance(content, dict) and content.get("type") != "doc":
-            raise ValueError("rich_text Tiptap content must be a document")
-        keys.add(key)
 
 
 def validate_starter(editor_type: str, starter_content: Any) -> None:
@@ -500,7 +507,7 @@ def lesson_payload(lesson: Lesson) -> dict[str, Any]:
         "course_id": lesson.course_id,
         "title": lesson.title,
         "position": lesson.position,
-        "activities": lesson.activities,
+        "activities": [{"version": ACTIVITY_SCHEMA_VERSION, "required": False, **activity} for activity in lesson.activities],
         "completion_policy": lesson.completion_policy,
         "start_mode": lesson.start_mode,
         "editor_type": lesson.editor_type,
@@ -513,8 +520,74 @@ def lesson_payload(lesson: Lesson) -> dict[str, Any]:
     }
 
 
+def course_unpublished_change_summary(course: Course, release: Optional[CourseRelease]) -> dict[str, Any]:
+    summary = {"course": False, "outline": False, "lesson_keys": []}
+    if release is None:
+        return summary
+    snapshot = release.snapshot
+    current_course = {
+        "id": course.id,
+        "title": course.title,
+        "description": course.description,
+        "authorId": course.author_id,
+        "learningObjectives": course.learning_objectives,
+        "visibility": course.visibility,
+        "coverImageUrl": course.cover_image_url,
+        "ageRange": course.age_range,
+        "difficulty": course.difficulty,
+        "estimatedDurationMinutes": course.estimated_duration_minutes,
+        "prerequisites": course.prerequisites,
+        "tags": course.tags,
+    }
+    summary["course"] = current_course != snapshot.get("course")
+
+    released_lessons = sorted(snapshot.get("lessons", []), key=lambda item: item["position"])
+    current_lessons = sorted((lesson for lesson in course.lessons if not lesson.archived), key=lambda item: item.position)
+    released_by_key = {item["lessonKey"]: item for item in released_lessons}
+    released_order = [item["lessonKey"] for item in released_lessons]
+    current_order = [lesson.lesson_key for lesson in current_lessons]
+    summary["outline"] = current_order != released_order
+
+    for lesson in current_lessons:
+        released = released_by_key.get(lesson.lesson_key)
+        if released is None:
+            summary["lesson_keys"].append(lesson.lesson_key)
+            continue
+        current_activities = []
+        for activity in lesson.activities:
+            item = copy.deepcopy(activity)
+            item.setdefault("version", ACTIVITY_SCHEMA_VERSION)
+            item.setdefault("required", False)
+            current_activities.append(item)
+        released_activities = [{key: value for key, value in item.items() if key != "definitionHash"} for item in released.get("activities", [])]
+        current_definition = {
+            "lessonKey": lesson.lesson_key,
+            "title": lesson.title,
+            "position": lesson.position,
+            "activities": current_activities,
+            "completionPolicy": lesson.completion_policy,
+            "startMode": lesson.start_mode,
+            "editorType": lesson.editor_type,
+            "starterContent": lesson.starter_content,
+            "simulatorSettings": lesson.simulator_settings,
+        }
+        released_definition = {key: released.get(key) for key in current_definition}
+        released_definition["activities"] = released_activities
+        current_stage = stage_payload(lesson) or None
+        released_stage = released.get("stageReference") or None
+        if current_definition != released_definition or current_stage != released_stage:
+            summary["lesson_keys"].append(lesson.lesson_key)
+    return summary
+
+
+def course_has_unpublished_changes(course: Course, release: Optional[CourseRelease]) -> bool:
+    summary = course_unpublished_change_summary(course, release)
+    return summary["course"] or summary["outline"] or bool(summary["lesson_keys"])
+
+
 def course_payload(course: Course, *, include_lessons: bool = False) -> dict[str, Any]:
     latest_release = next((item for item in course.releases if item.id == course.latest_published_release_id), None)
+    change_summary = course_unpublished_change_summary(course, latest_release)
     payload = {
         "id": course.id,
         "title": course.title,
@@ -531,6 +604,8 @@ def course_payload(course: Course, *, include_lessons: bool = False) -> dict[str
         "tags": course.tags,
         "latest_published_release_id": course.latest_published_release_id,
         "latest_published_release_version": latest_release.version if latest_release else None,
+        "has_unpublished_changes": change_summary["course"] or change_summary["outline"] or bool(change_summary["lesson_keys"]),
+        "unpublished_change_summary": change_summary,
         "created_at": course.created_at,
         "updated_at": course.updated_at,
     }
@@ -553,12 +628,14 @@ def release_course_payload(course: Course, release: CourseRelease) -> dict[str, 
         "estimated_duration_minutes": snapshot_course.get("estimatedDurationMinutes"),
         "prerequisites": snapshot_course.get("prerequisites"),
         "tags": snapshot_course.get("tags"),
+        "has_unpublished_changes": False,
+        "unpublished_change_summary": {"course": False, "outline": False, "lesson_keys": []},
         "author_name": f"{course.author.firstname} {course.author.lastname}".strip() or course.author.username,
         "latest_release": {
             "id": release.id,
             "version": release.version,
             "published_at": release.published_at,
-            "lessons": release.snapshot["lessons"],
+            "lessons": student_release_lessons(release.snapshot["lessons"]),
         },
     })
     return payload
@@ -573,6 +650,8 @@ def release_lesson_snapshot(lesson: Lesson, stage_reference: Optional[dict[str, 
     activities = []
     for activity in lesson.activities:
         item = dict(activity)
+        item.setdefault("version", ACTIVITY_SCHEMA_VERSION)
+        item.setdefault("required", False)
         item["definitionHash"] = canonical_hash(activity)
         activities.append(item)
     definition = {
@@ -608,6 +687,9 @@ def validate_publication(course: Course, lessons: list[Lesson]) -> None:
             validate_activities(lesson.activities)
         except ValueError as error:
             raise HTTPException(status_code=422, detail=f"Lesson {lesson.lesson_key}: {error}") from error
+        has_observation = any(activity.get("type") == "simulator_observation" for activity in lesson.activities)
+        if has_observation and (stage_payload(lesson) is None or (lesson.simulator_settings or {}).get("showSimulator") is False):
+            raise HTTPException(status_code=422, detail=f"Lesson {lesson.lesson_key}: simulator observations require a visible simulator stage")
     for previous, lesson in zip(lessons, lessons[1:]):
         if lesson.start_mode == "inherit_previous_code" and lesson.editor_type != previous.editor_type:
             raise HTTPException(status_code=422, detail=f"Lesson {lesson.lesson_key}: inherited workspaces require the same editor type as the previous lesson")
@@ -618,7 +700,7 @@ def stage_model_from_lesson(lesson: Lesson) -> Optional[StageReference]:
     return StageReference.model_validate(payload) if payload else None
 
 
-def release_payload(release: CourseRelease, *, include_snapshot: bool = False) -> dict[str, Any]:
+def release_payload(release: CourseRelease, *, include_snapshot: bool = False, safe_snapshot: bool = False) -> dict[str, Any]:
     payload = {
         "id": release.id,
         "course_id": release.course_id,
@@ -628,7 +710,10 @@ def release_payload(release: CourseRelease, *, include_snapshot: bool = False) -
         "published_at": release.published_at,
     }
     if include_snapshot:
-        payload["snapshot"] = release.snapshot
+        snapshot = release.snapshot
+        if safe_snapshot:
+            snapshot = {**release.snapshot, "lessons": student_release_lessons(release.snapshot.get("lessons", []))}
+        payload["snapshot"] = snapshot
     return payload
 
 
@@ -729,6 +814,7 @@ def add_lesson(course_id: int, request: LessonCreate, user: User = Depends(get_c
             "key": f"content-{uuid.uuid4().hex[:12]}",
             "type": "rich_text",
             "version": 1,
+            "required": False,
             "content": {"type": "doc", "content": [{"type": "paragraph"}]},
         }]
     lesson = Lesson(
@@ -850,6 +936,9 @@ def validate_course_for_publication(course_id: int, user: User = Depends(get_cur
             validate_activities(lesson.activities)
         except ValueError as error:
             issues.append(PublicationIssue(group="Lesson", code="activity", message=str(error), lesson_id=lesson.id, field="activities"))
+        has_observation = any(activity.get("type") == "simulator_observation" for activity in lesson.activities)
+        if has_observation and (stage_payload(lesson) is None or (lesson.simulator_settings or {}).get("showSimulator") is False):
+            issues.append(PublicationIssue(group="Stage", code="observation_stage", message="Simulator observations require a visible simulator stage.", lesson_id=lesson.id, field="stageReference"))
         try:
             validate_starter_for_publication(lesson.editor_type, lesson.starter_content)
         except ValueError as error:
@@ -869,6 +958,15 @@ def publish_course(course_id: int, user: User = Depends(get_current_user), db: S
     course = authored_course_or_404(db, user, course_id)
     if course.status == "archived":
         raise HTTPException(status_code=409, detail="Archived courses cannot be published")
+    latest_release = db.query(CourseRelease).filter(CourseRelease.id == course.latest_published_release_id).first()
+    if latest_release and not course_has_unpublished_changes(course, latest_release):
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error": "no_unpublished_changes",
+                "detail": "This course already matches its latest published release.",
+            },
+        )
     lessons = active_lessons(db, course_id)
     validate_publication(course, lessons)
     lesson_snapshots = []
@@ -993,6 +1091,80 @@ def progress_row(db: Session, enrollment: Enrollment, lesson_key: str) -> Option
         LessonProgress.release_id == enrollment.active_release_id,
         LessonProgress.lesson_key == lesson_key,
     ).first()
+
+
+def activity_answer_row(
+    db: Session,
+    enrollment: Enrollment,
+    lesson_key: str,
+    activity_key: str,
+) -> Optional[ActivityAnswer]:
+    return db.query(ActivityAnswer).filter(
+        ActivityAnswer.enrollment_id == enrollment.id,
+        ActivityAnswer.release_id == enrollment.active_release_id,
+        ActivityAnswer.lesson_key == lesson_key,
+        ActivityAnswer.activity_key == activity_key,
+    ).first()
+
+
+def activity_state_payload(activity: dict[str, Any], answer: Optional[ActivityAnswer]) -> dict[str, Any]:
+    return {
+        "activity_key": activity["key"],
+        "type": activity["type"],
+        "required": activity.get("required", False),
+        "submitted_value": answer.submitted_value if answer else None,
+        "correctness": answer.correctness if answer else None,
+        "satisfied": answer.satisfied if answer else False,
+        "attempt_count": answer.attempt_count if answer else 0,
+        "sensor_summary": answer.sensor_summary if answer else None,
+        "first_submitted_at": answer.first_submitted_at if answer else None,
+        "last_submitted_at": answer.last_submitted_at if answer else None,
+        "satisfied_at": answer.satisfied_at if answer else None,
+    }
+
+
+def required_activities_satisfied(
+    db: Session,
+    enrollment: Enrollment,
+    lesson: dict[str, Any],
+) -> bool:
+    required = {activity["key"] for activity in lesson.get("activities", []) if activity.get("required", False)}
+    if not required:
+        return True
+    satisfied = {
+        item.activity_key
+        for item in db.query(ActivityAnswer).filter(
+            ActivityAnswer.enrollment_id == enrollment.id,
+            ActivityAnswer.release_id == enrollment.active_release_id,
+            ActivityAnswer.lesson_key == lesson["lessonKey"],
+            ActivityAnswer.satisfied.is_(True),
+        ).all()
+    }
+    return required.issubset(satisfied)
+
+
+def complete_progress(
+    db: Session,
+    enrollment: Enrollment,
+    release: CourseRelease,
+    lesson_key: str,
+    method: str,
+) -> None:
+    now = datetime.datetime.utcnow()
+    progress = progress_row(db, enrollment, lesson_key)
+    if progress is None:
+        progress = LessonProgress(
+            enrollment_id=enrollment.id,
+            release_id=release.id,
+            lesson_key=lesson_key,
+            started_at=now,
+        )
+        db.add(progress)
+    if progress.state != "completed":
+        progress.state = "completed"
+        progress.completed_at = now
+        progress.completion_method = method
+    refresh_course_completion(db, enrollment, release)
 
 
 def workspace_payload(workspace: LessonWorkspace) -> dict[str, Any]:
@@ -1123,7 +1295,12 @@ def enrollment_payload(db: Session, enrollment: Enrollment) -> dict[str, Any]:
             "tags": snapshot_course.get("tags"),
             "visibility": snapshot_course["visibility"],
         },
-        "active_release": {"id": release.id, "version": release.version, "published_at": release.published_at, "lessons": lessons},
+        "active_release": {
+            "id": release.id,
+            "version": release.version,
+            "published_at": release.published_at,
+            "lessons": student_release_lessons(lessons),
+        },
         "progress": progress,
         "completed_count": completed_count,
         "lesson_count": len(lessons),
@@ -1238,6 +1415,105 @@ def reset_lesson_workspace(enrollment_id: int, lesson_key: str, request: Workspa
     return workspace_payload(workspace)
 
 
+@router.get("/enrollments/{enrollment_id}/lessons/{lesson_key}/activities")
+def read_activity_states(enrollment_id: int, lesson_key: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    require_student(user)
+    enrollment = owned_enrollment_or_404(db, user, enrollment_id)
+    release = db.query(CourseRelease).filter(CourseRelease.id == enrollment.active_release_id).one()
+    lesson = lesson_for_release_or_404(release, lesson_key)
+    stored = {
+        item.activity_key: item
+        for item in db.query(ActivityAnswer).filter(
+            ActivityAnswer.enrollment_id == enrollment.id,
+            ActivityAnswer.release_id == release.id,
+            ActivityAnswer.lesson_key == lesson_key,
+        ).all()
+    }
+    return [activity_state_payload(activity, stored.get(activity["key"])) for activity in lesson.get("activities", [])]
+
+
+@router.post("/enrollments/{enrollment_id}/lessons/{lesson_key}/activities/{activity_key}/submit")
+def submit_activity(
+    enrollment_id: int,
+    lesson_key: str,
+    activity_key: str,
+    request: ActivitySubmissionRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    require_student(user)
+    enrollment = owned_enrollment_or_404(db, user, enrollment_id)
+    release = db.query(CourseRelease).filter(CourseRelease.id == enrollment.active_release_id).one()
+    lesson = lesson_for_release_or_404(release, lesson_key)
+    try:
+        activity = activity_by_key(lesson, activity_key)
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    answer = activity_answer_row(db, enrollment, lesson_key, activity_key)
+    duplicate = bool(answer and answer.last_submission_id == request.submission_id)
+    if duplicate:
+        _, _, feedback = grade_submission(activity, answer.submitted_value)
+        return {
+            "state": activity_state_payload(activity, answer),
+            "feedback": feedback,
+            "duplicate": True,
+            "lesson_completed": progress_row(db, enrollment, lesson_key).state == "completed" if progress_row(db, enrollment, lesson_key) else False,
+        }
+
+    try:
+        correctness, satisfied_now, feedback = grade_submission(activity, request.value)
+        summary = compact_sensor_summary(request.sensor_summary, activity)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+    now = datetime.datetime.utcnow()
+    if answer is None:
+        answer = ActivityAnswer(
+            enrollment_id=enrollment.id,
+            release_id=release.id,
+            lesson_key=lesson_key,
+            activity_key=activity_key,
+            attempt_count=0,
+            last_submission_id=request.submission_id,
+            first_submitted_at=now,
+            last_submitted_at=now,
+        )
+        db.add(answer)
+    answer.submitted_value = request.value if activity.get("collectResponse", True) else None
+    answer.correctness = correctness
+    answer.satisfied = answer.satisfied or satisfied_now
+    answer.attempt_count += 1
+    answer.last_submission_id = request.submission_id
+    answer.last_submitted_at = now
+    if summary is not None:
+        answer.sensor_summary = summary
+    if satisfied_now and answer.satisfied_at is None:
+        answer.satisfied_at = now
+    db.flush()
+
+    if lesson["completionPolicy"] == "activity" and required_activities_satisfied(db, enrollment, lesson):
+        complete_progress(db, enrollment, release, lesson_key, "activity")
+    else:
+        progress = progress_row(db, enrollment, lesson_key)
+        if progress is None:
+            db.add(LessonProgress(
+                enrollment_id=enrollment.id,
+                release_id=release.id,
+                lesson_key=lesson_key,
+                state="in_progress",
+                started_at=now,
+            ))
+    safe_commit(db)
+    db.refresh(answer)
+    progress = progress_row(db, enrollment, lesson_key)
+    return {
+        "state": activity_state_payload(activity, answer),
+        "feedback": feedback,
+        "duplicate": False,
+        "lesson_completed": bool(progress and progress.state == "completed"),
+    }
+
+
 @router.post("/enrollments/{enrollment_id}/lessons/{lesson_key}/complete")
 def complete_lesson(enrollment_id: int, lesson_key: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     require_student(user)
@@ -1246,16 +1522,12 @@ def complete_lesson(enrollment_id: int, lesson_key: str, user: User = Depends(ge
     lesson = lesson_for_release_or_404(release, lesson_key)
     if lesson["completionPolicy"] not in ("self", "hybrid"):
         raise HTTPException(status_code=409, detail="This lesson cannot be self-completed")
-    progress = progress_row(db, enrollment, lesson_key)
-    now = datetime.datetime.utcnow()
-    if progress is None:
-        progress = LessonProgress(enrollment_id=enrollment.id, release_id=release.id, lesson_key=lesson_key, started_at=now)
-        db.add(progress)
-    if progress.state != "completed":
-        progress.state = "completed"
-        progress.completed_at = now
-        progress.completion_method = "self"
-    refresh_course_completion(db, enrollment, release)
+    if lesson["completionPolicy"] == "hybrid" and not required_activities_satisfied(db, enrollment, lesson):
+        raise HTTPException(status_code=409, detail={
+            "error": "required_activities_incomplete",
+            "detail": "Complete the required activities before finishing this lesson.",
+        })
+    complete_progress(db, enrollment, release, lesson_key, "hybrid" if lesson["completionPolicy"] == "hybrid" else "self")
     safe_commit(db)
     return enrollment_payload(db, enrollment)
 
@@ -1267,7 +1539,7 @@ def uncomplete_lesson(enrollment_id: int, lesson_key: str, user: User = Depends(
     release = db.query(CourseRelease).filter(CourseRelease.id == enrollment.active_release_id).one()
     lesson = lesson_for_release_or_404(release, lesson_key)
     progress = progress_row(db, enrollment, lesson_key)
-    if lesson["completionPolicy"] not in ("self", "hybrid") or progress is None or progress.completion_method != "self":
+    if lesson["completionPolicy"] not in ("self", "hybrid") or progress is None or progress.completion_method not in ("self", "hybrid"):
         raise HTTPException(status_code=409, detail="This completion cannot be undone")
     progress.state = "in_progress"
     progress.completed_at = None
@@ -1325,6 +1597,13 @@ def update_enrollment_release(enrollment_id: int, user: User = Depends(get_curre
         LessonWorkspace.enrollment_id == enrollment.id,
         LessonWorkspace.release_id == active.id,
     ).all()}
+    old_answers = {
+        (item.lesson_key, item.activity_key): item
+        for item in db.query(ActivityAnswer).filter(
+            ActivityAnswer.enrollment_id == enrollment.id,
+            ActivityAnswer.release_id == active.id,
+        ).all()
+    }
     for lesson in release_lessons(latest):
         key = lesson["lessonKey"]
         previous = active_by_key.get(key)
@@ -1350,6 +1629,27 @@ def update_enrollment_release(enrollment_id: int, user: User = Depends(get_curre
                 origin={**(workspace.origin or {}), "carriedFromReleaseId": active.id, "carriedFromWorkspaceRevision": workspace.revision},
                 revision=1,
                 initialized_at=datetime.datetime.utcnow(),
+            ))
+        previous_activities = {item["key"]: item for item in previous.get("activities", [])} if previous else {}
+        for activity in lesson.get("activities", []):
+            old_activity = previous_activities.get(activity["key"])
+            old_answer = old_answers.get((key, activity["key"]))
+            if not old_activity or not old_answer or old_activity.get("definitionHash") != activity.get("definitionHash"):
+                continue
+            db.add(ActivityAnswer(
+                enrollment_id=enrollment.id,
+                release_id=latest.id,
+                lesson_key=key,
+                activity_key=activity["key"],
+                submitted_value=old_answer.submitted_value,
+                correctness=old_answer.correctness,
+                satisfied=old_answer.satisfied,
+                attempt_count=old_answer.attempt_count,
+                last_submission_id=old_answer.last_submission_id,
+                sensor_summary=old_answer.sensor_summary,
+                first_submitted_at=old_answer.first_submitted_at,
+                last_submitted_at=old_answer.last_submitted_at,
+                satisfied_at=old_answer.satisfied_at,
             ))
     enrollment.active_release_id = latest.id
     enrollment.release_updated_at = datetime.datetime.utcnow()
@@ -1384,7 +1684,7 @@ def read_release(course_id: int, release_id: int, user: Optional[User] = Depends
         ).first() is not None
     if user is None or (course.author_id != user.id and not enrolled):
         raise HTTPException(status_code=404, detail="Release not found")
-    return release_payload(release, include_snapshot=True)
+    return release_payload(release, include_snapshot=True, safe_snapshot=course.author_id != user.id)
 
 
 # Deprecated compatibility aliases. They intentionally expose the former payload shape.

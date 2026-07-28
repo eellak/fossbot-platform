@@ -79,7 +79,7 @@ def test_legacy_curriculum_and_lesson_survive_upgrade(tmp_path):
 
     inspector = inspect(engine)
     assert "curriculums" not in inspector.get_table_names()
-    assert {"courses", "course_releases", "enrollments", "lesson_progress", "lesson_workspaces"}.issubset(
+    assert {"courses", "course_releases", "enrollments", "lesson_progress", "lesson_workspaces", "activity_answers"}.issubset(
         inspector.get_table_names()
     )
     with engine.connect() as connection:

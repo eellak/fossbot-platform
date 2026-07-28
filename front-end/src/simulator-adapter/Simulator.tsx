@@ -30,6 +30,7 @@ import {
 import CardDialog from 'src/components/stage-select-popup/CardDialog';
 import type { RawStageConfig } from 'src/simulator/stages';
 import type { FossbotSimulatorHandle } from 'src/simulator/FossbotSimulator';
+import type { SensorRunSummary, SensorTelemetryListener, SensorTelemetrySnapshot } from 'src/simulator/sensors/telemetry';
 
 type SimulatorVersion = 'v1' | 'v2';
 
@@ -42,6 +43,10 @@ type WebGLAppProps = {
   /** Base URL for assets referenced by initialStageConfig, such as GitHub stage assets. */
   initialStageAssetBaseUrl?: string | null;
   showControls?: boolean;
+  allowStageSelection?: boolean;
+  sensorHelpersVisible?: boolean;
+  sensorTelemetryAutoStart?: boolean;
+  onTelemetry?: SensorTelemetryListener;
 };
 
 const SIMULATOR_VERSION_KEY = 'fossbot.simulatorVersion';
@@ -144,16 +149,22 @@ const V2WebGLApp = forwardRef<unknown, WebGLAppProps>((props, ref) => {
     () => ({
       ...v2Config,
       stageAssetBaseUrl: props.initialStageAssetBaseUrl || undefined,
+      sensorHelpersVisible: props.sensorHelpersVisible ?? false,
+      sensorTelemetryAutoStart: props.sensorTelemetryAutoStart ?? true,
     }),
-    [v2Config, props.initialStageAssetBaseUrl],
+    [v2Config, props.initialStageAssetBaseUrl, props.sensorHelpersVisible, props.sensorTelemetryAutoStart],
   );
   const handleRef = useRef<FossbotSimulatorHandle | null>(null);
+  const telemetryUnsubscribeRef = useRef<(() => void) | null>(null);
+  const onTelemetryRef = useRef(props.onTelemetry);
   const [lightIntensity, setLightIntensity] = useState(100);
   const [currentURL, setCurrentURL] = useState(DEFAULT_STAGE_URL);
   const [openDialog, setOpenDialog] = useState(false);
   const [initialStageConfig, setInitialStageConfig] = useState<RawStageConfig | null | undefined>(undefined);
   // undefined = loading, null = no custom stage (use default), RawStageConfig = ready
   const [stageLoadError, setStageLoadError] = useState<string | null>(null);
+
+  useEffect(() => { onTelemetryRef.current = props.onTelemetry; }, [props.onTelemetry]);
 
   // Use pre-fetched config from parent if provided; otherwise fetch from URL
   useEffect(() => {
@@ -195,12 +206,19 @@ const V2WebGLApp = forwardRef<unknown, WebGLAppProps>((props, ref) => {
 
   const setV2Handle = useCallback(
     (handle: FossbotSimulatorHandle | null) => {
+      telemetryUnsubscribeRef.current?.();
+      telemetryUnsubscribeRef.current = null;
       handleRef.current = handle;
       activeV2Handle = handle;
+      if (handle) telemetryUnsubscribeRef.current = handle.subscribeSensorTelemetry((snapshot) => onTelemetryRef.current?.(snapshot));
       setForwardedRef(ref, handle);
     },
     [ref],
   );
+
+  useEffect(() => {
+    handleRef.current?.setSensorHelpersVisible(props.sensorHelpersVisible ?? false);
+  }, [props.sensorHelpersVisible]);
 
   const handleMountChange = useCallback(
     (mounted: boolean) => {
@@ -284,11 +302,12 @@ const V2WebGLApp = forwardRef<unknown, WebGLAppProps>((props, ref) => {
       display="flex"
       flexDirection="column"
       alignItems="center"
-      justifyContent="center"
+      justifyContent="flex-start"
       height="100%"
       width="100%"
+      overflow="hidden"
     >
-      <Box width="100%" height="100%" minHeight={0}>
+      <Box width="100%" flex="1 1 auto" minHeight={240}>
         <Suspense fallback={<div style={{ width: '100%', height: '100%' }} />}>
           <LazyFossbotSimulator
             appsessionId={props.appsessionId}
@@ -299,8 +318,8 @@ const V2WebGLApp = forwardRef<unknown, WebGLAppProps>((props, ref) => {
           />
         </Suspense>
       </Box>
-      {props.showControls !== false && <Box mt={2} width="100%">
-        <Grid container spacing={2} justifyContent="center">
+      {props.showControls !== false && <Box mt={1} width="100%" flex="0 0 auto">
+        <Grid container spacing={1} justifyContent="center">
           <Grid item>
             <Button variant="contained" color="primary" onClick={handleForward}>
               <FontAwesomeIcon icon={faArrowUp} size="2x" />
@@ -331,15 +350,15 @@ const V2WebGLApp = forwardRef<unknown, WebGLAppProps>((props, ref) => {
               <FontAwesomeIcon icon={faRefresh} size="2x" />
             </Button>
           </Grid>
-          <Grid item>
+          {props.allowStageSelection !== false && <Grid item>
             <Button variant="contained" color="success" onClick={() => setOpenDialog(true)}>
               <FontAwesomeIcon icon={faMap} size="2x" />
             </Button>
-          </Grid>
+          </Grid>}
         </Grid>
       </Box>}
-      {props.showControls !== false && <Box mt={2} width="80%">
-        <Grid container spacing={2} alignItems="center" justifyContent="center">
+      {props.showControls !== false && <Box mt={0.5} mb={0.5} width="80%" flex="0 0 auto">
+        <Grid container spacing={1} alignItems="center" justifyContent="center">
           <Grid item>
             <FontAwesomeIcon icon={faLightbulb} size="2x" color="primary" />
           </Grid>
@@ -355,7 +374,7 @@ const V2WebGLApp = forwardRef<unknown, WebGLAppProps>((props, ref) => {
           </Grid>
         </Grid>
       </Box>}
-      {props.showControls !== false && <CardDialog open={openDialog} onClose={() => setOpenDialog(false)} onSelect={handleCardSelect} />}
+      {props.showControls !== false && props.allowStageSelection !== false && <CardDialog open={openDialog} onClose={() => setOpenDialog(false)} onSelect={handleCardSelect} />}
     </Box>
   );
 });
@@ -459,6 +478,30 @@ export function drawLine(status: boolean): void {
 export function changeCameraView(): void {
   const handle = getActiveV2Handle();
   if (handle) handle.changeCamera();
+}
+
+export function startSensorRun(): string {
+  return getActiveV2Handle()?.startSensorRun() ?? '';
+}
+
+export function endSensorRun(): SensorRunSummary | null {
+  return getActiveV2Handle()?.endSensorRun() ?? null;
+}
+
+export function pauseSensorRun(): void {
+  getActiveV2Handle()?.pauseSensorRun();
+}
+
+export function resumeSensorRun(): string {
+  return getActiveV2Handle()?.resumeSensorRun() ?? '';
+}
+
+export function getSensorTelemetrySnapshot(): SensorTelemetrySnapshot | null {
+  return getActiveV2Handle()?.getSensorTelemetrySnapshot() ?? null;
+}
+
+export function setSensorHelpersVisible(visible: boolean): void {
+  getActiveV2Handle()?.setSensorHelpersVisible(visible);
 }
 
 export { WebGLApp };

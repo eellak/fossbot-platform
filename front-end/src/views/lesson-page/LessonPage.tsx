@@ -67,7 +67,7 @@ export default function LessonPage() {
                 <Typography variant="h2">{lesson.title}</Typography>
               </Box>
               {error ? <Alert severity="error" action={<Button color="inherit" disabled={saving} onClick={() => void setCompletion(progress?.state !== 'completed')}>{t('education.student.retry')}</Button>}>{error}</Alert> : null}
-              <Stack spacing={2}>{lesson.activities.map((activity) => <RichTextContent key={activity.key} content={activity.content} />)}</Stack>
+              <Stack spacing={2}>{lesson.activities.map((activity) => activity.type === 'rich_text' || activity.type === 'hint' ? <RichTextContent key={activity.key} content={activity.content} /> : null)}</Stack>
               <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} justifyContent="space-between" alignItems={{ sm: 'center' }} sx={{ pt: 3, borderTop: '1px solid', borderColor: 'divider' }}>
                 <Button startIcon={<IconArrowLeft size={18} />} disabled={!previous} onClick={() => previous && navigate(`/courses/${courseId}/learn/${previous.lessonKey}`)}>{t('education.student.previous')}</Button>
                 {canSelfComplete && (progress?.state === 'completed' ? <Button color="inherit" disabled={saving} onClick={() => void setCompletion(false)}>{saving ? t('education.student.saving') : t('education.student.undoCompletion')}</Button> : <Button variant="contained" startIcon={<IconCircleCheck size={18} />} disabled={saving} onClick={() => void setCompletion(true)}>{saving ? t('education.student.saving') : t('education.student.finished')}</Button>)}

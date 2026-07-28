@@ -11,6 +11,9 @@ import type {
   ReleaseUpdate,
   StudentCourse,
   LessonWorkspace,
+  ActivityState,
+  ActivitySubmissionResponse,
+  CompactSensorSummary,
 } from './types';
 
 const backendUrl: string = process.env.REACT_APP_BACKEND_URL;
@@ -146,4 +149,24 @@ export async function saveLessonWorkspace(token: string, enrollmentId: number, l
 
 export async function resetLessonWorkspace(token: string, enrollmentId: number, lessonKey: string, revision: number): Promise<LessonWorkspace> {
   return parse(await fetch(`${backendUrl}/enrollments/${enrollmentId}/lessons/${encodeURIComponent(lessonKey)}/workspace/reset`, { method: 'POST', headers: headers(token), body: JSON.stringify({ revision }) }));
+}
+
+export async function readActivityStates(token: string, enrollmentId: number, lessonKey: string): Promise<ActivityState[]> {
+  return parse(await fetch(`${backendUrl}/enrollments/${enrollmentId}/lessons/${encodeURIComponent(lessonKey)}/activities`, { headers: headers(token) }));
+}
+
+export async function submitActivity(
+  token: string,
+  enrollmentId: number,
+  lessonKey: string,
+  activityKey: string,
+  submissionId: string,
+  value?: unknown,
+  sensorSummary?: CompactSensorSummary | null,
+): Promise<ActivitySubmissionResponse> {
+  return parse(await fetch(`${backendUrl}/enrollments/${enrollmentId}/lessons/${encodeURIComponent(lessonKey)}/activities/${encodeURIComponent(activityKey)}/submit`, {
+    method: 'POST',
+    headers: headers(token),
+    body: JSON.stringify({ submission_id: submissionId, value, sensor_summary: sensorSummary || null }),
+  }));
 }

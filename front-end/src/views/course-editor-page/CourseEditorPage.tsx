@@ -6,7 +6,7 @@ import {
 } from '@mui/material';
 import {
   IconAlertTriangle, IconArrowDown, IconArrowLeft, IconArrowUp, IconCheck, IconChevronDown, IconCopy, IconEye,
-  IconGripVertical, IconPlus, IconTrash,
+  IconGripVertical, IconPlus, IconTrash, IconArrowBackUp, IconArrowForwardUp,
 } from '@tabler/icons-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -14,12 +14,14 @@ import { useAuth } from 'src/authentication/AuthProvider';
 import {
   CourseRequestError, addLesson, deleteLesson, publishCourse, readCourseDraft, reorderLessons, updateCourse, updateLesson, validateCourse,
 } from 'src/courses/CoursesApi';
-import { inheritanceChanges, moveLesson, richTextActivity } from 'src/courses/courseAuthoring';
-import type { CourseDraft, Lesson, PublicationIssue, StageReference, TiptapNode } from 'src/courses/types';
-import RichTextEditor from 'src/components/courses/RichTextEditor';
+import { inheritanceChanges, moveLesson } from 'src/courses/courseAuthoring';
+import { authoringSnapshot, emptyAuthoringHistory, loadAuthoringHistory, restoreAuthoringSnapshot, saveAuthoringHistory, snapshotFingerprint, type AuthoringHistory } from 'src/courses/courseHistory';
+import { activityValidation } from 'src/courses/activitySchema';
+import type { CourseDraft, Lesson, PublicationIssue, StageReference } from 'src/courses/types';
 import LessonPreview from 'src/components/courses/LessonPreview';
 import StageSelector from 'src/components/courses/StageSelector';
 import StarterCodeWorkspace from 'src/components/courses/StarterCodeWorkspace';
+import ActivityComposer from 'src/components/courses/activities/ActivityComposer';
 
 type SaveState = 'saved' | 'unsaved' | 'saving' | 'failed';
 type Panel = 'outline' | 'content' | 'settings';
@@ -30,7 +32,9 @@ type OutlineDropTarget = { lessonId: number; placement: OutlineDropPlacement };
 type ResizeSide = 'left' | 'right';
 type ResizeState = { side: ResizeSide; startX: number; startWidth: number };
 
-const panelSizing = { left: 280, right: 340, min: 230, max: 480, handle: 10 } as const;
+const panelSizing = { left: 280, right: 340, min: 230, max: 480, handle: 8 } as const;
+const historyLimit = 20;
+const historyGroupMs = 800;
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
 const courseFields = (course: CourseDraft) => ({
@@ -88,9 +92,73 @@ export default function CourseEditorPage() {
   const [leftWidth, setLeftWidth] = useState<number>(panelSizing.left);
   const [rightWidth, setRightWidth] = useState<number>(panelSizing.right);
   const [resizing, setResizing] = useState<ResizeState | null>(null);
+  const historyRef = useRef<AuthoringHistory>(emptyAuthoringHistory());
+  const historyGroupRef = useRef<{ scope: string; at: number } | null>(null);
+  const historyPersistTimer = useRef<number | null>(null);
+  const [historyRevision, setHistoryRevision] = useState(0);
+  const historyStorageKey = `fossbot.course-authoring-history.v1:${id}`;
 
   useEffect(() => { courseRef.current = course; }, [course]);
   const selectedLesson = useMemo(() => course?.lessons.find((lesson) => lesson.id === selectedId) || null, [course, selectedId]);
+
+  const setHistory = (history: AuthoringHistory, current: CourseDraft) => {
+    historyRef.current = history;
+    setHistoryRevision((value) => value + 1);
+    if (historyPersistTimer.current !== null) window.clearTimeout(historyPersistTimer.current);
+    historyPersistTimer.current = window.setTimeout(() => saveAuthoringHistory(historyStorageKey, historyRef.current, courseRef.current || current), 200);
+  };
+
+  const resetHistory = (current: CourseDraft) => {
+    historyGroupRef.current = null;
+    setHistory(emptyAuthoringHistory(), current);
+  };
+
+  const recordHistory = (before: CourseDraft, after: CourseDraft, scope: string) => {
+    if (snapshotFingerprint(authoringSnapshot(before)) === snapshotFingerprint(authoringSnapshot(after))) return;
+    const now = Date.now();
+    const grouped = historyGroupRef.current?.scope === scope && now - historyGroupRef.current.at < historyGroupMs;
+    const past = grouped ? historyRef.current.past : [...historyRef.current.past, authoringSnapshot(before)].slice(-historyLimit);
+    historyGroupRef.current = { scope, at: now };
+    setHistory({ past, future: [] }, after);
+  };
+
+  const applyHistorySnapshot = (snapshot: ReturnType<typeof authoringSnapshot>) => {
+    const before = courseRef.current;
+    if (!before) return;
+    const next = restoreAuthoringSnapshot(before, snapshot);
+    const beforeSnapshot = authoringSnapshot(before);
+    const nextSnapshot = authoringSnapshot(next);
+    if (JSON.stringify(beforeSnapshot.course) !== JSON.stringify(nextSnapshot.course)) courseGeneration.current += 1;
+    const beforeLessons = new Map(beforeSnapshot.lessons.map((lesson) => [lesson.id, lesson.fields]));
+    nextSnapshot.lessons.forEach((lesson) => {
+      if (JSON.stringify(beforeLessons.get(lesson.id)) !== JSON.stringify(lesson.fields)) {
+        lessonGenerations.current.set(lesson.id, (lessonGenerations.current.get(lesson.id) || 0) + 1);
+      }
+    });
+    setCourse(next); courseRef.current = next; setSaveState('unsaved'); setRevision((value) => value + 1);
+  };
+
+  const undo = () => {
+    const current = courseRef.current;
+    const previous = historyRef.current.past[historyRef.current.past.length - 1];
+    if (!current || !previous) return;
+    const history = { past: historyRef.current.past.slice(0, -1), future: [authoringSnapshot(current), ...historyRef.current.future].slice(0, historyLimit) };
+    historyGroupRef.current = null;
+    const next = restoreAuthoringSnapshot(current, previous);
+    setHistory(history, next);
+    applyHistorySnapshot(previous);
+  };
+
+  const redo = () => {
+    const current = courseRef.current;
+    const upcoming = historyRef.current.future[0];
+    if (!current || !upcoming) return;
+    const history = { past: [...historyRef.current.past, authoringSnapshot(current)].slice(-historyLimit), future: historyRef.current.future.slice(1) };
+    historyGroupRef.current = null;
+    const next = restoreAuthoringSnapshot(current, upcoming);
+    setHistory(history, next);
+    applyHistorySnapshot(upcoming);
+  };
 
   const load = useCallback(async () => {
     setLoading(true); setError(''); setConflict(null);
@@ -99,25 +167,45 @@ export default function CourseEditorPage() {
       setCourse(draft); courseRef.current = draft;
       setSelectedId((current) => draft.lessons.some((lesson) => lesson.id === current) ? current : draft.lessons[0]?.id || null);
       courseGeneration.current = 0; lessonGenerations.current.clear(); setSaveState('saved');
+      historyRef.current = loadAuthoringHistory(historyStorageKey, draft); historyGroupRef.current = null; setHistoryRevision((value) => value + 1);
     } catch (err) { setError(err instanceof Error ? err.message : t('education.errors.load')); }
     finally { setLoading(false); }
-  }, [id, token, t]);
+  }, [historyStorageKey, id, token, t]);
   useEffect(() => { load(); }, [load]);
 
   const markCourse = (patch: Partial<CourseDraft>) => {
-    setCourse((current) => {
-      const next = current ? { ...current, ...patch } : current;
-      courseRef.current = next;
-      return next;
-    });
+    const current = courseRef.current;
+    if (!current) return;
+    const published = Boolean(current.latest_published_release_id);
+    const next = {
+      ...current,
+      ...patch,
+      has_unpublished_changes: published,
+      unpublished_change_summary: published
+        ? { course: true, outline: current.unpublished_change_summary?.outline || false, lesson_keys: current.unpublished_change_summary?.lesson_keys || [] }
+        : current.unpublished_change_summary,
+    };
+    recordHistory(current, next, `course:${Object.keys(patch).sort().join(',')}`);
+    setCourse(next); courseRef.current = next;
     courseGeneration.current += 1; setSaveState('unsaved'); setRevision((value) => value + 1);
   };
   const markLesson = (lessonId: number, patch: Partial<Lesson>) => {
-    setCourse((current) => {
-      const next = current ? { ...current, lessons: current.lessons.map((lesson) => lesson.id === lessonId ? { ...lesson, ...patch } : lesson) } : current;
-      courseRef.current = next;
-      return next;
-    });
+    const current = courseRef.current;
+    if (!current) return;
+    const changedLesson = current.lessons.find((lesson) => lesson.id === lessonId);
+    const published = Boolean(current.latest_published_release_id);
+    const lessonKeys = new Set(current.unpublished_change_summary?.lesson_keys || []);
+    if (published && changedLesson) lessonKeys.add(changedLesson.lesson_key);
+    const next = {
+      ...current,
+      has_unpublished_changes: published,
+      unpublished_change_summary: published
+        ? { course: current.unpublished_change_summary?.course || false, outline: current.unpublished_change_summary?.outline || false, lesson_keys: [...lessonKeys] }
+        : current.unpublished_change_summary,
+      lessons: current.lessons.map((lesson) => lesson.id === lessonId ? { ...lesson, ...patch } : lesson),
+    };
+    recordHistory(current, next, `lesson:${lessonId}:${Object.keys(patch).sort().join(',')}`);
+    setCourse(next); courseRef.current = next;
     lessonGenerations.current.set(lessonId, (lessonGenerations.current.get(lessonId) || 0) + 1);
     setSaveState('unsaved'); setRevision((value) => value + 1);
   };
@@ -159,6 +247,12 @@ export default function CourseEditorPage() {
           if (lessonGenerations.current.get(lessonId) === generation) lessonGenerations.current.delete(lessonId);
         } catch (err) { handleSaveError(err, 'lesson', lessonId); return false; }
       }
+      if (!courseGeneration.current && !lessonGenerations.current.size) {
+        const refreshed = await readCourseDraft(token, snapshot.id);
+        if (!courseGeneration.current && !lessonGenerations.current.size) {
+          setCourse(refreshed); courseRef.current = refreshed;
+        }
+      }
       setSaveState(courseGeneration.current || lessonGenerations.current.size ? 'unsaved' : 'saved');
       return true;
     } catch (err) { handleSaveError(err, 'course'); return false; }
@@ -178,6 +272,11 @@ export default function CourseEditorPage() {
     window.addEventListener('beforeunload', warn);
     return () => window.removeEventListener('beforeunload', warn);
   }, []);
+
+  useEffect(() => () => {
+    if (historyPersistTimer.current !== null) window.clearTimeout(historyPersistTimer.current);
+    if (courseRef.current) saveAuthoringHistory(historyStorageKey, historyRef.current, courseRef.current);
+  }, [historyStorageKey]);
 
   useEffect(() => {
     if (!resizing) return undefined;
@@ -222,9 +321,8 @@ export default function CourseEditorPage() {
     setSaveState('saving');
     try {
       const lesson = await addLesson(token, course.id, { title: t('education.lesson.untitled') });
-      const base = courseRef.current || course;
-      const next = { ...base, lessons: [...base.lessons, lesson] };
-      setCourse(next); courseRef.current = next; setSelectedId(lesson.id); setMobilePanel('content'); setSaveState('saved');
+      const next = await readCourseDraft(token, course.id);
+      setCourse(next); courseRef.current = next; resetHistory(next); setSelectedId(lesson.id); setMobilePanel('content'); setSaveState('saved');
     } catch (err) { handleSaveError(err, 'course'); }
   };
 
@@ -234,9 +332,8 @@ export default function CourseEditorPage() {
     setSaveState('saving');
     try {
       const copy = await addLesson(token, course.id, { ...lessonFields(lesson), title: `${lesson.title} (${t('education.copy')})` });
-      const base = courseRef.current || course;
-      const next = { ...base, lessons: [...base.lessons, copy] };
-      setCourse(next); courseRef.current = next; setSelectedId(copy.id); setSaveState('saved');
+      const next = await readCourseDraft(token, course.id);
+      setCourse(next); courseRef.current = next; resetHistory(next); setSelectedId(copy.id); setSaveState('saved');
     } catch (err) { handleSaveError(err, 'lesson', lesson.id); }
   };
 
@@ -245,10 +342,8 @@ export default function CourseEditorPage() {
     if (!(await saveDraft())) return;
     try {
       await deleteLesson(token, course.id, lesson.id);
-      const base = courseRef.current || course;
-      const lessons = base.lessons.filter((item) => item.id !== lesson.id).map((item, index) => ({ ...item, position: index + 1 }));
-      const next = { ...base, lessons };
-      setCourse(next); courseRef.current = next; setSelectedId(lessons[0]?.id || null); setSaveState('saved');
+      const next = await readCourseDraft(token, course.id);
+      setCourse(next); courseRef.current = next; resetHistory(next); setSelectedId(next.lessons[0]?.id || null); setSaveState('saved');
     } catch (err) { handleSaveError(err, 'lesson', lesson.id); }
   };
 
@@ -260,15 +355,12 @@ export default function CourseEditorPage() {
     const ordered = next.map((item, index) => ({ ...(previous.find((lesson) => lesson.id === item.id) || item), position: index + 1 }));
     const changed = inheritanceChanges(previous, ordered);
     setInheritanceWarning(changed);
-    const optimistic = { ...savedBase, lessons: ordered };
+    const optimistic = { ...savedBase, has_unpublished_changes: Boolean(savedBase.latest_published_release_id), lessons: ordered };
     setCourse(optimistic); courseRef.current = optimistic; setSaveState('saving');
     try {
-      const saved = await reorderLessons(token, course.id, ordered.map((lesson) => lesson.id));
-      setCourse((current) => {
-        const nextCourse = current ? { ...current, lessons: saved } : current;
-        courseRef.current = nextCourse;
-        return nextCourse;
-      }); setSaveState('saved');
+      await reorderLessons(token, course.id, ordered.map((lesson) => lesson.id));
+      const nextCourse = await readCourseDraft(token, course.id);
+      setCourse(nextCourse); courseRef.current = nextCourse; resetHistory(nextCourse); setSaveState('saved');
     } catch (err) {
       setCourse((current) => {
         const rollback = current ? { ...current, lessons: previous } : current;
@@ -289,6 +381,8 @@ export default function CourseEditorPage() {
     draft?.lessons.forEach((lesson, index) => {
       if (!lesson.title.trim()) localIssues.push({ group: 'Lesson', code: 'required', message: t('education.validation.lessonTitleRequired'), lesson_id: lesson.id, field: 'title' });
       if (index === 0 && lesson.start_mode === 'inherit_previous_code') localIssues.push({ group: 'Lesson', code: 'inheritance', message: t('education.validation.firstFresh'), lesson_id: lesson.id, field: 'start_mode' });
+      if (lesson.activities.some((activity) => activityValidation(activity).length > 0)) localIssues.push({ group: 'Lesson', code: 'activity', message: t('education.activities.validation'), lesson_id: lesson.id, field: 'activities' });
+      if (lesson.activities.some((activity) => activity.type === 'simulator_observation') && (!lesson.stageReference || lesson.simulator_settings?.showSimulator === false)) localIssues.push({ group: 'Stage', code: 'observation_stage', message: t('education.validation.observationStage'), lesson_id: lesson.id, field: 'stageReference' });
     });
     if (localIssues.length) {
       setValidationIssues(localIssues); setSettingsTab('validation'); setMobilePanel('settings'); setValidating(false); return;
@@ -308,7 +402,7 @@ export default function CourseEditorPage() {
     try {
       const release = await publishCourse(token, id);
       setPublishOpen(false); setPublishedVersion(release.version);
-      setCourse((current) => current ? { ...current, status: 'published', latest_published_release_id: release.id, latest_published_release_version: release.version } : current);
+      setCourse((current) => current ? { ...current, status: 'published', latest_published_release_id: release.id, latest_published_release_version: release.version, has_unpublished_changes: false, unpublished_change_summary: { course: false, outline: false, lesson_keys: [] } } : current);
     } catch (err) { setPublishOpen(false); setError(err instanceof Error ? err.message : t('education.errors.publish')); }
     finally { setValidating(false); }
   };
@@ -330,7 +424,12 @@ export default function CourseEditorPage() {
   if (!course) return <Box sx={{ p: 3 }}><Alert severity="error">{error || t('education.errors.load')}</Alert></Box>;
 
   const saveLabel = t(`education.save.${saveState}`);
-  const outline = <OutlinePanel lessons={course.lessons} selectedId={selectedId} warningIds={inheritanceWarning} draggingId={draggingId} dropTarget={dropTarget} onSelect={(lessonId: number) => { setSelectedId(lessonId); setMobilePanel('content'); }} onAdd={addNewLesson} onDuplicate={duplicateLesson} onDelete={removeLesson} onMove={(lessonId: number, direction: -1 | 1) => applyReorder(moveLesson(course.lessons, lessonId, direction))} onDrag={(lessonId: number | null) => { setDraggingId(lessonId); if (!lessonId) setDropTarget(null); }} onDragOver={setDropTarget} onDrop={(target: OutlineDropTarget) => {
+  const canUndo = historyRevision >= 0 && historyRef.current.past.length > 0;
+  const canRedo = historyRevision >= 0 && historyRef.current.future.length > 0;
+  const releaseState = !course.latest_published_release_id ? 'draft' : course.has_unpublished_changes ? 'unpublished' : 'live';
+  const changeSummary = course.unpublished_change_summary || { course: false, outline: false, lesson_keys: [] };
+  const changedLessonKeys = new Set(changeSummary.lesson_keys);
+  const outline = <OutlinePanel lessons={course.lessons} selectedId={selectedId} warningIds={inheritanceWarning} changedLessonKeys={changedLessonKeys} outlineChanged={changeSummary.outline} publishedVersion={course.latest_published_release_version} draggingId={draggingId} dropTarget={dropTarget} onSelect={(lessonId: number) => { setSelectedId(lessonId); setMobilePanel('content'); }} onAdd={addNewLesson} onDuplicate={duplicateLesson} onDelete={removeLesson} onMove={(lessonId: number, direction: -1 | 1) => applyReorder(moveLesson(course.lessons, lessonId, direction))} onDrag={(lessonId: number | null) => { setDraggingId(lessonId); if (!lessonId) setDropTarget(null); }} onDragOver={setDropTarget} onDrop={(target: OutlineDropTarget) => {
     if (!draggingId || draggingId === target.lessonId) { setDraggingId(null); setDropTarget(null); return; }
     const from = course.lessons.findIndex((lesson) => lesson.id === draggingId);
     const targetIndex = course.lessons.findIndex((lesson) => lesson.id === target.lessonId);
@@ -345,8 +444,8 @@ export default function CourseEditorPage() {
     setDraggingId(null); setDropTarget(null); applyReorder(next.map((lesson, index) => ({ ...lesson, position: index + 1 })));
   }} t={t} />;
 
-  const content = selectedLesson ? <ContentPanel lesson={selectedLesson} onChange={(patch) => markLesson(selectedLesson.id, patch)} t={t} /> : <EmptyLesson onAdd={addNewLesson} t={t} />;
-  const settings = <SettingsPanel course={course} lesson={selectedLesson} userLabel={user ? `${user.firstname} ${user.lastname}`.trim() || user.username : ''} token={token} tab={settingsTab} issues={validationIssues} onTab={setSettingsTab} onCourse={markCourse} onLesson={(patch) => selectedLesson && markLesson(selectedLesson.id, patch)} onIssue={navigateIssue} t={t} />;
+  const content = selectedLesson ? <ContentPanel lesson={selectedLesson} changed={changedLessonKeys.has(selectedLesson.lesson_key)} publishedVersion={course.latest_published_release_version} onChange={(patch) => markLesson(selectedLesson.id, patch)} t={t} /> : <EmptyLesson onAdd={addNewLesson} t={t} />;
+  const settings = <SettingsPanel course={course} lesson={selectedLesson} courseChanged={changeSummary.course} publishedVersion={course.latest_published_release_version} userLabel={user ? `${user.firstname} ${user.lastname}`.trim() || user.username : ''} token={token} tab={settingsTab} issues={validationIssues} onTab={setSettingsTab} onCourse={markCourse} onLesson={(patch) => selectedLesson && markLesson(selectedLesson.id, patch)} onIssue={navigateIssue} t={t} />;
 
   return (
     <Box sx={{ minHeight: 'calc(100vh - 70px)', display: 'flex', flexDirection: 'column', bgcolor: 'background.default' }}>
@@ -354,11 +453,19 @@ export default function CourseEditorPage() {
         <Stack direction="row" alignItems="center" gap={1}>
           <Button color="inherit" startIcon={<IconArrowLeft size={18} />} onClick={() => navigate('/teach/courses')}>{t('back')}</Button>
           <Divider orientation="vertical" flexItem />
-          <Box sx={{ minWidth: 0, flex: 1 }}><Typography fontWeight={700} noWrap>{course.title}</Typography><Stack direction="row" alignItems="center" gap={0.75}><Box sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: saveState === 'failed' ? 'error.main' : saveState === 'saved' ? 'success.main' : 'warning.main' }} /><Typography variant="caption" color="text.secondary">{saveLabel}</Typography></Stack></Box>
+          <Box sx={{ minWidth: 0, flex: 1 }}><Typography fontWeight={700} noWrap>{course.title}</Typography><Stack direction="row" alignItems="center" gap={1}><Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: saveState === 'failed' ? 'error.main' : saveState === 'saved' ? 'success.main' : 'warning.main' }} /><Typography variant="caption" color="text.secondary">{saveLabel}</Typography></Stack></Box>
+          <Stack direction="row" spacing={0.5}>
+            <Tooltip title={t('education.authoring.undo')}><span><IconButton size="small" disabled={!canUndo || saveState === 'saving' || !!conflict} onClick={undo} aria-label={t('education.authoring.undo')}><IconArrowBackUp size={19} /></IconButton></span></Tooltip>
+            <Tooltip title={t('education.authoring.redo')}><span><IconButton size="small" disabled={!canRedo || saveState === 'saving' || !!conflict} onClick={redo} aria-label={t('education.authoring.redo')}><IconArrowForwardUp size={19} /></IconButton></span></Tooltip>
+          </Stack>
           <Button startIcon={<IconEye size={18} />} disabled={!selectedLesson} onClick={() => setPreviewOpen(true)}>{t('education.preview.action')}</Button>
-          <Button variant="contained" disabled={validating || saveState === 'saving' || !!conflict} onClick={validateForPublish}>{course.latest_published_release_id ? t('education.publish.update') : t('education.publish.first')}</Button>
+          <Tooltip title={course.latest_published_release_id && !course.has_unpublished_changes ? t('education.publish.noChanges') : ''}><span><Button variant="contained" disabled={validating || saveState === 'saving' || !!conflict || Boolean(course.latest_published_release_id && !course.has_unpublished_changes)} onClick={validateForPublish}>{course.latest_published_release_id ? t('education.publish.update') : t('education.publish.first')}</Button></span></Tooltip>
         </Stack>
       </Paper>
+      <Alert severity={releaseState === 'unpublished' ? 'warning' : releaseState === 'live' ? 'success' : 'info'} variant="filled" icon={releaseState === 'unpublished' ? <IconAlertTriangle size={20} /> : releaseState === 'live' ? <IconCheck size={20} /> : <IconEye size={20} />} sx={{ borderRadius: 0, py: 0.5 }}>
+        <Typography fontWeight={700}>{t(`education.publish.status.${releaseState}.title`, { version: course.latest_published_release_version })}</Typography>
+        <Typography variant="body2">{t(`education.publish.status.${releaseState}.detail`, { version: course.latest_published_release_version })}</Typography>
+      </Alert>
       {error && <Alert severity="error" onClose={() => setError('')} sx={{ borderRadius: 0 }}>{error}</Alert>}
       {conflict && <Alert severity="warning" icon={<IconAlertTriangle size={20} />} action={<Stack direction="row"><Button color="inherit" size="small" onClick={load}>{t('education.conflict.reload')}</Button><Button color="inherit" size="small" onClick={overwriteConflict}>{t('education.conflict.overwrite')}</Button></Stack>} sx={{ borderRadius: 0 }}>{t('education.conflict.message')}</Alert>}
       {compact && <Tabs value={mobilePanel} onChange={(_, value) => setMobilePanel(value)} variant="fullWidth" sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: 'background.paper' }}><Tab value="outline" label={t('education.panels.outline')} /><Tab value="content" label={t('education.panels.content')} /><Tab value="settings" label={t('education.panels.settings')} /></Tabs>}
@@ -369,22 +476,27 @@ export default function CourseEditorPage() {
         {!compact && <PanelResizeHandle side="right" onPointerDown={beginResize('right')} onDoubleClick={resetResize('right')} t={t} />}
         {(!compact || mobilePanel === 'settings') && <Box sx={{ width: compact ? '100%' : rightWidth, flex: compact ? 1 : '0 0 auto', bgcolor: 'background.paper', minHeight: 0 }}>{settings}</Box>}
       </Box>
-      <Dialog open={previewOpen} onClose={() => setPreviewOpen(false)} fullScreen={compact} fullWidth maxWidth="lg"><DialogTitle>{t('education.preview.title')}</DialogTitle><DialogContent sx={{ bgcolor: 'background.default', py: 3 }}>{selectedLesson && <LessonPreview lesson={selectedLesson} resetCopy={t('education.simulator.reset')} labels={{ lesson: t('education.lesson.number', { position: selectedLesson.position }), noCode: t('education.editor.none'), python: t('education.editor.python'), blockly: t('education.editor.blockly'), noStage: t('education.stage.none') }} />}</DialogContent><DialogActions><Button onClick={() => setPreviewOpen(false)}>{t('education.preview.close')}</Button></DialogActions></Dialog>
+      <Dialog open={previewOpen} onClose={() => setPreviewOpen(false)} fullScreen={compact} fullWidth maxWidth="lg"><DialogTitle>{t('education.preview.title')}</DialogTitle><DialogContent sx={{ bgcolor: 'background.default', py: 3 }}>{selectedLesson && <LessonPreview lesson={selectedLesson} resetCopy={t('education.simulator.reset')} labels={{ lesson: t('education.lesson.number', { position: selectedLesson.position }), noCode: t('education.editor.none'), python: t('education.editor.python'), blockly: t('education.editor.blockly'), noStage: t('education.stage.none'), required: t('education.activities.required'), answerIn: t('education.activities.answerIn') }} />}</DialogContent><DialogActions><Button onClick={() => setPreviewOpen(false)}>{t('education.preview.close')}</Button></DialogActions></Dialog>
       <Dialog open={publishOpen} onClose={() => !validating && setPublishOpen(false)}><DialogTitle>{course.latest_published_release_id ? t('education.publish.confirmUpdate') : t('education.publish.confirmFirst')}</DialogTitle><DialogContent><Typography>{t('education.publish.immutable')}</Typography>{course.latest_published_release_id && <Alert severity="info" sx={{ mt: 2 }}>{t('education.publish.studentChoice')}</Alert>}</DialogContent><DialogActions><Button onClick={() => setPublishOpen(false)}>{t('cancel')}</Button><Button variant="contained" onClick={confirmPublish} disabled={validating}>{t('education.publish.confirm')}</Button></DialogActions></Dialog>
       <Dialog open={publishedVersion !== null} onClose={() => setPublishedVersion(null)}><DialogTitle>{t('education.publish.success', { version: publishedVersion })}</DialogTitle><DialogContent><Alert severity="success" icon={<IconCheck size={20} />}>{t('education.publish.studentChoice')}</Alert></DialogContent><DialogActions><Button onClick={() => setPublishedVersion(null)}>{t('education.publish.done')}</Button></DialogActions></Dialog>
     </Box>
   );
 }
 
+function ChangeBadge({ publishedVersion, t }: { publishedVersion?: number | null; t: any }) {
+  const description = t('education.publish.changedSince', { version: publishedVersion });
+  return <Tooltip title={description}><Chip component="span" size="small" variant="outlined" color="info" label={t('education.publish.changed')} aria-label={description} sx={{ height: 20, flexShrink: 0, '& .MuiChip-label': { px: 0.5, fontSize: '0.75rem', fontWeight: 600 } }} /></Tooltip>;
+}
+
 function PanelResizeHandle({ side, onPointerDown, onDoubleClick, t }: { side: ResizeSide; onPointerDown: React.PointerEventHandler<HTMLDivElement>; onDoubleClick: React.MouseEventHandler<HTMLDivElement>; t: any }) {
   return <Box role="separator" aria-orientation="vertical" aria-label={t('education.panels.resize', { panel: t(`education.panels.${side === 'left' ? 'outline' : 'settings'}`) })} title={t('education.panels.resizeHelp')} onPointerDown={onPointerDown} onDoubleClick={onDoubleClick} sx={{ width: panelSizing.handle, flex: `0 0 ${panelSizing.handle}px`, mx: `-${panelSizing.handle / 2}px`, cursor: 'col-resize', touchAction: 'none', position: 'relative', zIndex: 2, '&:before': { content: '""', position: 'absolute', top: 0, bottom: 0, left: '50%', width: 2, transform: 'translateX(-50%)', bgcolor: 'divider' }, '&:hover:before': { bgcolor: 'primary.main' } }} />;
 }
 
-function OutlinePanel({ lessons, selectedId, warningIds, draggingId, dropTarget, onSelect, onAdd, onDuplicate, onDelete, onMove, onDrag, onDragOver, onDrop, t }: any) {
-  return <Stack sx={{ height: '100%' }}><Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ p: 2, borderBottom: 1, borderColor: 'divider' }}><Box><Typography fontWeight={700}>{t('education.panels.outline')}</Typography><Typography variant="caption" color="text.secondary">{t('education.lesson.count', { count: lessons.length })}</Typography></Box><IconButton color="primary" onClick={onAdd} aria-label={t('education.lesson.add')}><IconPlus size={20} /></IconButton></Stack><Box component="ol" sx={{ p: 1, m: 0, listStyle: 'none', overflow: 'auto' }}>
+function OutlinePanel({ lessons, selectedId, warningIds, changedLessonKeys, outlineChanged, publishedVersion, draggingId, dropTarget, onSelect, onAdd, onDuplicate, onDelete, onMove, onDrag, onDragOver, onDrop, t }: any) {
+  return <Stack sx={{ height: '100%' }}><Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ p: 2, borderBottom: 1, borderColor: 'divider' }}><Box><Stack direction="row" alignItems="center" gap={0.5}><Typography fontWeight={700}>{t('education.panels.outline')}</Typography>{outlineChanged && <ChangeBadge publishedVersion={publishedVersion} t={t} />}</Stack><Typography variant="caption" color="text.secondary">{t('education.lesson.count', { count: lessons.length })}</Typography></Box><IconButton color="primary" onClick={onAdd} aria-label={t('education.lesson.add')}><IconPlus size={20} /></IconButton></Stack><Box component="ol" sx={{ p: 1, m: 0, listStyle: 'none', overflow: 'auto' }}>
     {lessons.map((lesson: Lesson, index: number) => { const placement = dropTarget?.lessonId === lesson.id ? dropTarget.placement : null; const placementFor = (event: React.DragEvent) => { const rect = event.currentTarget.getBoundingClientRect(); const ratio = (event.clientY - rect.top) / rect.height; return ratio < 0.28 ? 'before' : ratio > 0.72 ? 'after' : 'replace'; }; return <Box component="li" key={lesson.id} onDragOver={(event: React.DragEvent) => { event.preventDefault(); onDragOver({ lessonId: lesson.id, placement: placementFor(event) }); }} onDrop={(event: React.DragEvent) => { event.preventDefault(); onDrop({ lessonId: lesson.id, placement: placementFor(event) }); }} sx={{ mb: 0.5, opacity: draggingId === lesson.id ? 0.45 : 1, position: 'relative', '&:before': placement === 'before' || placement === 'after' ? { content: '""', position: 'absolute', zIndex: 3, left: 4, right: 4, height: 3, borderRadius: 2, bgcolor: 'primary.main', top: placement === 'before' ? -3 : 'auto', bottom: placement === 'after' ? -3 : 'auto' } : undefined }}>
-      <Box onClick={() => onSelect(lesson.id)} sx={{ display: 'flex', alignItems: 'center', gap: 0.75, p: 1, borderRadius: 1.5, cursor: 'pointer', bgcolor: selectedId === lesson.id ? 'primary.light' : 'transparent', outline: placement === 'replace' ? '2px solid' : 'none', outlineColor: 'primary.main', outlineOffset: -2, '&:hover': { bgcolor: selectedId === lesson.id ? 'primary.light' : 'action.hover' } }}>
-        <Box draggable onDragStart={(event) => { event.dataTransfer.effectAllowed = 'move'; onDrag(lesson.id); }} onDragEnd={() => onDrag(null)} aria-label={t('education.lesson.drag', { title: lesson.title })} title={t('education.lesson.dragHelp')} sx={{ display: 'flex', cursor: 'grab', '&:active': { cursor: 'grabbing' } }}><IconGripVertical size={16} aria-hidden /></Box><Box sx={{ minWidth: 0, flex: 1 }}><Typography variant="body2" fontWeight={650} noWrap>{index + 1}. {lesson.title}</Typography><Stack direction="row" gap={0.5} alignItems="center"><Typography variant="caption" color="text.secondary">{lesson.start_mode === 'fresh' ? t('education.start.fresh') : t('education.start.inherit')}</Typography>{warningIds.includes(lesson.id) && <Tooltip title={t('education.inheritance.changed')}><IconAlertTriangle size={14} color={themeWarning} /></Tooltip>}</Stack></Box>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, p: 1, borderRadius: 1.5, bgcolor: selectedId === lesson.id ? 'primary.light' : 'transparent', outline: placement === 'replace' ? '2px solid' : 'none', outlineColor: 'primary.main', outlineOffset: -2, '&:hover': { bgcolor: selectedId === lesson.id ? 'primary.light' : 'action.hover' } }}>
+        <Box draggable onDragStart={(event) => { event.dataTransfer.effectAllowed = 'move'; onDrag(lesson.id); }} onDragEnd={() => onDrag(null)} aria-label={t('education.lesson.drag', { title: lesson.title })} title={t('education.lesson.dragHelp')} sx={{ display: 'flex', cursor: 'grab', '&:active': { cursor: 'grabbing' } }}><IconGripVertical size={16} aria-hidden /></Box><Box role="button" tabIndex={0} aria-current={selectedId === lesson.id ? 'true' : undefined} onClick={() => onSelect(lesson.id)} onKeyDown={(event) => { if (!['Enter', ' '].includes(event.key)) return; event.preventDefault(); onSelect(lesson.id); }} sx={{ minWidth: 0, flex: 1, cursor: 'pointer', borderRadius: 1, '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 } }}><Tooltip title={lesson.title} placement="top-start"><Typography variant="body2" fontWeight={650} noWrap>{index + 1}. {lesson.title}</Typography></Tooltip><Stack direction="row" gap={0.5} alignItems="center" flexWrap="wrap"><Typography variant="caption" color="text.secondary">{lesson.start_mode === 'fresh' ? t('education.start.fresh') : t('education.start.inherit')}</Typography>{changedLessonKeys.has(lesson.lesson_key) && <ChangeBadge publishedVersion={publishedVersion} t={t} />}{warningIds.includes(lesson.id) && <Tooltip title={t('education.inheritance.changed')}><IconAlertTriangle size={14} color={themeWarning} /></Tooltip>}</Stack></Box>
         <Stack direction="row" spacing={-0.5}><IconButton size="small" disabled={index === 0} onClick={(event) => { event.stopPropagation(); onMove(lesson.id, -1); }} aria-label={t('education.lesson.moveUp')}><IconArrowUp size={16} /></IconButton><IconButton size="small" disabled={index === lessons.length - 1} onClick={(event) => { event.stopPropagation(); onMove(lesson.id, 1); }} aria-label={t('education.lesson.moveDown')}><IconArrowDown size={16} /></IconButton></Stack>
       </Box>{placement && <Chip size="small" color="primary" label={t(`education.lesson.drop.${placement}`)} sx={{ position: 'absolute', zIndex: 4, right: 6, top: placement === 'after' ? 'auto' : 4, bottom: placement === 'after' ? 4 : 'auto', pointerEvents: 'none', height: 20 }} />}{selectedId === lesson.id && <Stack direction="row" justifyContent="flex-end" sx={{ px: 1, py: 0.5 }}><Button size="small" startIcon={<IconCopy size={14} />} onClick={() => onDuplicate(lesson)}>{t('education.lesson.duplicate')}</Button><Button size="small" color="error" startIcon={<IconTrash size={14} />} onClick={() => onDelete(lesson)}>{t('delete')}</Button></Stack>}
     </Box>; })}
@@ -393,24 +505,23 @@ function OutlinePanel({ lessons, selectedId, warningIds, draggingId, dropTarget,
 
 const themeWarning = '#9a6700';
 
-function ContentPanel({ lesson, onChange, t }: { lesson: Lesson; onChange: (patch: Partial<Lesson>) => void; t: any }) {
-  const activity = richTextActivity(lesson);
+function ContentPanel({ lesson, changed, publishedVersion, onChange, t }: { lesson: Lesson; changed: boolean; publishedVersion?: number | null; onChange: (patch: Partial<Lesson>) => void; t: any }) {
   const [tab, setTab] = useState<'instructions' | 'code'>('instructions');
-  return <Stack spacing={2.5} sx={{ maxWidth: 1100, mx: 'auto' }}><Box><Typography variant="caption" color="text.secondary">{t('education.lesson.number', { position: lesson.position })}</Typography><TextField fullWidth required value={lesson.title} onChange={(event) => onChange({ title: event.target.value })} variant="standard" inputProps={{ 'aria-label': t('education.lesson.title') }} sx={{ '& input': { fontSize: '1.75rem', fontWeight: 700, py: 1 } }} /></Box><Tabs value={tab} onChange={(_, value) => setTab(value)} sx={{ borderBottom: 1, borderColor: 'divider' }}><Tab value="instructions" label={t('education.code.instructions')} /><Tab value="code" label={t('education.code.title')} /></Tabs>{tab === 'instructions' ? <Box><Typography variant="subtitle2" sx={{ mb: 1 }}>{t('education.lesson.content')}</Typography><RichTextEditor value={activity.content as TiptapNode} onChange={(content) => onChange({ activities: [{ ...activity, content }] })} labels={{ content: t('education.lesson.content'), bold: t('education.richText.bold'), italic: t('education.richText.italic'), heading: t('education.richText.heading'), bullets: t('education.richText.bullets'), numbered: t('education.richText.numbered') }} /></Box> : lesson.editor_type === 'none' ? <Alert severity="info">{t('education.code.chooseEditor')}</Alert> : <StarterCodeWorkspace key={lesson.id} lesson={lesson} onChange={onChange} t={t} />}</Stack>;
+  return <Stack spacing={2.5} sx={{ maxWidth: 1100, mx: 'auto' }}><Box><Stack direction="row" alignItems="center" gap={0.5}><Typography variant="caption" color="text.secondary">{t('education.lesson.number', { position: lesson.position })}</Typography>{changed && <ChangeBadge publishedVersion={publishedVersion} t={t} />}</Stack><TextField fullWidth required value={lesson.title} onChange={(event) => onChange({ title: event.target.value })} variant="standard" inputProps={{ 'aria-label': t('education.lesson.title') }} sx={{ '& input': { fontSize: '1.875rem', fontWeight: 700, py: 1 } }} /></Box><Tabs value={tab} onChange={(_, value) => setTab(value)} sx={{ borderBottom: 1, borderColor: 'divider' }}><Tab value="instructions" label={t('education.activities.title')} /><Tab value="code" label={t('education.code.title')} /></Tabs>{tab === 'instructions' ? <ActivityComposer activities={lesson.activities} onChange={(activities) => onChange({ activities })} t={t} /> : lesson.editor_type === 'none' ? <Alert severity="info">{t('education.code.chooseEditor')}</Alert> : <StarterCodeWorkspace key={lesson.id} lesson={lesson} onChange={onChange} t={t} />}</Stack>;
 }
 
 function EmptyLesson({ onAdd, t }: any) { return <Paper variant="outlined" sx={{ py: 8, textAlign: 'center' }}><Typography variant="h5">{t('education.lesson.empty')}</Typography><Typography color="text.secondary" sx={{ my: 1 }}>{t('education.lesson.emptyHelp')}</Typography><Button variant="contained" startIcon={<IconPlus size={18} />} onClick={onAdd}>{t('education.lesson.add')}</Button></Paper>; }
 
-function SettingsPanel({ course, lesson, userLabel, token, tab, issues, onTab, onCourse, onLesson, onIssue, t }: any) {
-  return <Stack sx={{ height: '100%' }}><Tabs value={tab} onChange={(_, value) => onTab(value)} variant="scrollable" scrollButtons="auto" sx={{ borderBottom: 1, borderColor: 'divider', minHeight: 44 }}><Tab value="course" label={t('education.settings.course')} /><Tab value="lesson" label={t('education.settings.lesson')} /><Tab value="simulator" label={t('education.settings.simulator')} /><Tab value="completion" label={t('education.settings.completion')} /><Tab value="validation" label={t('education.settings.validation')} /></Tabs><Box sx={{ p: 2, overflow: 'auto' }}>
+function SettingsPanel({ course, lesson, courseChanged, publishedVersion, userLabel, token, tab, issues, onTab, onCourse, onLesson, onIssue, t }: any) {
+  return <Stack sx={{ height: '100%' }}><Tabs value={tab} onChange={(_, value) => onTab(value)} variant="scrollable" scrollButtons="auto" allowScrollButtonsMobile sx={{ borderBottom: 1, borderColor: 'divider', minHeight: 44 }}><Tab value="course" aria-label={courseChanged ? t('education.publish.changedSection', { section: t('education.settings.course'), version: publishedVersion }) : undefined} label={<Stack component="span" direction="row" alignItems="center" gap={0.5} sx={{ whiteSpace: 'nowrap' }}><span>{t('education.settings.course')}</span>{courseChanged && <ChangeBadge publishedVersion={publishedVersion} t={t} />}</Stack>} /><Tab value="lesson" label={t('education.settings.lesson')} /><Tab value="simulator" label={t('education.settings.simulator')} /><Tab value="completion" label={t('education.settings.completion')} /><Tab value="validation" label={t('education.settings.validation')} /></Tabs><Box sx={{ p: 2, overflow: 'auto' }}>
     {tab === 'course' && <Stack spacing={2}><TextField required size="small" label={t('education.fields.title')} value={course.title} onChange={(event) => onCourse({ title: event.target.value })} /><TextField required multiline minRows={3} size="small" label={t('education.fields.description')} value={course.description} onChange={(event) => onCourse({ description: event.target.value })} /><TextField size="small" label={t('education.fields.author')} value={userLabel} InputProps={{ readOnly: true }} />
       <Box><Typography variant="subtitle2" sx={{ mb: 1 }}>{t('education.fields.objectives')}</Typography><Stack spacing={1}>{course.learning_objectives.map((objective: string, index: number) => <Stack direction="row" gap={0.5} key={index}><TextField required fullWidth size="small" value={objective} onChange={(event) => onCourse({ learning_objectives: course.learning_objectives.map((item: string, itemIndex: number) => itemIndex === index ? event.target.value : item) })} /><IconButton size="small" disabled={course.learning_objectives.length === 1} onClick={() => onCourse({ learning_objectives: course.learning_objectives.filter((_: string, itemIndex: number) => itemIndex !== index) })} aria-label={t('delete')}><IconTrash size={17} /></IconButton></Stack>)}</Stack><Button size="small" startIcon={<IconPlus size={16} />} onClick={() => onCourse({ learning_objectives: [...course.learning_objectives, ''] })} sx={{ mt: 1 }}>{t('education.fields.addObjective')}</Button></Box>
       <TextField select size="small" label={t('education.fields.visibility')} value={course.visibility} onChange={(event) => onCourse({ visibility: event.target.value })}><MenuItem value="public">{t('education.visibility.public')}</MenuItem><MenuItem value="unlisted">{t('education.visibility.unlisted')}</MenuItem></TextField>
       <Accordion disableGutters elevation={0} sx={{ border: 1, borderColor: 'divider', '&:before': { display: 'none' } }}><AccordionSummary expandIcon={<IconChevronDown size={18} />}><Box><Typography fontWeight={650}>{t('education.details.title')}</Typography><Typography variant="caption" color="text.secondary">{t('education.details.optional')}</Typography></Box></AccordionSummary><AccordionDetails><Stack spacing={2}><TextField size="small" label={t('education.fields.cover')} value={course.cover_image_url || ''} onChange={(event) => onCourse({ cover_image_url: event.target.value || null })} /><TextField size="small" label={t('education.fields.ageRange')} value={course.age_range || ''} onChange={(event) => onCourse({ age_range: event.target.value || null })} /><TextField size="small" label={t('education.fields.difficulty')} value={course.difficulty || ''} onChange={(event) => onCourse({ difficulty: event.target.value || null })} /><TextField size="small" type="number" label={t('education.fields.duration')} value={course.estimated_duration_minutes || ''} onChange={(event) => onCourse({ estimated_duration_minutes: event.target.value ? Number(event.target.value) : null })} /><TextField multiline minRows={2} size="small" label={t('education.fields.prerequisites')} value={course.prerequisites || ''} onChange={(event) => onCourse({ prerequisites: event.target.value || null })} /><TextField size="small" label={t('education.fields.tags')} value={(course.tags || []).join(', ')} onChange={(event) => onCourse({ tags: event.target.value.split(',').map((item) => item.trim()).filter(Boolean) })} /></Stack></AccordionDetails></Accordion>
     </Stack>}
     {tab === 'lesson' && (lesson ? <Stack spacing={2}><TextField select size="small" label={t('education.lesson.editorType')} value={lesson.editor_type} onChange={(event) => onLesson({ editor_type: event.target.value, starter_content: event.target.value === 'none' ? null : event.target.value === 'python' ? (typeof lesson.starter_content === 'string' ? lesson.starter_content : '') : (typeof lesson.starter_content === 'object' ? lesson.starter_content : null) })}><MenuItem value="none">{t('education.editor.none')}</MenuItem><MenuItem value="python">{t('education.editor.python')}</MenuItem><MenuItem value="blockly">{t('education.editor.blockly')}</MenuItem></TextField><Alert severity="info">{lesson.editor_type === 'none' ? t('education.code.chooseEditor') : t('education.code.openWorkspace')}</Alert><TextField select size="small" label={t('education.lesson.startMode')} value={lesson.position === 1 ? 'fresh' : lesson.start_mode} onChange={(event) => onLesson({ start_mode: event.target.value })}><MenuItem value="fresh">{t('education.start.fresh')}</MenuItem><MenuItem value="inherit_previous_code" disabled={lesson.position === 1}>{t('education.start.inherit')}</MenuItem></TextField>{lesson.position === 1 && <Alert severity="info">{t('education.inheritance.first')}</Alert>}</Stack> : <Typography color="text.secondary">{t('education.lesson.select')}</Typography>)}
-    {tab === 'simulator' && (lesson ? <Stack spacing={2}><StageSelector token={token} value={lesson.stageReference} onChange={(stageReference: StageReference | null) => onLesson({ stageReference })} labels={{ label: t('education.stage.label'), none: t('education.stage.none'), optional: t('education.stage.optional'), builtIn: t('education.stage.builtIn'), builtInHelp: t('education.stage.builtInHelp'), github: t('education.stage.github'), marketplace: t('education.stage.marketplace'), loading: t('education.stage.loading'), unavailable: t('education.stage.unavailable'), pinned: t('education.stage.pinned'), pinOnSave: t('education.stage.pinOnSave'), choose: t('education.stage.choose'), chooseTitle: t('education.stage.chooseTitle'), search: t('education.stage.search'), refresh: t('education.stage.refresh'), selected: t('education.stage.selected'), select: t('education.stage.select'), noResults: t('education.stage.noResults'), clear: t('education.stage.clear'), close: t('education.stage.close') }} /><FormControlLabel control={<Switch checked={lesson.simulator_settings?.showSimulator !== false} onChange={(event) => onLesson({ simulator_settings: { ...(lesson.simulator_settings || {}), showSimulator: event.target.checked } })} />} label={t('education.simulator.show')} /><Alert severity="info">{t('education.simulator.reset')}</Alert><Typography variant="caption" color="text.secondary">{t('education.simulator.noTransient')}</Typography></Stack> : null)}
+    {tab === 'simulator' && (lesson ? <Stack spacing={2}><StageSelector token={token} value={lesson.stageReference} onChange={(stageReference: StageReference | null) => onLesson({ stageReference })} labels={{ label: t('education.stage.label'), none: t('education.stage.none'), optional: t('education.stage.optional'), builtIn: t('education.stage.builtIn'), builtInHelp: t('education.stage.builtInHelp'), github: t('education.stage.github'), marketplace: t('education.stage.marketplace'), loading: t('education.stage.loading'), unavailable: t('education.stage.unavailable'), pinned: t('education.stage.pinned'), pinOnSave: t('education.stage.pinOnSave'), choose: t('education.stage.choose'), chooseTitle: t('education.stage.chooseTitle'), search: t('education.stage.search'), refresh: t('education.stage.refresh'), selected: t('education.stage.selected'), select: t('education.stage.select'), noResults: t('education.stage.noResults'), clear: t('education.stage.clear'), close: t('education.stage.close') }} /><FormControlLabel control={<Switch checked={lesson.simulator_settings?.showSimulator !== false} onChange={(event) => onLesson({ simulator_settings: { ...(lesson.simulator_settings || {}), showSimulator: event.target.checked } })} />} label={t('education.simulator.show')} /><FormControlLabel control={<Switch checked={lesson.simulator_settings?.showRemoteControls === true || lesson.editor_type === 'none'} onChange={(event) => onLesson({ simulator_settings: { ...(lesson.simulator_settings || {}), showRemoteControls: event.target.checked } })} />} label={t('education.simulator.remoteControls')} /><Alert severity="info">{t('education.simulator.reset')}</Alert><Typography variant="caption" color="text.secondary">{t('education.simulator.noTransient')}</Typography></Stack> : null)}
     {tab === 'completion' && (lesson ? <Stack spacing={2}><TextField select size="small" label={t('education.completion.label')} value={lesson.completion_policy} onChange={(event) => onLesson({ completion_policy: event.target.value })}><MenuItem value="self">{t('education.completion.self')}</MenuItem><MenuItem value="activity">{t('education.completion.activity')}</MenuItem><MenuItem value="teacher_review">{t('education.completion.teacherReview')}</MenuItem><MenuItem value="hybrid">{t('education.completion.hybrid')}</MenuItem></TextField><Alert severity={lesson.completion_policy === 'self' ? 'success' : 'info'}>{lesson.completion_policy === 'self' ? t('education.completion.selfHelp') : t('education.completion.futureHelp')}</Alert></Stack> : null)}
-    {tab === 'validation' && <Stack spacing={1}>{issues.length === 0 ? <Alert severity="info">{t('education.validation.help')}</Alert> : issues.map((issue: PublicationIssue, index: number) => <Paper variant="outlined" key={`${issue.group}-${index}`} sx={{ p: 1.5, cursor: 'pointer' }} onClick={() => onIssue(issue)}><Stack direction="row" justifyContent="space-between" gap={1}><Box><Chip size="small" label={t(`education.validation.groups.${issue.group}`)} sx={{ mb: 0.75 }} /><Typography variant="body2">{issue.message}</Typography></Box><Button size="small">{t('education.validation.go')}</Button></Stack></Paper>)}</Stack>}
+    {tab === 'validation' && <Stack spacing={1}>{issues.length === 0 ? <Alert severity="info">{t('education.validation.help')}</Alert> : issues.map((issue: PublicationIssue, index: number) => <Paper variant="outlined" key={`${issue.group}-${index}`} sx={{ p: 1.5, cursor: 'pointer' }} onClick={() => onIssue(issue)}><Stack direction="row" justifyContent="space-between" gap={1}><Box><Chip size="small" label={t(`education.validation.groups.${issue.group}`)} sx={{ mb: 0.5 }} /><Typography variant="body2">{issue.message}</Typography></Box><Button size="small">{t('education.validation.go')}</Button></Stack></Paper>)}</Stack>}
   </Box></Stack>;
 }
