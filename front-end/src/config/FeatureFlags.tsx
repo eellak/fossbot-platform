@@ -1,4 +1,6 @@
-import React, { createContext, ReactNode, useContext, useEffect, useState } from 'react';
+import React, { createContext, ReactNode, useContext } from 'react';
+import { useAuth } from 'src/authentication/AuthProvider';
+import { UserRole } from 'src/authentication/AuthInterfaces';
 
 interface FeatureFlags {
   marketplace: boolean;
@@ -7,26 +9,11 @@ interface FeatureFlags {
 
 const defaultFlags: FeatureFlags = { marketplace: false, ready: false };
 const FeatureFlagsContext = createContext<FeatureFlags>(defaultFlags);
-const backendUrl: string = process.env.REACT_APP_BACKEND_URL;
 
 export function FeatureFlagsProvider({ children }: { children: ReactNode }) {
-  const [flags, setFlags] = useState<FeatureFlags>(defaultFlags);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    fetch(`${backendUrl}/api/features`, { signal: controller.signal })
-      .then((response) => response.ok ? response.json() : Promise.reject(new Error(`HTTP ${response.status}`)))
-      .then((payload) => {
-        if (!controller.signal.aborted) setFlags({ marketplace: payload?.marketplace === true, ready: true });
-      })
-      .catch((error) => {
-        if (!controller.signal.aborted) {
-          console.warn('[features] failed to load runtime feature flags', error);
-          setFlags({ ...defaultFlags, ready: true });
-        }
-      });
-    return () => controller.abort();
-  }, []);
+  const { user, token } = useAuth();
+  const hasBetaAccess = user?.beta_tester || user?.role === UserRole.ADMIN;
+  const flags = { marketplace: Boolean(hasBetaAccess), ready: !token || user !== null };
 
   return <FeatureFlagsContext.Provider value={flags}>{children}</FeatureFlagsContext.Provider>;
 }

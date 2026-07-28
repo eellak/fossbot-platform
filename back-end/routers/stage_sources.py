@@ -11,6 +11,7 @@ from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+from utils.beta_access import require_beta_access
 from utils.github_app_auth import (
     create_github_app_jwt,
     decrypt_secret,
@@ -87,6 +88,11 @@ async def get_current_user(
             status_code=status.HTTP_403_FORBIDDEN, detail=REVOKED_ACCESS_MESSAGE
         )
     return user
+
+
+async def get_beta_user(current_user: User = Depends(get_current_user)) -> User:
+    require_beta_access(current_user)
+    return current_user
 
 
 def stage_error(
@@ -578,7 +584,7 @@ async def github_disconnect(
 @router.post("/api/stages/bootstrap-links")
 async def stage_bootstrap_links(
     request: BootstrapLinksRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_beta_user),
 ):
     repo_name = normalize_repo_name(request.slug)
     state = sign_state(
@@ -919,7 +925,7 @@ def save_stage_to_repo(
 @router.post("/api/stages/save")
 async def create_stage_save(
     request: StageSaveRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_beta_user),
     db: Session = Depends(get_db),
 ):
     try:
@@ -935,7 +941,7 @@ async def create_stage_save(
 @router.put("/api/stages/save")
 async def update_stage_save(
     request: StageSaveRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_beta_user),
     db: Session = Depends(get_db),
 ):
     try:
@@ -950,7 +956,7 @@ async def update_stage_save(
 
 @router.get("/api/stages/list")
 async def list_stages(
-    current_user: User = Depends(get_current_user), db: Session = Depends(get_db)
+    current_user: User = Depends(get_beta_user), db: Session = Depends(get_db)
 ):
     try:
         connection, user_token = require_connection(db, current_user)
@@ -979,7 +985,7 @@ async def load_stage(
     owner: str,
     repo_name: str,
     commit_sha: Optional[str] = Query(default=None),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_beta_user),
     db: Session = Depends(get_db),
 ):
     ensure_repo_allowed(repo_name)

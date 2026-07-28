@@ -86,7 +86,6 @@ Create the empty GitHub repository before pushing, or use your normal GitHub CLI
 After the remote repository exists, configure the platform backend in `back-end/.env`:
 
 ```dotenv
-FOSSBOT_MARKETPLACE_ENABLED=false
 FOSSBOT_MARKETPLACE_OWNER=<github-owner>
 FOSSBOT_MARKETPLACE_REPO=fossbot-marketplace
 FOSSBOT_MARKETPLACE_BRANCH=main
@@ -97,7 +96,7 @@ FOSSBOT_MARKETPLACE_RAW_INDEX_URL=https://raw.githubusercontent.com/<github-owne
 FOSSBOT_MARKETPLACE_INSTALLATION_ID=
 ```
 
-These variables identify the remote marketplace; they do not create it. Set `FOSSBOT_MARKETPLACE_ENABLED=true` only when the instance is ready to expose marketplace browsing and publishing. Keep GitHub App credentials and private keys in the existing backend secret configuration.
+These variables identify the remote marketplace; they do not create it. Marketplace access is granted per user by enabling **Beta Tester** in the Admin panel. Keep GitHub App credentials and private keys in the existing backend secret configuration.
 
 Next:
 

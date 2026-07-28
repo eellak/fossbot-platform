@@ -14,6 +14,7 @@ import {
   IconWorld,
   IconBooks,
 } from '@tabler/icons-react';
+import type { BetaFeature } from 'src/config/betaFeatures';
 
 interface MenuitemsType {
   [x: string]: any;
@@ -29,6 +30,8 @@ interface MenuitemsType {
   variant?: string;
   external?: boolean;
   allowedRoles?: string[];
+  betaOnly?: boolean;
+  betaFeature?: BetaFeature;
 }
 
 const Menuitems: MenuitemsType[] = [
@@ -56,6 +59,8 @@ const Menuitems: MenuitemsType[] = [
     title: 'Stages',
     icon: IconWorld,
     href: '/stages',
+    betaOnly: true,
+    betaFeature: 'stages',
   },
   {
     navlabel: true,
@@ -84,6 +89,8 @@ const Menuitems: MenuitemsType[] = [
     subtitle: 'menu.stageBuilderBased',
     icon: IconMap,
     href: '/stage-builder',
+    betaOnly: true,
+    betaFeature: 'stages',
   },
 
   {
@@ -93,6 +100,7 @@ const Menuitems: MenuitemsType[] = [
     icon: IconHandGrab,
     href: '/interactive-page',
     disabled: false,
+    betaFeature: 'interactive',
   },
   {
     id: uniqueId(),
@@ -113,6 +121,8 @@ const Menuitems: MenuitemsType[] = [
     icon: IconBooks,
     href: '/courses',
     allowedRoles: ['user'],
+    betaOnly: true,
+    betaFeature: 'education',
   },
   {
     id: uniqueId(),
@@ -120,13 +130,14 @@ const Menuitems: MenuitemsType[] = [
     icon: IconBooks,
     href: '/teach/courses',
     allowedRoles: ['tutor', 'admin'],
+    betaOnly: true,
+    betaFeature: 'education',
   },
   {
     id: uniqueId(),
     title: 'menu.tutorials',
     icon: IconAlbum,
-    chip: 'preview',
-    // chipColor: 'primary',
+    chip: 'Preview',
     href: '/tutorials-page',
     disabled: false,
   },
@@ -134,8 +145,7 @@ const Menuitems: MenuitemsType[] = [
     id: uniqueId(),
     title: 'menu.kindergarten',
     icon: IconMoodKid,
-    chip: 'soon',
-    // chipColor: 'primary',
+    chip: 'Soon',
     href: '/material-page',
     disabled: true,
   },
@@ -143,7 +153,7 @@ const Menuitems: MenuitemsType[] = [
     id: uniqueId(),
     title: 'menu.elementary',
     icon: IconMoodHappy,
-    chip: 'soon',
+    chip: 'Soon',
     href: '/material-page',
     disabled: true,
   },

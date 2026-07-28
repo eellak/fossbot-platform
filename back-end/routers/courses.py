@@ -26,6 +26,7 @@ from routers.stage_sources import (
     FOSSBOT_REPO_PREFIX,
     current_branch_commit_sha,
     get_current_user,
+    get_beta_user,
     get_db,
     github_raw_base_url,
     github_stage_error,
@@ -50,7 +51,7 @@ from utils.source_providers.github_app import GitHubApiError
 from utils.utils_jwt import verify_access_token
 
 
-router = APIRouter(tags=["courses"])
+router = APIRouter(tags=["courses"], dependencies=[Depends(get_beta_user)])
 optional_oauth2 = OAuth2PasswordBearer(tokenUrl="token", auto_error=False)
 RELEASE_SCHEMA_VERSION = 3
 MISSION_ATTEMPT_SCHEMA_VERSION = 1

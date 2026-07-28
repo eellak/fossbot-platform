@@ -44,6 +44,23 @@ def test_required_only_draft_and_optional_metadata_omission(client_for, users):
     assert client_for(tutor).post("/courses", json=REQUIRED_COURSE | {"author_id": admin.id}).status_code == 422
 
 
+def test_courses_require_beta_access(client_for, db):
+    non_beta_student = User(
+        username="non-beta-student",
+        firstname="Non",
+        lastname="Beta",
+        email="non-beta@example.test",
+        hashed_password="unused",
+        role=UserRole.USER,
+        beta_tester=False,
+        activated=True,
+    )
+    db.add(non_beta_student)
+    db.commit()
+
+    assert client_for(non_beta_student).get("/courses").status_code == 403
+
+
 def test_ordering_first_lesson_rule_and_nested_ownership(client_for, users):
     tutor, other_tutor, _, _ = users
     owner = client_for(tutor)

@@ -18,14 +18,14 @@ const Modern = () => {
     <PageContainer title={t('dashboard-page.title')} description={t('dashboard-page.description')}>
       <Box>
         <Grid container spacing={3}>
-          <Grid item xs={12}><CourseResumeCard /></Grid>
+          {marketplace && <Grid item xs={12}><CourseResumeCard /></Grid>}
         {/* <Grid item xs={8} lg={8}>
         <SlideShow />
         </Grid> */}
           <Grid item xs={12} lg={12} >
             <ProjectsCard />
           </Grid>
-          <Grid item xs={12} xl={marketplace ? 5 : 12}><UserGitHubStagesPanel embedded preview /></Grid>
+          {marketplace && <Grid item xs={12} xl={5}><UserGitHubStagesPanel embedded preview /></Grid>}
           {marketplace && <Grid item xs={12} xl={7}><StageMarketplacePanel embedded preview /></Grid>}
         </Grid>
       </Box>

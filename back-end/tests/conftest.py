@@ -42,6 +42,7 @@ def users(db):
         email="teacher@example.test",
         hashed_password="unused",
         role=UserRole.TUTOR,
+        beta_tester=True,
         activated=True,
     )
     other_tutor = User(
@@ -51,6 +52,7 @@ def users(db):
         email="other@example.test",
         hashed_password="unused",
         role=UserRole.TUTOR,
+        beta_tester=True,
         activated=True,
     )
     student = User(
@@ -60,6 +62,7 @@ def users(db):
         email="student@example.test",
         hashed_password="unused",
         role=UserRole.USER,
+        beta_tester=True,
         activated=True,
     )
     admin = User(

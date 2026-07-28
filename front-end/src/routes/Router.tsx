@@ -135,7 +135,7 @@ const Router = [
     title: 'Stages',
     element: (
       <PrivateRoute>
-        <FullLayout />
+        <RoleBasedRoute betaTesterOnly><FullLayout /></RoleBasedRoute>
       </PrivateRoute>
     ),
     children: [{ path: '', exact: true, element: <StagesPage /> }],
@@ -143,19 +143,19 @@ const Router = [
   {
     path: '/courses',
     title: 'Courses',
-    element: <PrivateRoute><FullLayout /></PrivateRoute>,
+    element: <PrivateRoute><RoleBasedRoute betaTesterOnly><FullLayout /></RoleBasedRoute></PrivateRoute>,
     children: [{ path: '', exact: true, element: <CoursesPage /> }],
   },
   {
     path: '/courses/:courseId',
     title: 'Course',
-    element: <PrivateRoute><FullLayout /></PrivateRoute>,
+    element: <PrivateRoute><RoleBasedRoute betaTesterOnly><FullLayout /></RoleBasedRoute></PrivateRoute>,
     children: [{ path: '', exact: true, element: <CoursePage /> }],
   },
   {
     path: '/courses/:courseId/learn/:lessonKey',
     title: 'Lesson',
-    element: <PrivateRoute><FullLayout /></PrivateRoute>,
+    element: <PrivateRoute><RoleBasedRoute betaTesterOnly><FullLayout /></RoleBasedRoute></PrivateRoute>,
     children: [{ path: '', exact: true, element: <LessonWorkspacePage /> }],
   },
   {
@@ -163,7 +163,7 @@ const Router = [
     title: 'Teacher courses',
     element: (
       <PrivateRoute>
-        <RoleBasedRoute roles={['tutor', 'admin']}><FullLayout /></RoleBasedRoute>
+        <RoleBasedRoute roles={['tutor', 'admin']} betaTesterOnly><FullLayout /></RoleBasedRoute>
       </PrivateRoute>
     ),
     children: [{ path: '', exact: true, element: <TeacherCoursesPage /> }],
@@ -189,7 +189,7 @@ const Router = [
     title: 'Course editor',
     element: (
       <PrivateRoute>
-        <RoleBasedRoute roles={['tutor', 'admin']}><FullFillLayout /></RoleBasedRoute>
+        <RoleBasedRoute roles={['tutor', 'admin']} betaTesterOnly><FullFillLayout /></RoleBasedRoute>
       </PrivateRoute>
     ),
     children: [{ path: '', exact: true, element: <CourseEditorPage /> }],
@@ -209,7 +209,7 @@ const Router = [
     title: 'Stage Builder',
     element: (
       <PrivateRoute>
-        <BlankLayout />
+        <RoleBasedRoute betaTesterOnly><BlankLayout /></RoleBasedRoute>
       </PrivateRoute>
     ),
     children: [
@@ -220,7 +220,7 @@ const Router = [
   {
     path: '/stage-test',
     title: 'GitHub Stage Test',
-    element: <BlankLayout />,
+    element: <PrivateRoute><RoleBasedRoute betaTesterOnly><BlankLayout /></RoleBasedRoute></PrivateRoute>,
     children: [
       { path: '', exact: true, element: <StageGitHubTestPage /> },
     ],
@@ -288,7 +288,7 @@ const Router = [
   {
     path: '/accountSettings',
     title: 'Account Settings',
-    element: <AdminRoute />,
+    element: <PrivateRoute />,
     children: [
       {
         path: '',
@@ -300,7 +300,7 @@ const Router = [
   {
     path: '/admin-panel',
     title: 'Admin Panel',
-    element: <PrivateRoute />,
+    element: <AdminRoute />,
     children: [
       {
         path: '',

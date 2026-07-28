@@ -21,6 +21,7 @@ from routers.stage_sources import (
     ensure_repo_in_installation,
     ensure_public_repo,
     get_current_user,
+    get_beta_user,
     get_db,
     github_raw_base_url,
     github_stage_error,
@@ -30,7 +31,6 @@ from routers.stage_sources import (
     stage_error,
 )
 from utils.github_app_auth import create_github_app_jwt
-from utils.feature_flags import require_marketplace_enabled
 from utils.marketplace_schema import (
     MarketplaceSchemaError,
     build_marketplace_entry,
@@ -46,7 +46,7 @@ from utils.source_providers.github_app import GitHubApiError, github_rate_limit_
 from utils.stage_repo_manifest import verify_stage_manifest
 
 
-router = APIRouter(dependencies=[Depends(require_marketplace_enabled)])
+router = APIRouter(dependencies=[Depends(get_beta_user)])
 DATA_URL_RE = re.compile(r"^data:([^;,]+)?(;base64)?,(.*)$", re.DOTALL)
 MARKETPLACE_INDEX_CACHE: dict[str, Any] = {"expiresAt": 0.0, "payload": None}
 
@@ -294,7 +294,6 @@ def marketplace_index_cache_ttl() -> int:
 
 
 def cached_public_marketplace_index(*, force_refresh: bool = False) -> dict[str, Any]:
-    require_marketplace_enabled()
     now = time.time()
     cached = MARKETPLACE_INDEX_CACHE.get("payload")
     if not force_refresh and cached is not None and now < float(MARKETPLACE_INDEX_CACHE.get("expiresAt") or 0):
