@@ -11,8 +11,8 @@ import RichTextContent from '../RichTextContent';
 import SensorNotebook from '../sensors/SensorNotebook';
 
 type Props = {
-  token: string;
-  enrollmentId: number;
+  token?: string;
+  enrollmentId?: number;
   lessonKey: string;
   activities: Activity[];
   telemetry: SensorTelemetrySnapshot | null;
@@ -21,11 +21,12 @@ type Props = {
   onHelpersVisible: (visible: boolean) => void;
   onReadingsRunning: (running: boolean) => void;
   onProgressChange: () => void;
+  preview?: boolean;
   t: any;
 };
 
 export default function StudentActivities(props: Props) {
-  const { token, enrollmentId, lessonKey, activities, telemetry, previousSummary, helpersVisible, onHelpersVisible, onReadingsRunning, onProgressChange, t } = props;
+  const { token, enrollmentId, lessonKey, activities, telemetry, previousSummary, helpersVisible, onHelpersVisible, onReadingsRunning, onProgressChange, preview = false, t } = props;
   const [states, setStates] = useState<Record<string, ActivityState>>({});
   const [answers, setAnswers] = useState<Record<string, any>>({});
   const [feedback, setFeedback] = useState<Record<string, string>>({});
@@ -35,6 +36,11 @@ export default function StudentActivities(props: Props) {
   const pendingIds = useRef<Record<string, string>>({});
 
   useEffect(() => {
+    if (preview) {
+      setStates({}); setAnswers({}); setFeedback({}); setErrors({}); setLoading(false);
+      return undefined;
+    }
+    if (!token || enrollmentId === undefined) return undefined;
     let cancelled = false;
     setLoading(true);
     readActivityStates(token, enrollmentId, lessonKey).then((items) => {
@@ -44,9 +50,28 @@ export default function StudentActivities(props: Props) {
     }).catch((reason) => { if (!cancelled) setErrors({ load: reason instanceof Error ? reason.message : t('education.activities.loadFailed') }); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [enrollmentId, lessonKey, t, token]);
+  }, [enrollmentId, lessonKey, preview, t, token]);
 
   const send = async (activity: Activity, value: unknown = true, summary?: CompactSensorSummary | null) => {
+    if (preview) {
+      const result = previewGrade(activity, value);
+      const state: ActivityState = {
+        activity_key: activity.key,
+        type: activity.type,
+        required: activity.required,
+        submitted_value: value,
+        correctness: result.correctness,
+        satisfied: result.satisfied,
+        attempt_count: (states[activity.key]?.attempt_count || 0) + 1,
+        sensor_summary: summary || null,
+      };
+      const nextStates = { ...states, [activity.key]: state };
+      setStates(nextStates);
+      setFeedback((current) => ({ ...current, [activity.key]: result.feedback || (result.correctness === true ? t('education.activities.correct') : result.correctness === false ? t('education.activities.incorrect') : t('education.activities.saved')) }));
+      if (activities.every((item) => !item.required || nextStates[item.key]?.satisfied)) onProgressChange();
+      return;
+    }
+    if (!token || enrollmentId === undefined) return;
     const submissionId = pendingIds.current[activity.key] || uuidv4();
     pendingIds.current[activity.key] = submissionId;
     setSubmitting(activity.key); setErrors((current) => ({ ...current, [activity.key]: '' }));
@@ -183,3 +208,29 @@ function observationSummary(activities: Activity[], summary: SensorRunSummary | 
 const optionStyle = { m: 0, px: 1.5, minHeight: 48, border: '1px solid', borderColor: 'divider', borderRadius: 1.25, '&:hover': { bgcolor: 'action.hover' }, '&:has(.Mui-checked)': { borderColor: 'primary.main', bgcolor: 'action.selected' } } as const;
 const visuallyHidden = { position: 'absolute', width: 1, height: 1, p: 0, m: -1, overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap', border: 0 } as const;
 const roundReading = (value: number) => Number(value.toFixed(2));
+
+function previewGrade(activity: Activity, value: unknown): { correctness: boolean | null; satisfied: boolean; feedback?: string } {
+  let correctness: boolean | null = null;
+  if (activity.type === 'multiple_choice') correctness = value === activity.correctOptionKey;
+  if (activity.type === 'multiple_select') {
+    const selected = Array.isArray(value) ? [...value].sort() : [];
+    const expected = [...(activity.correctOptionKeys || [])].sort();
+    correctness = selected.length === expected.length && selected.every((item, index) => item === expected[index]);
+  }
+  if (activity.type === 'numeric_answer') {
+    const numeric = Number(value);
+    const expected = activity.expectedValue;
+    if (expected !== undefined && Number.isFinite(numeric)) {
+      const allowed = activity.tolerance.mode === 'absolute' ? activity.tolerance.value : Math.abs(expected) * activity.tolerance.value / 100;
+      correctness = Math.abs(numeric - expected) <= allowed + 1e-12;
+    } else correctness = false;
+  }
+  const objective = activity.type === 'multiple_choice' || activity.type === 'multiple_select' || activity.type === 'numeric_answer';
+  const feedbackCorrect = 'feedbackCorrect' in activity ? activity.feedbackCorrect : undefined;
+  const feedbackIncorrect = 'feedbackIncorrect' in activity ? activity.feedbackIncorrect : undefined;
+  return {
+    correctness,
+    satisfied: objective ? correctness === true : true,
+    feedback: correctness === true ? feedbackCorrect : correctness === false ? feedbackIncorrect : undefined,
+  };
+}
