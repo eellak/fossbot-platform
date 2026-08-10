@@ -11,12 +11,13 @@ import { useAssistantAccess } from 'src/ai/AssistantProvider';
 import type { SuggestionPreview } from 'src/ai/suggestions/codeSuggestions';
 import { parseAssistantSuggestion } from 'src/ai/suggestions/parseSuggestion';
 import type { AIAssistantSuggestion, AICapabilityId, AIAssistantSurface } from 'src/ai/types';
+import StageSuggestionPreview from './StageSuggestionPreview';
 
 type ConversationTurn = { role: 'user' | 'assistant'; content: string };
 type RequestMode = 'explain' | 'suggest';
 
 export type AssistantSurfaceAdapter = {
-  surface: Extract<AIAssistantSurface, 'python' | 'blockly' | 'lesson'>;
+  surface: Extract<AIAssistantSurface, 'python' | 'blockly' | 'lesson' | 'stage'>;
   getContext: () => Promise<Record<string, unknown>>;
   getFingerprint: () => Promise<string>;
   previewSuggestion: (suggestion: AIAssistantSuggestion) => Promise<SuggestionPreview>;
@@ -32,11 +33,12 @@ type Props = {
   secondaryLabel?: string;
   confirmationBody?: string;
   appliedMessage?: string;
+  singleMode?: boolean;
 };
 
 const suggestionBase = (suggestion: AIAssistantSuggestion) => suggestion.type === 'lesson_operations' ? suggestion.baseRevision : suggestion.baseFingerprint;
 
-export default function AssistantPanel({ adapter, explainCapability, suggestCapability, suggestedPrompts, primaryLabel, secondaryLabel, confirmationBody, appliedMessage }: Props) {
+export default function AssistantPanel({ adapter, explainCapability, suggestCapability, suggestedPrompts, primaryLabel, secondaryLabel, confirmationBody, appliedMessage, singleMode = false }: Props) {
   const { t } = useTranslation();
   const { token } = useAuth();
   const { access, loading, error: accessError, refresh } = useAssistantAccess();
@@ -60,7 +62,7 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
   const suggest = access?.capabilities.find((item) => item.capability === suggestCapability);
   const activeDecision = mode === 'explain' ? explain : suggest;
   const activeCapability = mode === 'explain' ? explainCapability : suggestCapability;
-  const canSuggest = Boolean(suggest?.allowed);
+  const canSuggest = !singleMode && Boolean(suggest?.allowed);
   const unavailableReason = activeDecision && !activeDecision.allowed ? t(`aiAdmin.reasons.${activeDecision.reasonCode}`, activeDecision.detail) : '';
 
   const run = async (nextQuestion = question, nextMode = mode) => {
@@ -175,7 +177,7 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
         {status === 'stopped' && <Alert severity="info">{t('aiAssistant.stopped')}</Alert>}
         {requestError && <Alert severity="error">{requestError}</Alert>}
         {(output || status === 'streaming') && <Box aria-live="polite"><Stack direction="row" spacing={1} alignItems="center"><Chip size="small" color="secondary" label={t('aiAssistant.generated')} />{attribution && <Typography variant="caption" color="text.secondary">{attribution.provider} · {attribution.model} · {t(`aiAdmin.runtimes.${attribution.runtime}`, attribution.runtime)}</Typography>}</Stack><Typography sx={{ mt: 1, whiteSpace: 'pre-wrap' }}>{output || t('aiAssistant.waiting')}</Typography></Box>}
-        {preview && <Paper variant="outlined" sx={{ p: 1.5 }}><Typography variant="subtitle2">{t('aiAssistant.preview')}</Typography><Typography sx={{ my: 1 }}>{preview.summary}</Typography><Divider />{preview.kind === 'lesson' ? <Stack spacing={1.25} sx={{ mt: 1 }}><Box><Typography variant="caption" color="text.secondary">{t('aiAssistant.authoring.changes')}</Typography><Stack direction="row" gap={0.5} flexWrap="wrap" sx={{ mt: 0.5 }}>{preview.changes?.map((change, index) => <Chip key={`${change}-${index}`} size="small" label={t(`aiAssistant.authoring.operations.${change}`, change)} />)}</Stack></Box><Box><Typography variant="caption" color="text.secondary">{t('aiAssistant.authoring.studentVisible')}</Typography><Box component="pre" tabIndex={0} sx={{ mt: 0.5, p: 1, maxHeight: 160, overflow: 'auto', bgcolor: 'action.hover', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{preview.studentVisible}</Box></Box>{preview.teacherOnly && <Alert severity="warning"><Typography variant="caption" fontWeight={700}>{t('aiAssistant.authoring.teacherOnly')}</Typography><Box component="pre" tabIndex={0} sx={{ m: 0, mt: 0.5, maxHeight: 130, overflow: 'auto', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{preview.teacherOnly}</Box></Alert>}{preview.validation?.length ? <Alert severity="warning">{t('aiAssistant.authoring.validationIssues', { count: preview.validation.length })}</Alert> : <Alert severity="success">{t('aiAssistant.authoring.validationPass')}</Alert>}</Stack> : <><Typography variant="caption" color="text.secondary">{preview.kind === 'python' ? t('aiAssistant.pythonDiff') : t('aiAssistant.generatedPython')}</Typography><Box component="pre" tabIndex={0} sx={{ mt: 1, p: 1, maxHeight: 180, overflow: 'auto', bgcolor: 'action.hover', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{preview.kind === 'python' ? preview.after : preview.detail}</Box></>}<Button sx={{ mt: 1 }} variant="contained" onClick={() => setConfirmOpen(true)}>{t('aiAssistant.apply')}</Button></Paper>}
+        {preview && <Paper variant="outlined" sx={{ p: 1.5 }}><Typography variant="subtitle2">{t('aiAssistant.preview')}</Typography><Typography sx={{ my: 1 }}>{preview.summary}</Typography><Divider />{preview.kind === 'lesson' ? <Stack spacing={1.25} sx={{ mt: 1 }}><Box><Typography variant="caption" color="text.secondary">{t('aiAssistant.authoring.changes')}</Typography><Stack direction="row" gap={0.5} flexWrap="wrap" sx={{ mt: 0.5 }}>{preview.changes?.map((change, index) => <Chip key={`${change}-${index}`} size="small" label={t(`aiAssistant.authoring.operations.${change}`, change)} />)}</Stack></Box><Box><Typography variant="caption" color="text.secondary">{t('aiAssistant.authoring.studentVisible')}</Typography><Box component="pre" tabIndex={0} sx={{ mt: 0.5, p: 1, maxHeight: 160, overflow: 'auto', bgcolor: 'action.hover', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{preview.studentVisible}</Box></Box>{preview.teacherOnly && <Alert severity="warning"><Typography variant="caption" fontWeight={700}>{t('aiAssistant.authoring.teacherOnly')}</Typography><Box component="pre" tabIndex={0} sx={{ m: 0, mt: 0.5, maxHeight: 130, overflow: 'auto', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{preview.teacherOnly}</Box></Alert>}{preview.validation?.length ? <Alert severity="warning">{t('aiAssistant.authoring.validationIssues', { count: preview.validation.length })}</Alert> : <Alert severity="success">{t('aiAssistant.authoring.validationPass')}</Alert>}</Stack> : preview.kind === 'stage' ? <StageSuggestionPreview preview={preview} /> : <><Typography variant="caption" color="text.secondary">{preview.kind === 'python' ? t('aiAssistant.pythonDiff') : t('aiAssistant.generatedPython')}</Typography><Box component="pre" tabIndex={0} sx={{ mt: 1, p: 1, maxHeight: 180, overflow: 'auto', bgcolor: 'action.hover', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{preview.kind === 'python' ? preview.after : preview.detail}</Box></>}<Button sx={{ mt: 1 }} variant="contained" onClick={() => setConfirmOpen(true)}>{t('aiAssistant.apply')}</Button></Paper>}
       </>}
     </Stack>
   </Paper>;

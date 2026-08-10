@@ -19,6 +19,17 @@ def request(surface, capability, context):
     )
 
 
+def stage_context(stage_payload, **extra):
+    fingerprint = hashlib.sha256(json.dumps(stage_payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    return {
+        "target": "create",
+        "baseFingerprint": fingerprint,
+        "stagePayload": stage_payload,
+        "catalog": ["robotSpawn", "target", "wall"],
+        **extra,
+    }
+
+
 def test_context_rejects_cross_surface_and_unknown_fields(db, users):
     student = users[2]
     with pytest.raises(ContextError):
@@ -44,23 +55,26 @@ def test_mutation_context_requires_matching_fingerprint(db, users):
 
 def test_context_removes_data_urls_and_is_deterministic(db, users):
     student = users[2]
-    payload = request("stage", "stage.create", {
-        "summary": {"preview": "data:image/png;base64,secret", "objectCount": 2},
-        "stage": {"objects": [{"id": "wall-1", "kind": "wall"}]},
-    })
+    unsafe = {"title": "Stage", "description": "", "floor": {"name": "Floor", "dimensions": [10, 10], "color": "#fff"}, "objects": [], "metadata": {}, "summary": {"preview": "data:image/png;base64,secret", "objectCount": 0}}
+    with pytest.raises(ContextError, match="Binary"):
+        assemble_context(db, student, request("stage", "stage.create", stage_context(unsafe)))
+    safe = {"title": "Stage", "description": "", "floor": {"name": "Floor", "dimensions": [10, 10], "color": "#fff"}, "objects": [], "metadata": {}, "summary": {"objectCount": 0, "knownObjectIds": []}}
+    payload = request("stage", "stage.create", stage_context(safe, contextTruncated=True))
     first = assemble_context(db, student, payload)
     second = assemble_context(db, student, payload)
     assert first.payload == second.payload
-    assert "base64" not in str(first.payload)
     assert first.report.characters <= 48_000
+    assert first.report.truncated == ["stage_objects"]
 
 
 def test_context_preserves_domain_names_while_removing_identity_fields(db, users):
     student = users[2]
-    assembled = assemble_context(db, student, request("stage", "stage.create", {
-        "summary": {"name": "Obstacle course", "username": "private-user"},
-        "stage": {"objects": [{"name": "Finish wall", "kind": "wall", "email": "private@example.test"}]},
-    }))
+    payload = {
+        "title": "Obstacle course", "description": "", "floor": {"name": "Floor", "dimensions": [10, 10], "color": "#fff"},
+        "objects": [{"id": "wall-1", "name": "Finish wall", "kind": "cube", "semanticKind": "wall", "position": [0, 0.25, 0], "dimensions": [1, 0.5, 0.08], "color": "#fff", "email": "private@example.test"}],
+        "metadata": {}, "summary": {"objectCount": 1, "knownObjectIds": ["wall-1"], "username": "private-user"},
+    }
+    assembled = assemble_context(db, student, request("stage", "stage.create", stage_context(payload)))
     serialized = str(assembled.payload)
     assert "Obstacle course" in serialized
     assert "Finish wall" in serialized

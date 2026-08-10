@@ -105,6 +105,33 @@ def test_provider_stream(payload: dict = Body(...)):
             else:
                 operations = [{"op": "update_lesson", "lessonId": int(lesson_id), "lessonPatch": {"title": "Move, predict, and reflect"}}]
             response = json.dumps({"version": "1", "type": "lesson_operations", "baseRevision": revision, "operations": operations, "summary": "Prepare one bounded, reviewable authoring change."})
+        elif "Capability: stage.create" in prompt or "Capability: stage.suggest_changes" in prompt:
+            fingerprint = prompt.split("baseFingerprint '", 1)[1].split("'", 1)[0]
+            target = prompt_value("Stage target")
+            selected_ids = [item for item in prompt_value("Selected object IDs").split(",") if item and item != "none"]
+            if "Capability: stage.create" in prompt:
+                operations = [
+                    {"op": "set_metadata", "patch": {"title": "FOSSBot Line and Obstacle Challenge", "description": "Follow the line, avoid the obstacle, and reach the target."}},
+                    {"op": "set_floor", "patch": {"dimensions": [8, 8], "color": "#f5f5f5"}},
+                    {"op": "add_object", "tempId": "ai-spawn", "semanticKind": "robotSpawn", "position": [-2.5, 0, -2.5]},
+                    {"op": "add_object", "tempId": "ai-target", "semanticKind": "target", "position": [2.5, 0, 2.5]},
+                    {"op": "add_object", "tempId": "ai-line", "semanticKind": "line", "position": [0, 0, 0]},
+                    {"op": "add_object", "tempId": "ai-obstacle", "semanticKind": "obstacle", "position": [0.7, 0, 0.3]},
+                    {"op": "add_object", "tempId": "ai-sensor", "semanticKind": "sensorZone", "position": [1.6, 0, 1.4]},
+                ]
+            elif target == "selection" and selected_ids:
+                operations = [
+                    {"op": "move_object", "objectId": selected_ids[0], "position": [1.5, 0.15, 1.5]},
+                    {"op": "update_object", "objectId": selected_ids[0], "patch": {"color": "#ffb020"}},
+                ]
+            else:
+                operations = [{"op": "add_object", "tempId": "ai-checkpoint", "semanticKind": "checkpoint", "position": [0, 0, 0]}]
+            response = json.dumps({
+                "version": "1", "type": "stage_operations", "baseFingerprint": fingerprint,
+                "rationale": "Keep the proposal small, editable, and within the supported Stage Builder catalog.",
+                "operations": operations, "expectedValidation": "The proposal should preserve serialization and expose remaining issues before apply.",
+                "summary": "Prepare a bounded Stage Builder proposal.",
+            })
         elif "Capability: blockly.explain" in prompt:
             response = "Deterministic test-only explanation: these blocks generate Python in workspace order."
         elif "Capability: code.explain" in prompt:
@@ -298,7 +325,7 @@ async def stream_assistance(
         input_tokens = None
         output_tokens = None
         suggestion_text = ""
-        suggestion_capability = payload.capability in {"code.suggest_changes", "blockly.suggest_changes", "lesson.draft", "lesson.suggest_changes"}
+        suggestion_capability = payload.capability in {"code.suggest_changes", "blockly.suggest_changes", "lesson.draft", "lesson.suggest_changes", "stage.create", "stage.suggest_changes"}
         yield sse_event("start", {
             "requestId": request_id,
             "providerId": provider.id,
@@ -326,7 +353,7 @@ async def stream_assistance(
                     yield sse_event(event.type, event.data)
             if outcome == "completed":
                 if suggestion_capability:
-                    fingerprint_key = "source_fingerprint" if payload.capability == "code.suggest_changes" else "workspace_fingerprint" if payload.capability == "blockly.suggest_changes" else "base_revision"
+                    fingerprint_key = "source_fingerprint" if payload.capability == "code.suggest_changes" else "workspace_fingerprint" if payload.capability == "blockly.suggest_changes" else "base_revision" if payload.capability in {"lesson.draft", "lesson.suggest_changes"} else "base_fingerprint"
                     suggestion = parse_suggestion(
                         suggestion_text,
                         payload.capability,

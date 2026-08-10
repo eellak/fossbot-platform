@@ -44,6 +44,8 @@ import { invalidateMarketplaceFirstPage, invalidateMyMarketplaceStages, invalida
 import { createLocalStage, listLocalStages, loadLocalStage, LocalStageRequestError, publishLocalStage, updateLocalStage, type LocalPublicationSubmissionSummary, type LocalStage } from 'src/stages/LocalStagesApi';
 import { OpenLocalStageDialog } from 'src/stages/OpenLocalStageDialog';
 import { useFeatureFlags } from 'src/config/FeatureFlags';
+import StageAuthoringAssistant from 'src/components/ai/StageAuthoringAssistant';
+import type { StageAuthoringTarget } from 'src/ai/suggestions/stageSuggestions';
 
 function userScope(user: ReturnType<typeof useAuth>['user']): string {
   if (!user) return 'anonymous';
@@ -437,6 +439,7 @@ const StageBuilderPage = () => {
   const selectedGroup = selectedGroupId ? stage.metadata.groups.find((group) => group.id === selectedGroupId) || null : null;
   const selectedGroupObjectIds = selectedGroup ? selectedGroup.objectIds.filter((id) => stage.objects.some((object) => object.id === id)) : [];
   const selectedCount = selectedGroup ? selectedGroupObjectIds.length : selectedIds.length || (selectedId ? 1 : 0);
+  const assistantSelectedIds = selectedGroup ? selectedGroupObjectIds : selectedIds.length ? selectedIds : selectedId ? [selectedId] : [];
   const dirty = useMemo(() => stageFingerprint(stage) !== lastExportFingerprint, [stage, lastExportFingerprint]);
   const localStageHasChanges = useMemo(() => localStage ? stageFingerprint(stage) !== stageFingerprint(configToEditorStage(localStage.record)) : dirty, [dirty, localStage, stage]);
   const gridVisible = stage.metadata.gridVisible ?? true;
@@ -793,6 +796,21 @@ const StageBuilderPage = () => {
       clearStageBuilderDraft(scope);
     }
     if (options.message) setMessage(options.message);
+  };
+
+  const applyAssistantStage = (next: EditorStage, target: StageAuthoringTarget): boolean => {
+    if (target === 'create' && !confirmIfDirty('Replace the current stage with this generated draft? Unsaved changes will remain in the existing recovery draft.')) return false;
+    const now = new Date().toISOString();
+    replaceStage({ ...next, createdAt: target === 'create' ? now : stage.createdAt, updatedAt: now }, { undoable: true, clean: false, message: 'Reviewed Buddy proposal applied as one undoable draft change. Nothing was saved, exported, published, or run.' });
+    if (target === 'create') {
+      setLocalStage(null);
+      setRemoteStage(null);
+    } else if (target === 'selection') {
+      setSelectedIds(assistantSelectedIds);
+      setSelectedId(assistantSelectedIds[assistantSelectedIds.length - 1] || null);
+      setInspectorTab(assistantSelectedIds.length ? 'object' : 'empty');
+    }
+    return true;
   };
 
   const confirmIfDirty = (messageText = leaveMessage): boolean => {
@@ -1726,6 +1744,9 @@ const StageBuilderPage = () => {
           </Box>
           <Box sx={{ position: 'absolute', top: 12, right: 12, zIndex: 5 }}>
             <EditorViewportCameraGizmo currentView={lookThroughCameraId && lookThroughCamera ? 'camera' : (cameraViewRequest?.view || 'perspective')} hasActiveCamera={hasVisibleStageCamera(stage)} onCameraViewChange={requestCameraView} />
+          </Box>
+          <Box sx={{ position: 'absolute', right: 12, bottom: 12, zIndex: 7 }}>
+            <StageAuthoringAssistant stage={stage} selectedIds={assistantSelectedIds} validation={validationResults} localStageId={localStage?.id} onApply={applyAssistantStage} />
           </Box>
           {lookThroughCamera && lookThroughCamera.kind === 'camera' && (
             <Box sx={{ position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)', zIndex: 6, maxWidth: 'min(420px, calc(100% - 32px))', pointerEvents: 'none' }}>

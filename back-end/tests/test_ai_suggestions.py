@@ -102,3 +102,55 @@ def test_lesson_suggestion_cannot_create_mission_rules():
             "version": "1", "type": "lesson_operations", "baseRevision": revision, "summary": "Unsafe.",
             "operations": [{"op": "replace_activity", "lessonId": 4, "activityKey": "mission-1", "activity": changed}],
         }), "lesson.suggest_changes", revision, context)
+
+
+def test_stage_create_requires_supported_spawn_and_target():
+    fingerprint = "c" * 64
+    context = {"target": "create", "selected_object_ids": [], "stage_payload": {"objects": [], "summary": {"knownObjectIds": []}}}
+    suggestion = {
+        "version": "1", "type": "stage_operations", "baseFingerprint": fingerprint,
+        "rationale": "Create a minimal challenge.", "expectedValidation": "Spawn and target remain visible.", "summary": "Create stage.",
+        "operations": [
+            {"op": "set_metadata", "patch": {"title": "Line challenge"}},
+            {"op": "add_object", "tempId": "ai-spawn", "semanticKind": "robotSpawn", "position": [-2, 0, -2]},
+            {"op": "add_object", "tempId": "ai-target", "semanticKind": "target", "position": [2, 0, 2]},
+        ],
+    }
+    parsed = parse_suggestion(json.dumps(suggestion), "stage.create", fingerprint, context)
+    assert parsed.type == "stage_operations"
+    suggestion["operations"][2]["semanticKind"] = "downloadedModel"
+    with pytest.raises(SuggestionError, match="not supported"):
+        parse_suggestion(json.dumps(suggestion), "stage.create", fingerprint, context)
+
+
+def test_stage_selection_rejects_unknown_unselected_and_invalid_geometry():
+    fingerprint = "d" * 64
+    context = {
+        "target": "selection", "selected_object_ids": ["wall-1"],
+        "stage_payload": {"objects": [{"id": "wall-1"}], "summary": {"knownObjectIds": ["wall-1", "wall-2"]}},
+    }
+    base = {
+        "version": "1", "type": "stage_operations", "baseFingerprint": fingerprint,
+        "rationale": "Move the selection.", "expectedValidation": "Keep valid dimensions.", "summary": "Move wall.",
+    }
+    with pytest.raises(SuggestionError, match="unselected"):
+        parse_suggestion(json.dumps({**base, "operations": [{"op": "move_object", "objectId": "wall-2", "position": [1, 0, 1]}]}), "stage.suggest_changes", fingerprint, context)
+    with pytest.raises(SuggestionError, match="dimensions"):
+        parse_suggestion(json.dumps({**base, "operations": [{"op": "resize_object", "objectId": "wall-1", "dimensions": [1, -1, 1]}]}), "stage.suggest_changes", fingerprint, context)
+    with pytest.raises(SuggestionError, match="unknown"):
+        parse_suggestion(json.dumps({**base, "operations": [{"op": "remove_object", "objectId": "missing"}]}), "stage.suggest_changes", fingerprint, context)
+
+
+def test_stage_suggestion_rejects_asset_fields_and_stale_fingerprint():
+    fingerprint = "e" * 64
+    context = {"target": "stage", "selected_object_ids": [], "stage_payload": {"objects": [{"id": "wall-1"}], "summary": {"knownObjectIds": ["wall-1"]}}}
+    payload = {
+        "version": "1", "type": "stage_operations", "baseFingerprint": fingerprint,
+        "rationale": "Keep assets private.", "expectedValidation": "No asset changes.", "summary": "Update wall.",
+        "operations": [{"op": "update_object", "objectId": "wall-1", "patch": {"source": "data:model/gltf;base64,secret"}}],
+    }
+    with pytest.raises(SuggestionError, match="unsupported fields"):
+        parse_suggestion(json.dumps(payload), "stage.suggest_changes", fingerprint, context)
+    payload["operations"] = [{"op": "move_object", "objectId": "wall-1", "position": [1, 0, 1]}]
+    with pytest.raises(SuggestionError, match="current workspace"):
+        parse_suggestion(json.dumps(payload), "stage.suggest_changes", "f" * 64, context)

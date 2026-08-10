@@ -162,5 +162,29 @@ export interface LessonAuthoringSuggestion {
   summary: string;
 }
 
+export type StageOperation = {
+  op: 'set_metadata' | 'set_floor' | 'add_object' | 'update_object' | 'move_object' | 'rotate_object' | 'resize_object' | 'set_line_points' | 'remove_object' | 'group_objects' | 'ungroup_objects';
+  objectId?: string;
+  tempId?: string;
+  semanticKind?: string;
+  position?: number[];
+  dimensions?: number[];
+  rotationY?: number;
+  points?: number[][];
+  patch?: Record<string, unknown>;
+  objectIds?: string[];
+  groupName?: string;
+};
+
+export interface StageAuthoringSuggestion {
+  version: '1';
+  type: 'stage_operations';
+  baseFingerprint: string;
+  rationale: string;
+  operations: StageOperation[];
+  expectedValidation: string;
+  summary: string;
+}
+
 export type AICodeSuggestion = PythonReplaceSuggestion | BlocklyReplaceSuggestion;
-export type AIAssistantSuggestion = AICodeSuggestion | LessonAuthoringSuggestion;
+export type AIAssistantSuggestion = AICodeSuggestion | LessonAuthoringSuggestion | StageAuthoringSuggestion;

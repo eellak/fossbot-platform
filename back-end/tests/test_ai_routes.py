@@ -379,6 +379,35 @@ def test_lesson_suggestion_is_authorized_typed_and_content_free(db, users, monke
     assert denied.status_code == 403
 
 
+def test_stage_suggestion_is_typed_and_never_streams_raw_json(db, users, monkeypatch):
+    student, admin = users[2], users[3]
+    provider = enable_streaming(db, admin, student, capability="stage.create")
+    stage_payload = {
+        "title": "Untitled Stage", "description": "", "floor": {"name": "Floor", "dimensions": [10, 10], "color": "#f5f5f5"},
+        "objects": [], "metadata": {"skybox": {"mode": "default", "color": "#87ceeb"}, "groups": []},
+        "summary": {"objectCount": 0, "knownObjectIds": [], "kinds": {}},
+    }
+    fingerprint = hashlib.sha256(json.dumps(stage_payload, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    suggestion = {
+        "version": "1", "type": "stage_operations", "baseFingerprint": fingerprint,
+        "rationale": "Create a small supported challenge.", "expectedValidation": "Spawn and target are present.", "summary": "Create stage.",
+        "operations": [
+            {"op": "add_object", "tempId": "ai-spawn", "semanticKind": "robotSpawn", "position": [-2, 0, -2]},
+            {"op": "add_object", "tempId": "ai-target", "semanticKind": "target", "position": [2, 0, 2]},
+        ],
+    }
+    monkeypatch.setattr(ai, "hosted_provider", lambda *args, **kwargs: FakeSuggestionProvider(suggestion))
+    with client_for(db, student) as client:
+        response = client.post("/api/ai/assist/stream", json={
+            "capability": "stage.create", "providerId": provider.id, "surface": "stage", "question": "Create a challenge",
+            "context": {"target": "create", "baseFingerprint": fingerprint, "stagePayload": stage_payload, "catalog": ["robotSpawn", "target"]},
+        })
+    assert response.status_code == 200
+    assert '"type":"stage_operations"' in response.text
+    assert "event: text_delta" not in response.text
+    assert db.query(AIUsageEvent).filter(AIUsageEvent.capability == "stage.create").one().outcome == "completed"
+
+
 def test_invalid_suggestion_emits_safe_error_without_done(db, users, monkeypatch):
     student, admin = users[2], users[3]
     provider = enable_streaming(db, admin, student, capability="code.suggest_changes")

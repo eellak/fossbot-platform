@@ -9,7 +9,7 @@ export const CODE_SUGGESTION_VERSION = '1';
 export type SuggestionPreview = {
   suggestion: AIAssistantSuggestion;
   summary: string;
-  kind: 'python' | 'blockly' | 'lesson';
+  kind: 'python' | 'blockly' | 'lesson' | 'stage';
   before: string;
   after: string;
   detail: string;
@@ -17,6 +17,15 @@ export type SuggestionPreview = {
   studentVisible?: string;
   teacherOnly?: string;
   validation?: string[];
+  stage?: {
+    added: number;
+    changed: number;
+    removed: number;
+    resolvedIssues: string[];
+    newIssues: string[];
+    floor: [number, number];
+    objects: Array<{ id: string; kind: string; position: [number, number, number] }>;
+  };
 };
 
 const ALLOWED_BLOCK_TYPES = new Set<string>();

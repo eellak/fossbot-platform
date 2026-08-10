@@ -183,7 +183,55 @@ def _stage_summary(record: dict[str, Any]) -> dict[str, Any]:
     return {"objectCount": len(entries) if isinstance(entries, list) else 0, "objectKinds": kinds}
 
 
+def _validate_stage_context(context: StageContext) -> None:
+    payload = context.stage_payload
+    allowed = {"title", "description", "floor", "objects", "metadata", "summary"}
+    if not isinstance(payload, dict) or set(payload) - allowed:
+        raise ContextError("Stage context contains unsupported fields")
+    if not isinstance(payload.get("title", ""), str) or not isinstance(payload.get("description", ""), str):
+        raise ContextError("Stage metadata context is invalid")
+    floor = payload.get("floor")
+    if not isinstance(floor, dict) or set(floor) - {"name", "dimensions", "color", "repeat", "offset"}:
+        raise ContextError("Stage floor context is invalid")
+    dimensions = floor.get("dimensions")
+    if not isinstance(dimensions, list) or len(dimensions) != 2 or any(not isinstance(value, (int, float)) or value <= 0 or value > 500 for value in dimensions):
+        raise ContextError("Stage floor context is invalid")
+    objects = payload.get("objects", [])
+    if not isinstance(objects, list) or len(objects) > 80:
+        raise ContextError("Stage object context is invalid")
+    object_ids: set[str] = set()
+    for item in objects:
+        if not isinstance(item, dict) or not isinstance(item.get("id"), str) or not item["id"]:
+            raise ContextError("Stage object context is invalid")
+        if item["id"] in object_ids:
+            raise ContextError("Stage object context contains duplicate IDs")
+        object_ids.add(item["id"])
+        if any(key in item for key in ("filename", "originalFileName", "source", "texture", "rawBaseUrl", "provider")):
+            raise ContextError("Stage asset sources are not accepted in assistant context")
+    def contains_binary(value: Any) -> bool:
+        if isinstance(value, str):
+            return value.lstrip().lower().startswith("data:")
+        if isinstance(value, list):
+            return any(contains_binary(item) for item in value)
+        if isinstance(value, dict):
+            return any(contains_binary(item) for item in value.values())
+        return False
+    if contains_binary(payload):
+        raise ContextError("Binary stage assets are not accepted in assistant context")
+    expected = hashlib.sha256(json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+    if context.base_fingerprint != expected:
+        raise ContextError("Stage fingerprint is missing or stale")
+    selected = set(context.selected_object_ids)
+    if context.target == "selection" and (not selected or selected != object_ids):
+        raise ContextError("Selected stage context must contain exactly the selected objects")
+    if context.target == "validation" and not context.validation:
+        raise ContextError("A stage validation target is required")
+    if any(not isinstance(item, str) or not item for item in context.catalog):
+        raise ContextError("Stage catalog context is invalid")
+
+
 def _load_stage(db: Session, user: User, context: StageContext) -> dict[str, Any]:
+    _validate_stage_context(context)
     if not context.local_stage_id:
         return {}
     query = db.query(LocalStage).filter(LocalStage.id == context.local_stage_id)
@@ -196,7 +244,6 @@ def _load_stage(db: Session, user: User, context: StageContext) -> dict[str, Any
         "title": stage.title,
         "revision": stage.revision,
         "summary": _stage_summary(stage.record),
-        "stage": stage.record,
     }
 
 
@@ -249,14 +296,7 @@ def assemble_context(db: Session, user: User, request: AssistantRequest) -> Asse
     })
     encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     if len(encoded) > MAX_CONTEXT_CHARACTERS:
-        if request.surface == "stage":
-            stage_payload = payload.get("authoritative", {}).pop("stage", None)
-            supplied_stage = payload.get("supplied", {}).pop("stage", None)
-            source = stage_payload or supplied_stage or {}
-            payload.setdefault("authoritative", {})["summary"] = _stage_summary(source) if isinstance(source, dict) else {}
-            encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-        if len(encoded) > MAX_CONTEXT_CHARACTERS:
-            raise ContextError("Assistant context exceeds the allowed size")
+        raise ContextError("Assistant context exceeds the allowed size")
     return AssembledContext(
         payload=payload,
         report=ContextReport(
@@ -264,6 +304,6 @@ def assemble_context(db: Session, user: User, request: AssistantRequest) -> Asse
             surface=request.surface,
             characters=len(encoded),
             estimated_tokens=(len(encoded) + 3) // 4,
-            truncated=["stage"] if "stage_payload" in locals() and stage_payload is not None else [],
+            truncated=["stage_objects"] if isinstance(surface, StageContext) and surface.context_truncated else [],
         ),
     )

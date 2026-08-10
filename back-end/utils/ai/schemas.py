@@ -66,10 +66,14 @@ class LessonContext(StrictModel):
 
 class StageContext(StrictModel):
     local_stage_id: Optional[int] = Field(default=None, ge=1)
-    summary: dict[str, Any] = Field(default_factory=dict)
-    stage: Optional[dict[str, Any]] = None
+    target: Literal["create", "stage", "selection", "validation"]
+    base_fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
+    stage_payload: dict[str, Any]
     selected_object_ids: list[str] = Field(default_factory=list, max_length=128)
-    validation: list[str] = Field(default_factory=list, max_length=64)
+    catalog: list[str] = Field(default_factory=list, max_length=64)
+    validation: list[dict[str, Any]] = Field(default_factory=list, max_length=64)
+    objective: str = Field(default="", max_length=1_000)
+    context_truncated: bool = False
 
 
 class ProbeContext(StrictModel):
@@ -165,4 +169,40 @@ class LessonAuthoringSuggestion(StrictModel):
     type: Literal["lesson_operations"]
     base_revision: str = Field(pattern=r"^[0-9a-f]{64}$")
     operations: list[LessonOperation] = Field(min_length=1, max_length=12)
+    summary: str = Field(min_length=1, max_length=1_000)
+
+
+class StageOperation(StrictModel):
+    op: Literal[
+        "set_metadata",
+        "set_floor",
+        "add_object",
+        "update_object",
+        "move_object",
+        "rotate_object",
+        "resize_object",
+        "set_line_points",
+        "remove_object",
+        "group_objects",
+        "ungroup_objects",
+    ]
+    object_id: Optional[str] = Field(default=None, min_length=1, max_length=160)
+    temp_id: Optional[str] = Field(default=None, min_length=1, max_length=160)
+    semantic_kind: Optional[str] = Field(default=None, min_length=1, max_length=80)
+    position: Optional[list[float]] = Field(default=None, min_length=3, max_length=3)
+    dimensions: Optional[list[float]] = Field(default=None, min_length=1, max_length=4)
+    rotation_y: Optional[float] = None
+    points: Optional[list[list[float]]] = Field(default=None, min_length=2, max_length=128)
+    patch: Optional[dict[str, Any]] = None
+    object_ids: list[str] = Field(default_factory=list, max_length=128)
+    group_name: Optional[str] = Field(default=None, min_length=1, max_length=120)
+
+
+class StageAuthoringSuggestion(StrictModel):
+    version: Literal["1"] = "1"
+    type: Literal["stage_operations"]
+    base_fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
+    rationale: str = Field(min_length=1, max_length=2_000)
+    operations: list[StageOperation] = Field(min_length=1, max_length=64)
+    expected_validation: str = Field(min_length=1, max_length=1_000)
     summary: str = Field(min_length=1, max_length=1_000)
