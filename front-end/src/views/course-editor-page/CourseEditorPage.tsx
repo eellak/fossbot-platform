@@ -22,6 +22,7 @@ import LessonPreview from 'src/components/courses/LessonPreview';
 import StageSelector from 'src/components/courses/StageSelector';
 import StarterCodeWorkspace from 'src/components/courses/StarterCodeWorkspace';
 import ActivityComposer from 'src/components/courses/activities/ActivityComposer';
+import AuthoringAssistant from 'src/components/ai/AuthoringAssistant';
 
 type SaveState = 'saved' | 'unsaved' | 'saving' | 'failed';
 type Panel = 'outline' | 'content' | 'settings';
@@ -60,6 +61,22 @@ const lessonFields = (lesson: Lesson) => ({
   simulator_settings: lesson.simulator_settings || null,
   stageReference: lesson.stageReference || null,
 });
+
+const localPublicationIssues = (draft: CourseDraft | null, t: any): PublicationIssue[] => {
+  const issues: PublicationIssue[] = [];
+  if (!draft?.title.trim()) issues.push({ group: 'Course', code: 'required', message: t('education.validation.titleRequired'), field: 'title' });
+  if (!draft?.description.trim()) issues.push({ group: 'Course', code: 'required', message: t('education.validation.descriptionRequired'), field: 'description' });
+  if (!draft?.learning_objectives.some((objective) => objective.trim())) issues.push({ group: 'Course', code: 'required', message: t('education.validation.objectiveRequired'), field: 'learning_objectives' });
+  if (!draft?.lessons.length) issues.push({ group: 'Lesson', code: 'required', message: t('education.validation.lessonRequired') });
+  draft?.lessons.forEach((lesson, index) => {
+    if (!lesson.title.trim()) issues.push({ group: 'Lesson', code: 'required', message: t('education.validation.lessonTitleRequired'), lesson_id: lesson.id, field: 'title' });
+    if (index === 0 && lesson.start_mode === 'inherit_previous_code') issues.push({ group: 'Lesson', code: 'inheritance', message: t('education.validation.firstFresh'), lesson_id: lesson.id, field: 'start_mode' });
+    if (lesson.activities.some((activity) => activityValidation(activity).length > 0)) issues.push({ group: 'Lesson', code: 'activity', message: t('education.activities.validation'), lesson_id: lesson.id, field: 'activities' });
+    if (lesson.activities.some((activity) => activity.type === 'simulator_observation') && (!lesson.stageReference || lesson.simulator_settings?.showSimulator === false)) issues.push({ group: 'Stage', code: 'observation_stage', message: t('education.validation.observationStage'), lesson_id: lesson.id, field: 'stageReference' });
+    if (lesson.activities.some((activity) => activity.type === 'mission') && (!lesson.stageReference || lesson.simulator_settings?.showSimulator === false)) issues.push({ group: 'Stage', code: 'mission_stage', message: t('education.validation.missionStage'), lesson_id: lesson.id, field: 'stageReference' });
+  });
+  return issues;
+};
 
 export default function CourseEditorPage() {
   const { t } = useTranslation();
@@ -373,18 +390,7 @@ export default function CourseEditorPage() {
   const validateForPublish = async () => {
     setValidating(true); setError('');
     const draft = courseRef.current;
-    const localIssues: PublicationIssue[] = [];
-    if (!draft?.title.trim()) localIssues.push({ group: 'Course', code: 'required', message: t('education.validation.titleRequired'), field: 'title' });
-    if (!draft?.description.trim()) localIssues.push({ group: 'Course', code: 'required', message: t('education.validation.descriptionRequired'), field: 'description' });
-    if (!draft?.learning_objectives.some((objective) => objective.trim())) localIssues.push({ group: 'Course', code: 'required', message: t('education.validation.objectiveRequired'), field: 'learning_objectives' });
-    if (!draft?.lessons.length) localIssues.push({ group: 'Lesson', code: 'required', message: t('education.validation.lessonRequired') });
-    draft?.lessons.forEach((lesson, index) => {
-      if (!lesson.title.trim()) localIssues.push({ group: 'Lesson', code: 'required', message: t('education.validation.lessonTitleRequired'), lesson_id: lesson.id, field: 'title' });
-      if (index === 0 && lesson.start_mode === 'inherit_previous_code') localIssues.push({ group: 'Lesson', code: 'inheritance', message: t('education.validation.firstFresh'), lesson_id: lesson.id, field: 'start_mode' });
-      if (lesson.activities.some((activity) => activityValidation(activity).length > 0)) localIssues.push({ group: 'Lesson', code: 'activity', message: t('education.activities.validation'), lesson_id: lesson.id, field: 'activities' });
-      if (lesson.activities.some((activity) => activity.type === 'simulator_observation') && (!lesson.stageReference || lesson.simulator_settings?.showSimulator === false)) localIssues.push({ group: 'Stage', code: 'observation_stage', message: t('education.validation.observationStage'), lesson_id: lesson.id, field: 'stageReference' });
-      if (lesson.activities.some((activity) => activity.type === 'mission') && (!lesson.stageReference || lesson.simulator_settings?.showSimulator === false)) localIssues.push({ group: 'Stage', code: 'mission_stage', message: t('education.validation.missionStage'), lesson_id: lesson.id, field: 'stageReference' });
-    });
+    const localIssues = localPublicationIssues(draft, t);
     if (localIssues.length) {
       setValidationIssues(localIssues); setSettingsTab('validation'); setMobilePanel('settings'); setValidating(false); return;
     }
@@ -419,6 +425,39 @@ export default function CourseEditorPage() {
     if (conflict.scope === 'course') setCourse((current) => current ? { ...current, updated_at: conflict.currentUpdatedAt } : current);
     else setCourse((current) => current ? { ...current, lessons: current.lessons.map((lesson) => lesson.id === conflict.lessonId ? { ...lesson, updated_at: conflict.currentUpdatedAt } : lesson) } : current);
     setConflict(null); setError(''); setRevision((value) => value + 1);
+  };
+
+  const applyAuthoringSuggestion = (proposed: CourseDraft) => {
+    const current = courseRef.current;
+    if (!current) return;
+    const beforeCourse = courseFields(current);
+    const afterCourse = courseFields(proposed);
+    const courseChanged = JSON.stringify(beforeCourse) !== JSON.stringify(afterCourse);
+    const changedLessonIds = proposed.lessons.filter((lesson) => {
+      const before = current.lessons.find((item) => item.id === lesson.id);
+      return before && JSON.stringify(lessonFields(before)) !== JSON.stringify(lessonFields(lesson));
+    }).map((lesson) => lesson.id);
+    const lessonKeys = new Set(current.unpublished_change_summary?.lesson_keys || []);
+    changedLessonIds.forEach((lessonId) => {
+      const lesson = proposed.lessons.find((item) => item.id === lessonId);
+      if (lesson) lessonKeys.add(lesson.lesson_key);
+    });
+    const next = {
+      ...proposed,
+      has_unpublished_changes: Boolean(current.latest_published_release_id),
+      unpublished_change_summary: current.latest_published_release_id ? {
+        ...(current.unpublished_change_summary || { course: false, outline: false, lesson_keys: [] }),
+        course: courseChanged || current.unpublished_change_summary?.course || false,
+        lesson_keys: [...lessonKeys],
+      } : current.unpublished_change_summary,
+    };
+    recordHistory(current, next, `ai-authoring:${Date.now()}`);
+    if (courseChanged) courseGeneration.current += 1;
+    changedLessonIds.forEach((lessonId) => lessonGenerations.current.set(lessonId, (lessonGenerations.current.get(lessonId) || 0) + 1));
+    setCourse(next); courseRef.current = next; setSaveState('unsaved'); setRevision((value) => value + 1);
+    const issues = localPublicationIssues(next, t);
+    setValidationIssues(issues);
+    if (issues.length) { setSettingsTab('validation'); setMobilePanel('settings'); }
   };
 
   if (loading) return <Box sx={{ p: 3 }}><Skeleton height={64} /><Skeleton variant="rounded" height={560} /></Box>;
@@ -467,6 +506,7 @@ export default function CourseEditorPage() {
         <Typography fontWeight={700}>{t(`education.publish.status.${releaseState}.title`, { version: course.latest_published_release_version })}</Typography>
         <Typography variant="body2">{t(`education.publish.status.${releaseState}.detail`, { version: course.latest_published_release_version })}</Typography>
       </Alert>
+      <Box sx={{ px: { xs: 1, md: 2 }, py: 1, bgcolor: 'background.paper', borderBottom: 1, borderColor: 'divider' }}><AuthoringAssistant course={course} lesson={selectedLesson} validationIssues={validationIssues} onApply={applyAuthoringSuggestion} /></Box>
       {error && <Alert severity="error" onClose={() => setError('')} sx={{ borderRadius: 0 }}>{error}</Alert>}
       {conflict && <Alert severity="warning" icon={<IconAlertTriangle size={20} />} action={<Stack direction="row"><Button color="inherit" size="small" onClick={load}>{t('education.conflict.reload')}</Button><Button color="inherit" size="small" onClick={overwriteConflict}>{t('education.conflict.overwrite')}</Button></Stack>} sx={{ borderRadius: 0 }}>{t('education.conflict.message')}</Alert>}
       {compact && <Tabs value={mobilePanel} onChange={(_, value) => setMobilePanel(value)} variant="fullWidth" sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: 'background.paper' }}><Tab value="outline" label={t('education.panels.outline')} /><Tab value="content" label={t('education.panels.content')} /><Tab value="settings" label={t('education.panels.settings')} /></Tabs>}

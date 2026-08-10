@@ -52,11 +52,16 @@ class BlocklyContext(StrictModel):
     stage_summary: dict[str, Any] = Field(default_factory=dict)
 
 
-class LessonContext(StrictModel):
+class PublishedLessonContext(StrictModel):
     release_id: Optional[int] = Field(default=None, ge=1)
     lesson_key: Optional[str] = Field(default=None, max_length=120)
-    title: str = Field(default="", max_length=200)
-    objectives: list[str] = Field(default_factory=list, max_length=24)
+
+
+class LessonContext(StrictModel):
+    course_id: int = Field(ge=1)
+    target: Literal["course", "lesson", "activity", "validation"]
+    base_revision: str = Field(pattern=r"^[0-9a-f]{64}$")
+    target_payload: dict[str, Any]
 
 
 class StageContext(StrictModel):
@@ -124,4 +129,40 @@ class BlocklyReplaceSuggestion(StrictModel):
     type: Literal["blockly_replace"]
     base_fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
     xml: str = Field(min_length=1, max_length=16_000)
+    summary: str = Field(min_length=1, max_length=1_000)
+
+
+class CourseAuthoringPatch(StrictModel):
+    title: Optional[str] = Field(default=None, min_length=1, max_length=200)
+    description: Optional[str] = Field(default=None, min_length=1, max_length=5_000)
+    learning_objectives: Optional[list[str]] = Field(default=None, min_length=1, max_length=24)
+
+
+class LessonAuthoringPatch(StrictModel):
+    title: Optional[str] = Field(default=None, min_length=1, max_length=200)
+
+
+class LessonOperation(StrictModel):
+    op: Literal[
+        "update_course",
+        "update_lesson",
+        "insert_activity",
+        "replace_activity",
+        "remove_activity",
+        "reorder_activities",
+    ]
+    lesson_id: Optional[int] = Field(default=None, ge=1)
+    activity_key: Optional[str] = Field(default=None, min_length=1, max_length=160)
+    index: Optional[int] = Field(default=None, ge=0, le=255)
+    course_patch: Optional[CourseAuthoringPatch] = None
+    lesson_patch: Optional[LessonAuthoringPatch] = None
+    activity: Optional[dict[str, Any]] = None
+    activity_keys: list[str] = Field(default_factory=list, max_length=256)
+
+
+class LessonAuthoringSuggestion(StrictModel):
+    version: Literal["1"] = "1"
+    type: Literal["lesson_operations"]
+    base_revision: str = Field(pattern=r"^[0-9a-f]{64}$")
+    operations: list[LessonOperation] = Field(min_length=1, max_length=12)
     summary: str = Field(min_length=1, max_length=1_000)

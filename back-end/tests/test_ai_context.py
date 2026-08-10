@@ -1,9 +1,10 @@
 import datetime
 import hashlib
+import json
 
 import pytest
 
-from database.database import Course, CourseRelease
+from database.database import Course, CourseRelease, Lesson
 from utils.ai.context import ContextError, assemble_context
 from utils.ai.prompts import PROMPT_VERSION, build_prompt
 from utils.ai.schemas import AssistantRequest
@@ -105,14 +106,41 @@ def test_published_lesson_context_is_student_safe(db, users):
     course.latest_published_release_id = release.id
     db.commit()
 
-    assembled = assemble_context(db, student, request("lesson", "lesson.draft", {
-        "release_id": release.id,
-        "lesson_key": "sensor-basics",
+    assembled = assemble_context(db, student, request("python", "code.explain", {
+        "source": "print('safe')",
+        "releaseId": release.id,
+        "lessonKey": "sensor-basics",
     }))
     serialized = str(assembled.payload)
-    assert "Which sensor?" in serialized
+    assert "Sensors" in serialized
     assert "correctOptionKey" not in serialized
     assert "secret answer feedback" not in serialized
+
+
+def test_authoring_context_is_bounded_revision_tied_and_author_only(db, users):
+    tutor, other_tutor, student, admin = users
+    course = Course(title="Robotics", description="Course", author_id=tutor.id, learning_objectives=["Move safely"], status="draft", visibility="public")
+    db.add(course)
+    db.flush()
+    lesson = Lesson(course_id=course.id, lesson_key="move", title="Move", position=1, activities=[], completion_policy="self", start_mode="fresh", editor_type="none", archived=False)
+    db.add(lesson)
+    db.commit()
+    payload = {
+        "course": {"title": "Robotics", "description": "Course", "objectives": ["Move safely"], "ageRange": "9-12", "difficulty": "intro"},
+        "lesson": {"id": lesson.id, "key": lesson.lesson_key, "title": lesson.title, "position": 1, "editorType": "none", "completionPolicy": "self", "activityCount": 0},
+        "outline": [{"key": lesson.lesson_key, "title": lesson.title, "position": 1}],
+    }
+    revision = hashlib.sha256(json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    context = {"courseId": course.id, "target": "lesson", "baseRevision": revision, "targetPayload": payload}
+    assembled = assemble_context(db, tutor, request("lesson", "lesson.draft", context))
+    assert assembled.payload["authoritative"]["course"]["id"] == course.id
+    assert "author_id" not in str(assembled.payload)
+    assemble_context(db, admin, request("lesson", "lesson.draft", context))
+    for actor in (other_tutor, student):
+        with pytest.raises(ContextError, match="authorized"):
+            assemble_context(db, actor, request("lesson", "lesson.draft", context))
+    with pytest.raises(ContextError, match="revision"):
+        assemble_context(db, tutor, request("lesson", "lesson.draft", context | {"baseRevision": "0" * 64}))
 
 
 def test_student_prompt_is_hint_first_and_versioned(db, users):

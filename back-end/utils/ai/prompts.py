@@ -34,6 +34,20 @@ def build_prompt(user_role: UserRole, request: AssistantRequest, context: Assemb
             f"baseFingerprint '{fingerprint}', xml containing the complete Blockly workspace, and a short summary. "
             "Use only block types listed in allowed_block_types. Do not wrap the JSON in Markdown."
         )
+    elif request.capability in {"lesson.draft", "lesson.suggest_changes"}:
+        supplied = context.payload["supplied"]
+        target_payload = supplied["target_payload"]
+        lesson_id = (target_payload.get("lesson") or {}).get("id", "none")
+        activity_key = (target_payload.get("activity") or {}).get("key", "none")
+        mutation_policy = (
+            "Return only one JSON object with exactly: version '1', type 'lesson_operations', "
+            f"baseRevision '{supplied['base_revision']}', operations, and a short summary. "
+            "Allowed operations are update_course, update_lesson, insert_activity, replace_activity, remove_activity, and reorder_activities. "
+            "Use only the supported activity types and version 1. Stable generated keys must start with 'ai-'. "
+            "Question answers, numeric expected values, tolerances, and valid ranges are teacher-only fields. "
+            "Do not add executable mission rules or hidden answers to student-visible text. Do not wrap the JSON in Markdown. "
+            f"Authoring target: '{supplied['target']}'. Selected lesson ID: '{lesson_id}'. Selected activity key: '{activity_key}'."
+        )
     system = "\n".join((
         "You are FOSSBot Buddy, a contextual robotics education assistant.",
         f"Capability: {request.capability}.",

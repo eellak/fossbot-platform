@@ -13,6 +13,8 @@ from database.database import (
     AIUsageEvent,
     ClassGroup,
     ClassMembership,
+    Course,
+    Lesson,
 )
 from models.models import UserRole
 from routers import ai, ai_admin
@@ -231,7 +233,7 @@ def enable_streaming(db, admin, student, *, request_limit=None, capability="code
         settings,
         AIPolicyRule(
             scope_type="role",
-            scope_key="user",
+            scope_key=student.role.value,
             capability=capability,
             effect="allow",
             created_by_id=admin.id,
@@ -343,6 +345,38 @@ def test_python_suggestion_is_typed_and_never_streams_raw_json(db, users, monkey
     assert '"type":"python_replace"' in response.text
     assert "event: text_delta" not in response.text
     assert "event: done" in response.text
+
+
+def test_lesson_suggestion_is_authorized_typed_and_content_free(db, users, monkeypatch):
+    tutor, _, student, admin = users
+    provider = enable_streaming(db, admin, tutor, capability="lesson.draft")
+    course = Course(title="Robotics", description="Course", author_id=tutor.id, learning_objectives=["Move"], status="draft", visibility="public")
+    db.add(course)
+    db.flush()
+    lesson = Lesson(course_id=course.id, lesson_key="move", title="Move", position=1, activities=[], completion_policy="self", start_mode="fresh", editor_type="none", archived=False)
+    db.add(lesson)
+    db.commit()
+    target = {
+        "course": {"title": "Robotics", "description": "Course", "objectives": ["Move"], "ageRange": "", "difficulty": ""},
+        "lesson": {"id": lesson.id, "key": "move", "title": "Move", "position": 1, "editorType": "none", "completionPolicy": "self", "activityCount": 0},
+        "outline": [{"key": "move", "title": "Move", "position": 1}],
+    }
+    revision = hashlib.sha256(json.dumps(target, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    suggestion = {
+        "version": "1", "type": "lesson_operations", "baseRevision": revision, "summary": "Add one activity.",
+        "operations": [{"op": "insert_activity", "lessonId": lesson.id, "index": 0, "activity": {"key": "ai-intro", "type": "rich_text", "version": 1, "required": False, "content": "Predict, then test."}}],
+    }
+    monkeypatch.setattr(ai, "hosted_provider", lambda *args, **kwargs: FakeSuggestionProvider(suggestion))
+    body = {"capability": "lesson.draft", "providerId": provider.id, "surface": "lesson", "question": "Draft an activity", "context": {"courseId": course.id, "target": "lesson", "baseRevision": revision, "targetPayload": target}}
+    with client_for(db, tutor) as client:
+        response = client.post("/api/ai/assist/stream", json=body)
+    assert response.status_code == 200
+    assert '"type":"lesson_operations"' in response.text
+    assert "event: text_delta" not in response.text
+    assert db.query(AIUsageEvent).filter(AIUsageEvent.capability == "lesson.draft").one().outcome == "completed"
+    with client_for(db, student) as client:
+        denied = client.post("/api/ai/assist/stream", json=body)
+    assert denied.status_code == 403
 
 
 def test_invalid_suggestion_emits_safe_error_without_done(db, users, monkeypatch):

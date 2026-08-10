@@ -2,16 +2,21 @@ import * as Blockly from 'blockly';
 import { pythonGenerator } from 'blockly/python';
 import TOOLBOX_JSON_EN from 'src/utils/toolboxBlockly/toolbox_en';
 import 'src/utils/blocksBlockly/customBlocks';
-import type { AICodeSuggestion, BlocklyReplaceSuggestion, PythonReplaceSuggestion } from '../types';
+import type { AIAssistantSuggestion, AICodeSuggestion, BlocklyReplaceSuggestion, PythonReplaceSuggestion } from '../types';
 
 export const CODE_SUGGESTION_VERSION = '1';
 
 export type SuggestionPreview = {
-  suggestion: AICodeSuggestion;
+  suggestion: AIAssistantSuggestion;
   summary: string;
+  kind: 'python' | 'blockly' | 'lesson';
   before: string;
   after: string;
   detail: string;
+  changes?: string[];
+  studentVisible?: string;
+  teacherOnly?: string;
+  validation?: string[];
 };
 
 const ALLOWED_BLOCK_TYPES = new Set<string>();
@@ -40,7 +45,7 @@ export function parseCodeSuggestion(value: Record<string, unknown>): AICodeSugge
 }
 
 export function previewPythonSuggestion(suggestion: PythonReplaceSuggestion, currentSource: string): SuggestionPreview {
-  return { suggestion, summary: suggestion.summary, before: currentSource, after: suggestion.replacement, detail: 'python' };
+  return { suggestion, summary: suggestion.summary, kind: 'python', before: currentSource, after: suggestion.replacement, detail: '' };
 }
 
 export function validateBlocklySuggestion(suggestion: BlocklyReplaceSuggestion, currentXml: string): SuggestionPreview {
@@ -58,6 +63,7 @@ export function validateBlocklySuggestion(suggestion: BlocklyReplaceSuggestion, 
     return {
       suggestion,
       summary: suggestion.summary,
+      kind: 'blockly',
       before: currentXml,
       after: suggestion.xml,
       detail: generatedPython,

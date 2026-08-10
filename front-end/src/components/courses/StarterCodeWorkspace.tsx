@@ -1,9 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Box, Button, Chip, CircularProgress, Paper, Stack, Typography } from '@mui/material';
 import { IconRefresh, IconTestPipe } from '@tabler/icons-react';
-import BlocklyEditor from 'src/components/editors/BlocklyEditor';
-import MonacoEditor from 'src/components/editors/MonacoEditor';
+import BlocklyEditor, { type BlocklyEditorHandle } from 'src/components/editors/BlocklyEditor';
+import MonacoEditor, { type MonacoEditorHandle } from 'src/components/editors/MonacoEditor';
 import type { Lesson } from 'src/courses/types';
+import AssistantPanel, { type AssistantSurfaceAdapter } from 'src/components/ai/AssistantPanel';
+import { fingerprintText } from 'src/ai/fingerprint';
+import { allowedBlocklyBlockTypes, previewPythonSuggestion, validateBlocklySuggestion } from 'src/ai/suggestions/codeSuggestions';
 
 const EMPTY_BLOCKLY = '<xml xmlns="https://developers.google.com/blockly/xml"></xml>';
 
@@ -23,6 +26,8 @@ function fingerprint(value: string): string {
 export default function StarterCodeWorkspace({ lesson, onChange, t }: { lesson: Lesson; onChange: (patch: Partial<Lesson>) => void; t: any }) {
   const initial = useRef<{ lessonId: number; content: Lesson['starter_content'] }>({ lessonId: lesson.id, content: lesson.starter_content });
   const worker = useRef<Worker | null>(null);
+  const monacoRef = useRef<MonacoEditorHandle | null>(null);
+  const blocklyRef = useRef<BlocklyEditorHandle | null>(null);
   const [checking, setChecking] = useState(false);
   const [result, setResult] = useState<{ valid: boolean; message?: string } | null>(null);
   const [generatedPython, setGeneratedPython] = useState('');
@@ -53,6 +58,56 @@ export default function StarterCodeWorkspace({ lesson, onChange, t }: { lesson: 
       ? t('education.stage.pinned')
       : t('education.stage.pinOnSave');
 
+  const assistantAdapter: AssistantSurfaceAdapter = lesson.editor_type === 'python' ? {
+    surface: 'python',
+    getFingerprint: () => fingerprintText(monacoRef.current?.getSource() ?? serialized),
+    getContext: async () => {
+      const source = monacoRef.current?.getSource() ?? serialized;
+      return {
+        source,
+        sourceFingerprint: await fingerprintText(source),
+        selection: monacoRef.current?.getSelection()?.text || '',
+        editorType: 'python',
+        lessonObjective: lesson.title,
+        stageSummary: lesson.stageReference ? { title: lesson.stageReference.title || '', sourceType: lesson.stageReference.sourceType, revision: lesson.stageReference.commitSha || '' } : {},
+      };
+    },
+    previewSuggestion: async (suggestion) => {
+      if (suggestion.type !== 'python_replace') throw new Error('invalid_suggestion');
+      return previewPythonSuggestion(suggestion, monacoRef.current?.getSource() ?? serialized);
+    },
+    applySuggestion: async (suggestion) => {
+      if (suggestion.type !== 'python_replace') throw new Error('invalid_suggestion');
+      monacoRef.current?.replaceSource(suggestion.replacement);
+    },
+  } : {
+    surface: 'blockly',
+    getFingerprint: () => fingerprintText(blocklyRef.current?.getXml() ?? serialized),
+    getContext: async () => {
+      const xml = blocklyRef.current?.getXml() ?? serialized;
+      const selection = blocklyRef.current?.getSelection() || { ids: [], types: [] };
+      return {
+        xml,
+        workspaceFingerprint: await fingerprintText(xml),
+        selectedBlockIds: selection.ids,
+        selectedBlockTypes: selection.types,
+        generatedPython: (blocklyRef.current?.getGeneratedPython() ?? generatedPython).slice(0, 8000),
+        allowedBlockTypes: allowedBlocklyBlockTypes(),
+        editorType: 'blockly',
+        lessonObjective: lesson.title,
+        stageSummary: lesson.stageReference ? { title: lesson.stageReference.title || '', sourceType: lesson.stageReference.sourceType, revision: lesson.stageReference.commitSha || '' } : {},
+      };
+    },
+    previewSuggestion: async (suggestion) => {
+      if (suggestion.type !== 'blockly_replace') throw new Error('invalid_suggestion');
+      return validateBlocklySuggestion(suggestion, blocklyRef.current?.getXml() ?? serialized);
+    },
+    applySuggestion: async (suggestion) => {
+      if (suggestion.type !== 'blockly_replace') throw new Error('invalid_suggestion');
+      blocklyRef.current?.replaceWorkspace(suggestion.xml);
+    },
+  };
+
   return <Stack spacing={1.5}>
     <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" gap={1}>
       <Box><Typography variant="subtitle2">{t('education.code.title')}</Typography><Typography variant="caption" color="text.secondary">{t('education.code.help')}</Typography></Box>
@@ -62,8 +117,9 @@ export default function StarterCodeWorkspace({ lesson, onChange, t }: { lesson: 
       </Stack>
     </Stack>
     <Paper variant="outlined" sx={{ height: { xs: 420, md: 520 }, overflow: 'hidden' }}>
-      {lesson.editor_type === 'python' ? <MonacoEditor code={serialized} handleGetValue={(getValue) => onChange({ starter_content: getValue().replace(/\r\n/g, '\n') })} /> : <BlocklyEditor code={serialized} handleGetValue={(getValue) => onChange({ starter_content: { xml: getValue() } })} handleGetPythonCodeValue={setGeneratedPython} />}
+      {lesson.editor_type === 'python' ? <MonacoEditor ref={monacoRef} code={serialized} handleGetValue={(getValue) => onChange({ starter_content: getValue().replace(/\r\n/g, '\n') })} /> : <BlocklyEditor ref={blocklyRef} code={serialized} handleGetValue={(getValue) => onChange({ starter_content: { xml: getValue() } })} handleGetPythonCodeValue={setGeneratedPython} />}
     </Paper>
+    <AssistantPanel key={`${lesson.id}:${lesson.editor_type}`} adapter={assistantAdapter} explainCapability={lesson.editor_type === 'python' ? 'code.explain' : 'blockly.explain'} suggestCapability={lesson.editor_type === 'python' ? 'code.suggest_changes' : 'blockly.suggest_changes'} suggestedPrompts={lesson.editor_type === 'python' ? [t('aiAssistant.authoring.prompts.starterExplain'), t('aiAssistant.authoring.prompts.starterImprove')] : [t('aiAssistant.authoring.prompts.blocklyStarter'), t('aiAssistant.prompts.blocklyPython')]} />
     <Stack direction="row" gap={1} flexWrap="wrap"><Chip size="small" variant="outlined" label={t('education.code.fingerprint', { fingerprint: fingerprint(serialized) })} /><Chip size="small" variant="outlined" label={t('education.code.stageVersion', { status: stageVersion })} /></Stack>
     {result && <Alert severity={result.valid ? 'success' : 'error'}>{result.valid ? t('education.code.valid') : result.message || t('education.code.invalid')}</Alert>}
   </Stack>;

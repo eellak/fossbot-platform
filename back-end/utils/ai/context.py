@@ -3,19 +3,21 @@ from __future__ import annotations
 import json
 import hashlib
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Optional
 
-from database.database import Course, CourseRelease, Enrollment, LocalStage, User
+from database.database import Course, CourseRelease, Enrollment, Lesson as LessonRecord, LocalStage, User
 from models.models import UserRole
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from utils.activity_schema import student_release_lessons
+from utils.activity_schema import validate_activities
 from utils.ai.schemas import (
     AssistantRequest,
     BlocklyContext,
     ContextReport,
     LessonContext,
+    PublishedLessonContext,
     ProbeContext,
     PythonContext,
     StageContext,
@@ -69,7 +71,7 @@ def _sanitize(value: Any) -> Any:
     return str(value)
 
 
-def _load_lesson(db: Session, user: User, context: LessonContext) -> dict[str, Any]:
+def _load_lesson(db: Session, user: User, context: PublishedLessonContext) -> dict[str, Any]:
     if not context.release_id or not context.lesson_key:
         return {}
     release = db.query(CourseRelease).filter(CourseRelease.id == context.release_id).first()
@@ -100,6 +102,73 @@ def _load_lesson(db: Session, user: User, context: LessonContext) -> dict[str, A
         },
         "lesson": lesson,
         "releaseVersion": release.version,
+    }
+
+
+def _validate_authoring_payload(context: LessonContext) -> tuple[Optional[int], Optional[str]]:
+    payload = context.target_payload
+    allowed = {"course", "lesson", "activity", "outline", "validation", "stageSummary"}
+    if not isinstance(payload, dict) or set(payload) - allowed:
+        raise ContextError("Authoring target contains unsupported fields")
+    course = payload.get("course")
+    if not isinstance(course, dict) or set(course) - {"title", "description", "objectives", "ageRange", "difficulty"}:
+        raise ContextError("Authoring course context is invalid")
+    if not isinstance(course.get("title", ""), str) or not isinstance(course.get("description", ""), str):
+        raise ContextError("Authoring course context is invalid")
+    objectives = course.get("objectives", [])
+    if not isinstance(objectives, list) or len(objectives) > 24 or any(not isinstance(item, str) for item in objectives):
+        raise ContextError("Authoring objectives are invalid")
+    lesson = payload.get("lesson")
+    lesson_id = None
+    if lesson is not None:
+        if not isinstance(lesson, dict) or set(lesson) - {"id", "key", "title", "position", "editorType", "completionPolicy", "activityCount"}:
+            raise ContextError("Authoring lesson context is invalid")
+        lesson_id = lesson.get("id")
+        if not isinstance(lesson_id, int) or lesson_id < 1:
+            raise ContextError("Authoring lesson context is invalid")
+    activity = payload.get("activity")
+    activity_key = None
+    if activity is not None:
+        try:
+            validate_activities([activity])
+        except ValueError as error:
+            raise ContextError("Selected authoring activity is invalid") from error
+        activity_key = activity.get("key")
+    outline = payload.get("outline", [])
+    if not isinstance(outline, list) or len(outline) > 80:
+        raise ContextError("Authoring outline is invalid")
+    for item in outline:
+        if not isinstance(item, dict) or set(item) - {"key", "title", "position"}:
+            raise ContextError("Authoring outline is invalid")
+    validation = payload.get("validation", [])
+    if not isinstance(validation, list) or len(validation) > 64:
+        raise ContextError("Authoring validation context is invalid")
+    expected = hashlib.sha256(json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+    if context.base_revision != expected:
+        raise ContextError("Authoring draft revision is missing or stale")
+    if context.target == "lesson" and lesson_id is None:
+        raise ContextError("A lesson target is required")
+    if context.target == "activity" and (lesson_id is None or not activity_key):
+        raise ContextError("An activity target is required")
+    if context.target == "validation" and not validation:
+        raise ContextError("A validation issue target is required")
+    return lesson_id, activity_key
+
+
+def _load_authoring_course(db: Session, user: User, context: LessonContext) -> dict[str, Any]:
+    lesson_id, _ = _validate_authoring_payload(context)
+    course = db.query(Course).filter(Course.id == context.course_id).first()
+    if course is None or (user.role != UserRole.ADMIN and course.author_id != user.id):
+        raise ContextError("Course authoring context is not authorized")
+    lesson_rows = db.query(LessonRecord).filter(LessonRecord.course_id == course.id, LessonRecord.archived.is_(False)).all()
+    if lesson_id is not None and not any(item.id == lesson_id for item in lesson_rows):
+        raise ContextError("Selected lesson is not part of this course")
+    return {
+        "course": {"id": course.id, "title": course.title, "updatedAt": course.updated_at.isoformat()},
+        "outline": [
+            {"id": item.id, "key": item.lesson_key, "title": item.title, "position": item.position}
+            for item in sorted(lesson_rows, key=lambda row: row.position)
+        ],
     }
 
 
@@ -159,9 +228,9 @@ def assemble_context(db: Session, user: User, request: AssistantRequest) -> Asse
             raise ContextError("Blockly workspace fingerprint is missing or stale")
     authoritative: dict[str, Any] = {}
     if isinstance(surface, LessonContext):
-        authoritative = _load_lesson(db, user, surface)
+        authoritative = _load_authoring_course(db, user, surface)
     elif isinstance(surface, (PythonContext, BlocklyContext)) and surface.release_id and surface.lesson_key:
-        loaded = _load_lesson(db, user, LessonContext(releaseId=surface.release_id, lessonKey=surface.lesson_key))
+        loaded = _load_lesson(db, user, PublishedLessonContext(releaseId=surface.release_id, lessonKey=surface.lesson_key))
         authoritative = {
             "course": loaded.get("course", {}),
             "lesson": {

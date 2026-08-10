@@ -8,18 +8,19 @@ import { useTranslation } from 'react-i18next';
 import { useAuth } from 'src/authentication/AuthProvider';
 import { AIRequestError, streamAIAssist } from 'src/ai/AssistantApi';
 import { useAssistantAccess } from 'src/ai/AssistantProvider';
-import { parseCodeSuggestion, type SuggestionPreview } from 'src/ai/suggestions/codeSuggestions';
-import type { AICapabilityId, AICodeSuggestion, AIAssistantSurface } from 'src/ai/types';
+import type { SuggestionPreview } from 'src/ai/suggestions/codeSuggestions';
+import { parseAssistantSuggestion } from 'src/ai/suggestions/parseSuggestion';
+import type { AIAssistantSuggestion, AICapabilityId, AIAssistantSurface } from 'src/ai/types';
 
 type ConversationTurn = { role: 'user' | 'assistant'; content: string };
 type RequestMode = 'explain' | 'suggest';
 
 export type AssistantSurfaceAdapter = {
-  surface: Extract<AIAssistantSurface, 'python' | 'blockly'>;
+  surface: Extract<AIAssistantSurface, 'python' | 'blockly' | 'lesson'>;
   getContext: () => Promise<Record<string, unknown>>;
   getFingerprint: () => Promise<string>;
-  previewSuggestion: (suggestion: AICodeSuggestion) => Promise<SuggestionPreview>;
-  applySuggestion: (suggestion: AICodeSuggestion) => Promise<void>;
+  previewSuggestion: (suggestion: AIAssistantSuggestion) => Promise<SuggestionPreview>;
+  applySuggestion: (suggestion: AIAssistantSuggestion) => Promise<void>;
 };
 
 type Props = {
@@ -27,9 +28,15 @@ type Props = {
   explainCapability: AICapabilityId;
   suggestCapability: AICapabilityId;
   suggestedPrompts: string[];
+  primaryLabel?: string;
+  secondaryLabel?: string;
+  confirmationBody?: string;
+  appliedMessage?: string;
 };
 
-export default function AssistantPanel({ adapter, explainCapability, suggestCapability, suggestedPrompts }: Props) {
+const suggestionBase = (suggestion: AIAssistantSuggestion) => suggestion.type === 'lesson_operations' ? suggestion.baseRevision : suggestion.baseFingerprint;
+
+export default function AssistantPanel({ adapter, explainCapability, suggestCapability, suggestedPrompts, primaryLabel, secondaryLabel, confirmationBody, appliedMessage }: Props) {
   const { t } = useTranslation();
   const { token } = useAuth();
   const { access, loading, error: accessError, refresh } = useAssistantAccess();
@@ -44,6 +51,7 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
   const [requestError, setRequestError] = useState('');
   const [attribution, setAttribution] = useState<{ provider: string; model: string; runtime: string } | null>(null);
   const [preview, setPreview] = useState<SuggestionPreview | null>(null);
+  const [previewCapability, setPreviewCapability] = useState<AICapabilityId | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [lastRequest, setLastRequest] = useState<{ question: string; mode: RequestMode } | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -58,12 +66,12 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
   const run = async (nextQuestion = question, nextMode = mode) => {
     const trimmed = nextQuestion.trim();
     if (!trimmed) return;
-    setRequestError(''); setOutput(''); setPreview(null); setAttribution(null); setStatus('streaming');
+    setRequestError(''); setOutput(''); setPreview(null); setPreviewCapability(null); setAttribution(null); setStatus('streaming');
     setQuestion(trimmed); setMode(nextMode); setLastRequest({ question: trimmed, mode: nextMode });
     const controller = new AbortController();
     abortRef.current = controller;
     let streamed = '';
-    let receivedSuggestion: AICodeSuggestion | null = null;
+    let receivedSuggestion: AIAssistantSuggestion | null = null;
     let streamFailed = '';
     try {
       if (!navigator.onLine) throw new Error('offline');
@@ -92,15 +100,16 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
           streamed += String(event.data.text || '');
           setOutput(streamed);
         }
-        if (event.type === 'suggestion') receivedSuggestion = parseCodeSuggestion(event.data);
+        if (event.type === 'suggestion') receivedSuggestion = parseAssistantSuggestion(event.data);
         if (event.type === 'error') streamFailed = String(event.data.code || 'provider_error');
       }, controller.signal);
       if (streamFailed) throw new Error(streamFailed);
       if (receivedSuggestion) {
         const currentFingerprint = await adapter.getFingerprint();
-        if (receivedSuggestion.baseFingerprint !== currentFingerprint) throw new Error('stale_suggestion');
+        if (suggestionBase(receivedSuggestion) !== currentFingerprint) throw new Error('stale_suggestion');
         const validated = await adapter.previewSuggestion(receivedSuggestion);
         setPreview(validated);
+        setPreviewCapability(capability);
         streamed = receivedSuggestion.summary;
         setOutput(streamed);
       }
@@ -124,13 +133,14 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
     setRequestError('');
     try {
       const currentAccess = await refresh();
-      const decision = currentAccess?.capabilities.find((item) => item.capability === suggestCapability);
+      const capability = previewCapability || suggestCapability;
+      const decision = currentAccess?.capabilities.find((item) => item.capability === capability);
       if (!decision?.allowed) throw new Error('capability_denied');
       const fingerprint = await adapter.getFingerprint();
-      if (fingerprint !== preview.suggestion.baseFingerprint) throw new Error('stale_suggestion');
+      if (fingerprint !== suggestionBase(preview.suggestion)) throw new Error('stale_suggestion');
       await adapter.previewSuggestion(preview.suggestion);
       await adapter.applySuggestion(preview.suggestion);
-      setConfirmOpen(false); setPreview(null); setOutput(t('aiAssistant.applied')); setStatus('done');
+      setConfirmOpen(false); setPreview(null); setPreviewCapability(null); setOutput(appliedMessage || t('aiAssistant.applied')); setStatus('done');
     } catch (reason) {
       const code = reason instanceof Error ? reason.message.split(':')[0] : 'invalid_suggestion';
       setRequestError(t(`aiAssistant.errors.${code}`, t('aiAssistant.errors.invalid_suggestion')));
@@ -151,8 +161,8 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
       {!loading && !accessError && !explain?.allowed && !suggest?.allowed && <Alert severity="info">{t('aiAssistant.unavailable')}</Alert>}
       {(explain?.allowed || suggest?.allowed) && <>
         <Stack direction="row" spacing={1}>
-          <Button variant={mode === 'explain' ? 'contained' : 'outlined'} disabled={!explain?.allowed || status === 'streaming'} onClick={() => setMode('explain')}>{t('aiAssistant.explain')}</Button>
-          {canSuggest && <Button variant={mode === 'suggest' ? 'contained' : 'outlined'} disabled={status === 'streaming'} onClick={() => setMode('suggest')}>{t('aiAssistant.suggest')}</Button>}
+          <Button variant={mode === 'explain' ? 'contained' : 'outlined'} disabled={!explain?.allowed || status === 'streaming'} onClick={() => setMode('explain')}>{primaryLabel || t('aiAssistant.explain')}</Button>
+          {canSuggest && <Button variant={mode === 'suggest' ? 'contained' : 'outlined'} disabled={status === 'streaming'} onClick={() => setMode('suggest')}>{secondaryLabel || t('aiAssistant.suggest')}</Button>}
         </Stack>
         {unavailableReason && <Alert severity="info">{unavailableReason}</Alert>}
         <Stack direction="row" gap={1} flexWrap="wrap">{suggestedPrompts.map((prompt) => <Chip key={prompt} label={prompt} onClick={() => setQuestion(prompt)} clickable />)}</Stack>
@@ -165,7 +175,7 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
         {status === 'stopped' && <Alert severity="info">{t('aiAssistant.stopped')}</Alert>}
         {requestError && <Alert severity="error">{requestError}</Alert>}
         {(output || status === 'streaming') && <Box aria-live="polite"><Stack direction="row" spacing={1} alignItems="center"><Chip size="small" color="secondary" label={t('aiAssistant.generated')} />{attribution && <Typography variant="caption" color="text.secondary">{attribution.provider} · {attribution.model} · {t(`aiAdmin.runtimes.${attribution.runtime}`, attribution.runtime)}</Typography>}</Stack><Typography sx={{ mt: 1, whiteSpace: 'pre-wrap' }}>{output || t('aiAssistant.waiting')}</Typography></Box>}
-        {preview && <Paper variant="outlined" sx={{ p: 1.5 }}><Typography variant="subtitle2">{t('aiAssistant.preview')}</Typography><Typography sx={{ my: 1 }}>{preview.summary}</Typography><Divider /><Typography variant="caption" color="text.secondary">{preview.detail === 'python' ? t('aiAssistant.pythonDiff') : t('aiAssistant.generatedPython')}</Typography><Box component="pre" tabIndex={0} sx={{ mt: 1, p: 1, maxHeight: 180, overflow: 'auto', bgcolor: 'action.hover', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{preview.detail === 'python' ? preview.after : preview.detail}</Box><Button sx={{ mt: 1 }} variant="contained" onClick={() => setConfirmOpen(true)}>{t('aiAssistant.apply')}</Button></Paper>}
+        {preview && <Paper variant="outlined" sx={{ p: 1.5 }}><Typography variant="subtitle2">{t('aiAssistant.preview')}</Typography><Typography sx={{ my: 1 }}>{preview.summary}</Typography><Divider />{preview.kind === 'lesson' ? <Stack spacing={1.25} sx={{ mt: 1 }}><Box><Typography variant="caption" color="text.secondary">{t('aiAssistant.authoring.changes')}</Typography><Stack direction="row" gap={0.5} flexWrap="wrap" sx={{ mt: 0.5 }}>{preview.changes?.map((change, index) => <Chip key={`${change}-${index}`} size="small" label={t(`aiAssistant.authoring.operations.${change}`, change)} />)}</Stack></Box><Box><Typography variant="caption" color="text.secondary">{t('aiAssistant.authoring.studentVisible')}</Typography><Box component="pre" tabIndex={0} sx={{ mt: 0.5, p: 1, maxHeight: 160, overflow: 'auto', bgcolor: 'action.hover', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{preview.studentVisible}</Box></Box>{preview.teacherOnly && <Alert severity="warning"><Typography variant="caption" fontWeight={700}>{t('aiAssistant.authoring.teacherOnly')}</Typography><Box component="pre" tabIndex={0} sx={{ m: 0, mt: 0.5, maxHeight: 130, overflow: 'auto', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{preview.teacherOnly}</Box></Alert>}{preview.validation?.length ? <Alert severity="warning">{t('aiAssistant.authoring.validationIssues', { count: preview.validation.length })}</Alert> : <Alert severity="success">{t('aiAssistant.authoring.validationPass')}</Alert>}</Stack> : <><Typography variant="caption" color="text.secondary">{preview.kind === 'python' ? t('aiAssistant.pythonDiff') : t('aiAssistant.generatedPython')}</Typography><Box component="pre" tabIndex={0} sx={{ mt: 1, p: 1, maxHeight: 180, overflow: 'auto', bgcolor: 'action.hover', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{preview.kind === 'python' ? preview.after : preview.detail}</Box></>}<Button sx={{ mt: 1 }} variant="contained" onClick={() => setConfirmOpen(true)}>{t('aiAssistant.apply')}</Button></Paper>}
       </>}
     </Stack>
   </Paper>;
@@ -173,6 +183,6 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
   return <Box sx={{ width: '100%' }}>
     <Button startIcon={<IconRobot size={19} />} aria-expanded={open} onClick={() => setOpen((value) => !value)}>{open ? t('aiAssistant.hide') : t('aiAssistant.open')}</Button>
     {compact ? <Drawer anchor="right" open={open} onClose={() => setOpen(false)}>{panel}</Drawer> : <Collapse in={open}>{panel}</Collapse>}
-    <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)}><DialogTitle>{t('aiAssistant.confirmTitle')}</DialogTitle><DialogContent><Typography>{t('aiAssistant.confirmBody')}</Typography></DialogContent><DialogActions><Button onClick={() => setConfirmOpen(false)}>{t('cancel')}</Button><Button variant="contained" onClick={() => void apply()}>{t('aiAssistant.apply')}</Button></DialogActions></Dialog>
+    <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)}><DialogTitle>{t('aiAssistant.confirmTitle')}</DialogTitle><DialogContent><Typography>{confirmationBody || t('aiAssistant.confirmBody')}</Typography></DialogContent><DialogActions><Button onClick={() => setConfirmOpen(false)}>{t('cancel')}</Button><Button variant="contained" onClick={() => void apply()}>{t('aiAssistant.apply')}</Button></DialogActions></Dialog>
   </Box>;
 }

@@ -56,6 +56,10 @@ def test_provider_stream(payload: dict = Body(...)):
     if "[mock:rate-limit]" in prompt:
         raise HTTPException(status_code=429, detail="Deterministic test-only rate limit")
 
+    def prompt_value(label: str, default: str = "none") -> str:
+        marker = f"{label}: '"
+        return prompt.split(marker, 1)[1].split("'", 1)[0] if marker in prompt else default
+
     async def chunks():
         if "[mock:delay]" in prompt:
             await asyncio.sleep(2)
@@ -73,6 +77,34 @@ def test_provider_stream(payload: dict = Body(...)):
             fingerprint = prompt.split("baseFingerprint '", 1)[1].split("'", 1)[0]
             xml = '<xml xmlns="https://developers.google.com/blockly/xml"><block type="text_print" id="ai-suggestion"><value name="TEXT"><shadow type="text" id="ai-text"><field name="TEXT">Hello, FOSSBot!</field></shadow></value></block></xml>'
             response = json.dumps({"version": "1", "type": "blockly_replace", "baseFingerprint": fingerprint, "xml": xml, "summary": "Add one print block as a reviewable example."})
+        elif "Capability: lesson.draft" in prompt or "Capability: lesson.suggest_changes" in prompt:
+            revision = prompt.split("baseRevision '", 1)[1].split("'", 1)[0]
+            target = prompt_value("Authoring target")
+            lesson_id = prompt_value("Selected lesson ID")
+            activity_key = prompt_value("Selected activity key")
+            if target == "course" or lesson_id == "none":
+                operations = [{"op": "update_course", "coursePatch": {"description": "A concise, age-appropriate robotics course draft."}}]
+            elif target == "activity":
+                activity = {
+                    "key": activity_key,
+                    "type": "numeric_answer",
+                    "version": 1,
+                    "required": False,
+                    "prompt": "How many forward steps should FOSSBot take?",
+                    "expectedValue": 2,
+                    "unit": "steps",
+                    "tolerance": {"mode": "absolute", "value": 0},
+                    "validRange": {"minimum": 0, "maximum": 10},
+                    "feedbackCorrect": "Good observation.",
+                    "feedbackIncorrect": "Trace one movement at a time.",
+                }
+                operations = [{"op": "replace_activity", "lessonId": int(lesson_id), "activityKey": activity_key, "activity": activity}]
+            elif "Capability: lesson.draft" in prompt:
+                activity = {"key": "ai-rich-text-intro", "type": "rich_text", "version": 1, "required": False, "content": "Introduce one movement command, predict the result, then test it."}
+                operations = [{"op": "insert_activity", "lessonId": int(lesson_id), "index": 0, "activity": activity}]
+            else:
+                operations = [{"op": "update_lesson", "lessonId": int(lesson_id), "lessonPatch": {"title": "Move, predict, and reflect"}}]
+            response = json.dumps({"version": "1", "type": "lesson_operations", "baseRevision": revision, "operations": operations, "summary": "Prepare one bounded, reviewable authoring change."})
         elif "Capability: blockly.explain" in prompt:
             response = "Deterministic test-only explanation: these blocks generate Python in workspace order."
         elif "Capability: code.explain" in prompt:
@@ -266,7 +298,7 @@ async def stream_assistance(
         input_tokens = None
         output_tokens = None
         suggestion_text = ""
-        suggestion_capability = payload.capability in {"code.suggest_changes", "blockly.suggest_changes"}
+        suggestion_capability = payload.capability in {"code.suggest_changes", "blockly.suggest_changes", "lesson.draft", "lesson.suggest_changes"}
         yield sse_event("start", {
             "requestId": request_id,
             "providerId": provider.id,
@@ -294,8 +326,13 @@ async def stream_assistance(
                     yield sse_event(event.type, event.data)
             if outcome == "completed":
                 if suggestion_capability:
-                    fingerprint_key = "source_fingerprint" if payload.capability == "code.suggest_changes" else "workspace_fingerprint"
-                    suggestion = parse_suggestion(suggestion_text, payload.capability, str(context.payload["supplied"][fingerprint_key]))
+                    fingerprint_key = "source_fingerprint" if payload.capability == "code.suggest_changes" else "workspace_fingerprint" if payload.capability == "blockly.suggest_changes" else "base_revision"
+                    suggestion = parse_suggestion(
+                        suggestion_text,
+                        payload.capability,
+                        str(context.payload["supplied"][fingerprint_key]),
+                        context.payload["supplied"],
+                    )
                     yield sse_event("suggestion", suggestion_payload(suggestion))
                 yield sse_event("done", {"requestId": request_id})
         except asyncio.CancelledError:

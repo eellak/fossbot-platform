@@ -143,4 +143,24 @@ export interface BlocklyReplaceSuggestion {
   summary: string;
 }
 
+export type LessonOperation = {
+  op: 'update_course' | 'update_lesson' | 'insert_activity' | 'replace_activity' | 'remove_activity' | 'reorder_activities';
+  lessonId?: number;
+  activityKey?: string;
+  index?: number;
+  coursePatch?: { title?: string; description?: string; learningObjectives?: string[] };
+  lessonPatch?: { title?: string };
+  activity?: Record<string, unknown>;
+  activityKeys?: string[];
+};
+
+export interface LessonAuthoringSuggestion {
+  version: '1';
+  type: 'lesson_operations';
+  baseRevision: string;
+  operations: LessonOperation[];
+  summary: string;
+}
+
 export type AICodeSuggestion = PythonReplaceSuggestion | BlocklyReplaceSuggestion;
+export type AIAssistantSuggestion = AICodeSuggestion | LessonAuthoringSuggestion;
