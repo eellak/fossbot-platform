@@ -1,7 +1,7 @@
 import { activityTypes, activityValidation } from 'src/courses/activitySchema';
 import type { Activity, CourseDraft } from 'src/courses/types';
 import type { LessonAuthoringSuggestion, LessonOperation } from '../types';
-import type { SuggestionPreview } from './codeSuggestions';
+import type { LessonPreviewItem, LessonPreviewValue, SuggestionPreview } from './codeSuggestions';
 
 export type AuthoringTarget = { type: 'course' | 'lesson' | 'activity' | 'validation'; activityKey?: string };
 
@@ -95,19 +95,48 @@ function applyOperations(course: CourseDraft, suggestion: LessonAuthoringSuggest
   return next;
 }
 
+const previewValue = (value: unknown): LessonPreviewValue => {
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return value;
+  if (Array.isArray(value) && value.every((item) => typeof item === 'string')) return value;
+  return value && typeof value === 'object' ? value as Record<string, unknown> : String(value ?? '');
+};
+
+const activityPreview = (fields: Record<string, unknown>): LessonPreviewItem => ({
+  title: 'activity',
+  activityType: typeof fields.type === 'string' ? fields.type : undefined,
+  fields: Object.entries(fields)
+    .filter(([key]) => !['key', 'type', 'version'].includes(key))
+    .map(([name, value]) => ({ name, value: previewValue(value) })),
+});
+
 function previewBoundaries(operations: LessonOperation[]) {
-  const studentVisible: unknown[] = [];
-  const teacherOnly: unknown[] = [];
+  const studentVisible: LessonPreviewItem[] = [];
+  const teacherOnly: LessonPreviewItem[] = [];
   operations.forEach((operation) => {
+    if (operation.op === 'update_course' && operation.coursePatch) {
+      studentVisible.push({ title: 'course', fields: Object.entries(operation.coursePatch).map(([name, value]) => ({ name, value: previewValue(value) })) });
+      return;
+    }
+    if (operation.op === 'update_lesson' && operation.lessonPatch) {
+      studentVisible.push({ title: 'lesson', fields: Object.entries(operation.lessonPatch).map(([name, value]) => ({ name, value: previewValue(value) })) });
+      return;
+    }
+    if (operation.op === 'remove_activity') {
+      studentVisible.push({ title: 'removeActivity', fields: [] });
+      return;
+    }
+    if (operation.op === 'reorder_activities') {
+      studentVisible.push({ title: 'activityOrder', fields: [{ name: 'activityCount', value: operation.activityKeys?.length || 0 }] });
+      return;
+    }
     if (!operation.activity) {
-      studentVisible.push(operation);
       return;
     }
     const visible: Record<string, unknown> = {};
     const hidden: Record<string, unknown> = {};
     Object.entries(operation.activity).forEach(([key, value]) => (TEACHER_ONLY_FIELDS.has(key) ? hidden : visible)[key] = value);
-    studentVisible.push({ op: operation.op, activity: visible });
-    if (Object.keys(hidden).length) teacherOnly.push({ activityKey: operation.activityKey || visible.key, fields: hidden });
+    studentVisible.push(activityPreview(visible));
+    if (Object.keys(hidden).length) teacherOnly.push(activityPreview(hidden));
   });
   return { studentVisible, teacherOnly };
 }
@@ -123,8 +152,7 @@ export function previewLessonSuggestion(suggestion: LessonAuthoringSuggestion, c
     after: JSON.stringify(next),
     detail: '',
     changes: suggestion.operations.map((operation) => operation.op),
-    studentVisible: JSON.stringify(boundaries.studentVisible, null, 2),
-    teacherOnly: boundaries.teacherOnly.length ? JSON.stringify(boundaries.teacherOnly, null, 2) : '',
+    lesson: boundaries,
     validation: next.lessons.flatMap((lesson) => lesson.activities.flatMap((activity) => activityValidation(activity).map((code) => `${lesson.lesson_key}:${activity.key}:${code}`))),
   };
 }

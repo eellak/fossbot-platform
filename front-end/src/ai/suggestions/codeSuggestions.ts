@@ -6,6 +6,13 @@ import type { AIAssistantSuggestion, AICodeSuggestion, BlocklyReplaceSuggestion,
 
 export const CODE_SUGGESTION_VERSION = '1';
 
+export type LessonPreviewValue = string | number | boolean | string[] | Record<string, unknown>;
+export type LessonPreviewItem = {
+  title: 'course' | 'lesson' | 'activity' | 'removeActivity' | 'activityOrder';
+  activityType?: string;
+  fields: Array<{ name: string; value: LessonPreviewValue }>;
+};
+
 export type SuggestionPreview = {
   suggestion: AIAssistantSuggestion;
   summary: string;
@@ -14,8 +21,10 @@ export type SuggestionPreview = {
   after: string;
   detail: string;
   changes?: string[];
-  studentVisible?: string;
-  teacherOnly?: string;
+  lesson?: {
+    studentVisible: LessonPreviewItem[];
+    teacherOnly: LessonPreviewItem[];
+  };
   validation?: string[];
   stage?: {
     added: number;
@@ -26,6 +35,7 @@ export type SuggestionPreview = {
     floor: [number, number];
     objects: Array<{ id: string; kind: string; position: [number, number, number] }>;
     editorStage?: any;
+    verifiedChecks: Array<'validGeometry' | 'spawnTarget' | 'wallEnclosure'>;
   };
 };
 

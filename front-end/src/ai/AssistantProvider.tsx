@@ -7,7 +7,7 @@ type AssistantContextValue = {
   access: AIAccessBootstrap | null;
   loading: boolean;
   error: string;
-  refresh: () => Promise<AIAccessBootstrap | null>;
+  refresh: (options?: { silent?: boolean }) => Promise<AIAccessBootstrap | null>;
   decision: (capability: AICapabilityId) => AIAccessBootstrap['capabilities'][number] | undefined;
 };
 
@@ -19,9 +19,10 @@ export default function AssistantProvider({ children }: { children: ReactNode })
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
     if (!token) { setAccess(null); return null; }
-    setLoading(true); setError('');
+    if (!silent) setLoading(true);
+    setError('');
     try {
       const result = await readAIAccess(token);
       setAccess(result);
@@ -29,7 +30,7 @@ export default function AssistantProvider({ children }: { children: ReactNode })
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'AI access could not be loaded');
       return null;
-    } finally { setLoading(false); }
+    } finally { if (!silent) setLoading(false); }
   }, [token]);
 
   useEffect(() => { void refresh(); }, [refresh]);

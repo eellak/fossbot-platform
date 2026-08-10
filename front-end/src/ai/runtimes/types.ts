@@ -14,6 +14,7 @@ export type AIRuntimeRequest = {
   question: string;
   history: Array<{ role: 'user' | 'assistant'; content: string }>;
   context: Record<string, unknown>;
+  maxOutputTokens: number;
   debug?: boolean;
   benchmark?: boolean;
 };

@@ -1,4 +1,5 @@
 import type { AIRuntimeRequest } from './types';
+import { STAGE_CATALOG_GEOMETRY_PROMPT } from 'src/components/stage-builder/stageBuilderCatalog';
 
 const suggestionInstruction = (request: AIRuntimeRequest) => {
   const context = request.context;
@@ -12,7 +13,7 @@ const suggestionInstruction = (request: AIRuntimeRequest) => {
     return `Return only one JSON object with version "1", type "lesson_operations", baseRevision "${String(context.baseRevision || '')}", constrained operations, and a short summary. Use camelCase fields such as lessonId, activityKey, coursePatch, lessonPatch, and activityKeys. Allowed operations are update_course, update_lesson, insert_activity, replace_activity, remove_activity, and reorder_activities. Generated activity keys begin with "ai-". Keep teacher-only answers and expected values out of student-visible text.`;
   }
   if (request.capability === 'stage.create' || request.capability === 'stage.suggest_changes') {
-    return `Return only one JSON object with version "1", type "stage_operations", baseFingerprint "${String(context.baseFingerprint || '')}", rationale, constrained operations, expectedValidation, and a short summary. Use camelCase fields such as objectId, tempId, semanticKind, rotationY, objectIds, and groupName. Allowed operations are set_metadata, set_floor, add_object, update_object, move_object, rotate_object, resize_object, set_line_points, remove_object, group_objects, and ungroup_objects. New temporary IDs begin with "ai-" and semanticKind must come from the supplied catalog. Never add URLs, assets, provider data, storage fields, or timestamps.`;
+    return `Return only one JSON object with version "1", type "stage_operations", baseFingerprint "${String(context.baseFingerprint || '')}", rationale, constrained operations, expectedValidation, and a short summary. Use camelCase fields such as objectId, tempId, semanticKind, rotationY, objectIds, and groupName. Allowed operations are set_metadata, set_floor, add_object, update_object, move_object, rotate_object, resize_object, set_line_points, remove_object, group_objects, and ungroup_objects. New temporary IDs begin with "ai-" and semanticKind must come from the supplied catalog. For a create target, add each object first, then use its tempId as objectId in later update_object, move_object, rotate_object, resize_object, or set_line_points operations. Create-target follow-up operations may reference only temporary IDs generated earlier in the same response. ${STAGE_CATALOG_GEOMETRY_PROMPT} Never add URLs, assets, provider data, storage fields, or timestamps.`;
   }
   return '';
 };

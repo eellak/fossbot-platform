@@ -67,6 +67,9 @@ def _stage_example(supplied: dict[str, Any]) -> dict[str, Any]:
             {"op": "set_floor", "patch": {"dimensions": [8, 8], "color": "#d8d8d8"}},
             {"op": "add_object", "tempId": "ai-spawn", "semanticKind": "robotSpawn", "position": [-2, 0, -2]},
             {"op": "add_object", "tempId": "ai-target", "semanticKind": "target", "position": [2, 0, 2]},
+            {"op": "add_object", "tempId": "ai-wall", "semanticKind": "wall", "position": [0, 0, -3]},
+            {"op": "resize_object", "objectId": "ai-wall", "dimensions": [6, 0.5, 0.08]},
+            {"op": "rotate_object", "objectId": "ai-wall", "rotationY": 1.5708},
         ]
     else:
         selected = supplied.get("selected_object_ids") or []

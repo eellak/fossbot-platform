@@ -31,7 +31,7 @@ from utils.ai.providers.base import ProviderError
 from utils.ai.schemas import AssistantRequest, LocalUsageReport, ProviderStreamRequest
 from utils.ai.secrets import decrypt_ai_secret
 from utils.ai.suggestion_contracts import is_suggestion_capability, suggestion_json_schema
-from utils.ai.suggestions import MAX_SUGGESTION_REPAIR_ATTEMPTS, MAX_SUGGESTION_RESPONSE_CHARACTERS, SUGGESTION_MAX_OUTPUT_TOKENS, SuggestionError, build_suggestion_repair_request, parse_suggestion_with_normalizations, repair_incomplete_json_object, suggestion_payload
+from utils.ai.suggestions import MAX_SUGGESTION_REPAIR_ATTEMPTS, SuggestionError, build_suggestion_repair_request, parse_suggestion_with_normalizations, repair_incomplete_json_object, suggestion_output_token_budget, suggestion_payload, suggestion_response_character_limit
 from utils.ai.usage import QuotaError, ensure_quota, record_usage
 
 
@@ -122,15 +122,33 @@ def test_provider_stream(payload: dict = Body(...)):
             target = prompt_value("Stage target")
             selected_ids = [item for item in prompt_value("Selected object IDs").split(",") if item and item != "none"]
             if "Capability: stage.create" in prompt:
-                operations = [
-                    {"op": "set_metadata", "patch": {"title": "FOSSBot Line and Obstacle Challenge", "description": "Follow the line, avoid the obstacle, and reach the target."}},
-                    {"op": "set_floor", "patch": {"dimensions": [8, 8], "color": "#f5f5f5"}},
-                    {"op": "add_object", "tempId": "ai-spawn", "semanticKind": "robotSpawn", "position": [-2.5, 0, -2.5]},
-                    {"op": "add_object", "tempId": "ai-target", "semanticKind": "target", "position": [2.5, 0, 2.5]},
-                    {"op": "add_object", "tempId": "ai-line", "semanticKind": "line", "position": [0, 0, 0]},
-                    {"op": "add_object", "tempId": "ai-obstacle", "semanticKind": "obstacle", "position": [0.7, 0, 0.3]},
-                    {"op": "add_object", "tempId": "ai-sensor", "semanticKind": "sensorZone", "position": [1.6, 0, 1.4]},
-                ]
+                if "small, simple building" in prompt.lower() and "four wall objects" in prompt.lower():
+                    operations = [
+                        {"op": "set_metadata", "patch": {"title": "Small FOSSBot Building", "description": "A single-room navigation stage."}},
+                        {"op": "set_floor", "patch": {"dimensions": [12, 12], "color": "#f5f5f5"}},
+                        {"op": "add_object", "tempId": "ai-spawn", "semanticKind": "robotSpawn", "position": [0, 0, -2]},
+                        {"op": "add_object", "tempId": "ai-target", "semanticKind": "target", "position": [0, 0, 2]},
+                        {"op": "add_object", "tempId": "ai-north", "semanticKind": "wall", "position": [0, 0, 4]},
+                        {"op": "resize_object", "objectId": "ai-north", "dimensions": [8, 0.5, 0.08]},
+                        {"op": "add_object", "tempId": "ai-south", "semanticKind": "wall", "position": [0, 0, -4]},
+                        {"op": "resize_object", "objectId": "ai-south", "dimensions": [8, 0.5, 0.08]},
+                        {"op": "add_object", "tempId": "ai-west", "semanticKind": "wall", "position": [-4, 0, 0]},
+                        {"op": "resize_object", "objectId": "ai-west", "dimensions": [8, 0.5, 0.08]},
+                        {"op": "rotate_object", "objectId": "ai-west", "rotationY": 1.5708},
+                        {"op": "add_object", "tempId": "ai-east", "semanticKind": "wall", "position": [4, 0, 0]},
+                        {"op": "resize_object", "objectId": "ai-east", "dimensions": [8, 0.5, 0.08]},
+                        {"op": "rotate_object", "objectId": "ai-east", "rotationY": 1.5708},
+                    ]
+                else:
+                    operations = [
+                        {"op": "set_metadata", "patch": {"title": "FOSSBot Line and Obstacle Challenge", "description": "Follow the line, avoid the obstacle, and reach the target."}},
+                        {"op": "set_floor", "patch": {"dimensions": [8, 8], "color": "#f5f5f5"}},
+                        {"op": "add_object", "tempId": "ai-spawn", "semanticKind": "robotSpawn", "position": [-2.5, 0, -2.5]},
+                        {"op": "add_object", "tempId": "ai-target", "semanticKind": "target", "position": [2.5, 0, 2.5]},
+                        {"op": "add_object", "tempId": "ai-line", "semanticKind": "line", "position": [0, 0, 0]},
+                        {"op": "add_object", "tempId": "ai-obstacle", "semanticKind": "obstacle", "position": [0.7, 0, 0.3]},
+                        {"op": "add_object", "tempId": "ai-sensor", "semanticKind": "sensorZone", "position": [1.6, 0, 1.4]},
+                    ]
             elif target == "selection" and selected_ids:
                 operations = [
                     {"op": "move_object", "objectId": selected_ids[0], "position": [1.5, 0.15, 1.5]},
@@ -397,7 +415,7 @@ async def stream_assistance(
         model=provider.model,
         system=prompt.system,
         messages=prompt.messages,
-        max_output_tokens=SUGGESTION_MAX_OUTPUT_TOKENS if suggestion_capability else 1_024,
+        max_output_tokens=suggestion_output_token_budget(payload.capability) if suggestion_capability else 1_024,
         response_schema=suggestion_json_schema(payload.capability) if suggestion_capability else None,
         deterministic=payload.benchmark,
     )
@@ -489,7 +507,7 @@ async def stream_assistance(
                                 yield sse_event("debug", entry)
                         if event.type == "text_delta":
                             response_text += str(event.data.get("text") or "")
-                            if suggestion_capability and len(response_text) > MAX_SUGGESTION_RESPONSE_CHARACTERS:
+                            if suggestion_capability and len(response_text) > suggestion_response_character_limit(payload.capability):
                                 raise SuggestionError("The provider suggestion exceeded the allowed size")
                             if not suggestion_capability:
                                 yield sse_event(event.type, event.data)
@@ -537,7 +555,7 @@ async def stream_assistance(
                         response_text,
                         payload.capability,
                         str(context.payload["supplied"][fingerprint_key]),
-                        context.payload["supplied"],
+                        {**context.payload["supplied"], "request_question": payload.question},
                     )
                 except SuggestionError as error:
                     last_traced_suggestion_error = error

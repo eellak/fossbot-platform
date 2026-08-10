@@ -96,7 +96,7 @@ export class WebLLMRuntime implements AIAssistantRuntime {
         messages: buildClientRuntimeMessages(request),
         stream: true,
         stream_options: { include_usage: true },
-        max_tokens: 2048,
+        max_tokens: request.maxOutputTokens,
         temperature: 0.2,
       });
       let characters = 0;

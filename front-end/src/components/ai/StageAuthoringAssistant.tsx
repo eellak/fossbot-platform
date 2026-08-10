@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Box, MenuItem, Stack, TextField, Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { fingerprintValue } from 'src/ai/fingerprint';
@@ -15,12 +15,15 @@ type Props = {
   validation: StageBuilderValidationResult[];
   localStageId?: number | null;
   onApply: (stage: EditorStage, target: StageAuthoringTarget) => boolean | void;
-  onPreviewStageChange?: (stage: EditorStage | null) => void;
+  onPreviewStageChange?: (stage: EditorStage | null, target: StageAuthoringTarget) => void;
 };
 
 export default function StageAuthoringAssistant({ stage, selectedIds, validation, localStageId, onApply, onPreviewStageChange }: Props) {
   const { t } = useTranslation();
   const [target, setTarget] = useState<StageAuthoringTarget>('create');
+  const handlePreviewStageChange = useCallback((previewStage: EditorStage | null) => {
+    onPreviewStageChange?.(previewStage, target);
+  }, [onPreviewStageChange, target]);
   useEffect(() => {
     if (target === 'selection' && !selectedIds.length) setTarget('stage');
     if (target === 'validation' && !validation.length) setTarget('stage');
@@ -40,9 +43,9 @@ export default function StageAuthoringAssistant({ stage, selectedIds, validation
       validation: bounded.validation,
       contextTruncated: bounded.contextTruncated,
     }),
-    previewSuggestion: async (suggestion) => {
+    previewSuggestion: async (suggestion, requestQuestion) => {
       if (suggestion.type !== 'stage_operations') throw new Error('invalid_suggestion');
-      return previewStageSuggestion(suggestion, stage, target, bounded.selectedObjectIds);
+      return previewStageSuggestion(suggestion, stage, target, bounded.selectedObjectIds, requestQuestion);
     },
     applySuggestion: async (suggestion) => {
       if (suggestion.type !== 'stage_operations') throw new Error('invalid_suggestion');
@@ -58,7 +61,7 @@ export default function StageAuthoringAssistant({ stage, selectedIds, validation
     confirmationBody={t('aiAssistant.stage.confirmBody')}
     appliedMessage={t('aiAssistant.stage.applied')}
     contextKey={`${localStageId || 'draft'}:${target}`}
-    onPreviewStageChange={onPreviewStageChange}
+    onPreviewStageChange={handlePreviewStageChange}
     benchmarkPrompts={target === 'create' ? [{
       id: 'small-building',
       label: t('aiAssistant.debug.benchmarks.stageBuilding'),

@@ -610,6 +610,61 @@ def test_invalid_stage_suggestion_is_repaired_before_reaching_the_client(db, use
     assert usage.output_tokens == 20
 
 
+def test_disconnected_wall_enclosure_is_repaired_before_reaching_the_client(db, users, monkeypatch):
+    admin = users[3]
+    provider = enable_streaming(db, admin, admin, capability="stage.create")
+    stage_payload = {
+        "title": "Untitled Stage", "description": "", "floor": {"name": "floor", "dimensions": [12, 12], "color": "dodgerblue"},
+        "objects": [], "metadata": {"groups": []}, "summary": {"objectCount": 0, "knownObjectIds": [], "kinds": {}},
+    }
+    fingerprint = hashlib.sha256(json.dumps(stage_payload, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    base_operations = [
+        {"op": "add_object", "tempId": "ai-spawn", "semanticKind": "robotSpawn", "position": [0, 0, -1]},
+        {"op": "add_object", "tempId": "ai-target", "semanticKind": "target", "position": [0, 0, 1]},
+        {"op": "add_object", "tempId": "ai-north", "semanticKind": "wall", "position": [0, 0, 3]},
+        {"op": "add_object", "tempId": "ai-south", "semanticKind": "wall", "position": [0, 0, -3]},
+        {"op": "add_object", "tempId": "ai-west", "semanticKind": "wall", "position": [-3, 0, 0]},
+        {"op": "add_object", "tempId": "ai-east", "semanticKind": "wall", "position": [3, 0, 0]},
+    ]
+    invalid = {
+        "version": "1", "type": "stage_operations", "baseFingerprint": fingerprint,
+        "rationale": "Create a room with four connected walls.", "summary": "Create a room.",
+        "expectedValidation": "The four walls form a connected enclosure.", "operations": base_operations,
+    }
+    repaired = {
+        **invalid,
+        "operations": [
+            *base_operations,
+            {"op": "resize_object", "objectId": "ai-north", "dimensions": [6, 0.5, 0.08]},
+            {"op": "resize_object", "objectId": "ai-south", "dimensions": [6, 0.5, 0.08]},
+            {"op": "resize_object", "objectId": "ai-west", "dimensions": [6, 0.5, 0.08]},
+            {"op": "rotate_object", "objectId": "ai-west", "rotationY": 1.5708},
+            {"op": "resize_object", "objectId": "ai-east", "dimensions": [6, 0.5, 0.08]},
+            {"op": "rotate_object", "objectId": "ai-east", "rotationY": 1.5708},
+        ],
+    }
+    adapter = SequencedSuggestionProvider([invalid, repaired])
+    monkeypatch.setattr(ai, "hosted_provider", lambda *args, **kwargs: adapter)
+
+    with client_for(db, admin) as client:
+        response = client.post("/api/ai/assist/stream", json={
+            "capability": "stage.create", "providerId": provider.id, "surface": "stage",
+            "question": "Create a small building with four connected wall objects.",
+            "context": {
+                "target": "create", "baseFingerprint": fingerprint, "stagePayload": stage_payload,
+                "catalog": ["robotSpawn", "target", "wall"],
+            },
+            "debug": True,
+        })
+
+    assert response.status_code == 200
+    assert len(adapter.requests) == 2
+    assert "suggestion.repair_requested" in response.text
+    assert "not geometrically closed" in adapter.requests[1].messages[-1].content
+    assert '"type":"stage_operations"' in response.text
+    assert '"code":"invalid_suggestion"' not in response.text
+
+
 def test_incomplete_suggestion_json_is_closed_before_provider_retry(db, users, monkeypatch):
     admin = users[3]
     provider = enable_streaming(db, admin, admin, capability="stage.create")
@@ -637,7 +692,7 @@ def test_incomplete_suggestion_json_is_closed_before_provider_retry(db, users, m
         })
 
     assert len(adapter.requests) == 1
-    assert adapter.requests[0].max_output_tokens == 4_096
+    assert adapter.requests[0].max_output_tokens == 8_192
     assert adapter.requests[0].response_schema["properties"]["type"]["const"] == "stage_operations"
     assert "suggestion.json_repaired" in response.text
     assert "suggestion.repair_requested" not in response.text

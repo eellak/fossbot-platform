@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js';
@@ -415,6 +415,11 @@ const StageBuilderPage = () => {
   const [bootstrapRepoName, setBootstrapRepoName] = useState<string | null>(null);
   const [openProviderOpen, setOpenProviderOpen] = useState(false);
   const [livePreviewStage, setLivePreviewStage] = useState<EditorStage | null>(null);
+  const [livePreviewTarget, setLivePreviewTarget] = useState<StageAuthoringTarget | null>(null);
+  const handleAssistantPreviewStageChange = useCallback((previewStage: EditorStage | null, target: StageAuthoringTarget) => {
+    setLivePreviewStage(previewStage);
+    setLivePreviewTarget(previewStage ? target : null);
+  }, []);
   const activeStage = livePreviewStage || stage;
   const [providerStages, setProviderStages] = useState<ProviderStageListItem[]>([]);
   const [providerListLoading, setProviderListLoading] = useState(false);
@@ -1725,15 +1730,15 @@ const StageBuilderPage = () => {
             onLockedSelectionAttempt={() => setMessage('Selection is locked to the current object. Change Selection behavior in Settings to select through objects.')}
           />
           {livePreviewStage && (
-            <Paper sx={{ position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)', zIndex: 10, px: 2, py: 1, bgcolor: 'warning.light', color: 'warning.contrastText', display: 'flex', alignItems: 'center', gap: 1.5, borderRadius: 2, boxShadow: 6 }}>
+            <Paper sx={{ position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)', zIndex: 10, px: 2, py: 1, bgcolor: 'background.paper', color: 'text.primary', border: 1, borderColor: 'warning.main', display: 'flex', alignItems: 'center', gap: 1.5, borderRadius: 2, boxShadow: 6 }}>
               <Typography variant="subtitle2" fontWeight={700}>
                 {t('aiAssistant.stage.previewingLive', 'Previewing proposed stage changes in Stage Builder')}
               </Typography>
-              <Button size="small" variant="contained" color="success" onClick={() => { applyAssistantStage(livePreviewStage, 'stage'); setLivePreviewStage(null); }}>
+              <Button size="small" variant="contained" color="success" onClick={() => { if (applyAssistantStage(livePreviewStage, livePreviewTarget || 'stage')) { setLivePreviewStage(null); setLivePreviewTarget(null); } }}>
                 {t('aiAssistant.apply', 'Apply')}
               </Button>
-              <Button size="small" variant="outlined" color="inherit" onClick={() => setLivePreviewStage(null)}>
-                {t('cancel', 'Cancel')}
+              <Button size="small" variant="outlined" onClick={() => { setLivePreviewStage(null); setLivePreviewTarget(null); }}>
+                {t('aiAssistant.stage.backToBuddy', 'Back to Buddy')}
               </Button>
             </Paper>
           )}
@@ -1762,7 +1767,7 @@ const StageBuilderPage = () => {
           <Box sx={{ position: 'absolute', top: 12, right: 12, zIndex: 5 }}>
             <EditorViewportCameraGizmo currentView={lookThroughCameraId && lookThroughCamera ? 'camera' : (cameraViewRequest?.view || 'perspective')} hasActiveCamera={hasVisibleStageCamera(activeStage)} onCameraViewChange={requestCameraView} />
           </Box>
-          <StageAuthoringAssistant stage={stage} selectedIds={assistantSelectedIds} validation={validationResults} localStageId={localStage?.id} onApply={applyAssistantStage} onPreviewStageChange={setLivePreviewStage} />
+          <StageAuthoringAssistant stage={stage} selectedIds={assistantSelectedIds} validation={validationResults} localStageId={localStage?.id} onApply={applyAssistantStage} onPreviewStageChange={handleAssistantPreviewStageChange} />
           {lookThroughCamera && lookThroughCamera.kind === 'camera' && (
             <Box sx={{ position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)', zIndex: 6, maxWidth: 'min(420px, calc(100% - 32px))', pointerEvents: 'none' }}>
               <Stack

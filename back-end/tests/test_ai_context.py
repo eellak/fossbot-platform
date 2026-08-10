@@ -175,6 +175,9 @@ def test_stage_prompt_uses_canonical_flat_contract_without_python_api(db, users)
     prompt = build_prompt(student.role, payload, assemble_context(db, student, payload))
     assert "Canonical response contract (JSON Schema)" in prompt.system
     assert '"op":"add_object","tempId":"ai-spawn"' in prompt.system
+    assert '"op":"resize_object","objectId":"ai-wall"' in prompt.system
+    assert "wall: cube dimensions [1,0.5,0.08]" in prompt.system
+    assert "reference its tempId as objectId" in prompt.system
     assert '"add_object":{"' not in prompt.system
     assert "Public FOSSBot Python API" not in prompt.system
     schema = suggestion_json_schema("stage.create")

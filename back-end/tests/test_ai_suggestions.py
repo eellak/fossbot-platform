@@ -4,7 +4,15 @@ import json
 import pytest
 
 from utils.ai.schemas import ConversationTurn, ProviderStreamRequest
-from utils.ai.suggestions import SuggestionError, build_suggestion_repair_request, parse_suggestion, parse_suggestion_with_normalizations, repair_incomplete_json_object, suggestion_payload
+from utils.ai.suggestions import SuggestionError, build_suggestion_repair_request, parse_suggestion, parse_suggestion_with_normalizations, repair_incomplete_json_object, suggestion_output_token_budget, suggestion_payload, suggestion_response_character_limit
+
+
+def test_structured_output_budgets_match_capability_payload_sizes():
+    assert suggestion_output_token_budget("code.suggest_changes") == 4_096
+    assert suggestion_output_token_budget("blockly.suggest_changes") == 6_144
+    assert suggestion_output_token_budget("lesson.suggest_changes") == 6_144
+    assert suggestion_output_token_budget("stage.create") == 8_192
+    assert suggestion_response_character_limit("code.suggest_changes") < suggestion_response_character_limit("stage.create")
 
 
 def test_python_suggestion_requires_valid_syntax_and_fingerprint():
@@ -192,6 +200,74 @@ def test_stage_create_requires_supported_spawn_and_target():
     suggestion["operations"][2]["semanticKind"] = "downloadedModel"
     with pytest.raises(SuggestionError, match="not supported"):
         parse_suggestion(json.dumps(suggestion), "stage.create", fingerprint, context)
+
+
+def test_stage_create_can_transform_only_objects_generated_earlier():
+    fingerprint = "8" * 64
+    context = {
+        "target": "create",
+        "selected_object_ids": [],
+        "stage_payload": {"objects": [{"id": "existing-wall"}], "summary": {"knownObjectIds": ["existing-wall"]}},
+    }
+    base = {
+        "version": "1",
+        "type": "stage_operations",
+        "baseFingerprint": fingerprint,
+        "rationale": "Create a sized and rotated room.",
+        "expectedValidation": "The generated wall has the requested dimensions and rotation.",
+        "summary": "Create room.",
+    }
+    operations = [
+        {"op": "add_object", "tempId": "ai-spawn", "semanticKind": "robotSpawn", "position": [0, 0, -2]},
+        {"op": "add_object", "tempId": "ai-target", "semanticKind": "target", "position": [0, 0, 2]},
+        {"op": "add_object", "tempId": "ai-wall", "semanticKind": "wall", "position": [0, 0, -3]},
+        {"op": "resize_object", "objectId": "ai-wall", "dimensions": [6, 0.5, 0.08]},
+        {"op": "rotate_object", "objectId": "ai-wall", "rotationY": 1.5707963267948966},
+    ]
+    parsed = parse_suggestion(json.dumps({**base, "operations": operations}), "stage.create", fingerprint, context)
+    assert [operation.op for operation in parsed.operations[-2:]] == ["resize_object", "rotate_object"]
+
+    operations[-1] = {"op": "rotate_object", "objectId": "existing-wall", "rotationY": 1.5707963267948966}
+    with pytest.raises(SuggestionError, match="unknown object"):
+        parse_suggestion(json.dumps({**base, "operations": operations}), "stage.create", fingerprint, context)
+
+
+def test_stage_create_validates_requested_wall_enclosure_geometry():
+    fingerprint = "7" * 64
+    context = {
+        "target": "create",
+        "request_question": "Create a building with four walls around one room.",
+        "selected_object_ids": [],
+        "stage_payload": {"objects": [], "summary": {"knownObjectIds": []}},
+    }
+    base = {
+        "version": "1",
+        "type": "stage_operations",
+        "baseFingerprint": fingerprint,
+        "rationale": "Create a bounded challenge.",
+        "expectedValidation": "The stage is usable.",
+        "summary": "Create building.",
+    }
+    operations = [
+        {"op": "add_object", "tempId": "ai-spawn", "semanticKind": "robotSpawn", "position": [0, 0, -2]},
+        {"op": "add_object", "tempId": "ai-target", "semanticKind": "target", "position": [0, 0, 2]},
+        {"op": "add_object", "tempId": "ai-north", "semanticKind": "wall", "position": [0, 0, -3]},
+        {"op": "resize_object", "objectId": "ai-north", "dimensions": [6, 0.5, 0.08]},
+        {"op": "add_object", "tempId": "ai-south", "semanticKind": "wall", "position": [0, 0, 3]},
+        {"op": "resize_object", "objectId": "ai-south", "dimensions": [6, 0.5, 0.08]},
+        {"op": "add_object", "tempId": "ai-west", "semanticKind": "wall", "position": [-3, 0, 0]},
+        {"op": "resize_object", "objectId": "ai-west", "dimensions": [6, 0.5, 0.08]},
+        {"op": "rotate_object", "objectId": "ai-west", "rotationY": 1.5707963267948966},
+        {"op": "add_object", "tempId": "ai-east", "semanticKind": "wall", "position": [3, 0, 0]},
+        {"op": "resize_object", "objectId": "ai-east", "dimensions": [6, 0.5, 0.08]},
+        {"op": "rotate_object", "objectId": "ai-east", "rotationY": 1.5707963267948966},
+    ]
+    parsed = parse_suggestion(json.dumps({**base, "operations": operations}), "stage.create", fingerprint, context)
+    assert len(parsed.operations) == len(operations)
+
+    disconnected = [operation for operation in operations if operation["op"] not in {"resize_object", "rotate_object"}]
+    with pytest.raises(SuggestionError, match="not geometrically closed"):
+        parse_suggestion(json.dumps({**base, "operations": disconnected}), "stage.create", fingerprint, context)
 
 
 def test_stage_suggestion_normalizes_only_known_unambiguous_shapes():

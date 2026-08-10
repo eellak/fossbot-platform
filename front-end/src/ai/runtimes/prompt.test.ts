@@ -1,4 +1,4 @@
-import { parseClientSuggestionText } from './prompt';
+import { buildClientRuntimeMessages, parseClientSuggestionText } from './prompt';
 
 declare const describe: any;
 declare const expect: any;
@@ -14,5 +14,17 @@ describe('parseClientSuggestionText', () => {
 
   it('rejects ambiguous multiple JSON objects', () => {
     expect(() => parseClientSuggestionText('{"version":"1"}\n{"version":"2"}')).toThrow('invalid_suggestion');
+  });
+
+  it('explains stage geometry and generated-object follow-up operations', () => {
+    const messages = buildClientRuntimeMessages({
+      capability: 'stage.create',
+      surface: 'stage',
+      question: 'Create a room.',
+      history: [],
+      context: { baseFingerprint: 'f'.repeat(64), target: 'create', catalog: ['robotSpawn', 'target', 'wall'] },
+    } as any);
+    expect(messages[0].content).toContain('wall: cube dimensions [1,0.5,0.08]');
+    expect(messages[0].content).toContain('use its tempId as objectId');
   });
 });

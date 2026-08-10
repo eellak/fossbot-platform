@@ -10,16 +10,39 @@ from pydantic import ValidationError
 
 from utils.activity_schema import validate_activities
 from utils.ai.schemas import BlocklyReplaceSuggestion, ConversationTurn, LessonAuthoringSuggestion, ProviderStreamRequest, PythonReplaceSuggestion, StageAuthoringSuggestion
+from utils.ai.stage_geometry import generated_wall_geometry, requires_wall_enclosure, wall_enclosure_status
 
 
 SUGGESTION_VERSION = "1"
-MAX_SUGGESTION_RESPONSE_CHARACTERS = 32_000
-SUGGESTION_MAX_OUTPUT_TOKENS = 4_096
+SUGGESTION_OUTPUT_TOKEN_BUDGETS = {
+    "code.suggest_changes": 4_096,
+    "blockly.suggest_changes": 6_144,
+    "lesson.draft": 6_144,
+    "lesson.suggest_changes": 6_144,
+    "stage.create": 8_192,
+    "stage.suggest_changes": 8_192,
+}
+SUGGESTION_RESPONSE_CHARACTER_LIMITS = {
+    "code.suggest_changes": 20_000,
+    "blockly.suggest_changes": 48_000,
+    "lesson.draft": 48_000,
+    "lesson.suggest_changes": 48_000,
+    "stage.create": 64_000,
+    "stage.suggest_changes": 64_000,
+}
 MAX_SUGGESTION_REPAIR_ATTEMPTS = 2
 MAX_REPAIR_TURN_CHARACTERS = 2_000
 Suggestion = Union[PythonReplaceSuggestion, BlocklyReplaceSuggestion, LessonAuthoringSuggestion, StageAuthoringSuggestion]
 LESSON_OPERATION_NAMES = {"update_course", "update_lesson", "insert_activity", "replace_activity", "remove_activity", "reorder_activities"}
 STAGE_OPERATION_NAMES = {"set_metadata", "set_floor", "add_object", "update_object", "move_object", "rotate_object", "resize_object", "set_line_points", "remove_object", "group_objects", "ungroup_objects"}
+
+
+def suggestion_output_token_budget(capability: str) -> int:
+    return SUGGESTION_OUTPUT_TOKEN_BUDGETS[capability]
+
+
+def suggestion_response_character_limit(capability: str) -> int:
+    return SUGGESTION_RESPONSE_CHARACTER_LIMITS[capability]
 
 
 class SuggestionError(ValueError):
@@ -202,7 +225,7 @@ def normalize_suggestion_payload(payload: dict[str, Any], capability: str) -> tu
 
 
 def parse_suggestion_with_normalizations(raw: str, capability: str, expected_fingerprint: str, context: Optional[dict[str, Any]] = None) -> tuple[Suggestion, list[str]]:
-    if len(raw) > MAX_SUGGESTION_RESPONSE_CHARACTERS:
+    if len(raw) > suggestion_response_character_limit(capability):
         raise SuggestionError("The provider suggestion exceeded the allowed size")
     try:
         payload, normalizations = normalize_suggestion_payload(_load_json_object(raw), capability)
@@ -313,7 +336,7 @@ def _validate_stage_operations(suggestion: StageAuthoringSuggestion, context: di
     known_ids = set((payload.get("summary") or {}).get("knownObjectIds") or [])
     known_ids.update(str(item.get("id")) for item in payload.get("objects", []) if isinstance(item, dict) and item.get("id"))
     allowed_by_target = {
-        "create": {"set_metadata", "set_floor", "add_object", "group_objects"},
+        "create": {"set_metadata", "set_floor", "add_object", "update_object", "move_object", "rotate_object", "resize_object", "set_line_points", "group_objects"},
         "stage": {"set_metadata", "set_floor", "add_object", "update_object", "move_object", "rotate_object", "resize_object", "set_line_points", "remove_object", "group_objects", "ungroup_objects"},
         "selection": {"update_object", "move_object", "rotate_object", "resize_object", "set_line_points", "remove_object", "group_objects", "ungroup_objects"},
         "validation": {"set_metadata", "set_floor", "add_object", "update_object", "move_object", "rotate_object", "resize_object", "set_line_points", "remove_object", "group_objects", "ungroup_objects"},
@@ -335,7 +358,11 @@ def _validate_stage_operations(suggestion: StageAuthoringSuggestion, context: di
         return bool(values) and all(isinstance(value, (int, float)) and value == value and abs(value) <= 1_000 and (not positive or 0 < value <= 500) for value in values)
 
     def existing(reference: Optional[str]) -> bool:
-        return bool(reference and (reference in known_ids or reference in generated))
+        if not reference:
+            return False
+        if target == "create":
+            return reference in generated
+        return reference in known_ids or reference in generated
 
     for index, operation in enumerate(suggestion.operations):
         if operation.op not in allowed_by_target[target]:
@@ -384,6 +411,13 @@ def _validate_stage_operations(suggestion: StageAuthoringSuggestion, context: di
         added = {operation.semantic_kind for operation in suggestion.operations if operation.op == "add_object"}
         if not {"robotSpawn", "target"}.issubset(added):
             raise SuggestionError("A generated stage needs a robot spawn and target")
+        intent = " ".join((str(context.get("request_question") or ""), suggestion.rationale, suggestion.expected_validation))
+        if requires_wall_enclosure(intent):
+            connected, enclosed = wall_enclosure_status(generated_wall_geometry(suggestion.operations))
+            if not connected or not enclosed:
+                raise SuggestionError(
+                    "The requested wall enclosure is not geometrically closed. Resize and rotate the generated walls so their edges touch and form one connected loop"
+                )
 
 
 def suggestion_payload(suggestion: Suggestion) -> dict:

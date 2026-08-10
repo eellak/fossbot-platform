@@ -45,7 +45,7 @@ export class LocalCompatibleRuntime implements AIAssistantRuntime {
           Accept: 'text/event-stream',
           ...(readLocalCompatibleSecret(this.provider.id) ? { Authorization: `Bearer ${readLocalCompatibleSecret(this.provider.id)}` } : {}),
         },
-        body: JSON.stringify({ model: configured.model, messages: buildClientRuntimeMessages(request), stream: true, stream_options: { include_usage: true }, max_tokens: 2048 }),
+        body: JSON.stringify({ model: configured.model, messages: buildClientRuntimeMessages(request), stream: true, stream_options: { include_usage: true }, max_tokens: request.maxOutputTokens }),
         signal: controller.signal,
       });
       if (!response.ok) throw new Error(response.status === 404 ? 'local_model_unavailable' : 'local_endpoint_error');

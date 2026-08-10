@@ -7,10 +7,11 @@ from models.models import UserRole
 from utils.ai.context import AssembledContext
 from utils.ai.fossbot_api import FOSSBOT_API_VERSION, prompt_reference_excerpt
 from utils.ai.schemas import AssistantRequest, PromptBundle
+from utils.ai.stage_geometry import STAGE_CATALOG_GEOMETRY_PROMPT
 from utils.ai.suggestion_contracts import is_suggestion_capability, suggestion_contract_prompt
 
 
-PROMPT_VERSION = "fossbot-assistant-v5"
+PROMPT_VERSION = "fossbot-assistant-v1"
 
 
 def build_prompt(user_role: UserRole, request: AssistantRequest, context: AssembledContext) -> PromptBundle:
@@ -61,7 +62,10 @@ def build_prompt(user_role: UserRole, request: AssistantRequest, context: Assemb
             "Use camelCase fields: set_metadata requires patch containing only title and/or description; set_floor requires patch; "
             "add_object requires tempId, semanticKind, and position; update_object requires objectId and patch; operations on existing objects require objectId; "
             "rotate_object requires rotationY; group operations require objectIds and groupName. "
+            "For a create target, add each object first, then reference its tempId as objectId in later update_object, move_object, rotate_object, resize_object, or set_line_points operations. "
+            "Create-target follow-up operations may reference only temporary IDs generated earlier in the same response, never IDs from the stage being replaced. "
             "Every position is [x,y,z]: the floor plane uses x and z, y is vertical height, and objects resting on the floor normally use y=0. "
+            f"{STAGE_CATALOG_GEOMETRY_PROMPT} "
             "The top-level expectedValidation field must be a short string, not an object or array. "
             "add_object must use one catalog semanticKind and a unique temporary ID beginning with 'ai-'. Existing objects must be referenced only by the supplied stable IDs. "
             "A create target must add at least one robotSpawn and one target object. "

@@ -12,6 +12,14 @@ export type StageObjectBounds = {
   soft: boolean;
 };
 
+export type StageWallEnclosureStatus = {
+  wallCount: number;
+  connected: boolean;
+  enclosed: boolean;
+};
+
+type FloorPoint = [number, number];
+
 export const DEFAULT_STAGE_SIZE: [number, number] = [10, 10];
 
 export function cloneStage<T>(value: T): T {
@@ -51,14 +59,17 @@ export function objectBounds(object: EditorStageObject): StageObjectBounds | nul
   if (object.hidden) return null;
   if (object.kind === 'cube') {
     const [w, h, d] = object.dimensions.map((value) => Math.abs(value)) as [number, number, number];
+    const rotation = object.rotationY || 0;
+    const halfX = Math.abs(Math.cos(rotation)) * w / 2 + Math.abs(Math.sin(rotation)) * d / 2;
+    const halfZ = Math.abs(Math.sin(rotation)) * w / 2 + Math.abs(Math.cos(rotation)) * d / 2;
     return {
       objectId: object.id,
-      minX: object.position[0] - w / 2,
-      maxX: object.position[0] + w / 2,
+      minX: object.position[0] - halfX,
+      maxX: object.position[0] + halfX,
       minY: object.position[1] - h / 2,
       maxY: object.position[1] + h / 2,
-      minZ: object.position[2] - d / 2,
-      maxZ: object.position[2] + d / 2,
+      minZ: object.position[2] - halfZ,
+      maxZ: object.position[2] + halfZ,
       solid: object.collision !== 'none',
       soft: false,
     };
@@ -254,6 +265,72 @@ export function boundsIntersect(a: StageObjectBounds, b: StageObjectBounds, padd
     a.maxY + padding < b.minY || a.minY - padding > b.maxY ||
     a.maxZ + padding < b.minZ || a.minZ - padding > b.maxZ
   );
+}
+
+function wallSegment(object: Extract<EditorStageObject, { kind: 'cube' }>): { start: FloorPoint; end: FloorPoint; halfThickness: number } {
+  const rotation = object.rotationY || 0;
+  const halfLength = Math.abs(object.dimensions[0]) / 2;
+  const directionX = Math.cos(rotation);
+  const directionZ = -Math.sin(rotation);
+  return {
+    start: [object.position[0] - directionX * halfLength, object.position[2] - directionZ * halfLength],
+    end: [object.position[0] + directionX * halfLength, object.position[2] + directionZ * halfLength],
+    halfThickness: Math.abs(object.dimensions[2]) / 2,
+  };
+}
+
+function pointSegmentDistance(point: FloorPoint, start: FloorPoint, end: FloorPoint): number {
+  const deltaX = end[0] - start[0];
+  const deltaZ = end[1] - start[1];
+  const lengthSquared = deltaX * deltaX + deltaZ * deltaZ;
+  if (!lengthSquared) return Math.hypot(point[0] - start[0], point[1] - start[1]);
+  const ratio = Math.max(0, Math.min(1, ((point[0] - start[0]) * deltaX + (point[1] - start[1]) * deltaZ) / lengthSquared));
+  return Math.hypot(point[0] - (start[0] + ratio * deltaX), point[1] - (start[1] + ratio * deltaZ));
+}
+
+function wallSegmentsTouch(left: ReturnType<typeof wallSegment>, right: ReturnType<typeof wallSegment>): boolean {
+  const distance = Math.min(
+    pointSegmentDistance(left.start, right.start, right.end),
+    pointSegmentDistance(left.end, right.start, right.end),
+    pointSegmentDistance(right.start, left.start, left.end),
+    pointSegmentDistance(right.end, left.start, left.end),
+  );
+  return distance <= left.halfThickness + right.halfThickness + 0.05;
+}
+
+export function wallEnclosureStatus(stage: Pick<EditorStage, 'objects'>): StageWallEnclosureStatus {
+  const walls = stage.objects.filter((object): object is Extract<EditorStageObject, { kind: 'cube' }> => object.kind === 'cube' && object.semanticKind === 'wall' && !object.hidden);
+  if (walls.length < 3) return { wallCount: walls.length, connected: false, enclosed: false };
+  const segments = walls.map(wallSegment);
+  const adjacency = walls.map(() => new Set<number>());
+  for (let left = 0; left < walls.length; left += 1) {
+    for (let right = left + 1; right < walls.length; right += 1) {
+      if (!wallSegmentsTouch(segments[left], segments[right])) continue;
+      adjacency[left].add(right);
+      adjacency[right].add(left);
+    }
+  }
+  const visited = new Set([0]);
+  const pending = [0];
+  while (pending.length) {
+    const current = pending.pop() as number;
+    adjacency[current].forEach((neighbor) => {
+      if (visited.has(neighbor)) return;
+      visited.add(neighbor);
+      pending.push(neighbor);
+    });
+  }
+  const connected = visited.size === walls.length;
+  const edgeCount = adjacency.reduce((count, neighbors) => count + neighbors.size, 0) / 2;
+  const enclosed = connected && edgeCount >= walls.length && adjacency.every((neighbors) => neighbors.size >= 2);
+  return { wallCount: walls.length, connected, enclosed };
+}
+
+export function requiresWallEnclosure(...values: string[]): boolean {
+  const text = values.filter(Boolean).join(' ').toLowerCase();
+  return text.includes('enclosure')
+    || text.includes('connected wall')
+    || (text.includes('wall') && (text.includes('room') || text.includes('building')) && (text.includes('four') || text.includes('4') || text.includes('sides')));
 }
 
 export function boundsOutsideStage(bounds: StageObjectBounds, stage: Pick<EditorStage, 'floor'>): boolean {

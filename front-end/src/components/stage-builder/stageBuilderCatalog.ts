@@ -38,6 +38,34 @@ export const STAGE_OBJECT_CATALOG: StageObjectCatalogItem[] = [
   { id: 'customObject', label: 'Imported model', shortLabel: 'Model', description: 'An imported OBJ, STL, or GLB model with transform and collision settings.', category: 'custom', placeable: false },
 ];
 
+export const STAGE_CATALOG_GEOMETRY_PROMPT = [
+  'Catalog geometry defaults use metres.',
+  'Positions are [x,y,z]; x and z span the floor and y is vertical.',
+  'rotationY is in radians around the vertical axis.',
+  'For cube-like objects, dimensions are [x width,y height,z depth].',
+  'robotSpawn: position marker, rotationY 0, no resizable dimensions.',
+  'target: flat marker dimensions [0.5,0.5] in [x,z].',
+  'checkpoint: flat marker dimensions [0.45,0.45] in [x,z].',
+  'collectible: sphere diameter [0.12].',
+  'pushObject: cube dimensions [0.3,0.3,0.3].',
+  'targetZone: flat marker dimensions [0.8,0.8] in [x,z].',
+  'line: default floor points [[x-0.5,z],[x,z+0.4],[x+0.5,z]]; set_line_points uses [x,z] pairs.',
+  'baseTile: flat marker dimensions [0.6,0.6] in [x,z].',
+  'dangerZone: flat marker dimensions [0.8,0.8] in [x,z].',
+  'sensorZone: flat marker dimensions [0.8,0.8] in [x,z].',
+  'directionArrow: dimensions [0.75,0.42,0.04] meaning [x length,z width,y thickness].',
+  'block: cube dimensions [0.3,0.3,0.3].',
+  'wall: cube dimensions [1,0.5,0.08]; its long axis is local x, so resize its first dimension for length and rotate by about 1.5708 radians for a north-south wall.',
+  'ramp: dimensions [0.6,0.04,0.9] in [x,y,z] with a 0.2618-radian incline.',
+  'platform: cube dimensions [0.8,0.12,0.8].',
+  'cylinder: dimensions [0.15,0.15,0.3,32] meaning [top radius,bottom radius,height,segments].',
+  'obstacle: cone dimensions [0.05,0.1,0.2,32] meaning [top radius,bottom radius,height,segments].',
+  'sphere: diameter [0.3].',
+  'label: scale 0.75 and no dimensions; update scale instead of resizing.',
+  'light: point light at y=1 with intensity 1.2 and range 4; move or update it after adding when needed.',
+  'camera: default position [2.5,2,2.5], rotationY 0.7854, pitch 0.4, fov 50; move or update it after adding when needed.',
+].join(' ');
+
 export function catalogItem(id: StageSemanticKind): StageObjectCatalogItem | undefined {
   return STAGE_OBJECT_CATALOG.find((item) => item.id === id);
 }

@@ -1,7 +1,7 @@
 import { makeLocalStageId } from 'src/components/stage-builder/localStages';
 import { configToEditorStage, editorStageToRecord } from 'src/components/stage-builder/serialize';
 import { createCatalogObject, STAGE_OBJECT_CATALOG } from 'src/components/stage-builder/stageBuilderCatalog';
-import { boundsOutsideStage, cloneStage, objectBounds, objectDimensionsAreValid, objectPosition, setObjectPosition } from 'src/components/stage-builder/stageBuilderGeometry';
+import { boundsOutsideStage, cloneStage, objectBounds, objectDimensionsAreValid, objectPosition, requiresWallEnclosure, setObjectPosition, wallEnclosureStatus } from 'src/components/stage-builder/stageBuilderGeometry';
 import { validateStageBuilderStage } from 'src/components/stage-builder/stageBuilderValidation';
 import type { EditorStage, EditorStageObject, StageSemanticKind, Vec2, Vec3 } from 'src/components/stage-builder/types';
 import type { StageAuthoringSuggestion, StageOperation } from '../types';
@@ -41,7 +41,7 @@ function cloneForTarget(stage: EditorStage, target: StageAuthoringTarget): Edito
   };
 }
 
-function applyOperations(stage: EditorStage, suggestion: StageAuthoringSuggestion, target: StageAuthoringTarget, selectedIds: string[], idFactory: (temporaryId: string) => string) {
+function applyOperations(stage: EditorStage, suggestion: StageAuthoringSuggestion, target: StageAuthoringTarget, selectedIds: string[], idFactory: (temporaryId: string) => string, requestQuestion = '') {
   const next = cloneForTarget(stage, target);
   const selected = new Set(selectedIds);
   const tempIds = new Map<string, string>();
@@ -49,7 +49,7 @@ function applyOperations(stage: EditorStage, suggestion: StageAuthoringSuggestio
   const changed = new Set<string>();
   const removed = new Set<string>();
   const allowed = {
-    create: new Set(['set_metadata', 'set_floor', 'add_object', 'group_objects']),
+    create: new Set(['set_metadata', 'set_floor', 'add_object', 'update_object', 'move_object', 'rotate_object', 'resize_object', 'set_line_points', 'group_objects']),
     stage: new Set(['set_metadata', 'set_floor', 'add_object', 'update_object', 'move_object', 'rotate_object', 'resize_object', 'set_line_points', 'remove_object', 'group_objects', 'ungroup_objects']),
     selection: new Set(['update_object', 'move_object', 'rotate_object', 'resize_object', 'set_line_points', 'remove_object', 'group_objects', 'ungroup_objects']),
     validation: new Set(['set_metadata', 'set_floor', 'add_object', 'update_object', 'move_object', 'rotate_object', 'resize_object', 'set_line_points', 'remove_object', 'group_objects', 'ungroup_objects']),
@@ -149,11 +149,14 @@ function applyOperations(stage: EditorStage, suggestion: StageAuthoringSuggestio
   const afterIssues = validateStageBuilderStage(roundTrip);
   const beforeErrors = new Set(beforeIssues.filter((item) => item.severity === 'error').map((item) => item.id));
   if (afterIssues.some((item) => item.severity === 'error' && !beforeErrors.has(item.id))) throw new Error('invalid_stage_validation');
-  return { stage: roundTrip, added, changed, removed, beforeIssues, afterIssues };
+  const enclosureRequired = target === 'create' && requiresWallEnclosure(requestQuestion, suggestion.rationale, suggestion.expectedValidation);
+  const enclosure = wallEnclosureStatus(roundTrip);
+  if (enclosureRequired && !enclosure.enclosed) throw new Error('invalid_stage_wall_enclosure');
+  return { stage: roundTrip, added, changed, removed, beforeIssues, afterIssues, enclosureRequired, enclosure };
 }
 
-export function previewStageSuggestion(suggestion: StageAuthoringSuggestion, stage: EditorStage, target: StageAuthoringTarget, selectedIds: string[]): SuggestionPreview {
-  const result = applyOperations(stage, suggestion, target, selectedIds, (temporaryId) => `preview-${temporaryId}`);
+export function previewStageSuggestion(suggestion: StageAuthoringSuggestion, stage: EditorStage, target: StageAuthoringTarget, selectedIds: string[], requestQuestion = ''): SuggestionPreview {
+  const result = applyOperations(stage, suggestion, target, selectedIds, (temporaryId) => `preview-${temporaryId}`, requestQuestion);
   const beforeIds = new Set(result.beforeIssues.map((item) => item.id));
   const afterIds = new Set(result.afterIssues.map((item) => item.id));
   return {
@@ -174,6 +177,11 @@ export function previewStageSuggestion(suggestion: StageAuthoringSuggestion, sta
       floor: result.stage.floor.dimensions,
       objects: result.stage.objects.slice(0, 80).map((object) => ({ id: object.id, kind: object.semanticKind || object.kind, position: objectPosition(object) })),
       editorStage: result.stage,
+      verifiedChecks: [
+        'validGeometry',
+        ...(target === 'create' ? ['spawnTarget' as const] : []),
+        ...(result.enclosureRequired && result.enclosure.enclosed ? ['wallEnclosure' as const] : []),
+      ],
     },
   };
 }

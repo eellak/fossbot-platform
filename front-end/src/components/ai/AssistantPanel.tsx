@@ -16,9 +16,11 @@ import type { AIAssistantSuggestion, AICapabilityId, AIAssistantSurface, AIDebug
 import { parseClientSuggestionText } from 'src/ai/runtimes/prompt';
 import { runtimeFor } from 'src/ai/runtimes/registry';
 import type { AIAssistantRuntime } from 'src/ai/runtimes/types';
+import { outputTokenBudget } from 'src/ai/outputBudgets';
 import { WebLLMRuntime, webLLMConsentKey, webLLMDownloadGuidance } from 'src/ai/runtimes/webllm';
 import AdminDebugTrace, { AdminDebugToggle } from './AdminDebugTrace';
 import StageSuggestionPreview from './StageSuggestionPreview';
+import LessonSuggestionPreview from './LessonSuggestionPreview';
 
 type ConversationTurn = { role: 'user' | 'assistant'; content: string };
 type RequestMode = 'explain' | 'suggest';
@@ -34,7 +36,7 @@ export type AssistantSurfaceAdapter = {
   surface: Extract<AIAssistantSurface, 'python' | 'blockly' | 'lesson' | 'stage'>;
   getContext: () => Promise<Record<string, unknown>>;
   getFingerprint: () => Promise<string>;
-  previewSuggestion: (suggestion: AIAssistantSuggestion) => Promise<SuggestionPreview>;
+  previewSuggestion: (suggestion: AIAssistantSuggestion, requestQuestion: string) => Promise<SuggestionPreview>;
   applySuggestion: (suggestion: AIAssistantSuggestion) => Promise<void>;
 };
 
@@ -53,6 +55,17 @@ type Props = {
 
 const suggestionBase = (suggestion: AIAssistantSuggestion) => suggestion.type === 'lesson_operations' ? suggestion.baseRevision : suggestion.baseFingerprint;
 
+const conversationProposal = (suggestion: AIAssistantSuggestion) => {
+  const serialized = JSON.stringify(suggestion);
+  if (serialized.length <= 2000) return serialized;
+  return JSON.stringify({
+    version: suggestion.version,
+    type: suggestion.type,
+    summary: suggestion.summary,
+    note: 'The previous validated proposal was too large to repeat in conversation history. Use the unchanged workspace context and this summary when revising it.',
+  });
+};
+
 const debugErrorData = (reason: unknown) => reason instanceof Error
   ? { type: reason.name, message: reason.message, stack: reason.stack || '' }
   : { type: typeof reason, message: String(reason) };
@@ -68,8 +81,9 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
   const [history, setHistory] = useState<ConversationTurn[]>([]);
   const [output, setOutput] = useState('');
   const [status, setStatus] = useState<'idle' | 'streaming' | 'done' | 'stopped' | 'error'>('idle');
+  const [requestStage, setRequestStage] = useState<'preparing' | 'connecting' | 'drafting' | 'validating'>('preparing');
+  const [waitingSeconds, setWaitingSeconds] = useState(0);
   const [requestError, setRequestError] = useState('');
-  const [attribution, setAttribution] = useState<{ provider: string; model: string } | null>(null);
   const [preview, setPreview] = useState<SuggestionPreview | null>(null);
   const [previewCapability, setPreviewCapability] = useState<AICapabilityId | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -83,6 +97,7 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
   const runtimeRef = useRef<AIAssistantRuntime | null>(null);
   const contextKeyRef = useRef(contextKey);
   const outputRef = useRef<HTMLDivElement | null>(null);
+  const questionRef = useRef<HTMLInputElement | null>(null);
   const debugSequenceRef = useRef(0);
   const isAdmin = user?.role === 'admin';
 
@@ -109,7 +124,7 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
     abortRef.current?.abort();
     runtimeRef.current?.cancel();
     contextKeyRef.current = contextKey;
-    setQuestion(''); setHistory([]); setOutput(''); setStatus('idle'); setRequestError(''); setAttribution(null); setPreview(null); setPreviewCapability(null); setLastRequest(null); setRuntimeStatus({ readiness: 'idle' });
+    setQuestion(''); setHistory([]); setOutput(''); setStatus('idle'); setRequestError(''); setPreview(null); setPreviewCapability(null); setLastRequest(null); setRuntimeStatus({ readiness: 'idle' });
     clearDebug();
   }, [contextKey]);
 
@@ -136,11 +151,18 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
     return () => window.cancelAnimationFrame(frame);
   }, [open, output, status]);
 
+  useEffect(() => {
+    if (status !== 'streaming') { setWaitingSeconds(0); return undefined; }
+    const startedAt = Date.now();
+    const timer = window.setInterval(() => setWaitingSeconds(Math.floor((Date.now() - startedAt) / 1000)), 1000);
+    return () => window.clearInterval(timer);
+  }, [status]);
+
   const run = async (nextQuestion = question, nextMode = mode, consentGranted = false, providerOverrideId?: number, benchmark = false) => {
     const trimmed = nextQuestion.trim();
     if (!trimmed) return;
     if (benchmark) { clearDebug(); setHistory([]); }
-    setRequestError(''); setOutput(''); setPreview(null); setPreviewCapability(null); setAttribution(null); setStatus('streaming');
+    setRequestError(''); setOutput(''); setPreview(null); setPreviewCapability(null); setRequestStage('preparing'); setStatus('streaming');
     setQuestion(trimmed); setMode(nextMode); setLastRequest({ question: trimmed, mode: nextMode, benchmark });
     const controller = new AbortController();
     abortRef.current = controller;
@@ -149,7 +171,7 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
     let streamFailed = '';
     appendDebug('client', 'request.started', { mode: nextMode, question: trimmed, surface: adapter.surface, benchmark });
     try {
-      const currentAccess = await refresh();
+      const currentAccess = await refresh({ silent: true });
       const capability = nextMode === 'explain' ? explainCapability : suggestCapability;
       const decision = currentAccess?.capabilities.find((item) => item.capability === capability);
       if (!decision?.allowed) throw new Error('capability_denied');
@@ -179,21 +201,13 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
       }
       const context = await adapter.getContext();
       appendDebug('client', 'context.prepared', context);
+      setRequestStage('connecting');
       const localRequestId = `local_${crypto.randomUUID().replace(/-/g, '')}`;
       const localStartedAt = new Date().toISOString();
       let localInputTokens: number | undefined;
       let localOutputTokens: number | undefined;
       let localTokensEstimated = true;
       let localOutcome: 'completed' | 'cancelled' | 'runtime_error' = 'completed';
-      const policyTimer = window.setInterval(() => {
-        void refresh().then((latest) => {
-          const latestDecision = latest?.capabilities.find((item) => item.capability === capability);
-          if (!latestDecision?.allowed || !latestDecision.providerIds.includes(provider.id)) {
-            controller.abort();
-            void runtime.dispose();
-          }
-        });
-      }, 5_000);
       try { await runtime.stream({
         request: {
         capability,
@@ -201,6 +215,7 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
         question: trimmed,
         history: benchmark ? [] : history.slice(-8),
         context,
+        maxOutputTokens: outputTokenBudget(capability),
         debug: isAdmin && debugEnabled,
         benchmark: isAdmin && benchmark,
         },
@@ -211,10 +226,9 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
           return;
         }
         if (event.type !== 'text_delta') appendDebug('client', `stream.${event.type}`, event.data);
-        if (event.type === 'start') setAttribution({
-          provider: String(event.data.provider || provider.name),
-          model: String(event.data.model || provider.model),
-        });
+        if (event.type === 'start') {
+          setRequestStage('drafting');
+        }
         if (event.type === 'text_delta') {
           streamed += String(event.data.text || '');
           setOutput(streamed);
@@ -241,13 +255,13 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
         localOutcome = controller.signal.aborted ? 'cancelled' : 'runtime_error';
         throw reason;
       } finally {
-        window.clearInterval(policyTimer);
         if (currentAccess?.reportLocalUsage && provider.runtime !== 'hosted') {
           void reportAILocalUsage(token, { providerId: provider.id, capability, requestId: localRequestId, startedAt: localStartedAt, outcome: localOutcome, inputTokens: localInputTokens, outputTokens: localOutputTokens, estimated: localTokensEstimated }).catch(() => undefined);
         }
       }
       appendDebug('client', 'stream.response_completed', { text: streamed, characters: streamed.length });
       if (streamFailed) throw new Error(streamFailed);
+      setRequestStage('validating');
       if (!receivedSuggestion && suggestionCapabilities.includes(capability)) {
         try {
           const parsedText = parseClientSuggestionText(streamed);
@@ -265,7 +279,7 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
         if (suggestionBase(receivedSuggestion) !== currentFingerprint) throw new Error('stale_suggestion');
         let validated: SuggestionPreview;
         try {
-          validated = await adapter.previewSuggestion(receivedSuggestion);
+          validated = await adapter.previewSuggestion(receivedSuggestion, trimmed);
           appendDebug('client-validator', 'preview.validated', validated);
         } catch (reason) {
           appendDebug('client-validator', 'preview.rejected', { error: debugErrorData(reason), suggestion: receivedSuggestion });
@@ -276,7 +290,11 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
         streamed = receivedSuggestion.summary;
         setOutput(streamed);
       }
-      if (!benchmark) setHistory((current) => ([...current, { role: 'user', content: trimmed }, { role: 'assistant', content: streamed || t('aiAssistant.noResponse') }] as ConversationTurn[]).slice(-8));
+      if (!benchmark) setHistory((current) => ([
+        ...current,
+        { role: 'user', content: trimmed },
+        { role: 'assistant', content: receivedSuggestion ? conversationProposal(receivedSuggestion) : streamed || t('aiAssistant.noResponse') },
+      ] as ConversationTurn[]).slice(-8));
       setStatus('done');
     } catch (reason) {
       if (controller.signal.aborted || (reason instanceof DOMException && reason.name === 'AbortError')) {
@@ -284,6 +302,11 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
         setStatus('stopped');
       } else {
         appendDebug('client', 'request.failed', debugErrorData(reason));
+        if (!benchmark) setHistory((current) => ([
+          ...current,
+          { role: 'user', content: trimmed },
+          { role: 'assistant', content: (streamed.trim() || t('aiAssistant.failedTurn')).slice(0, 2000) },
+        ] as ConversationTurn[]).slice(-8));
         const code = reason instanceof AIRequestError && reason.status === 429 ? 'quota' : reason instanceof AIRequestError ? reason.code : reason instanceof Error ? reason.message : 'provider_error';
         if (code.startsWith('webllm_') || code.startsWith('local_') || code === 'mixed_content') setRuntimeStatus({ readiness: 'error', message: code });
         setRequestError(t(`aiAssistant.errors.${code}`, t('aiAssistant.errors.provider_error')));
@@ -298,14 +321,14 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
     if (!preview) return;
     setRequestError('');
     try {
-      const currentAccess = await refresh();
+      const currentAccess = await refresh({ silent: true });
       const capability = previewCapability || suggestCapability;
       const decision = currentAccess?.capabilities.find((item) => item.capability === capability);
       if (!decision?.allowed) throw new Error('capability_denied');
       const fingerprint = await adapter.getFingerprint();
       appendDebug('client-validator', 'apply.fingerprint_compared', { suggestion: suggestionBase(preview.suggestion), current: fingerprint });
       if (fingerprint !== suggestionBase(preview.suggestion)) throw new Error('stale_suggestion');
-      await adapter.previewSuggestion(preview.suggestion);
+      await adapter.previewSuggestion(preview.suggestion, lastRequest?.question || '');
       appendDebug('client-validator', 'apply.revalidated', preview.suggestion);
       await adapter.applySuggestion(preview.suggestion);
       appendDebug('client', 'apply.completed', { capability, suggestion: preview.suggestion });
@@ -316,6 +339,22 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
       setRequestError(t(`aiAssistant.errors.${code}`, t('aiAssistant.errors.invalid_suggestion')));
       setConfirmOpen(false); setStatus('error');
     }
+  };
+
+  const declinePreview = () => {
+    setPreview(null);
+    setPreviewCapability(null);
+    onPreviewStageChange?.(null);
+    setOutput(t('aiAssistant.declined'));
+  };
+
+  const modifyPreview = () => {
+    onPreviewStageChange?.(null);
+    setPreview(null);
+    setPreviewCapability(null);
+    setMode('suggest');
+    setQuestion(t('aiAssistant.modifyPrompt'));
+    window.requestAnimationFrame(() => questionRef.current?.focus());
   };
 
   const panel = <Paper id="fossbot-buddy-panel" role="dialog" aria-label={t('aiAssistant.title')} elevation={8} sx={{ width: '100%', boxSizing: 'border-box', p: 2, maxHeight: 'calc(100vh - 40px)', overflowY: 'auto', overflowX: 'hidden', borderRadius: 2, '& .MuiButton-root': { minHeight: { xs: 44, md: 36 } }, '& .MuiChip-clickable': { minHeight: { xs: 44, md: 32 } } }}>
@@ -347,22 +386,22 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
       {(explain?.allowed || suggest?.allowed) && <>
         {runtimeStatus.readiness === 'loading' && <Box><Typography variant="caption">{runtimeStatus.message || t('aiAssistant.runtimeLoading')}</Typography><LinearProgress variant={typeof runtimeStatus.progress === 'number' ? 'determinate' : 'indeterminate'} value={(runtimeStatus.progress || 0) * 100} /></Box>}
         {(runtimeStatus.readiness === 'error' || runtimeStatus.readiness === 'unavailable') && <Alert severity="warning">{t(`aiAssistant.errors.${runtimeStatus.message || 'provider_error'}`, t('aiAssistant.errors.provider_error'))}</Alert>}
-        {!singleMode && canSuggest && explain?.allowed && <TextField select size="small" label={t('aiAssistant.task')} value={mode} onChange={(event) => setMode(event.target.value as RequestMode)} disabled={status === 'streaming'}>
-          <MenuItem value="explain">{t('aiAssistant.tasks.explain')}</MenuItem>
-          <MenuItem value="suggest">{t('aiAssistant.tasks.suggest')}</MenuItem>
-        </TextField>}
         {unavailableReason && <Alert severity="info">{unavailableReason}</Alert>}
-        <TextField label={t('aiAssistant.message')} value={question} onChange={(event) => setQuestion(event.target.value)} multiline minRows={2} inputProps={{ maxLength: 2000 }} disabled={status === 'streaming'} />
+        <TextField inputRef={questionRef} label={t('aiAssistant.message')} value={question} onChange={(event) => setQuestion(event.target.value)} multiline minRows={2} inputProps={{ maxLength: 2000 }} disabled={status === 'streaming'} />
         <Stack direction="row" spacing={1} flexWrap="wrap">
-          <Button variant="contained" startIcon={<IconSparkles size={18} />} disabled={!activeDecision?.allowed || !question.trim() || status === 'streaming'} onClick={() => void run()}>{status === 'streaming' ? t('aiAssistant.streaming') : t('aiAssistant.send')}</Button>
+          {singleMode ? <Button variant="contained" startIcon={<IconSparkles size={18} />} disabled={!activeDecision?.allowed || !question.trim() || status === 'streaming'} onClick={() => void run(question, mode)}>{t('aiAssistant.actions.send')}</Button> : <>
+            {explain?.allowed && <Button variant="contained" startIcon={<IconSparkles size={18} />} disabled={!question.trim() || status === 'streaming'} onClick={() => void run(question, 'explain')}>{t('aiAssistant.actions.help')}</Button>}
+            {canSuggest && <Button variant="outlined" disabled={!question.trim() || status === 'streaming'} onClick={() => void run(question, 'suggest')}>{t('aiAssistant.actions.change')}</Button>}
+          </>}
           {status === 'streaming' && <Button color="error" onClick={() => { runtimeRef.current?.cancel(); abortRef.current?.abort(); setStatus('stopped'); }}>{t('aiAssistant.stop')}</Button>}
           {(status === 'error' || status === 'stopped') && lastRequest && <Button onClick={() => void run(lastRequest.question, lastRequest.mode, false, undefined, Boolean(lastRequest.benchmark))}>{t('aiAssistant.retry')}</Button>}
         </Stack>
         {status === 'stopped' && <Alert severity="info">{t('aiAssistant.stopped')}</Alert>}
         {requestError && <Alert severity="error">{requestError}</Alert>}
         {isAdmin && debugEnabled && <AdminDebugTrace entries={debugEntries} onClear={clearDebug} />}
-        {(output || status === 'streaming') && <Box ref={outputRef} tabIndex={0} aria-live="polite" sx={{ maxHeight: 280, overflowY: 'auto', overscrollBehavior: 'contain' }}><Stack direction="row" spacing={1} alignItems="center"><Chip size="small" color="secondary" label={t('aiAssistant.generated')} />{attribution && <Typography variant="caption" color="text.secondary" sx={{ overflowWrap: 'anywhere' }}>{attribution.provider} · {attribution.model}</Typography>}</Stack><Box sx={{ mt: 1, overflowWrap: 'anywhere', '& > :first-of-type': { mt: 0 }, '& > :last-child': { mb: 0 }, '& p': { my: 1 }, '& ul, & ol': { my: 1, pl: 3 }, '& blockquote': { mx: 0, pl: 1.5, borderLeft: 3, borderColor: 'divider', color: 'text.secondary' }, '& pre': { p: 1.25, overflowX: 'auto', bgcolor: 'action.hover', borderRadius: 1 }, '& code': { fontFamily: 'monospace', fontSize: '0.875em' }, '& table': { display: 'block', maxWidth: '100%', overflowX: 'auto', borderCollapse: 'collapse' }, '& th, & td': { px: 1, py: 0.5, border: 1, borderColor: 'divider' } }}><ReactMarkdown remarkPlugins={[remarkGfm]}>{output || t('aiAssistant.waiting')}</ReactMarkdown></Box></Box>}
-        {preview && <Paper variant="outlined" sx={{ p: 1.5 }}><Typography variant="subtitle2">{t('aiAssistant.preview')}</Typography><Typography sx={{ my: 1 }}>{preview.summary}</Typography><Divider />{preview.kind === 'lesson' ? <Stack spacing={1.25} sx={{ mt: 1 }}><Box><Typography variant="caption" color="text.secondary">{t('aiAssistant.authoring.changes')}</Typography><Stack direction="row" gap={0.5} flexWrap="wrap" sx={{ mt: 0.5 }}>{preview.changes?.map((change, index) => <Chip key={`${change}-${index}`} size="small" label={t(`aiAssistant.authoring.operations.${change}`, change)} />)}</Stack></Box><Box><Typography variant="caption" color="text.secondary">{t('aiAssistant.authoring.studentVisible')}</Typography><Box component="pre" tabIndex={0} sx={{ mt: 0.5, p: 1, maxHeight: 160, overflow: 'auto', bgcolor: 'action.hover', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{preview.studentVisible}</Box></Box>{preview.teacherOnly && <Alert severity="warning"><Typography variant="caption" fontWeight={700}>{t('aiAssistant.authoring.teacherOnly')}</Typography><Box component="pre" tabIndex={0} sx={{ m: 0, mt: 0.5, maxHeight: 130, overflow: 'auto', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{preview.teacherOnly}</Box></Alert>}{preview.validation?.length ? <Alert severity="warning">{t('aiAssistant.authoring.validationIssues', { count: preview.validation.length })}</Alert> : <Alert severity="success">{t('aiAssistant.authoring.validationPass')}</Alert>}</Stack> : preview.kind === 'stage' ? <StageSuggestionPreview preview={preview} onPreviewLiveToggle={onPreviewStageChange} /> : <><Typography variant="caption" color="text.secondary">{preview.kind === 'python' ? t('aiAssistant.pythonDiff') : t('aiAssistant.generatedPython')}</Typography><Box component="pre" tabIndex={0} sx={{ mt: 1, p: 1, maxHeight: 180, overflow: 'auto', bgcolor: 'action.hover', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{preview.kind === 'python' ? preview.after : preview.detail}</Box></>}<Button sx={{ mt: 1 }} variant="contained" onClick={() => setConfirmOpen(true)}>{t('aiAssistant.apply')}</Button></Paper>}
+        {status === 'streaming' && !output && <Paper variant="outlined" role="status" aria-live="polite" sx={{ p: 1.5, bgcolor: 'action.hover' }}><Stack direction="row" spacing={1.25} alignItems="center"><CircularProgress size={20} /><Box><Typography variant="body2" fontWeight={700}>{t(`aiAssistant.progress.${requestStage}`)}</Typography><Typography variant="caption" color="text.secondary">{waitingSeconds >= 10 ? t('aiAssistant.progress.longWait') : t('aiAssistant.progress.safe')}</Typography></Box></Stack></Paper>}
+        {output && <Box ref={outputRef} tabIndex={0} aria-live="polite" sx={{ maxHeight: 280, overflowY: 'auto', overscrollBehavior: 'contain' }}><Chip size="small" color="secondary" label={t('aiAssistant.generated')} /><Box sx={{ mt: 1, overflowWrap: 'anywhere', '& > :first-of-type': { mt: 0 }, '& > :last-child': { mb: 0 }, '& p': { my: 1 }, '& ul, & ol': { my: 1, pl: 3 }, '& blockquote': { mx: 0, pl: 1.5, borderLeft: 3, borderColor: 'divider', color: 'text.secondary' }, '& pre': { p: 1.25, overflowX: 'auto', bgcolor: 'action.hover', borderRadius: 1 }, '& code': { fontFamily: 'monospace', fontSize: '0.875em' }, '& table': { display: 'block', maxWidth: '100%', overflowX: 'auto', borderCollapse: 'collapse' }, '& th, & td': { px: 1, py: 0.5, border: 1, borderColor: 'divider' } }}><ReactMarkdown remarkPlugins={[remarkGfm]}>{output}</ReactMarkdown></Box></Box>}
+        {preview && <Paper variant="outlined" sx={{ p: 1.5 }}><Typography variant="subtitle2">{t('aiAssistant.preview')}</Typography><Typography sx={{ my: 1 }}>{preview.summary}</Typography><Divider />{preview.kind === 'lesson' ? <><Box sx={{ mt: 1 }}><Typography variant="caption" color="text.secondary">{t('aiAssistant.authoring.changes')}</Typography><Stack direction="row" gap={0.5} flexWrap="wrap" sx={{ mt: 0.5 }}>{preview.changes?.map((change, index) => <Chip key={`${change}-${index}`} size="small" label={t(`aiAssistant.authoring.operations.${change}`, change)} />)}</Stack></Box><LessonSuggestionPreview preview={preview} /></> : preview.kind === 'stage' ? <StageSuggestionPreview preview={preview} onPreviewLiveToggle={onPreviewStageChange} /> : <><Typography variant="caption" color="text.secondary">{preview.kind === 'python' ? t('aiAssistant.pythonDiff') : t('aiAssistant.generatedPython')}</Typography><Box component="pre" tabIndex={0} sx={{ mt: 1, p: 1, maxHeight: 180, overflow: 'auto', bgcolor: 'action.hover', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{preview.kind === 'python' ? preview.after : preview.detail}</Box></>}<Stack direction="row" spacing={1} flexWrap="wrap" sx={{ mt: 1 }}><Button variant="contained" onClick={() => setConfirmOpen(true)}>{t('aiAssistant.apply')}</Button>{preview.kind === 'stage' && <><Button variant="outlined" onClick={modifyPreview}>{t('aiAssistant.modify')}</Button><Button color="inherit" onClick={declinePreview}>{t('aiAssistant.decline')}</Button></>}</Stack></Paper>}
       </>}
     </Stack>
   </Paper>;
