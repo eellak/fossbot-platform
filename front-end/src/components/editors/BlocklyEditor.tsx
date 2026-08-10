@@ -71,8 +71,6 @@ const BlocklyEditorComponent = forwardRef<BlocklyEditorHandle, BlocklyEditorProp
   const theme = customizer.activeMode === 'dark' ? DarkTheme : LightTheme;
 
   useEffect(() => {
-    console.log('Current Color:', customizer.activeMode);
-
     const handleLanguageChange = () => {
       const currentLanguage = i18n.language;
 

@@ -47,6 +47,7 @@ export interface AIPublicProvider {
 export interface AIInstanceSettings {
   enabled: boolean;
   reportLocalUsage: boolean;
+  usageRetentionDays: number;
   defaultProviderId?: number | null;
   requestLimit?: number | null;
   tokenLimit?: number | null;

@@ -49,13 +49,21 @@ def test_provider_models():
 @router.post("/test/mock/v1/chat/completions", include_in_schema=False)
 def test_provider_stream(payload: dict = Body(...)):
     require_test_provider()
-    if payload.get("model") != "fossbot-test" or not payload.get("stream"):
-        raise HTTPException(status_code=422, detail="The test-only provider requires model fossbot-test with streaming enabled")
+    if payload.get("model") != "fossbot-test":
+        raise HTTPException(status_code=422, detail="The test-only provider requires model fossbot-test")
 
     messages = payload.get("messages") or []
     prompt = "\n".join(str(item.get("content") or "") for item in messages if isinstance(item, dict))
     if "[mock:rate-limit]" in prompt:
         raise HTTPException(status_code=429, detail="Deterministic test-only rate limit")
+    if not payload.get("stream"):
+        return {
+            "id": "fossbot-test-connection",
+            "object": "chat.completion",
+            "model": "fossbot-test",
+            "choices": [{"index": 0, "message": {"role": "assistant", "content": "OK"}, "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": 4, "completion_tokens": 1},
+        }
 
     def prompt_value(label: str, default: str = "none") -> str:
         marker = f"{label}: '"

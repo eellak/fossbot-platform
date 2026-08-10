@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 
 USAGE_WINDOW_SECONDS = 3_600
+DEFAULT_USAGE_RETENTION_DAYS = 30
 
 
 class QuotaError(ValueError):
@@ -17,6 +18,17 @@ class QuotaError(ValueError):
         self.code = code
         self.safe_message = message
         self.retry_after = retry_after
+
+
+def purge_expired_usage(
+    db: Session,
+    retention_days: int,
+    *,
+    now: Optional[datetime.datetime] = None,
+) -> int:
+    cutoff = (now or datetime.datetime.utcnow()) - datetime.timedelta(days=retention_days)
+    deleted = db.query(AIUsageEvent).filter(AIUsageEvent.started_at < cutoff).delete(synchronize_session=False)
+    return int(deleted or 0)
 
 
 def _usage_totals(query) -> tuple[int, int]:
@@ -75,6 +87,8 @@ def record_usage(
     output_tokens: Optional[int] = None,
 ) -> None:
     completed_at = datetime.datetime.utcnow()
+    settings = db.query(AIInstanceSettings).filter(AIInstanceSettings.id == 1).first()
+    purge_expired_usage(db, settings.usage_retention_days if settings else DEFAULT_USAGE_RETENTION_DAYS, now=completed_at)
     db.add(AIUsageEvent(
         user_id=user_id,
         provider_id=provider.id,

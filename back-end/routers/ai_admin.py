@@ -23,6 +23,7 @@ from utils.ai.capabilities import AI_ADMIN_SCHEMA_VERSION, CAPABILITIES, CAPABIL
 from utils.ai.providers import hosted_provider
 from utils.ai.providers.base import ProviderError
 from utils.ai.secrets import decrypt_ai_secret, encrypt_ai_secret
+from utils.ai.usage import purge_expired_usage
 
 
 router = APIRouter(prefix="/api/admin/ai", tags=["ai-admin"])
@@ -216,6 +217,7 @@ class SettingsUpdate(APIModel):
     request_limit: Optional[int] = Field(default=None, ge=1)
     token_limit: Optional[int] = Field(default=None, ge=1)
     report_local_usage: bool = False
+    usage_retention_days: int = Field(default=30, ge=1, le=365)
 
 
 class PolicyUpdate(APIModel):
@@ -272,6 +274,7 @@ def settings_payload(settings: AIInstanceSettings) -> dict:
         "requestLimit": settings.request_limit,
         "tokenLimit": settings.token_limit,
         "reportLocalUsage": settings.report_local_usage,
+        "usageRetentionDays": settings.usage_retention_days,
         "registryVersion": settings.registry_version,
         "updatedAt": settings.updated_at,
     }
@@ -467,8 +470,10 @@ def update_settings(request: SettingsUpdate, current_user: User = Depends(get_cu
     settings.request_limit = request.request_limit
     settings.token_limit = request.token_limit
     settings.report_local_usage = request.report_local_usage
+    settings.usage_retention_days = request.usage_retention_days
     settings.registry_version = CAPABILITY_REGISTRY_VERSION
     settings.updated_by_id = current_user.id
+    purge_expired_usage(db, request.usage_retention_days)
     db.commit()
     db.refresh(settings)
     return settings_payload(settings)

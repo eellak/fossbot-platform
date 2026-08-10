@@ -1,10 +1,22 @@
+from __future__ import annotations
+
 import logging
+import os
 
 from models.models import UserRole
 from sqlalchemy.orm import Session
 from utils.utils_hash import get_hashed
 
-from database.database import Course, Lesson, MarketplaceRoleAssignment, User
+from database.database import (
+    AIInstanceSettings,
+    AIPolicyRule,
+    AIProviderConfig,
+    Course,
+    Lesson,
+    MarketplaceRoleAssignment,
+    User,
+)
+from utils.ai.capabilities import CAPABILITIES, CAPABILITY_REGISTRY_VERSION
 
 logger = logging.getLogger("uvicorn")
 DEV_SAMPLE_TAG = "dev-education-sample"
@@ -54,6 +66,66 @@ DEV_VERIFIER_USERNAME = "dev_teacher_verifier"
 DEV_SAMPLE_PHASE_5_TAG = "education-phase-5"
 DEV_SAMPLE_PHASE_6_TAG = "education-phase-6"
 PHASE_8_EXAMPLE_TAG = "education-phase-8-example"
+DEV_AI_PROVIDER_NAME = "FOSSBot deterministic test provider"
+
+
+def seed_dev_ai_data(db: Session, admin_username: str) -> AIProviderConfig | None:
+    if (
+        os.getenv("ENVIRONMENT", "development").lower() in {"production", "prod"}
+        or os.getenv("AI_ENABLE_TEST_PROVIDER", "false").lower() not in {"1", "true", "yes"}
+    ):
+        return None
+    admin = db.query(User).filter(User.username == admin_username).first()
+    if admin is None:
+        raise ValueError("Development AI seed requires an administrator")
+    provider = db.query(AIProviderConfig).filter(AIProviderConfig.name == DEV_AI_PROVIDER_NAME).first()
+    if provider is None:
+        provider = AIProviderConfig(
+            name=DEV_AI_PROVIDER_NAME,
+            provider_type="openai_compatible",
+            runtime="hosted",
+            enabled=True,
+            model="fossbot-test",
+            base_url="http://localhost:8000/api/ai/test/mock/v1",
+            settings={"version": "1", "path": "chat/completions", "supportsUsage": True, "allowPrivateNetwork": True},
+            request_limit=1_000,
+            token_limit=1_000_000,
+            created_by_id=admin.id,
+            updated_by_id=admin.id,
+        )
+        db.add(provider)
+        db.flush()
+    settings = db.query(AIInstanceSettings).filter(AIInstanceSettings.id == 1).first()
+    if settings is None:
+        settings = AIInstanceSettings(
+            id=1,
+            enabled=True,
+            default_provider_id=provider.id,
+            registry_version=CAPABILITY_REGISTRY_VERSION,
+            updated_by_id=admin.id,
+        )
+        db.add(settings)
+    for capability in CAPABILITIES:
+        existing = db.query(AIPolicyRule).filter(
+            AIPolicyRule.scope_type == "instance",
+            AIPolicyRule.scope_key == "*",
+            AIPolicyRule.capability == capability.id,
+        ).first()
+        if existing is None:
+            db.add(AIPolicyRule(
+                scope_type="instance",
+                scope_key="*",
+                capability=capability.id,
+                effect="allow",
+                provider_ids=[provider.id],
+                runtimes=["hosted"],
+                created_by_id=admin.id,
+                updated_by_id=admin.id,
+            ))
+    db.commit()
+    db.refresh(provider)
+    logger.info("Development AI test provider ready")
+    return provider
 
 
 def seed_dev_test_users(db: Session, password: str) -> list[User]:
@@ -1182,6 +1254,7 @@ def seed_dev_sample_course(db: Session, admin_username: str) -> Course:
 
 def seed_dev_data(db: Session, admin_username: str, test_user_password: str) -> Course:
     seed_dev_test_users(db, test_user_password)
+    seed_dev_ai_data(db, admin_username)
     sample = seed_dev_sample_course(db, admin_username)
     seed_phase_eight_example_courses(db)
     return sample

@@ -260,6 +260,47 @@ def test_local_usage_reporting_is_opt_in_content_free_and_policy_checked(db, use
         assert denied.status_code == 403
 
 
+def test_admin_settings_update_enforces_usage_retention(db, users):
+    student, admin = users[2], users[3]
+    provider = seed_provider(db, admin)
+    settings = AIInstanceSettings(
+        id=1,
+        enabled=True,
+        default_provider_id=provider.id,
+        usage_retention_days=30,
+        registry_version="1",
+        updated_by_id=admin.id,
+    )
+    old = AIUsageEvent(
+        user_id=student.id,
+        provider_id=provider.id,
+        capability="code.explain",
+        provider_name=provider.name,
+        model=provider.model,
+        runtime=provider.runtime,
+        request_id="expired_route_usage_1234",
+        started_at=datetime.datetime.utcnow() - datetime.timedelta(days=8),
+        completed_at=datetime.datetime.utcnow() - datetime.timedelta(days=8),
+        outcome="completed",
+        policy_version="1",
+        prompt_version="fossbot-assistant-v1",
+    )
+    db.add_all([settings, old])
+    db.commit()
+    old_request_id = old.request_id
+
+    with client_for(db, admin) as client:
+        response = client.put("/api/admin/ai/settings", json={
+            "enabled": True,
+            "defaultProviderId": provider.id,
+            "reportLocalUsage": False,
+            "usageRetentionDays": 7,
+        })
+    assert response.status_code == 200
+    assert response.json()["usageRetentionDays"] == 7
+    assert db.query(AIUsageEvent).filter(AIUsageEvent.request_id == old_request_id).first() is None
+
+
 def test_provider_secret_create_preserve_rotate_and_clear(db, users, monkeypatch):
     admin = users[3]
     monkeypatch.setenv("SECRET_KEY", "deterministic-test-secret")
@@ -521,10 +562,12 @@ def test_deterministic_provider_is_explicitly_test_only(db, users, monkeypatch):
     with client_for(db, student) as client:
         models = client.get("/api/ai/test/mock/v1/models")
         streamed = client.post("/api/ai/test/mock/v1/chat/completions", json={"model": "fossbot-test", "stream": True})
+        connection = client.post("/api/ai/test/mock/v1/chat/completions", json={"model": "fossbot-test", "stream": False})
     assert models.status_code == 200
     assert models.json()["data"][0]["owned_by"] == "test-only"
     assert "Deterministic test-only provider" in streamed.text
     assert "data: [DONE]" in streamed.text
+    assert connection.json()["choices"][0]["message"]["content"] == "OK"
 
 
 def test_disconnect_closes_upstream_and_records_cancellation(db, users, monkeypatch):

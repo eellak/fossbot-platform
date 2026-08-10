@@ -1,14 +1,16 @@
-from database.database import Course, CourseRelease, Lesson, MarketplaceRoleAssignment, User
+from database.database import AIInstanceSettings, AIPolicyRule, AIProviderConfig, Course, CourseRelease, Lesson, MarketplaceRoleAssignment, User
 from database.dev_seed import (
     DEV_SAMPLE_PHASE_5_TAG,
     DEV_SAMPLE_PHASE_6_TAG,
     DEV_SAMPLE_TAG,
     DEV_TEST_USERS,
+    DEV_AI_PROVIDER_NAME,
     PHASE_8_EXAMPLE_TAG,
     phase_eight_example_definitions,
     seed_phase_eight_example_courses,
     seed_dev_sample_course,
     seed_dev_test_users,
+    seed_dev_ai_data,
 )
 from models.models import UserRole
 from utils.utils_hash import verify_hashed
@@ -126,6 +128,27 @@ def test_dev_users_include_admin_two_teachers_one_verifier_and_two_students(db):
     verifier = next(user for user in seeded if user.username == "dev_teacher_verifier")
     assignments = db.query(MarketplaceRoleAssignment).filter(MarketplaceRoleAssignment.role == "verifier").all()
     assert [assignment.user_id for assignment in assignments] == [verifier.id]
+
+
+def test_dev_ai_seed_is_test_only_complete_and_idempotent(db, users, monkeypatch):
+    *_, admin = users
+    monkeypatch.setenv("AI_ENABLE_TEST_PROVIDER", "true")
+    monkeypatch.setenv("ENVIRONMENT", "development")
+
+    created = seed_dev_ai_data(db, admin.username)
+    seeded_again = seed_dev_ai_data(db, admin.username)
+
+    assert created is not None and seeded_again is not None
+    assert created.id == seeded_again.id
+    assert created.name == DEV_AI_PROVIDER_NAME
+    assert created.model == "fossbot-test" and created.enabled is True
+    assert db.query(AIProviderConfig).filter(AIProviderConfig.name == DEV_AI_PROVIDER_NAME).count() == 1
+    settings = db.query(AIInstanceSettings).filter(AIInstanceSettings.id == 1).one()
+    assert settings.enabled is True and settings.default_provider_id == created.id
+    assert db.query(AIPolicyRule).filter(AIPolicyRule.scope_type == "instance").count() == 8
+
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    assert seed_dev_ai_data(db, admin.username) is None
 
 
 def test_phase_eight_examples_publish_three_courses_and_eight_lessons(db, users):

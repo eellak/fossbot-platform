@@ -33,7 +33,8 @@ export class LocalCompatibleRuntime implements AIAssistantRuntime {
     this.controller = controller;
     const abort = () => controller.abort();
     signal?.addEventListener('abort', abort, { once: true });
-    const timeout = window.setTimeout(abort, REQUEST_TIMEOUT_MS);
+    let timedOut = false;
+    const timeout = window.setTimeout(() => { timedOut = true; controller.abort(); }, REQUEST_TIMEOUT_MS);
     onStatus({ readiness: 'ready' });
     onEvent({ type: 'start', data: { provider: this.provider.name, model: configured.model, runtime: 'user_local' } });
     try {
@@ -77,6 +78,7 @@ export class LocalCompatibleRuntime implements AIAssistantRuntime {
       if (!parsedFrames) throw new Error('local_malformed_stream');
       onEvent({ type: 'done', data: {} });
     } catch (reason) {
+      if (timedOut) throw new Error('local_timeout');
       throw localError(reason, endpoint);
     } finally {
       window.clearTimeout(timeout);
@@ -103,6 +105,8 @@ export async function testLocalCompatibleConnection(provider: AIPublicProvider, 
   if (!response.ok) throw new Error(response.status === 404 ? 'local_model_unavailable' : 'local_endpoint_error');
   const text = await response.text();
   if (text.length > 64_000) throw new Error('local_response_limit');
-  const payload = JSON.parse(text);
+  let payload: any;
+  try { payload = JSON.parse(text); }
+  catch { throw new Error('local_malformed_stream'); }
   if (typeof payload?.choices?.[0]?.message?.content !== 'string') throw new Error('local_malformed_stream');
 }

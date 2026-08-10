@@ -17,11 +17,24 @@ const backendUrl: string = process.env.REACT_APP_BACKEND_URL;
 
 export class AIRequestError extends Error {
   status: number;
-  constructor(message: string, status: number) {
+  code: string;
+  constructor(message: string, status: number, code = 'provider_error') {
     super(message);
     this.name = 'AIRequestError';
     this.status = status;
+    this.code = code;
   }
+}
+
+export function parseAIStreamFrame(frame: string): AIStreamEvent {
+  const eventType = frame.split('\n').find((line) => line.startsWith('event:'))?.slice(6).trim();
+  const data = frame.split('\n').filter((line) => line.startsWith('data:')).map((line) => line.slice(5).trim()).join('\n');
+  if (!eventType || !data || !['start', 'text_delta', 'suggestion', 'usage', 'done', 'error'].includes(eventType)) throw new AIRequestError('Malformed assistant stream', 502, 'malformed_response');
+  let payload: unknown;
+  try { payload = JSON.parse(data); }
+  catch { throw new AIRequestError('Malformed assistant stream', 502, 'malformed_response'); }
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) throw new AIRequestError('Malformed assistant stream', 502, 'malformed_response');
+  return { type: eventType as AIStreamEvent['type'], data: payload as Record<string, unknown> };
 }
 
 function headers(token: string) {
@@ -32,7 +45,11 @@ async function parse<T>(response: Response): Promise<T> {
   const payload = await response.json().catch(() => null);
   if (!response.ok) {
     const detail = payload?.detail;
-    throw new AIRequestError(typeof detail === 'string' ? detail : detail?.detail || 'AI request failed', response.status);
+    throw new AIRequestError(
+      typeof detail === 'string' ? detail : detail?.message || 'AI request failed',
+      response.status,
+      typeof detail === 'object' && typeof detail?.code === 'string' ? detail.code : 'provider_error',
+    );
   }
   return payload as T;
 }
@@ -53,7 +70,7 @@ export function updateAIProvider(token: string, providerId: number, input: Parti
   return fetch(`${backendUrl}/api/admin/ai/providers/${providerId}`, { method: 'PUT', headers: headers(token), body: JSON.stringify(input) }).then(parse<AIProviderConfig>);
 }
 
-export function updateAISettings(token: string, settings: Pick<AIInstanceSettings, 'enabled' | 'defaultProviderId' | 'requestLimit' | 'tokenLimit' | 'reportLocalUsage'>): Promise<AIInstanceSettings> {
+export function updateAISettings(token: string, settings: Pick<AIInstanceSettings, 'enabled' | 'defaultProviderId' | 'requestLimit' | 'tokenLimit' | 'reportLocalUsage' | 'usageRetentionDays'>): Promise<AIInstanceSettings> {
   return fetch(`${backendUrl}/api/admin/ai/settings`, { method: 'PUT', headers: headers(token), body: JSON.stringify(settings) }).then(parse<AIInstanceSettings>);
 }
 
@@ -113,16 +130,33 @@ export async function streamAIAssist(
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
-  while (true) {
-    const { done, value } = await reader.read();
-    buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
-    const frames = buffer.split('\n\n');
-    buffer = frames.pop() || '';
-    for (const frame of frames) {
-      const eventType = frame.split('\n').find((line) => line.startsWith('event:'))?.slice(6).trim();
-      const data = frame.split('\n').filter((line) => line.startsWith('data:')).map((line) => line.slice(5).trim()).join('\n');
-      if (eventType && data) onEvent({ type: eventType as AIStreamEvent['type'], data: JSON.parse(data) });
+  let sawStart = false;
+  let sawTerminal = false;
+  const dispatch = (frame: string) => {
+    const event = parseAIStreamFrame(frame);
+    if (sawTerminal || (!sawStart && event.type !== 'start') || (sawStart && event.type === 'start')) throw new AIRequestError('Malformed assistant stream', 502, 'malformed_response');
+    if (event.type === 'start') sawStart = true;
+    if (event.type === 'done' || event.type === 'error') sawTerminal = true;
+    onEvent(event);
+  };
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
+      buffer = buffer.replace(/\r\n/g, '\n');
+      const frames = buffer.split('\n\n');
+      buffer = frames.pop() || '';
+      frames.filter((frame) => frame.trim()).forEach(dispatch);
+      if (done) {
+        if (buffer.trim()) dispatch(buffer);
+        break;
+      }
     }
-    if (done) break;
+  } catch (error) {
+    await reader.cancel().catch(() => undefined);
+    throw error;
+  } finally {
+    reader.releaseLock();
   }
+  if (!sawStart || !sawTerminal) throw new AIRequestError('Incomplete assistant stream', 502, 'malformed_response');
 }

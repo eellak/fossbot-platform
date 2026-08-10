@@ -33,6 +33,7 @@ def test_ai_foundation_upgrade_and_downgrade_on_sqlite(tmp_path):
     usage_columns = {column["name"] for column in inspector.get_columns("ai_usage_events")}
     settings_columns = {column["name"] for column in inspector.get_columns("ai_instance_settings")}
     assert "report_local_usage" in settings_columns
+    assert "usage_retention_days" in settings_columns
     forbidden = {"prompt", "response", "code", "blockly_xml", "lesson_content", "stage_content", "student_answer", "telemetry", "secret"}
     assert forbidden.isdisjoint(usage_columns)
 

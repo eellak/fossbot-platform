@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
   Alert, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, Divider,
@@ -86,26 +86,26 @@ export default function AIAdminPage() {
       {success && <Alert severity="success" sx={{ mb: 2 }} onClose={() => setSuccess('')}>{success}</Alert>}
       <Paper variant="outlined" sx={{ overflow: 'hidden' }}>
         <Tabs value={tab} onChange={(_, value) => setTab(value)} variant="scrollable" scrollButtons="auto" aria-label={t('aiAdmin.tabs.label')}>
-          <Tab label={t('aiAdmin.tabs.providers')} />
-          <Tab label={t('aiAdmin.tabs.defaults')} />
-          <Tab label={t('aiAdmin.tabs.overrides')} />
-          <Tab label={t('aiAdmin.tabs.inspector')} />
-          <Tab label={t('aiAdmin.tabs.probe')} />
+          <Tab id="ai-admin-tab-0" aria-controls="ai-admin-panel-0" label={t('aiAdmin.tabs.providers')} />
+          <Tab id="ai-admin-tab-1" aria-controls="ai-admin-panel-1" label={t('aiAdmin.tabs.defaults')} />
+          <Tab id="ai-admin-tab-2" aria-controls="ai-admin-panel-2" label={t('aiAdmin.tabs.overrides')} />
+          <Tab id="ai-admin-tab-3" aria-controls="ai-admin-panel-3" label={t('aiAdmin.tabs.inspector')} />
+          <Tab id="ai-admin-tab-4" aria-controls="ai-admin-panel-4" label={t('aiAdmin.tabs.probe')} />
         </Tabs>
         <Divider />
-        <Box role="tabpanel" hidden={tab !== 0} sx={{ p: { xs: 2, md: 3 } }}>
+        <Box role="tabpanel" id="ai-admin-panel-0" aria-labelledby="ai-admin-tab-0" hidden={tab !== 0} sx={{ p: { xs: 2, md: 3 } }}>
           {tab === 0 && <ProvidersTab data={data} token={token} saving={saving} run={run} openCreate={() => { setEditingProvider(null); setProviderDialog(true); }} openEdit={(provider) => { setEditingProvider(provider); setProviderDialog(true); }} t={t} />}
         </Box>
-        <Box role="tabpanel" hidden={tab !== 1} sx={{ p: { xs: 2, md: 3 } }}>
+        <Box role="tabpanel" id="ai-admin-panel-1" aria-labelledby="ai-admin-tab-1" hidden={tab !== 1} sx={{ p: { xs: 2, md: 3 } }}>
           {tab === 1 && <DefaultsTab data={data} token={token} saving={saving} run={run} t={t} />}
         </Box>
-        <Box role="tabpanel" hidden={tab !== 2} sx={{ p: { xs: 2, md: 3 } }}>
+        <Box role="tabpanel" id="ai-admin-panel-2" aria-labelledby="ai-admin-tab-2" hidden={tab !== 2} sx={{ p: { xs: 2, md: 3 } }}>
           {tab === 2 && <OverridesTab data={data} token={token} saving={saving} run={run} t={t} />}
         </Box>
-        <Box role="tabpanel" hidden={tab !== 3} sx={{ p: { xs: 2, md: 3 } }}>
+        <Box role="tabpanel" id="ai-admin-panel-3" aria-labelledby="ai-admin-tab-3" hidden={tab !== 3} sx={{ p: { xs: 2, md: 3 } }}>
           {tab === 3 && <InspectorTab data={data} token={token} t={t} />}
         </Box>
-        <Box role="tabpanel" hidden={tab !== 4} sx={{ p: { xs: 2, md: 3 } }}>
+        <Box role="tabpanel" id="ai-admin-panel-4" aria-labelledby="ai-admin-tab-4" hidden={tab !== 4} sx={{ p: { xs: 2, md: 3 } }}>
           {tab === 4 && <ProbeTab data={data} token={token} t={t} />}
         </Box>
       </Paper>
@@ -140,19 +140,21 @@ function ProvidersTab({ data, token, saving, run, openCreate, openEdit, t }: { d
 function DefaultsTab({ data, token, saving, run, t }: { data: AIAdminBootstrap; token: string; saving: boolean; run: RunAction; t: any }) {
   const [enabled, setEnabled] = useState(data.settings.enabled);
   const [reportLocalUsage, setReportLocalUsage] = useState(data.settings.reportLocalUsage);
+  const [usageRetentionDays, setUsageRetentionDays] = useState(data.settings.usageRetentionDays);
   const [defaultProviderId, setDefaultProviderId] = useState<number | ''>(data.providers.some((provider) => provider.enabled && provider.id === data.settings.defaultProviderId) ? data.settings.defaultProviderId! : '');
-  const saveSettings = () => run(() => updateAISettings(token, { enabled, reportLocalUsage, defaultProviderId: defaultProviderId || null, requestLimit: data.settings.requestLimit, tokenLimit: data.settings.tokenLimit }), t('aiAdmin.messages.settingsSaved'));
+  const saveSettings = () => run(() => updateAISettings(token, { enabled, reportLocalUsage, usageRetentionDays, defaultProviderId: defaultProviderId || null, requestLimit: data.settings.requestLimit, tokenLimit: data.settings.tokenLimit }), t('aiAdmin.messages.settingsSaved'));
   return <Stack spacing={3}>
     <Box>
       <SectionHeading title={t('aiAdmin.instance.title')} description={t('aiAdmin.instance.description')} />
-      <Stack direction={{ xs: 'column', sm: 'row' }} alignItems={{ sm: 'center' }} gap={2}>
+      <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', alignItems: 'center', gap: 2 }}>
         <FormControlLabel control={<Switch checked={enabled} onChange={(event) => setEnabled(event.target.checked)} />} label={enabled ? t('aiAdmin.instance.enabled') : t('aiAdmin.instance.disabled')} />
         <TextField select size="small" label={t('aiAdmin.instance.defaultProvider')} value={defaultProviderId} onChange={(event) => setDefaultProviderId(event.target.value === '' ? '' : Number(event.target.value))} sx={{ minWidth: 240 }}>
           <MenuItem value="">{t('aiAdmin.instance.automatic')}</MenuItem>{data.providers.filter((provider) => provider.enabled).map((provider) => <MenuItem key={provider.id} value={provider.id}>{provider.name}</MenuItem>)}
         </TextField>
         <FormControlLabel control={<Switch checked={reportLocalUsage} onChange={(event) => setReportLocalUsage(event.target.checked)} />} label={t('aiAdmin.instance.reportLocalUsage')} />
-        <Button variant="contained" disabled={saving} onClick={() => void saveSettings()}>{saving ? t('saving') : t('save')}</Button>
-      </Stack>
+        <TextField type="number" label={t('aiAdmin.instance.usageRetentionDays')} value={usageRetentionDays} onChange={(event) => setUsageRetentionDays(Number(event.target.value))} inputProps={{ min: 1, max: 365 }} helperText={t('aiAdmin.instance.usageRetentionHelp')} />
+        <Button variant="contained" disabled={saving || usageRetentionDays < 1 || usageRetentionDays > 365} onClick={() => void saveSettings()}>{saving ? t('saving') : t('save')}</Button>
+      </Box>
       {!enabled && <Alert severity="warning" sx={{ mt: 2 }}>{t('aiAdmin.instance.absolute')}</Alert>}
     </Box>
     <Divider />
@@ -228,28 +230,35 @@ function InspectorTab({ data, token, t }: { data: AIAdminBootstrap; token: strin
 
 function ProbeTab({ data, token, t }: { data: AIAdminBootstrap; token: string; t: any }) {
   const hosted = data.providers.filter((provider) => provider.enabled && provider.runtime === 'hosted');
+  const capabilities = data.capabilities.filter((item) => item.explanationOnly);
   const [providerId, setProviderId] = useState<number | ''>(hosted[0]?.id || '');
   const [capability, setCapability] = useState<AICapabilityId>('code.explain');
   const [question, setQuestion] = useState('');
   const [output, setOutput] = useState('');
   const [status, setStatus] = useState<'idle' | 'streaming' | 'done' | 'error'>('idle');
+  const controllerRef = useRef<AbortController | null>(null);
+  useEffect(() => () => controllerRef.current?.abort(), []);
   const runProbe = async () => {
     setOutput(''); setStatus('streaming');
+    const controller = new AbortController();
+    controllerRef.current = controller;
     try {
       await streamAIAssist(token, { capability, providerId: providerId || undefined, surface: 'probe', question, context: { note: 'Administrator transport probe' } }, (event) => {
         if (event.type === 'text_delta') setOutput((current) => current + String(event.data.text || ''));
         if (event.type === 'error') setStatus('error');
         if (event.type === 'done') setStatus('done');
-      });
-    } catch { setStatus('error'); }
+      }, controller.signal);
+    } catch (reason) { setStatus(reason instanceof DOMException && reason.name === 'AbortError' ? 'idle' : 'error'); }
+    finally { if (controllerRef.current === controller) controllerRef.current = null; }
   };
   return <>
     <SectionHeading title={t('aiAdmin.probe.title')} description={t('aiAdmin.probe.description')} />
     <Stack direction={{ xs: 'column', md: 'row' }} gap={2} alignItems={{ md: 'flex-end' }}>
       <TextField select label={t('aiAdmin.probe.provider')} value={providerId} onChange={(event) => setProviderId(Number(event.target.value))} sx={{ minWidth: 220 }}>{hosted.map((provider) => <MenuItem key={provider.id} value={provider.id}>{provider.name}</MenuItem>)}</TextField>
-      <TextField select label={t('aiAdmin.policy.capability')} value={capability} onChange={(event) => setCapability(event.target.value as AICapabilityId)} sx={{ minWidth: 220 }}>{data.capabilities.map((item) => <MenuItem key={item.id} value={item.id}>{t(`aiAdmin.capabilities.${item.id}`)}</MenuItem>)}</TextField>
+      <TextField select label={t('aiAdmin.policy.capability')} value={capability} onChange={(event) => setCapability(event.target.value as AICapabilityId)} sx={{ minWidth: 220 }}>{capabilities.map((item) => <MenuItem key={item.id} value={item.id}>{t(`aiAdmin.capabilities.${item.id}`)}</MenuItem>)}</TextField>
       <TextField fullWidth label={t('aiAdmin.probe.question')} value={question} onChange={(event) => setQuestion(event.target.value)} inputProps={{ maxLength: 2000 }} />
       <Button variant="contained" disabled={!providerId || !question.trim() || status === 'streaming'} onClick={() => void runProbe()}>{status === 'streaming' ? t('aiAdmin.probe.streaming') : t('aiAdmin.probe.run')}</Button>
+      {status === 'streaming' && <Button color="error" onClick={() => controllerRef.current?.abort()}>{t('aiAdmin.probe.stop')}</Button>}
     </Stack>
     {!hosted.length && <Alert severity="info" sx={{ mt: 2 }}>{t('aiAdmin.probe.noProviders')}</Alert>}
     {status === 'error' && <Alert severity="error" sx={{ mt: 2 }}>{t('aiAdmin.probe.failed')}</Alert>}

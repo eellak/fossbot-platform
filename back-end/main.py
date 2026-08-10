@@ -433,8 +433,6 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: SessionLocal
 
 @app.post("/token")
 async def login_for_access_token( login_request: LoginRequest,  db: SessionLocal = Depends(get_db)):
-    
-    logger.info(f"Request body: {login_request}")
     user = authenticate_user(db, login_request.username, login_request.password)
     
     if not user:
