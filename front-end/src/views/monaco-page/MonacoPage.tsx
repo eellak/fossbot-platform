@@ -11,7 +11,7 @@ import {
 } from '@mui/material';
 import Spinner from '../spinner/Spinner';
 import PageContainer from 'src/components/container/PageContainer';
-import MonacoEditorComponent from 'src/components/editors/MonacoEditor';
+import MonacoEditorComponent, { type MonacoEditorHandle } from 'src/components/editors/MonacoEditor';
 import Buttons from 'src/components/editors/RightColButtons';
 import PythonExecutor from 'src/components/editors/PythonExecutor';
 import { useAuth } from 'src/authentication/AuthProvider';
@@ -52,11 +52,14 @@ import ExecutionTargetPanel from 'src/components/robot/ExecutionTargetPanel';
 import PhysicalRobotTerminal from 'src/components/robot/PhysicalRobotTerminal';
 import { useRobotConnection } from 'src/robot/RobotConnectionContext';
 import ProjectStageIndicator from 'src/components/editors/ProjectStageIndicator';
+import AssistantPanel, { type AssistantSurfaceAdapter } from 'src/components/ai/AssistantPanel';
+import { fingerprintText } from 'src/ai/fingerprint';
+import { previewPythonSuggestion } from 'src/ai/suggestions/codeSuggestions';
 
-const textart = ` 
-# __   __   __   __   __   __  ___     __      ___       __       
-#|__  /  \\ /__\` /__\` |__) /  \\  |     |__) \\ /  |  |__| /  \\ |\\ | 
-#|    \\__/ .__/ .__/ |__) \\__/  |     |     |   |  |  | \\__/ | \\| 
+const textart = `
+# __   __   __   __   __   __  ___     __      ___       __
+#|__  /  \\ /__\` /__\` |__) /  \\  |     |__) \\ /  |  |__| /  \\ |\\ |
+#|    \\__/ .__/ .__/ |__) \\__/  |     |     |   |  |  | \\__/ | \\|
 
 print("hello world")`;
 
@@ -82,6 +85,8 @@ const MonacoPage: React.FC = () => {
   const [showVideoPlayer, setShowVideoPlayer] = useState(false);
   const runScriptRef = useRef<() => Promise<void>>();
   const stopScriptRef = useRef<() => void>();
+  const editorRef = useRef<MonacoEditorHandle | null>(null);
+  const [runtimeContext, setRuntimeContext] = useState({ output: [] as string[], error: '' });
   const auth = useAuth();
   const { token } = auth;
   const authRef = useRef(auth);
@@ -159,6 +164,12 @@ const MonacoPage: React.FC = () => {
 
   const setStopScriptFunction = useCallback((stopScript: () => void) => {
     stopScriptRef.current = stopScript;
+  }, []);
+
+  const handleExecutionEvent = useCallback((event: { type: 'start' | 'stdout' | 'stderr' | 'complete' | 'stopped'; text?: string }) => {
+    if (event.type === 'start') { setRuntimeContext({ output: [], error: '' }); return; }
+    if (event.type === 'stdout') setRuntimeContext((current) => ({ ...current, output: [...current.output, event.text || ''].slice(-24) }));
+    if (event.type === 'stderr') setRuntimeContext((current) => ({ output: [...current.output, event.text || ''].slice(-24), error: event.text || 'Runtime error' }));
   }, []);
 
   useEffect(() => {
@@ -324,6 +335,32 @@ const MonacoPage: React.FC = () => {
   const isStageConfigLoading =
     stageNeedsAuthenticatedLoad(selectedStage) && initialStageConfig === undefined;
   const selectedStageLabel = selectedStage?.title || [selectedStage?.repoOwner, selectedStage?.repoName].filter(Boolean).join('/');
+  const assistantAdapter: AssistantSurfaceAdapter = {
+    surface: 'python',
+    getFingerprint: async () => fingerprintText(editorRef.current?.getSource() ?? editorValue),
+    getContext: async () => {
+      const source = editorRef.current?.getSource() ?? editorValue;
+      const selection = editorRef.current?.getSelection();
+      return {
+        source,
+        sourceFingerprint: await fingerprintText(source),
+        selection: selection?.text || '',
+        runtimeOutput: runtimeContext.output.join('\n').slice(-2000),
+        runtimeError: runtimeContext.error.slice(-2000),
+        editorType: 'python',
+        ...(projectId ? { projectId: Number(projectId) } : {}),
+        stageSummary: selectedStage ? { title: selectedStageLabel, sourceType: selectedStage.sourceType } : {},
+      };
+    },
+    previewSuggestion: async (suggestion) => {
+      if (suggestion.type !== 'python_replace') throw new Error('invalid_suggestion');
+      return previewPythonSuggestion(suggestion, editorRef.current?.getSource() ?? editorValue);
+    },
+    applySuggestion: async (suggestion) => {
+      if (suggestion.type !== 'python_replace') throw new Error('invalid_suggestion');
+      editorRef.current?.replaceSource(suggestion.replacement);
+    },
+  };
 
   const terminalPanel = (
     <Box
@@ -357,6 +394,7 @@ const MonacoPage: React.FC = () => {
           stopMotion={stopMotion}
           getLightSensor={get_light_sensor}
           drawLine={drawLine}
+          onExecutionEvent={handleExecutionEvent}
         />
       ) : (
         <PhysicalRobotTerminal />
@@ -454,7 +492,7 @@ const MonacoPage: React.FC = () => {
               lg={7}
               height={showVideoPlayer && !isInPIP ? 'calc(150vh - 300px)' : 'calc(120vh - 300px)'}
             >
-              <MonacoEditorComponent code={editorValue} handleGetValue={handleGetValue} />
+              <MonacoEditorComponent ref={editorRef} code={editorValue} handleGetValue={handleGetValue} />
             </Grid>
             <Grid item xs={5} lg={5}>
               {showVideoPlayer && (
@@ -530,6 +568,8 @@ const MonacoPage: React.FC = () => {
           </Grid>
         )}
       </Box>
+
+      {!loading && <Box sx={{ mt: 2 }}><AssistantPanel adapter={assistantAdapter} explainCapability="code.explain" suggestCapability="code.suggest_changes" suggestedPrompts={[t('aiAssistant.prompts.pythonError'), t('aiAssistant.prompts.pythonTrace'), t('aiAssistant.prompts.pythonApi')]} /></Box>}
 
       {showSuccessAlert && <SuccessAlert title={showSuccessAlertText} description={''} />}
 

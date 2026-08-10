@@ -1,5 +1,7 @@
 import asyncio
 import datetime
+import hashlib
+import json
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -214,7 +216,7 @@ class FakeHostedProvider:
         yield ProviderEvent("usage", {"inputTokens": 12, "outputTokens": 4})
 
 
-def enable_streaming(db, admin, student, *, request_limit=None):
+def enable_streaming(db, admin, student, *, request_limit=None, capability="code.explain"):
     provider = seed_provider(db, admin)
     provider.encrypted_secret = None
     provider.request_limit = request_limit
@@ -230,7 +232,7 @@ def enable_streaming(db, admin, student, *, request_limit=None):
         AIPolicyRule(
             scope_type="role",
             scope_key="user",
-            capability="code.explain",
+            capability=capability,
             effect="allow",
             created_by_id=admin.id,
             updated_by_id=admin.id,
@@ -238,6 +240,16 @@ def enable_streaming(db, admin, student, *, request_limit=None):
     ])
     db.commit()
     return provider
+
+
+class FakeSuggestionProvider:
+    def __init__(self, payload):
+        self.payload = json.dumps(payload)
+
+    async def stream(self, request):
+        yield ProviderEvent("text_delta", {"text": self.payload[:25]})
+        yield ProviderEvent("text_delta", {"text": self.payload[25:]})
+        yield ProviderEvent("usage", {"inputTokens": 20, "outputTokens": 10})
 
 
 def test_stream_is_normalized_and_records_content_free_usage(db, users, monkeypatch):
@@ -304,6 +316,57 @@ def test_denied_and_over_budget_requests_do_not_invoke_provider(db, users, monke
         })
     assert limited.status_code == 429
     assert calls["count"] == 0
+
+
+def test_python_suggestion_is_typed_and_never_streams_raw_json(db, users, monkeypatch):
+    student, admin = users[2], users[3]
+    provider = enable_streaming(db, admin, student, capability="code.suggest_changes")
+    source = "print('before')"
+    fingerprint = hashlib.sha256(source.encode()).hexdigest()
+    monkeypatch.setattr(ai, "hosted_provider", lambda *args, **kwargs: FakeSuggestionProvider({
+        "version": "1",
+        "type": "python_replace",
+        "baseFingerprint": fingerprint,
+        "replacement": "print('after')\n",
+        "summary": "Use the updated value.",
+    }))
+    with client_for(db, student) as client:
+        response = client.post("/api/ai/assist/stream", json={
+            "capability": "code.suggest_changes",
+            "providerId": provider.id,
+            "surface": "python",
+            "question": "Suggest a small change",
+            "context": {"source": source, "sourceFingerprint": fingerprint},
+        })
+    assert response.status_code == 200
+    assert "event: suggestion" in response.text
+    assert '"type":"python_replace"' in response.text
+    assert "event: text_delta" not in response.text
+    assert "event: done" in response.text
+
+
+def test_invalid_suggestion_emits_safe_error_without_done(db, users, monkeypatch):
+    student, admin = users[2], users[3]
+    provider = enable_streaming(db, admin, student, capability="code.suggest_changes")
+    source = "print('before')"
+    fingerprint = hashlib.sha256(source.encode()).hexdigest()
+    monkeypatch.setattr(ai, "hosted_provider", lambda *args, **kwargs: FakeSuggestionProvider({
+        "version": "1",
+        "type": "python_replace",
+        "baseFingerprint": fingerprint,
+        "replacement": "if :",
+        "summary": "Malformed on purpose.",
+    }))
+    with client_for(db, student) as client:
+        response = client.post("/api/ai/assist/stream", json={
+            "capability": "code.suggest_changes",
+            "providerId": provider.id,
+            "surface": "python",
+            "question": "Suggest a change",
+            "context": {"source": source, "sourceFingerprint": fingerprint},
+        })
+    assert '"code":"invalid_suggestion"' in response.text
+    assert "event: done" not in response.text
 
 
 def test_deterministic_provider_is_explicitly_test_only(db, users, monkeypatch):

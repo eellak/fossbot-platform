@@ -11,9 +11,9 @@ import {
 } from 'src/simulator-adapter/Simulator';
 import { useTranslation } from 'react-i18next';
 
-type Props = { code: string; sessionId: string; hasStage: boolean; hasMission?: boolean; showCommandHelper: boolean; onBeforeRun: (run: () => void) => void; onResetSimulation: () => void; onChangeCamera: () => void };
+type Props = { code: string; sessionId: string; hasStage: boolean; hasMission?: boolean; showCommandHelper: boolean; onBeforeRun: (run: () => void) => void; onResetSimulation: () => void; onChangeCamera: () => void; onExecutionEvent?: (event: { type: 'start' | 'stdout' | 'stderr' | 'complete' | 'stopped'; text?: string }) => void };
 
-export default function LessonExecution({ code, sessionId, hasStage, hasMission = false, showCommandHelper, onBeforeRun, onResetSimulation, onChangeCamera }: Props) {
+export default function LessonExecution({ code, sessionId, hasStage, hasMission = false, showCommandHelper, onBeforeRun, onResetSimulation, onChangeCamera, onExecutionEvent }: Props) {
   const { t } = useTranslation();
   const runRef = useRef<() => Promise<void>>();
   const stopRef = useRef<() => void>();
@@ -53,7 +53,7 @@ export default function LessonExecution({ code, sessionId, hasStage, hasMission 
           <Box sx={{ mx: -1.5, mt: -1.5, mb: 1.25, px: 1.5, py: 1, bgcolor: 'grey.800', borderBottom: '1px solid', borderColor: 'grey.700' }}>
             <Typography component="p" sx={{ color: 'grey.400!important', fontStyle: 'italic' }}>{t('education.workspace.terminalReady')}</Typography>
           </Box>
-          <PythonExecutor pythonScript={code} sessionId={sessionId} onRunScript={(run) => { runRef.current = run; }} onStopScript={(stop) => { stopRef.current = stop; }} moveStep={moveStep} rotateStep={rotateStep} getdistance={get_distance} rgbsetcolor={rgb_set_color} buzzerBeep={buzzer_beep} getacceleration={get_acceleration} getgyroscope={get_gyroscope} getfloorsensor={get_floor_sensor} justRotate={just_rotate} justMove={just_move} stopMotion={stopMotion} getLightSensor={get_light_sensor} drawLine={drawLine} onExecutionComplete={() => { if (hasMission) programCompleted(); endSensorRun(); }} onExecutionError={(message) => { if (hasMission) programRuntimeError(message); }} />
+          <PythonExecutor pythonScript={code} sessionId={sessionId} onRunScript={(run) => { runRef.current = run; }} onStopScript={(stop) => { stopRef.current = stop; }} moveStep={moveStep} rotateStep={rotateStep} getdistance={get_distance} rgbsetcolor={rgb_set_color} buzzerBeep={buzzer_beep} getacceleration={get_acceleration} getgyroscope={get_gyroscope} getfloorsensor={get_floor_sensor} justRotate={just_rotate} justMove={just_move} stopMotion={stopMotion} getLightSensor={get_light_sensor} drawLine={drawLine} onExecutionEvent={onExecutionEvent} onExecutionComplete={() => { if (hasMission) programCompleted(); endSensorRun(); }} onExecutionError={(message) => { if (hasMission) programRuntimeError(message); }} />
         </Box>
       </Box>
     </Box>

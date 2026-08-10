@@ -35,6 +35,15 @@ export interface AIProviderConfig {
   updatedAt: string;
 }
 
+export interface AIPublicProvider {
+  id: number;
+  name: string;
+  providerType: AIProviderType;
+  runtime: AIRuntime;
+  model: string;
+  settings: Record<string, unknown>;
+}
+
 export interface AIInstanceSettings {
   enabled: boolean;
   defaultProviderId?: number | null;
@@ -85,6 +94,14 @@ export interface AIAccessDecision {
   username?: string;
 }
 
+export interface AIAccessBootstrap {
+  schemaVersion: '1';
+  registryVersion: string;
+  instanceEnabled: boolean;
+  capabilities: AIAccessDecision[];
+  providers: AIPublicProvider[];
+}
+
 export interface AIProviderInput {
   name: string;
   providerType: AIProviderType;
@@ -99,3 +116,31 @@ export interface AIProviderInput {
 
 export type AIStreamEventType = 'start' | 'text_delta' | 'suggestion' | 'usage' | 'done' | 'error';
 export interface AIStreamEvent { type: AIStreamEventType; data: Record<string, unknown> }
+
+export type AIAssistantSurface = 'python' | 'blockly' | 'lesson' | 'stage' | 'probe';
+export interface AIAssistInput {
+  capability: AICapabilityId;
+  providerId?: number;
+  surface: AIAssistantSurface;
+  question: string;
+  history?: Array<{ role: 'user' | 'assistant'; content: string }>;
+  context: Record<string, unknown>;
+}
+
+export interface PythonReplaceSuggestion {
+  version: '1';
+  type: 'python_replace';
+  baseFingerprint: string;
+  replacement: string;
+  summary: string;
+}
+
+export interface BlocklyReplaceSuggestion {
+  version: '1';
+  type: 'blockly_replace';
+  baseFingerprint: string;
+  xml: string;
+  summary: string;
+}
+
+export type AICodeSuggestion = PythonReplaceSuggestion | BlocklyReplaceSuggestion;

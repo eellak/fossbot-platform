@@ -1,5 +1,7 @@
 import type {
   AIAdminBootstrap,
+  AIAccessBootstrap,
+  AIAssistInput,
   AIAccessDecision,
   AICapabilityId,
   AIInstanceSettings,
@@ -37,6 +39,10 @@ async function parse<T>(response: Response): Promise<T> {
 
 export function readAIAdminBootstrap(token: string): Promise<AIAdminBootstrap> {
   return fetch(`${backendUrl}/api/admin/ai/bootstrap`, { headers: headers(token) }).then(parse<AIAdminBootstrap>);
+}
+
+export function readAIAccess(token: string): Promise<AIAccessBootstrap> {
+  return fetch(`${backendUrl}/api/ai/access`, { headers: headers(token) }).then(parse<AIAccessBootstrap>);
 }
 
 export function createAIProvider(token: string, input: AIProviderInput): Promise<AIProviderConfig> {
@@ -78,7 +84,7 @@ export function testAIProvider(token: string, providerId: number): Promise<{ ok:
 
 export async function streamAIAssist(
   token: string,
-  input: { capability: AICapabilityId; providerId?: number; surface: 'probe'; question: string; context: { note?: string } },
+  input: AIAssistInput,
   onEvent: (event: AIStreamEvent) => void,
   signal?: AbortSignal,
 ): Promise<void> {

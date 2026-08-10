@@ -24,7 +24,7 @@ import {
 } from 'src/simulator-adapter/Simulator';
 import Buttons from 'src/components/editors/RightColButtons';
 import PageContainer from '../../components/container/PageContainer';
-import BlocklyEditorComponent from '../../components/editors/BlocklyEditor';
+import BlocklyEditorComponent, { type BlocklyEditorHandle } from '../../components/editors/BlocklyEditor';
 import Spinner from '../spinner/Spinner';
 import VideoPlayer from 'src/components/videoplayer/VideoPlayer';
 import NewProjectDialog from 'src/components/dashboard/NewProjectDialog';
@@ -43,6 +43,9 @@ import ExecutionTargetPanel from 'src/components/robot/ExecutionTargetPanel';
 import PhysicalRobotTerminal from 'src/components/robot/PhysicalRobotTerminal';
 import { useRobotConnection } from 'src/robot/RobotConnectionContext';
 import ProjectStageIndicator from 'src/components/editors/ProjectStageIndicator';
+import AssistantPanel, { type AssistantSurfaceAdapter } from 'src/components/ai/AssistantPanel';
+import { fingerprintText } from 'src/ai/fingerprint';
+import { allowedBlocklyBlockTypes, validateBlocklySuggestion } from 'src/ai/suggestions/codeSuggestions';
 
 function stageNeedsAuthenticatedLoad(stage: ProjectStageReference | null): boolean {
   return (stage?.sourceType === 'local' && !!stage.localStageId)
@@ -68,6 +71,8 @@ const BlocklyPage = () => {
   const [showDrawer, setShowDrawer] = useState(false);
 
   const runScriptRef = useRef<() => Promise<void>>();
+  const editorRef = useRef<BlocklyEditorHandle | null>(null);
+  const [runtimeContext, setRuntimeContext] = useState({ output: [] as string[], error: '' });
   const auth = useAuth();
   const { token } = auth;
   const authRef = useRef(auth);
@@ -134,6 +139,12 @@ const BlocklyPage = () => {
   const setStopScriptFunction = useCallback((stopScript: () => void) => {
     // Added set stop script function
     stopScriptRef.current = stopScript;
+  }, []);
+
+  const handleExecutionEvent = useCallback((event: { type: 'start' | 'stdout' | 'stderr' | 'complete' | 'stopped'; text?: string }) => {
+    if (event.type === 'start') { setRuntimeContext({ output: [], error: '' }); return; }
+    if (event.type === 'stdout') setRuntimeContext((current) => ({ ...current, output: [...current.output, event.text || ''].slice(-24) }));
+    if (event.type === 'stderr') setRuntimeContext((current) => ({ output: [...current.output, event.text || ''].slice(-24), error: event.text || 'Runtime error' }));
   }, []);
 
   useEffect(() => {
@@ -253,7 +264,7 @@ const BlocklyPage = () => {
 
   const handleGetPythonCodeValue = useCallback((getValueFunc) => {
     // Save Python code
-    const value = getValueFunc;
+    const value = typeof getValueFunc === 'function' ? getValueFunc() : getValueFunc;
     setEditorPythonValue(value);
   }, []);
 
@@ -303,6 +314,35 @@ const BlocklyPage = () => {
   const isStageConfigLoading =
     stageNeedsAuthenticatedLoad(selectedStage) && initialStageConfig === undefined;
   const selectedStageLabel = selectedStage?.title || [selectedStage?.repoOwner, selectedStage?.repoName].filter(Boolean).join('/');
+  const assistantAdapter: AssistantSurfaceAdapter = {
+    surface: 'blockly',
+    getFingerprint: async () => fingerprintText(editorRef.current?.getXml() ?? editorValue),
+    getContext: async () => {
+      const xml = editorRef.current?.getXml() ?? editorValue;
+      const selection = editorRef.current?.getSelection() || { ids: [], types: [] };
+      return {
+        xml,
+        workspaceFingerprint: await fingerprintText(xml),
+        generatedPython: (editorRef.current?.getGeneratedPython() ?? editorPythonValue).slice(0, 8000),
+        selectedBlockIds: selection.ids,
+        selectedBlockTypes: selection.types,
+        allowedBlockTypes: allowedBlocklyBlockTypes(),
+        runtimeOutput: runtimeContext.output.join('\n').slice(-2000),
+        runtimeError: runtimeContext.error.slice(-2000),
+        editorType: 'blockly',
+        ...(projectId ? { projectId: Number(projectId) } : {}),
+        stageSummary: selectedStage ? { title: selectedStageLabel, sourceType: selectedStage.sourceType } : {},
+      };
+    },
+    previewSuggestion: async (suggestion) => {
+      if (suggestion.type !== 'blockly_replace') throw new Error('invalid_suggestion');
+      return validateBlocklySuggestion(suggestion, editorRef.current?.getXml() ?? editorValue);
+    },
+    applySuggestion: async (suggestion) => {
+      if (suggestion.type !== 'blockly_replace') throw new Error('invalid_suggestion');
+      editorRef.current?.replaceWorkspace(suggestion.xml);
+    },
+  };
 
   const terminalPanel = (
     <Box
@@ -336,6 +376,7 @@ const BlocklyPage = () => {
           stopMotion={stopMotion}
           getLightSensor={get_light_sensor}
           drawLine={drawLine}
+          onExecutionEvent={handleExecutionEvent}
         />
       ) : (
         <PhysicalRobotTerminal />
@@ -423,6 +464,7 @@ const BlocklyPage = () => {
             >
               {/* column */}
               <BlocklyEditorComponent
+                ref={editorRef}
                 code={editorValue}
                 handleGetValue={handleGetValue}
                 handleGetPythonCodeValue={handleGetPythonCodeValue}
@@ -496,6 +538,8 @@ const BlocklyPage = () => {
           </Grid>
         )}
       </Box>
+
+      {!loading && <Box sx={{ mt: 2 }}><AssistantPanel adapter={assistantAdapter} explainCapability="blockly.explain" suggestCapability="blockly.suggest_changes" suggestedPrompts={[t('aiAssistant.prompts.blocklyExplain'), t('aiAssistant.prompts.blocklyPython'), t('aiAssistant.prompts.blocklyError')]} /></Box>}
 
       {showSuccessAlert && <SuccessAlert title={showSuccessAlertText} description={''} />}
 

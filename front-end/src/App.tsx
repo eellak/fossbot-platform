@@ -15,6 +15,7 @@ import DevicesPage from './components/devices-page/DevicesPage';
 import { useTranslation } from 'react-i18next';
 import { RobotConnectionProvider } from './robot/RobotConnectionContext';
 import { FeatureFlagsProvider } from './config/FeatureFlags';
+import AssistantProvider from './ai/AssistantProvider';
 
 function App() {
   const routing = useRoutes(Router);
@@ -45,18 +46,20 @@ function App() {
   }
 
   return (
-    <AuthProvider>
-      <FeatureFlagsProvider>
-        <ThemeProvider theme={theme}>
-          <RTL direction={customizer.activeDir}>
-            <CssBaseline />
-            <MatomoTracker />
-            <RobotConnectionProvider>
-              <ScrollToTop>{isEducationRoute ? <div style={{ overflowX: 'clip' }}>{routing}</div> : routing}</ScrollToTop>
-            </RobotConnectionProvider>
-          </RTL>
-        </ThemeProvider>
-      </FeatureFlagsProvider>
+      <AuthProvider>
+        <FeatureFlagsProvider>
+          <AssistantProvider>
+            <ThemeProvider theme={theme}>
+              <RTL direction={customizer.activeDir}>
+                <CssBaseline />
+                <MatomoTracker />
+                <RobotConnectionProvider>
+                  <ScrollToTop>{isEducationRoute ? <div style={{ overflowX: 'clip' }}>{routing}</div> : routing}</ScrollToTop>
+                </RobotConnectionProvider>
+              </RTL>
+            </ThemeProvider>
+          </AssistantProvider>
+        </FeatureFlagsProvider>
     </AuthProvider>
   );
 }

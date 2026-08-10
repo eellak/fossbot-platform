@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 from dataclasses import dataclass
 from typing import Any
 
@@ -148,9 +149,27 @@ def assemble_context(db: Session, user: User, request: AssistantRequest) -> Asse
         raise ContextError("Surface context is invalid or contains unsupported fields") from error
 
     supplied = surface.model_dump(exclude_none=True)
+    if isinstance(surface, PythonContext) and request.capability == "code.suggest_changes":
+        expected = hashlib.sha256(surface.source.encode("utf-8")).hexdigest()
+        if surface.source_fingerprint != expected:
+            raise ContextError("Python source fingerprint is missing or stale")
+    if isinstance(surface, BlocklyContext) and request.capability == "blockly.suggest_changes":
+        expected = hashlib.sha256(surface.xml.encode("utf-8")).hexdigest()
+        if surface.workspace_fingerprint != expected:
+            raise ContextError("Blockly workspace fingerprint is missing or stale")
     authoritative: dict[str, Any] = {}
     if isinstance(surface, LessonContext):
         authoritative = _load_lesson(db, user, surface)
+    elif isinstance(surface, (PythonContext, BlocklyContext)) and surface.release_id and surface.lesson_key:
+        loaded = _load_lesson(db, user, LessonContext(releaseId=surface.release_id, lessonKey=surface.lesson_key))
+        authoritative = {
+            "course": loaded.get("course", {}),
+            "lesson": {
+                "title": loaded.get("lesson", {}).get("title", ""),
+                "editorType": loaded.get("lesson", {}).get("editorType", "none"),
+            },
+            "releaseVersion": loaded.get("releaseVersion"),
+        }
     elif isinstance(surface, StageContext):
         authoritative = _load_stage(db, user, surface)
 

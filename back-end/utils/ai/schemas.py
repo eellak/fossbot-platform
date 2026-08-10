@@ -23,16 +23,33 @@ class ConversationTurn(StrictModel):
 
 class PythonContext(StrictModel):
     source: str = Field(default="", max_length=12_000)
+    source_fingerprint: Optional[str] = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     selection: str = Field(default="", max_length=4_000)
     runtime_output: str = Field(default="", max_length=2_000)
     runtime_error: str = Field(default="", max_length=2_000)
+    editor_type: Literal["python"] = "python"
+    project_id: Optional[int] = Field(default=None, ge=1)
+    release_id: Optional[int] = Field(default=None, ge=1)
+    lesson_key: Optional[str] = Field(default=None, max_length=120)
+    lesson_objective: str = Field(default="", max_length=500)
+    stage_summary: dict[str, Any] = Field(default_factory=dict)
 
 
 class BlocklyContext(StrictModel):
     xml: str = Field(default="", max_length=16_000)
+    workspace_fingerprint: Optional[str] = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     selected_block_ids: list[str] = Field(default_factory=list, max_length=64)
+    selected_block_types: list[str] = Field(default_factory=list, max_length=64)
     generated_python: str = Field(default="", max_length=8_000)
     allowed_block_types: list[str] = Field(default_factory=list, max_length=128)
+    runtime_output: str = Field(default="", max_length=2_000)
+    runtime_error: str = Field(default="", max_length=2_000)
+    editor_type: Literal["blockly"] = "blockly"
+    project_id: Optional[int] = Field(default=None, ge=1)
+    release_id: Optional[int] = Field(default=None, ge=1)
+    lesson_key: Optional[str] = Field(default=None, max_length=120)
+    lesson_objective: str = Field(default="", max_length=500)
+    stage_summary: dict[str, Any] = Field(default_factory=dict)
 
 
 class LessonContext(StrictModel):
@@ -92,3 +109,19 @@ class ProviderStreamRequest(StrictModel):
 class StreamEvent(StrictModel):
     type: Literal["start", "text_delta", "suggestion", "usage", "done", "error"]
     data: dict[str, Any] = Field(default_factory=dict)
+
+
+class PythonReplaceSuggestion(StrictModel):
+    version: Literal["1"] = "1"
+    type: Literal["python_replace"]
+    base_fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
+    replacement: str = Field(max_length=12_000)
+    summary: str = Field(min_length=1, max_length=1_000)
+
+
+class BlocklyReplaceSuggestion(StrictModel):
+    version: Literal["1"] = "1"
+    type: Literal["blockly_replace"]
+    base_fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
+    xml: str = Field(min_length=1, max_length=16_000)
+    summary: str = Field(min_length=1, max_length=1_000)

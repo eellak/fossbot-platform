@@ -1,4 +1,4 @@
-import React, { useRef, useCallback, useEffect, useState } from 'react';
+import React, { forwardRef, useRef, useCallback, useEffect, useImperativeHandle, useState } from 'react';
 import MonacoEditor from '@monaco-editor/react';
 import { editor } from 'monaco-editor';
 import { AppState } from 'src/store/Store';
@@ -9,7 +9,14 @@ type MonacoEditorProps = {
   handleGetValue: (getValueFunc: () => string) => void;
 };
 
-const MonacoEditorComponent = ({ code, handleGetValue }: MonacoEditorProps) => {
+export type MonacoEditorHandle = {
+  getSource: () => string;
+  getSelection: () => { text: string; startLine: number; startColumn: number; endLine: number; endColumn: number } | null;
+  replaceSource: (source: string) => void;
+  undo: () => void;
+};
+
+const MonacoEditorComponent = forwardRef<MonacoEditorHandle, MonacoEditorProps>(({ code, handleGetValue }, ref) => {
   const customizer = useSelector((state: AppState) => state.customizer);
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
 
@@ -39,6 +46,33 @@ const MonacoEditorComponent = ({ code, handleGetValue }: MonacoEditorProps) => {
     height: '100%',
   };
 
+  useImperativeHandle(ref, () => ({
+    getSource: () => editorRef.current?.getValue() ?? code,
+    getSelection: () => {
+      const instance = editorRef.current;
+      const selection = instance?.getSelection();
+      const model = instance?.getModel();
+      if (!selection || !model || selection.isEmpty()) return null;
+      return {
+        text: model.getValueInRange(selection),
+        startLine: selection.startLineNumber,
+        startColumn: selection.startColumn,
+        endLine: selection.endLineNumber,
+        endColumn: selection.endColumn,
+      };
+    },
+    replaceSource: (source) => {
+      const instance = editorRef.current;
+      const model = instance?.getModel();
+      if (!instance || !model) throw new Error('editor_unavailable');
+      instance.pushUndoStop();
+      instance.executeEdits('fossbot-buddy', [{ range: model.getFullModelRange(), text: source }]);
+      instance.pushUndoStop();
+      handleGetValue(() => instance.getValue());
+    },
+    undo: () => editorRef.current?.trigger('fossbot-buddy', 'undo', null),
+  }), [code, handleGetValue]);
+
   return (
     <div style={containerStyle}>
       <MonacoEditor
@@ -54,6 +88,8 @@ const MonacoEditorComponent = ({ code, handleGetValue }: MonacoEditorProps) => {
       />
     </div>
   );
-};
+});
+
+MonacoEditorComponent.displayName = 'MonacoEditorComponent';
 
 export default MonacoEditorComponent;

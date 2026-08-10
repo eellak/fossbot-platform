@@ -16,6 +16,11 @@ import type { RawStageConfig } from 'src/simulator/stages';
 import { CAMERA_MODES } from 'src/simulator/ui/cameraTypes';
 import { changeCameraView, endSensorRun, pauseSensorRun, resumeSensorRun, WebGLApp } from 'src/simulator-adapter/Simulator';
 import type { SensorRunSummary, SensorTelemetrySnapshot } from 'src/simulator/sensors/telemetry';
+import AssistantPanel, { type AssistantSurfaceAdapter } from 'src/components/ai/AssistantPanel';
+import { fingerprintText } from 'src/ai/fingerprint';
+import { allowedBlocklyBlockTypes, previewPythonSuggestion, validateBlocklySuggestion } from 'src/ai/suggestions/codeSuggestions';
+import type { MonacoEditorHandle } from 'src/components/editors/MonacoEditor';
+import type { BlocklyEditorHandle } from 'src/components/editors/BlocklyEditor';
 
 type SaveState = 'saved' | 'unsaved' | 'saving' | 'failed' | 'conflict';
 type Pane = 'instructions' | 'code' | 'simulator' | 'results';
@@ -65,6 +70,15 @@ export default function LessonWorkspacePage() {
   const cameraAppliedKey = useRef<number | null>(null);
   const gridRef = useRef<HTMLDivElement | null>(null);
   const hasRun = useRef(false);
+  const monacoRef = useRef<MonacoEditorHandle | null>(null);
+  const blocklyRef = useRef<BlocklyEditorHandle | null>(null);
+  const [runtimeContext, setRuntimeContext] = useState({ output: [] as string[], error: '' });
+
+  const handleExecutionEvent = useCallback((event: { type: 'start' | 'stdout' | 'stderr' | 'complete' | 'stopped'; text?: string }) => {
+    if (event.type === 'start') { setRuntimeContext({ output: [], error: '' }); return; }
+    if (event.type === 'stdout') setRuntimeContext((current) => ({ ...current, output: [...current.output, event.text || ''].slice(-24) }));
+    if (event.type === 'stderr') setRuntimeContext((current) => ({ output: [...current.output, event.text || ''].slice(-24), error: event.text || 'Runtime error' }));
+  }, []);
 
   useEffect(() => {
     if (!resizing) return undefined;
@@ -237,6 +251,63 @@ export default function LessonWorkspacePage() {
   const hasMission = lesson.activities.some((activity) => activity.type === 'mission');
   const stageRevision = stage?.commitSha || stage?.url || 'built-in:none';
   const code = lesson.editorType === 'python' ? (typeof content === 'string' ? content : '') : generatedPython;
+  const assistantAdapter: AssistantSurfaceAdapter | null = lesson.editorType === 'python' ? {
+    surface: 'python',
+    getFingerprint: async () => fingerprintText(monacoRef.current?.getSource() ?? code),
+    getContext: async () => {
+      const source = monacoRef.current?.getSource() ?? code;
+      return {
+        source,
+        sourceFingerprint: await fingerprintText(source),
+        selection: monacoRef.current?.getSelection()?.text || '',
+        runtimeOutput: runtimeContext.output.join('\n').slice(-2000),
+        runtimeError: runtimeContext.error.slice(-2000),
+        editorType: 'python',
+        releaseId: workspace.release_id,
+        lessonKey,
+        lessonObjective: enrollment.course.learning_objectives.join('; ').slice(0, 500),
+        stageSummary: stage ? { title: stage.title || '', sourceType: stage.sourceType, revision: stage.commitSha || stage.url || '' } : {},
+      };
+    },
+    previewSuggestion: async (suggestion) => {
+      if (suggestion.type !== 'python_replace') throw new Error('invalid_suggestion');
+      return previewPythonSuggestion(suggestion, monacoRef.current?.getSource() ?? code);
+    },
+    applySuggestion: async (suggestion) => {
+      if (suggestion.type !== 'python_replace') throw new Error('invalid_suggestion');
+      monacoRef.current?.replaceSource(suggestion.replacement);
+    },
+  } : lesson.editorType === 'blockly' ? {
+    surface: 'blockly',
+    getFingerprint: async () => fingerprintText(blocklyRef.current?.getXml() ?? (typeof content === 'object' && content && typeof content.xml === 'string' ? content.xml : '')),
+    getContext: async () => {
+      const xml = blocklyRef.current?.getXml() ?? (typeof content === 'object' && content && typeof content.xml === 'string' ? content.xml : '');
+      const selection = blocklyRef.current?.getSelection() || { ids: [], types: [] };
+      return {
+        xml,
+        workspaceFingerprint: await fingerprintText(xml),
+        generatedPython: (blocklyRef.current?.getGeneratedPython() ?? generatedPython).slice(0, 8000),
+        selectedBlockIds: selection.ids,
+        selectedBlockTypes: selection.types,
+        allowedBlockTypes: allowedBlocklyBlockTypes(),
+        runtimeOutput: runtimeContext.output.join('\n').slice(-2000),
+        runtimeError: runtimeContext.error.slice(-2000),
+        editorType: 'blockly',
+        releaseId: workspace.release_id,
+        lessonKey,
+        lessonObjective: enrollment.course.learning_objectives.join('; ').slice(0, 500),
+        stageSummary: stage ? { title: stage.title || '', sourceType: stage.sourceType, revision: stage.commitSha || stage.url || '' } : {},
+      };
+    },
+    previewSuggestion: async (suggestion) => {
+      if (suggestion.type !== 'blockly_replace') throw new Error('invalid_suggestion');
+      return validateBlocklySuggestion(suggestion, blocklyRef.current?.getXml() || '');
+    },
+    applySuggestion: async (suggestion) => {
+      if (suggestion.type !== 'blockly_replace') throw new Error('invalid_suggestion');
+      blocklyRef.current?.replaceWorkspace(suggestion.xml);
+    },
+  } : null;
   const panes = [
     { key: 'instructions' as Pane, label: t('education.workspace.instructions'), show: true },
     { key: 'code' as Pane, label: t('education.workspace.code'), show: hasEditor },
@@ -246,9 +317,9 @@ export default function LessonWorkspacePage() {
   const saveLabel = saveState === 'conflict' ? t('education.workspace.conflict') : t(`education.save.${saveState === 'unsaved' ? 'unsaved' : saveState}`);
   const refreshProgress = async () => { setEnrollment(await readEnrollment(token, enrollment.id)); };
   const instructions = <Stack spacing={2} sx={{ width: '100%', maxWidth: '76ch', mx: 'auto' }}><Typography variant="h4">{lesson.title}</Typography><StudentActivities token={token} enrollmentId={enrollment.id} lessonKey={lessonKey} activities={lesson.activities} telemetry={telemetry} previousSummary={previousSummary || telemetry?.previousSummary || null} helpersVisible={sensorHelpersVisible} onHelpersVisible={setSensorHelpersVisible} onReadingsRunning={(running) => { if (running) resumeSensorRun(); else pauseSensorRun(); }} stageRevision={stageRevision} allowManualMissionFinish={!hasEditor} onMissionRetry={() => resetSimulation(true)} onProgressChange={() => void refreshProgress()} t={t} /></Stack>;
-  const editor = <LessonEditor editorType={lesson.editorType} content={content} onChange={setContent} onPythonChange={setGeneratedPython} />;
+  const editor = <LessonEditor editorType={lesson.editorType} content={content} onChange={setContent} onPythonChange={setGeneratedPython} monacoRef={monacoRef} blocklyRef={blocklyRef} />;
   const simulator = stageConfig === undefined ? <Stack spacing={1} sx={{ p: 2 }}><Skeleton variant="rounded" height={320} /><Typography variant="caption">{t('education.workspace.loadingStage')}</Typography></Stack> : stageError ? <Alert severity="warning" action={<Button onClick={() => setSimulatorKey((value) => value + 1)}>{t('education.student.retry')}</Button>}>{stage?.visibility === 'private' ? t('education.workspace.privateStageFailed') : t('education.workspace.stageFailed')}</Alert> : <Box sx={{ height: '100%', minHeight: 0 }}><WebGLApp key={simulatorKey} appsessionId={sessionId} initialStageUrl={stage?.url} initialStageConfig={stageConfig} initialStageAssetBaseUrl={stageAssetBase} showControls={!hasEditor || lesson.simulatorSettings?.showRemoteControls === true} autoStartMissionAttempt={!hasEditor && hasMission} allowStageSelection={false} sensorHelpersVisible={sensorHelpersVisible} sensorTelemetryAutoStart={false} onTelemetry={setTelemetry} onMountChange={(mounted) => { if (!mounted) return; if (cameraAppliedKey.current !== simulatorKey) { cameraAppliedKey.current = simulatorKey; for (let step = 0; step < cameraStep; step += 1) changeCameraView(); } if (pendingRun.current) { const run = pendingRun.current; pendingRun.current = null; run(); } }} /></Box>;
-  const results = <LessonExecution code={code} sessionId={sessionId} hasStage={hasStage} hasMission={hasMission} showCommandHelper={lesson.editorType === 'python'} onBeforeRun={runAfterReset} onResetSimulation={() => resetSimulation(true)} onChangeCamera={changeCamera} />;
+  const results = <LessonExecution code={code} sessionId={sessionId} hasStage={hasStage} hasMission={hasMission} showCommandHelper={lesson.editorType === 'python'} onBeforeRun={runAfterReset} onResetSimulation={() => resetSimulation(true)} onChangeCamera={changeCamera} onExecutionEvent={handleExecutionEvent} />;
   const highlightedResize = resizing?.target ?? hoveredResize;
   const highlightColumns = highlightedResize === 'columns' || highlightedResize === 'corner';
   const highlightRows = highlightedResize === 'rows' || highlightedResize === 'corner';
@@ -265,6 +336,7 @@ export default function LessonWorkspacePage() {
       {saveState === 'failed' && <Button size="small" onClick={() => void retrySave()}>{t('education.student.retry')}</Button>}
     </Stack>
     <LinearProgress variant="determinate" value={enrollment.progress_percent} sx={{ height: 3 }} />
+    {assistantAdapter && <Box sx={{ px: 2, py: 1 }}><AssistantPanel adapter={assistantAdapter} explainCapability={lesson.editorType === 'python' ? 'code.explain' : 'blockly.explain'} suggestCapability={lesson.editorType === 'python' ? 'code.suggest_changes' : 'blockly.suggest_changes'} suggestedPrompts={lesson.editorType === 'python' ? [t('aiAssistant.prompts.pythonError'), t('aiAssistant.prompts.pythonTrace')] : [t('aiAssistant.prompts.blocklyExplain'), t('aiAssistant.prompts.blocklyError')]} /></Box>}
     {enrollment.update_available && <Alert severity="info" action={<Button color="inherit" onClick={() => navigate(`/courses/${courseId}`)}>{t('education.student.reviewChanges')}</Button>}>{t('education.workspace.updateWhileOpen')}</Alert>}
     {saveState === 'conflict' && <Alert severity="error" action={<Button color="inherit" onClick={() => void load()}>{t('education.conflict.reload')}</Button>}>{t('education.workspace.staleTab')}</Alert>}
     <Box sx={{ display: 'flex', flex: 1, minHeight: 0 }}>

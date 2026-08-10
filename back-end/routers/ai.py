@@ -27,6 +27,7 @@ from utils.ai.providers import hosted_provider
 from utils.ai.providers.base import ProviderError
 from utils.ai.schemas import AssistantRequest, ProviderStreamRequest
 from utils.ai.secrets import decrypt_ai_secret
+from utils.ai.suggestions import MAX_SUGGESTION_RESPONSE_CHARACTERS, SuggestionError, parse_suggestion, suggestion_payload
 from utils.ai.usage import QuotaError, ensure_quota, record_usage
 
 
@@ -50,8 +51,34 @@ def test_provider_stream(payload: dict = Body(...)):
     if payload.get("model") != "fossbot-test" or not payload.get("stream"):
         raise HTTPException(status_code=422, detail="The test-only provider requires model fossbot-test with streaming enabled")
 
+    messages = payload.get("messages") or []
+    prompt = "\n".join(str(item.get("content") or "") for item in messages if isinstance(item, dict))
+    if "[mock:rate-limit]" in prompt:
+        raise HTTPException(status_code=429, detail="Deterministic test-only rate limit")
+
     async def chunks():
-        response = "Deterministic test-only provider: hosted streaming is working."
+        if "[mock:delay]" in prompt:
+            await asyncio.sleep(2)
+        if "[mock:error]" in prompt:
+            yield f"data: {json.dumps({'error': {'message': 'deterministic test-only error'}})}\n\n"
+            return
+        if "[mock:timeout]" in prompt:
+            await asyncio.sleep(50)
+        if "[mock:malformed]" in prompt:
+            response = "{malformed suggestion"
+        elif "Capability: code.suggest_changes" in prompt:
+            fingerprint = prompt.split("baseFingerprint '", 1)[1].split("'", 1)[0]
+            response = json.dumps({"version": "1", "type": "python_replace", "baseFingerprint": fingerprint, "replacement": "# FOSSBot Buddy suggestion\nprint('Hello, FOSSBot!')\n", "summary": "Replace the program with a small, reviewable greeting."})
+        elif "Capability: blockly.suggest_changes" in prompt:
+            fingerprint = prompt.split("baseFingerprint '", 1)[1].split("'", 1)[0]
+            xml = '<xml xmlns="https://developers.google.com/blockly/xml"><block type="text_print" id="ai-suggestion"><value name="TEXT"><shadow type="text" id="ai-text"><field name="TEXT">Hello, FOSSBot!</field></shadow></value></block></xml>'
+            response = json.dumps({"version": "1", "type": "blockly_replace", "baseFingerprint": fingerprint, "xml": xml, "summary": "Add one print block as a reviewable example."})
+        elif "Capability: blockly.explain" in prompt:
+            response = "Deterministic test-only explanation: these blocks generate Python in workspace order."
+        elif "Capability: code.explain" in prompt:
+            response = "Deterministic test-only explanation: trace the current value one loop at a time."
+        else:
+            response = "Deterministic test-only provider: hosted streaming is working."
         for text_delta in (response[:34], response[34:]):
             yield f"data: {json.dumps({'choices': [{'delta': {'content': text_delta}, 'finish_reason': None}]})}\n\n"
         yield f"data: {json.dumps({'choices': [{'delta': {}, 'finish_reason': 'stop'}], 'usage': {'prompt_tokens': 32, 'completion_tokens': 9}})}\n\n"
@@ -238,6 +265,8 @@ async def stream_assistance(
         outcome = "completed"
         input_tokens = None
         output_tokens = None
+        suggestion_text = ""
+        suggestion_capability = payload.capability in {"code.suggest_changes", "blockly.suggest_changes"}
         yield sse_event("start", {
             "requestId": request_id,
             "providerId": provider.id,
@@ -257,8 +286,17 @@ async def stream_assistance(
                 if event.type == "usage":
                     input_tokens = event.data.get("inputTokens")
                     output_tokens = event.data.get("outputTokens")
-                yield sse_event(event.type, event.data)
+                if suggestion_capability and event.type == "text_delta":
+                    suggestion_text += str(event.data.get("text") or "")
+                    if len(suggestion_text) > MAX_SUGGESTION_RESPONSE_CHARACTERS:
+                        raise SuggestionError("The provider suggestion exceeded the allowed size")
+                else:
+                    yield sse_event(event.type, event.data)
             if outcome == "completed":
+                if suggestion_capability:
+                    fingerprint_key = "source_fingerprint" if payload.capability == "code.suggest_changes" else "workspace_fingerprint"
+                    suggestion = parse_suggestion(suggestion_text, payload.capability, str(context.payload["supplied"][fingerprint_key]))
+                    yield sse_event("suggestion", suggestion_payload(suggestion))
                 yield sse_event("done", {"requestId": request_id})
         except asyncio.CancelledError:
             outcome = "cancelled"
@@ -266,6 +304,9 @@ async def stream_assistance(
         except ProviderError as error:
             outcome = error.code
             yield sse_event("error", {"code": error.code, "message": error.safe_message, "retryable": error.retryable})
+        except SuggestionError as error:
+            outcome = "invalid_suggestion"
+            yield sse_event("error", {"code": "invalid_suggestion", "message": str(error), "retryable": False})
         except Exception:
             outcome = "provider_error"
             yield sse_event("error", {"code": "provider_error", "message": "The AI provider request failed.", "retryable": True})

@@ -1,4 +1,5 @@
 import datetime
+import hashlib
 
 import pytest
 
@@ -23,6 +24,21 @@ def test_context_rejects_cross_surface_and_unknown_fields(db, users):
         assemble_context(db, student, request("python", "blockly.explain", {}))
     with pytest.raises(ContextError):
         assemble_context(db, student, request("python", "code.explain", {"email": "leak@example.test"}))
+
+
+def test_mutation_context_requires_matching_fingerprint(db, users):
+    student = users[2]
+    source = "print('hello')"
+    with pytest.raises(ContextError, match="fingerprint"):
+        assemble_context(db, student, request("python", "code.suggest_changes", {
+            "source": source,
+            "sourceFingerprint": "0" * 64,
+        }))
+    assembled = assemble_context(db, student, request("python", "code.suggest_changes", {
+        "source": source,
+        "sourceFingerprint": hashlib.sha256(source.encode()).hexdigest(),
+    }))
+    assert assembled.payload["supplied"]["source_fingerprint"] == hashlib.sha256(source.encode()).hexdigest()
 
 
 def test_context_removes_data_urls_and_is_deterministic(db, users):

@@ -22,6 +22,7 @@ type PythonExecutorProps = {
   drawLine: (status: boolean) => void;
   onExecutionComplete?: () => void;
   onExecutionError?: (message: string) => void;
+  onExecutionEvent?: (event: { type: 'start' | 'stdout' | 'stderr' | 'complete' | 'stopped'; text?: string }) => void;
 };
 
 const PythonExecutor = ({
@@ -44,6 +45,7 @@ const PythonExecutor = ({
   drawLine,
   onExecutionComplete,
   onExecutionError,
+  onExecutionEvent,
 }: PythonExecutorProps) => {
   const [results, setResults] = useState<string[]>([]);
   const { t } = useTranslation();
@@ -59,6 +61,7 @@ const PythonExecutor = ({
 
       if (data.command === 'stdout' || data.command === 'stderr') {
         setResults((prevResults) => [...prevResults, data.data]);
+        onExecutionEvent?.({ type: data.command, text: String(data.data || '') });
         if (data.command === 'stderr') onExecutionError?.(String(data.data || 'Runtime error'));
 
         worker.postMessage(JSON.stringify({ command: 'exit' }));
@@ -107,7 +110,7 @@ const PythonExecutor = ({
       if (data.command === 'clear_results') {
         setResults([]);
       }
-      if (data.command === 'execution_complete') onExecutionComplete?.();
+      if (data.command === 'execution_complete') { onExecutionEvent?.({ type: 'complete' }); onExecutionComplete?.(); }
     };
 
     return worker;
@@ -139,16 +142,18 @@ const PythonExecutor = ({
       sessionId: sessionId,
     };
 
+    onExecutionEvent?.({ type: 'start' });
     pyodideWorker?.postMessage(JSON.stringify(scriptWithSession));
     setError('');
-  }, [pythonScript, sessionId, t, pyodideWorker]);
+  }, [onExecutionEvent, pythonScript, sessionId, t, pyodideWorker]);
 
   const stopPythonScript = useCallback(() => {
     stopMotion();
     pyodideWorker?.terminate();
     const newWorker = createWorker();
     setPyodideWorker(newWorker);
-  }, [pyodideWorker, stopMotion]);
+    onExecutionEvent?.({ type: 'stopped' });
+  }, [onExecutionEvent, pyodideWorker, stopMotion]);
 
   useEffect(() => {
     onRunScript(runPythonScript);

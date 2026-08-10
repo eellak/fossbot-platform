@@ -9,7 +9,7 @@ import { BlocklyWorkspace } from 'react-blockly';
 import { AppState } from 'src/store/Store';
 import { useSelector } from 'src/store/Store';
 import { Languages } from 'src/utils/languages/Languages.ts';
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef } from 'react';
 import { pythonGenerator } from 'blockly/python';
 import { useTranslation } from 'react-i18next';
 import LightTheme from './LightTheme.js'; // Import the custom theme
@@ -23,11 +23,19 @@ type BlocklyEditorProps = {
   handleGetPythonCodeValue: (getValueFunc: () => string) => void;
 };
 
-const BlocklyEditorComponent = ({
+export type BlocklyEditorHandle = {
+  getXml: () => string;
+  getGeneratedPython: () => string;
+  getSelection: () => { ids: string[]; types: string[] };
+  replaceWorkspace: (xml: string) => void;
+  undo: () => void;
+};
+
+const BlocklyEditorComponent = forwardRef<BlocklyEditorHandle, BlocklyEditorProps>(({
   code,
   handleGetValue,
   handleGetPythonCodeValue,
-}: BlocklyEditorProps) => {
+}: BlocklyEditorProps, ref) => {
   const { i18n } = useTranslation();
   const workspaceRef = useRef<WorkspaceSvg | null>(null);
 
@@ -50,14 +58,15 @@ const BlocklyEditorComponent = ({
   }, []);
 
   const onWorkspaceChange = useCallback(
-    (xml: string) => {
-      handleGetValue(() => xml);
-
-      const pythonCode = customPythonGenerator.workspaceToCode(Blockly.getMainWorkspace());
-      handleGetPythonCodeValue(pythonCode);
+    (workspace: Blockly.WorkspaceSvg) => {
+      workspaceRef.current = workspace;
+      const pythonCode = customPythonGenerator.workspaceToCode(workspace);
+      handleGetPythonCodeValue(() => pythonCode);
     },
-    [customPythonGenerator, handleGetValue, handleGetPythonCodeValue],
+    [customPythonGenerator, handleGetPythonCodeValue],
   );
+
+  const onXmlChange = useCallback((xml: string) => handleGetValue(() => xml), [handleGetValue]);
 
   const theme = customizer.activeMode === 'dark' ? DarkTheme : LightTheme;
 
@@ -69,9 +78,11 @@ const BlocklyEditorComponent = ({
 
       currentLanguage == 'gr' ? Blockly.setLocale(localeEl) : Blockly.setLocale(localeEn);
 
-      const workspaceXml = Blockly.Xml.workspaceToDom(Blockly.getMainWorkspace(), true);
-      Blockly.getMainWorkspace().clear();
-      Blockly.Xml.domToWorkspace(workspaceXml, Blockly.getMainWorkspace());
+      const workspace = workspaceRef.current;
+      if (!workspace) return;
+      const workspaceXml = Blockly.Xml.workspaceToDom(workspace, true);
+      workspace.clear();
+      Blockly.Xml.domToWorkspace(workspaceXml, workspace);
     };
 
     // Subscribe to language change events
@@ -105,17 +116,44 @@ const BlocklyEditorComponent = ({
     if (workspaceRef.current === workspace) workspaceRef.current = null;
   }, []);
 
+  useImperativeHandle(ref, () => ({
+    getXml: () => {
+      const workspace = workspaceRef.current;
+      return workspace ? Blockly.Xml.domToText(Blockly.Xml.workspaceToDom(workspace, true)) : code;
+    },
+    getGeneratedPython: () => workspaceRef.current ? customPythonGenerator.workspaceToCode(workspaceRef.current) : '',
+    getSelection: () => {
+      const selected = Blockly.getSelected() as unknown as Blockly.Block | null;
+      if (!selected || selected.workspace !== workspaceRef.current) return { ids: [], types: [] };
+      return { ids: [selected.id], types: [selected.type] };
+    },
+    replaceWorkspace: (xml) => {
+      const workspace = workspaceRef.current;
+      if (!workspace) throw new Error('editor_unavailable');
+      const dom = Blockly.utils.xml.textToDom(xml);
+      Blockly.Events.setGroup(true);
+      try {
+        workspace.clear();
+        Blockly.Xml.domToWorkspace(dom, workspace);
+      } finally { Blockly.Events.setGroup(false); }
+    },
+    undo: () => workspaceRef.current?.undo(false),
+  }), [code, customPythonGenerator]);
+
   return (
     <BlocklyWorkspace
       className={`blocklyDiv ${customizer.activeMode === 'dark' ? 'blockly-theme-dark' : 'blockly-theme-light'}`}
       toolboxConfiguration={toolboxJSON}
       initialXml={code}
-      onXmlChange={onWorkspaceChange}
+      onWorkspaceChange={onWorkspaceChange}
+      onXmlChange={onXmlChange}
       workspaceConfiguration={workspaceConfiguration}
       onInject={handleInject}
       onDispose={handleDispose}
     />
   );
-};
+});
+
+BlocklyEditorComponent.displayName = 'BlocklyEditorComponent';
 
 export default BlocklyEditorComponent;
