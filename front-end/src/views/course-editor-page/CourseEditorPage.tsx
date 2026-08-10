@@ -27,6 +27,7 @@ import AuthoringAssistant from 'src/components/ai/AuthoringAssistant';
 type SaveState = 'saved' | 'unsaved' | 'saving' | 'failed';
 type Panel = 'outline' | 'content' | 'settings';
 type SettingsTab = 'course' | 'lesson' | 'simulator' | 'completion' | 'validation';
+type ContentTab = 'instructions' | 'code';
 type Conflict = { scope: 'course' | 'lesson'; lessonId?: number; currentUpdatedAt: string };
 type OutlineDropPlacement = 'before' | 'replace' | 'after';
 type OutlineDropTarget = { lessonId: number; placement: OutlineDropPlacement };
@@ -98,6 +99,7 @@ export default function CourseEditorPage() {
   const [conflict, setConflict] = useState<Conflict | null>(null);
   const [mobilePanel, setMobilePanel] = useState<Panel>('content');
   const [settingsTab, setSettingsTab] = useState<SettingsTab>('lesson');
+  const [contentTab, setContentTab] = useState<ContentTab>('instructions');
   const [previewOpen, setPreviewOpen] = useState(false);
   const [publishOpen, setPublishOpen] = useState(false);
   const [publishedVersion, setPublishedVersion] = useState<number | null>(null);
@@ -117,6 +119,7 @@ export default function CourseEditorPage() {
 
   useEffect(() => { courseRef.current = course; }, [course]);
   const selectedLesson = useMemo(() => course?.lessons.find((lesson) => lesson.id === selectedId) || null, [course, selectedId]);
+  useEffect(() => { setContentTab('instructions'); }, [selectedId]);
 
   const setHistory = (history: AuthoringHistory, current: CourseDraft) => {
     historyRef.current = history;
@@ -484,7 +487,7 @@ export default function CourseEditorPage() {
     setDraggingId(null); setDropTarget(null); applyReorder(next.map((lesson, index) => ({ ...lesson, position: index + 1 })));
   }} t={t} />;
 
-  const content = selectedLesson ? <ContentPanel lesson={selectedLesson} changed={changedLessonKeys.has(selectedLesson.lesson_key)} publishedVersion={course.latest_published_release_version} token={token} onChange={(patch) => markLesson(selectedLesson.id, patch)} t={t} /> : <EmptyLesson onAdd={addNewLesson} t={t} />;
+  const content = selectedLesson ? <ContentPanel lesson={selectedLesson} changed={changedLessonKeys.has(selectedLesson.lesson_key)} publishedVersion={course.latest_published_release_version} token={token} tab={contentTab} onTab={setContentTab} onChange={(patch) => markLesson(selectedLesson.id, patch)} t={t} /> : <EmptyLesson onAdd={addNewLesson} t={t} />;
   const settings = <SettingsPanel course={course} lesson={selectedLesson} courseChanged={changeSummary.course} publishedVersion={course.latest_published_release_version} userLabel={user ? `${user.firstname} ${user.lastname}`.trim() || user.username : ''} token={token} tab={settingsTab} issues={validationIssues} onTab={setSettingsTab} onCourse={markCourse} onLesson={(patch) => selectedLesson && markLesson(selectedLesson.id, patch)} onIssue={navigateIssue} t={t} />;
 
   return (
@@ -506,7 +509,7 @@ export default function CourseEditorPage() {
         <Typography fontWeight={700}>{t(`education.publish.status.${releaseState}.title`, { version: course.latest_published_release_version })}</Typography>
         <Typography variant="body2">{t(`education.publish.status.${releaseState}.detail`, { version: course.latest_published_release_version })}</Typography>
       </Alert>
-      <Box sx={{ px: { xs: 1, md: 2 }, py: 1, bgcolor: 'background.paper', borderBottom: 1, borderColor: 'divider' }}><AuthoringAssistant course={course} lesson={selectedLesson} validationIssues={validationIssues} onApply={applyAuthoringSuggestion} /></Box>
+      {(!selectedLesson || contentTab !== 'code' || selectedLesson.editor_type === 'none') && <AuthoringAssistant course={course} lesson={selectedLesson} validationIssues={validationIssues} onApply={applyAuthoringSuggestion} />}
       {error && <Alert severity="error" onClose={() => setError('')} sx={{ borderRadius: 0 }}>{error}</Alert>}
       {conflict && <Alert severity="warning" icon={<IconAlertTriangle size={20} />} action={<Stack direction="row"><Button color="inherit" size="small" onClick={load}>{t('education.conflict.reload')}</Button><Button color="inherit" size="small" onClick={overwriteConflict}>{t('education.conflict.overwrite')}</Button></Stack>} sx={{ borderRadius: 0 }}>{t('education.conflict.message')}</Alert>}
       {compact && <Tabs value={mobilePanel} onChange={(_, value) => setMobilePanel(value)} variant="fullWidth" sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: 'background.paper' }}><Tab value="outline" label={t('education.panels.outline')} /><Tab value="content" label={t('education.panels.content')} /><Tab value="settings" label={t('education.panels.settings')} /></Tabs>}
@@ -546,9 +549,8 @@ function OutlinePanel({ lessons, selectedId, warningIds, changedLessonKeys, outl
 
 const themeWarning = '#9a6700';
 
-function ContentPanel({ lesson, changed, publishedVersion, token, onChange, t }: { lesson: Lesson; changed: boolean; publishedVersion?: number | null; token?: string; onChange: (patch: Partial<Lesson>) => void; t: any }) {
-  const [tab, setTab] = useState<'instructions' | 'code'>('instructions');
-  return <Stack spacing={2.5} sx={{ maxWidth: 1100, mx: 'auto' }}><Box><Stack direction="row" alignItems="center" gap={0.5}><Typography variant="caption" color="text.secondary">{t('education.lesson.number', { position: lesson.position })}</Typography>{changed && <ChangeBadge publishedVersion={publishedVersion} t={t} />}</Stack><TextField fullWidth required value={lesson.title} onChange={(event) => onChange({ title: event.target.value })} variant="standard" inputProps={{ 'aria-label': t('education.lesson.title') }} sx={{ '& input': { fontSize: '1.875rem', fontWeight: 700, py: 1 } }} /></Box><Tabs value={tab} onChange={(_, value) => setTab(value)} sx={{ borderBottom: 1, borderColor: 'divider' }}><Tab value="instructions" label={t('education.activities.title')} /><Tab value="code" label={t('education.code.title')} /></Tabs>{tab === 'instructions' ? <ActivityComposer activities={lesson.activities} stageReference={lesson.stageReference} token={token} onChange={(activities) => onChange({ activities })} t={t} /> : lesson.editor_type === 'none' ? <Alert severity="info">{t('education.code.chooseEditor')}</Alert> : <StarterCodeWorkspace key={lesson.id} lesson={lesson} onChange={onChange} t={t} />}</Stack>;
+function ContentPanel({ lesson, changed, publishedVersion, token, tab, onTab, onChange, t }: { lesson: Lesson; changed: boolean; publishedVersion?: number | null; token?: string; tab: ContentTab; onTab: (tab: ContentTab) => void; onChange: (patch: Partial<Lesson>) => void; t: any }) {
+  return <Stack spacing={2.5} sx={{ maxWidth: 1100, mx: 'auto' }}><Box><Stack direction="row" alignItems="center" gap={0.5}><Typography variant="caption" color="text.secondary">{t('education.lesson.number', { position: lesson.position })}</Typography>{changed && <ChangeBadge publishedVersion={publishedVersion} t={t} />}</Stack><TextField fullWidth required value={lesson.title} onChange={(event) => onChange({ title: event.target.value })} variant="standard" inputProps={{ 'aria-label': t('education.lesson.title') }} sx={{ '& input': { fontSize: '1.875rem', fontWeight: 700, py: 1 } }} /></Box><Tabs value={tab} onChange={(_, value) => onTab(value)} sx={{ borderBottom: 1, borderColor: 'divider' }}><Tab value="instructions" label={t('education.activities.title')} /><Tab value="code" label={t('education.code.title')} /></Tabs>{tab === 'instructions' ? <ActivityComposer activities={lesson.activities} stageReference={lesson.stageReference} token={token} onChange={(activities) => onChange({ activities })} t={t} /> : lesson.editor_type === 'none' ? <Alert severity="info">{t('education.code.chooseEditor')}</Alert> : <StarterCodeWorkspace key={lesson.id} lesson={lesson} onChange={onChange} t={t} />}</Stack>;
 }
 
 function EmptyLesson({ onAdd, t }: any) { return <Paper variant="outlined" sx={{ py: 8, textAlign: 'center' }}><Typography variant="h5">{t('education.lesson.empty')}</Typography><Typography color="text.secondary" sx={{ my: 1 }}>{t('education.lesson.emptyHelp')}</Typography><Button variant="contained" startIcon={<IconPlus size={18} />} onClick={onAdd}>{t('education.lesson.add')}</Button></Paper>; }

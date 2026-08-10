@@ -1745,9 +1745,7 @@ const StageBuilderPage = () => {
           <Box sx={{ position: 'absolute', top: 12, right: 12, zIndex: 5 }}>
             <EditorViewportCameraGizmo currentView={lookThroughCameraId && lookThroughCamera ? 'camera' : (cameraViewRequest?.view || 'perspective')} hasActiveCamera={hasVisibleStageCamera(stage)} onCameraViewChange={requestCameraView} />
           </Box>
-          <Box sx={{ position: 'absolute', right: 12, bottom: 12, zIndex: 7 }}>
-            <StageAuthoringAssistant stage={stage} selectedIds={assistantSelectedIds} validation={validationResults} localStageId={localStage?.id} onApply={applyAssistantStage} />
-          </Box>
+          <StageAuthoringAssistant stage={stage} selectedIds={assistantSelectedIds} validation={validationResults} localStageId={localStage?.id} onApply={applyAssistantStage} />
           {lookThroughCamera && lookThroughCamera.kind === 'camera' && (
             <Box sx={{ position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)', zIndex: 6, maxWidth: 'min(420px, calc(100% - 32px))', pointerEvents: 'none' }}>
               <Stack

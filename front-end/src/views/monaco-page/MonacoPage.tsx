@@ -569,7 +569,7 @@ const MonacoPage: React.FC = () => {
         )}
       </Box>
 
-      {!loading && <Box sx={{ mt: 2 }}><AssistantPanel adapter={assistantAdapter} explainCapability="code.explain" suggestCapability="code.suggest_changes" suggestedPrompts={[t('aiAssistant.prompts.pythonError'), t('aiAssistant.prompts.pythonTrace'), t('aiAssistant.prompts.pythonApi')]} /></Box>}
+      {!loading && <Box sx={{ mt: 2 }}><AssistantPanel adapter={assistantAdapter} explainCapability="code.explain" suggestCapability="code.suggest_changes" /></Box>}
 
       {showSuccessAlert && <SuccessAlert title={showSuccessAlertText} description={''} />}
 

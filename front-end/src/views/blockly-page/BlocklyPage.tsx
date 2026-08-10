@@ -539,7 +539,7 @@ const BlocklyPage = () => {
         )}
       </Box>
 
-      {!loading && <Box sx={{ mt: 2 }}><AssistantPanel adapter={assistantAdapter} explainCapability="blockly.explain" suggestCapability="blockly.suggest_changes" suggestedPrompts={[t('aiAssistant.prompts.blocklyExplain'), t('aiAssistant.prompts.blocklyPython'), t('aiAssistant.prompts.blocklyError')]} /></Box>}
+      {!loading && <Box sx={{ mt: 2 }}><AssistantPanel adapter={assistantAdapter} explainCapability="blockly.explain" suggestCapability="blockly.suggest_changes" /></Box>}
 
       {showSuccessAlert && <SuccessAlert title={showSuccessAlertText} description={''} />}
 

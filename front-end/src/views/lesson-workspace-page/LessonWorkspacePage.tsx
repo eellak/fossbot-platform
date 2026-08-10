@@ -336,7 +336,7 @@ export default function LessonWorkspacePage() {
       {saveState === 'failed' && <Button size="small" onClick={() => void retrySave()}>{t('education.student.retry')}</Button>}
     </Stack>
     <LinearProgress variant="determinate" value={enrollment.progress_percent} sx={{ height: 3 }} />
-    {assistantAdapter && <Box sx={{ px: 2, py: 1 }}><AssistantPanel adapter={assistantAdapter} explainCapability={lesson.editorType === 'python' ? 'code.explain' : 'blockly.explain'} suggestCapability={lesson.editorType === 'python' ? 'code.suggest_changes' : 'blockly.suggest_changes'} suggestedPrompts={lesson.editorType === 'python' ? [t('aiAssistant.prompts.pythonError'), t('aiAssistant.prompts.pythonTrace')] : [t('aiAssistant.prompts.blocklyExplain'), t('aiAssistant.prompts.blocklyError')]} /></Box>}
+    {assistantAdapter && <Box sx={{ px: 2, py: 1 }}><AssistantPanel adapter={assistantAdapter} explainCapability={lesson.editorType === 'python' ? 'code.explain' : 'blockly.explain'} suggestCapability={lesson.editorType === 'python' ? 'code.suggest_changes' : 'blockly.suggest_changes'} /></Box>}
     {enrollment.update_available && <Alert severity="info" action={<Button color="inherit" onClick={() => navigate(`/courses/${courseId}`)}>{t('education.student.reviewChanges')}</Button>}>{t('education.workspace.updateWhileOpen')}</Alert>}
     {saveState === 'conflict' && <Alert severity="error" action={<Button color="inherit" onClick={() => void load()}>{t('education.conflict.reload')}</Button>}>{t('education.workspace.staleTab')}</Alert>}
     <Box sx={{ display: 'flex', flex: 1, minHeight: 0 }}>

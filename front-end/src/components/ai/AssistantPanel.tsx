@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   Alert, Box, Button, Chip, CircularProgress, Collapse, Dialog, DialogActions, DialogContent,
-  DialogTitle, Divider, Drawer, LinearProgress, MenuItem, Paper, Stack, TextField, Typography,
-  useMediaQuery, useTheme,
+  DialogTitle, Divider, Fab, IconButton, LinearProgress, MenuItem, Paper, Portal, Stack, TextField, Tooltip, Typography,
 } from '@mui/material';
-import { IconRobot, IconSparkles, IconX } from '@tabler/icons-react';
+import { IconMinus, IconRobot, IconSettings, IconSparkles } from '@tabler/icons-react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from 'src/authentication/AuthProvider';
 import { AIRequestError, reportAILocalUsage } from 'src/ai/AssistantApi';
@@ -33,30 +34,28 @@ type Props = {
   adapter: AssistantSurfaceAdapter;
   explainCapability: AICapabilityId;
   suggestCapability: AICapabilityId;
-  suggestedPrompts: string[];
-  primaryLabel?: string;
-  secondaryLabel?: string;
   confirmationBody?: string;
   appliedMessage?: string;
   singleMode?: boolean;
+  contextControls?: ReactNode;
+  contextKey?: string;
 };
 
 const suggestionBase = (suggestion: AIAssistantSuggestion) => suggestion.type === 'lesson_operations' ? suggestion.baseRevision : suggestion.baseFingerprint;
 
-export default function AssistantPanel({ adapter, explainCapability, suggestCapability, suggestedPrompts, primaryLabel, secondaryLabel, confirmationBody, appliedMessage, singleMode = false }: Props) {
+export default function AssistantPanel({ adapter, explainCapability, suggestCapability, confirmationBody, appliedMessage, singleMode = false, contextControls, contextKey = '' }: Props) {
   const { t } = useTranslation();
   const { token } = useAuth();
   const { access, loading, error: accessError, refresh } = useAssistantAccess();
-  const theme = useTheme();
-  const compact = useMediaQuery(theme.breakpoints.down('md'));
   const [open, setOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [mode, setMode] = useState<RequestMode>('explain');
   const [question, setQuestion] = useState('');
   const [history, setHistory] = useState<ConversationTurn[]>([]);
   const [output, setOutput] = useState('');
   const [status, setStatus] = useState<'idle' | 'streaming' | 'done' | 'stopped' | 'error'>('idle');
   const [requestError, setRequestError] = useState('');
-  const [attribution, setAttribution] = useState<{ provider: string; model: string; runtime: string } | null>(null);
+  const [attribution, setAttribution] = useState<{ provider: string; model: string } | null>(null);
   const [preview, setPreview] = useState<SuggestionPreview | null>(null);
   const [previewCapability, setPreviewCapability] = useState<AICapabilityId | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -66,12 +65,22 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
   const [consent, setConsent] = useState<{ provider: AIPublicProvider; question: string; mode: RequestMode; kind: 'download' | 'local' } | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const runtimeRef = useRef<AIAssistantRuntime | null>(null);
+  const contextKeyRef = useRef(contextKey);
+  const outputRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => () => {
     abortRef.current?.abort();
     runtimeRef.current?.cancel();
     void runtimeRef.current?.dispose();
   }, []);
+
+  useEffect(() => {
+    if (contextKeyRef.current === contextKey) return;
+    abortRef.current?.abort();
+    runtimeRef.current?.cancel();
+    contextKeyRef.current = contextKey;
+    setQuestion(''); setHistory([]); setOutput(''); setStatus('idle'); setRequestError(''); setAttribution(null); setPreview(null); setPreviewCapability(null); setLastRequest(null); setRuntimeStatus({ readiness: 'idle' });
+  }, [contextKey]);
 
   const explain = access?.capabilities.find((item) => item.capability === explainCapability);
   const suggest = access?.capabilities.find((item) => item.capability === suggestCapability);
@@ -84,6 +93,17 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
     || allowedProviders.find((provider) => provider.id === activeDecision?.defaultProviderId)
     || allowedProviders[0];
   const suggestionCapabilities: AICapabilityId[] = ['code.suggest_changes', 'blockly.suggest_changes', 'lesson.draft', 'lesson.suggest_changes', 'stage.create', 'stage.suggest_changes'];
+
+  useEffect(() => {
+    if (!singleMode && mode === 'explain' && explain && !explain.allowed && suggest?.allowed) setMode('suggest');
+  }, [explain, mode, singleMode, suggest]);
+
+  useEffect(() => {
+    const node = outputRef.current;
+    if (!node || !open) return undefined;
+    const frame = window.requestAnimationFrame(() => { node.scrollTop = node.scrollHeight; });
+    return () => window.cancelAnimationFrame(frame);
+  }, [open, output, status]);
 
   const run = async (nextQuestion = question, nextMode = mode, consentGranted = false, providerOverrideId?: number) => {
     const trimmed = nextQuestion.trim();
@@ -151,7 +171,6 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
         if (event.type === 'start') setAttribution({
           provider: String(event.data.provider || provider.name),
           model: String(event.data.model || provider.model),
-          runtime: String(event.data.runtime || provider.runtime),
         });
         if (event.type === 'text_delta') {
           streamed += String(event.data.text || '');
@@ -223,49 +242,56 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
     }
   };
 
-  const panel = <Paper variant="outlined" sx={{ width: '100%', maxWidth: compact ? '100vw' : 760, boxSizing: 'border-box', p: 2, mt: compact ? 0 : 1.5, maxHeight: compact ? '100%' : 620, overflowY: 'auto', overflowX: 'hidden', '& .MuiButton-root': { minHeight: compact ? 44 : undefined }, '& .MuiChip-clickable': { minHeight: compact ? 44 : undefined } }}>
+  const panel = <Paper id="fossbot-buddy-panel" role="dialog" aria-label={t('aiAssistant.title')} elevation={8} sx={{ width: '100%', boxSizing: 'border-box', p: 2, maxHeight: 'calc(100vh - 40px)', overflowY: 'auto', overflowX: 'hidden', borderRadius: 2, '& .MuiButton-root': { minHeight: { xs: 44, md: 36 } }, '& .MuiChip-clickable': { minHeight: { xs: 44, md: 32 } } }}>
     <Stack spacing={2}>
       <Stack direction="row" alignItems="center" spacing={1}>
         <IconRobot size={22} aria-hidden="true" />
         <Box sx={{ flex: 1 }}><Typography variant="h6">{t('aiAssistant.title')}</Typography><Typography variant="caption" color="text.secondary">{t('aiAssistant.subtitle')}</Typography></Box>
-        {compact && <Button aria-label={t('aiAssistant.close')} onClick={() => { runtimeRef.current?.cancel(); abortRef.current?.abort(); setStatus((current) => current === 'streaming' ? 'stopped' : current); setOpen(false); }}><IconX size={19} /></Button>}
+        {allowedProviders.length > 0 && <IconButton aria-label={t('aiAssistant.settings')} aria-expanded={settingsOpen} onClick={() => setSettingsOpen((current) => !current)}><IconSettings size={19} /></IconButton>}
+        <IconButton aria-label={t('aiAssistant.minimize')} onClick={() => setOpen(false)}><IconMinus size={19} /></IconButton>
       </Stack>
-      <Alert severity="info">{t(`aiAssistant.runtimeNotices.${selectedProvider?.runtime || 'hosted'}`)}</Alert>
+      <Collapse in={settingsOpen} unmountOnExit>
+        <Stack spacing={1.25} sx={{ p: 1.25, bgcolor: 'action.hover', borderRadius: 1 }}>
+          {allowedProviders.length > 0 && <TextField select size="small" label={t('aiAssistant.provider')} value={selectedProvider?.id || ''} onChange={(event) => { setSelectedProviderId(Number(event.target.value)); setRuntimeStatus({ readiness: 'idle' }); }} disabled={status === 'streaming'} sx={{ minWidth: 0, '& .MuiInputBase-root': { minWidth: 0 }, '& .MuiSelect-select': { minWidth: 0, maxWidth: '100%', boxSizing: 'border-box' } }}>{allowedProviders.map((provider) => <MenuItem key={provider.id} value={provider.id}>{provider.name}</MenuItem>)}</TextField>}
+          {selectedProvider?.runtime === 'browser' && <Button size="small" color="error" sx={{ alignSelf: 'flex-start' }} disabled={status === 'streaming'} onClick={() => { const runtime = runtimeFor(selectedProvider, token); if (runtime instanceof WebLLMRuntime) void runtime.clearCache().then(() => { localStorage.removeItem(webLLMConsentKey(selectedProvider)); setRuntimeStatus({ readiness: 'idle', cached: false }); }).catch(() => setRuntimeStatus({ readiness: 'error', message: 'webllm_worker_stopped' })); }}>{t('aiAssistant.clearModel')}</Button>}
+        </Stack>
+      </Collapse>
+      {contextControls}
       <Box component="span" role="status" aria-live="polite" sx={{ position: 'absolute', width: 1, height: 1, p: 0, m: -1, overflow: 'hidden', clip: 'rect(0, 0, 0, 0)', whiteSpace: 'nowrap', border: 0 }}>{status === 'streaming' ? t('aiAssistant.streaming') : status === 'done' ? t('aiAssistant.completed') : status === 'stopped' ? t('aiAssistant.stopped') : ''}</Box>
       {loading && <Stack direction="row" spacing={1} alignItems="center"><CircularProgress size={18} /><Typography>{t('loading')}</Typography></Stack>}
       {accessError && <Alert severity="warning" action={<Button onClick={() => void refresh()}>{t('retry')}</Button>}>{t('aiAssistant.errors.access')}</Alert>}
       {!loading && !accessError && !explain?.allowed && !suggest?.allowed && <Alert severity="info">{t('aiAssistant.unavailable')}</Alert>}
       {(explain?.allowed || suggest?.allowed) && <>
-        {allowedProviders.length > 0 && <TextField select size="small" label={t('aiAssistant.runtime')} value={selectedProvider?.id || ''} onChange={(event) => { setSelectedProviderId(Number(event.target.value)); setRuntimeStatus({ readiness: 'idle' }); }} disabled={status === 'streaming'} sx={{ minWidth: 0, '& .MuiInputBase-root': { minWidth: 0 }, '& .MuiSelect-select': { minWidth: 0, maxWidth: '100%', boxSizing: 'border-box' } }}>{allowedProviders.map((provider) => <MenuItem key={provider.id} value={provider.id}>{provider.name} · {t(`aiAdmin.runtimes.${provider.runtime}`)}</MenuItem>)}</TextField>}
         {runtimeStatus.readiness === 'loading' && <Box><Typography variant="caption">{runtimeStatus.message || t('aiAssistant.runtimeLoading')}</Typography><LinearProgress variant={typeof runtimeStatus.progress === 'number' ? 'determinate' : 'indeterminate'} value={(runtimeStatus.progress || 0) * 100} /></Box>}
         {(runtimeStatus.readiness === 'error' || runtimeStatus.readiness === 'unavailable') && <Alert severity="warning">{t(`aiAssistant.errors.${runtimeStatus.message || 'provider_error'}`, t('aiAssistant.errors.provider_error'))}</Alert>}
-        {selectedProvider?.runtime === 'browser' && <Button size="small" color="error" sx={{ minHeight: 44, alignSelf: 'flex-start' }} disabled={status === 'streaming'} onClick={() => { const runtime = runtimeFor(selectedProvider, token); if (runtime instanceof WebLLMRuntime) void runtime.clearCache().then(() => { localStorage.removeItem(webLLMConsentKey(selectedProvider)); setRuntimeStatus({ readiness: 'idle', cached: false }); }).catch(() => setRuntimeStatus({ readiness: 'error', message: 'webllm_worker_stopped' })); }}>{t('aiAssistant.clearModel')}</Button>}
-        <Stack direction="row" spacing={1}>
-          <Button variant={mode === 'explain' ? 'contained' : 'outlined'} disabled={!explain?.allowed || status === 'streaming'} onClick={() => setMode('explain')}>{primaryLabel || t('aiAssistant.explain')}</Button>
-          {canSuggest && <Button variant={mode === 'suggest' ? 'contained' : 'outlined'} disabled={status === 'streaming'} onClick={() => setMode('suggest')}>{secondaryLabel || t('aiAssistant.suggest')}</Button>}
-        </Stack>
+        {!singleMode && canSuggest && explain?.allowed && <TextField select size="small" label={t('aiAssistant.task')} value={mode} onChange={(event) => setMode(event.target.value as RequestMode)} disabled={status === 'streaming'}>
+          <MenuItem value="explain">{t('aiAssistant.tasks.explain')}</MenuItem>
+          <MenuItem value="suggest">{t('aiAssistant.tasks.suggest')}</MenuItem>
+        </TextField>}
         {unavailableReason && <Alert severity="info">{unavailableReason}</Alert>}
-        <Stack direction="row" gap={1} flexWrap="wrap">{suggestedPrompts.map((prompt) => <Chip key={prompt} label={prompt} onClick={() => setQuestion(prompt)} clickable />)}</Stack>
-        <TextField label={t('aiAssistant.question')} value={question} onChange={(event) => setQuestion(event.target.value)} multiline minRows={2} inputProps={{ maxLength: 2000 }} disabled={status === 'streaming'} />
+        <TextField label={t('aiAssistant.message')} value={question} onChange={(event) => setQuestion(event.target.value)} multiline minRows={2} inputProps={{ maxLength: 2000 }} disabled={status === 'streaming'} />
         <Stack direction="row" spacing={1} flexWrap="wrap">
-          <Button variant="contained" startIcon={<IconSparkles size={18} />} disabled={!activeDecision?.allowed || !question.trim() || status === 'streaming'} onClick={() => void run()}>{status === 'streaming' ? t('aiAssistant.streaming') : t('aiAssistant.ask')}</Button>
+          <Button variant="contained" startIcon={<IconSparkles size={18} />} disabled={!activeDecision?.allowed || !question.trim() || status === 'streaming'} onClick={() => void run()}>{status === 'streaming' ? t('aiAssistant.streaming') : t('aiAssistant.send')}</Button>
           {status === 'streaming' && <Button color="error" onClick={() => { runtimeRef.current?.cancel(); abortRef.current?.abort(); setStatus('stopped'); }}>{t('aiAssistant.stop')}</Button>}
           {(status === 'error' || status === 'stopped') && lastRequest && <Button onClick={() => void run(lastRequest.question, lastRequest.mode)}>{t('aiAssistant.retry')}</Button>}
         </Stack>
         {status === 'stopped' && <Alert severity="info">{t('aiAssistant.stopped')}</Alert>}
         {requestError && <Alert severity="error">{requestError}</Alert>}
-        {(output || status === 'streaming') && <Box><Stack direction="row" spacing={1} alignItems="center"><Chip size="small" color="secondary" label={t('aiAssistant.generated')} />{attribution && <Typography variant="caption" color="text.secondary" sx={{ overflowWrap: 'anywhere' }}>{attribution.provider} · {attribution.model} · {t(`aiAdmin.runtimes.${attribution.runtime}`, attribution.runtime)}</Typography>}</Stack><Typography sx={{ mt: 1, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{output || t('aiAssistant.waiting')}</Typography></Box>}
+        {(output || status === 'streaming') && <Box ref={outputRef} tabIndex={0} aria-live="polite" sx={{ maxHeight: 280, overflowY: 'auto', overscrollBehavior: 'contain' }}><Stack direction="row" spacing={1} alignItems="center"><Chip size="small" color="secondary" label={t('aiAssistant.generated')} />{attribution && <Typography variant="caption" color="text.secondary" sx={{ overflowWrap: 'anywhere' }}>{attribution.provider} · {attribution.model}</Typography>}</Stack><Box sx={{ mt: 1, overflowWrap: 'anywhere', '& > :first-of-type': { mt: 0 }, '& > :last-child': { mb: 0 }, '& p': { my: 1 }, '& ul, & ol': { my: 1, pl: 3 }, '& blockquote': { mx: 0, pl: 1.5, borderLeft: 3, borderColor: 'divider', color: 'text.secondary' }, '& pre': { p: 1.25, overflowX: 'auto', bgcolor: 'action.hover', borderRadius: 1 }, '& code': { fontFamily: 'monospace', fontSize: '0.875em' }, '& table': { display: 'block', maxWidth: '100%', overflowX: 'auto', borderCollapse: 'collapse' }, '& th, & td': { px: 1, py: 0.5, border: 1, borderColor: 'divider' } }}><ReactMarkdown remarkPlugins={[remarkGfm]}>{output || t('aiAssistant.waiting')}</ReactMarkdown></Box></Box>}
         {preview && <Paper variant="outlined" sx={{ p: 1.5 }}><Typography variant="subtitle2">{t('aiAssistant.preview')}</Typography><Typography sx={{ my: 1 }}>{preview.summary}</Typography><Divider />{preview.kind === 'lesson' ? <Stack spacing={1.25} sx={{ mt: 1 }}><Box><Typography variant="caption" color="text.secondary">{t('aiAssistant.authoring.changes')}</Typography><Stack direction="row" gap={0.5} flexWrap="wrap" sx={{ mt: 0.5 }}>{preview.changes?.map((change, index) => <Chip key={`${change}-${index}`} size="small" label={t(`aiAssistant.authoring.operations.${change}`, change)} />)}</Stack></Box><Box><Typography variant="caption" color="text.secondary">{t('aiAssistant.authoring.studentVisible')}</Typography><Box component="pre" tabIndex={0} sx={{ mt: 0.5, p: 1, maxHeight: 160, overflow: 'auto', bgcolor: 'action.hover', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{preview.studentVisible}</Box></Box>{preview.teacherOnly && <Alert severity="warning"><Typography variant="caption" fontWeight={700}>{t('aiAssistant.authoring.teacherOnly')}</Typography><Box component="pre" tabIndex={0} sx={{ m: 0, mt: 0.5, maxHeight: 130, overflow: 'auto', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{preview.teacherOnly}</Box></Alert>}{preview.validation?.length ? <Alert severity="warning">{t('aiAssistant.authoring.validationIssues', { count: preview.validation.length })}</Alert> : <Alert severity="success">{t('aiAssistant.authoring.validationPass')}</Alert>}</Stack> : preview.kind === 'stage' ? <StageSuggestionPreview preview={preview} /> : <><Typography variant="caption" color="text.secondary">{preview.kind === 'python' ? t('aiAssistant.pythonDiff') : t('aiAssistant.generatedPython')}</Typography><Box component="pre" tabIndex={0} sx={{ mt: 1, p: 1, maxHeight: 180, overflow: 'auto', bgcolor: 'action.hover', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{preview.kind === 'python' ? preview.after : preview.detail}</Box></>}<Button sx={{ mt: 1 }} variant="contained" onClick={() => setConfirmOpen(true)}>{t('aiAssistant.apply')}</Button></Paper>}
       </>}
     </Stack>
   </Paper>;
 
-  return <Box sx={{ width: '100%' }}>
-    <Button sx={{ minHeight: compact ? 44 : undefined }} startIcon={<IconRobot size={19} />} aria-expanded={open} onClick={() => { if (open) { runtimeRef.current?.cancel(); abortRef.current?.abort(); setStatus((current) => current === 'streaming' ? 'stopped' : current); } setOpen(!open); }}>{open ? t('aiAssistant.hide') : t('aiAssistant.open')}</Button>
-    {compact ? <Drawer anchor="right" open={open} PaperProps={{ sx: { width: 'min(100vw, 430px)', overflowX: 'hidden' } }} onClose={() => { runtimeRef.current?.cancel(); abortRef.current?.abort(); setStatus((current) => current === 'streaming' ? 'stopped' : current); setOpen(false); }}>{panel}</Drawer> : <Collapse in={open}>{panel}</Collapse>}
+  return <>
+    <Portal>
+      <Box sx={{ position: 'fixed', right: { xs: 12, sm: 20 }, bottom: { xs: 12, sm: 20 }, zIndex: (currentTheme) => currentTheme.zIndex.modal - 1, width: open ? 'min(430px, calc(100vw - 24px))' : 'auto', maxWidth: 'calc(100vw - 24px)' }}>
+        {open ? panel : <Tooltip title={t('aiAssistant.open')} placement="left"><Fab color="primary" aria-controls="fossbot-buddy-panel" aria-expanded={false} aria-label={t('aiAssistant.open')} onClick={() => setOpen(true)}>{status === 'streaming' ? <CircularProgress size={22} color="inherit" /> : <IconRobot size={24} />}</Fab></Tooltip>}
+      </Box>
+    </Portal>
     <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)}><DialogTitle>{t('aiAssistant.confirmTitle')}</DialogTitle><DialogContent><Typography>{confirmationBody || t('aiAssistant.confirmBody')}</Typography></DialogContent><DialogActions><Button onClick={() => setConfirmOpen(false)}>{t('cancel')}</Button><Button variant="contained" onClick={() => void apply()}>{t('aiAssistant.apply')}</Button></DialogActions></Dialog>
     <Dialog open={Boolean(consent)} onClose={() => setConsent(null)} fullWidth maxWidth="sm"><DialogTitle>{t(consent?.kind === 'download' ? 'aiAssistant.consent.downloadTitle' : 'aiAssistant.consent.localTitle')}</DialogTitle><DialogContent><Stack spacing={1.5}>{consent?.kind === 'download' ? <><Typography>{t('aiAssistant.consent.downloadBody', { size: formatBytes(webLLMDownloadGuidance(consent.provider).downloadBytes), memory: formatBytes(webLLMDownloadGuidance(consent.provider).memoryBytes) })}</Typography><Typography variant="caption" sx={{ overflowWrap: 'anywhere' }}>{t('aiAssistant.consent.source', { source: webLLMDownloadGuidance(consent.provider).source })}</Typography></> : <Alert severity="warning">{t('aiAssistant.consent.localBody')}</Alert>}</Stack></DialogContent><DialogActions><Button onClick={() => setConsent(null)}>{t('cancel')}</Button><Button variant="contained" onClick={() => { if (!consent) return; const pending = consent; if (pending.kind === 'download') localStorage.setItem(webLLMConsentKey(pending.provider), 'accepted'); setSelectedProviderId(pending.provider.id); setConsent(null); void run(pending.question, pending.mode, true, pending.provider.id); }}>{t(consent?.kind === 'download' ? 'aiAssistant.consent.download' : 'aiAssistant.consent.send')}</Button></DialogActions></Dialog>
-  </Box>;
+  </>;
 }
 
 function formatBytes(value: number) {

@@ -144,7 +144,22 @@ def test_provider_stream(payload: dict = Body(...)):
         elif "Capability: blockly.explain" in prompt:
             response = "Deterministic test-only explanation: these blocks generate Python in workspace order."
         elif "Capability: code.explain" in prompt:
-            response = "Deterministic test-only explanation: trace the current value one loop at a time."
+            response = (
+                "### Trace the program\n\n"
+                "1. Start at the first executable line.\n"
+                "2. Record the current variable values.\n"
+                "3. Read the next expression left to right.\n"
+                "4. Check whether a condition is true.\n"
+                "5. Enter only the matching branch.\n"
+                "6. Update values after each assignment.\n"
+                "7. Recheck a loop before every iteration.\n"
+                "8. Follow one function call at a time.\n"
+                "9. Return to the calling line afterward.\n"
+                "10. Note each value sent to the robot.\n"
+                "11. Compare the result with your prediction.\n"
+                "12. Change one thing before testing again.\n\n"
+                "Use `print(value)` for a small observation."
+            )
         else:
             response = "Deterministic test-only provider: hosted streaming is working."
         for text_delta in (response[:34], response[34:]):

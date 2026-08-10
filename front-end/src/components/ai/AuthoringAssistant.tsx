@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Box, MenuItem, Paper, Stack, TextField, Typography } from '@mui/material';
+import { Box, MenuItem, Stack, TextField, Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { fingerprintValue } from 'src/ai/fingerprint';
 import { applyLessonSuggestion, previewLessonSuggestion, type AuthoringTarget } from 'src/ai/suggestions/lessonSuggestions';
@@ -73,8 +73,14 @@ export default function AuthoringAssistant({ course, lesson, validationIssues, o
     },
   };
 
-  return <Paper variant="outlined" sx={{ p: 1.5 }}>
-    <Stack spacing={1}>
+  return <AssistantPanel
+    adapter={adapter}
+    explainCapability="lesson.draft"
+    suggestCapability="lesson.suggest_changes"
+    confirmationBody={t('aiAssistant.authoring.confirmBody')}
+    appliedMessage={t('aiAssistant.authoring.applied')}
+    contextKey={`${course.id}:${lesson?.id || 'course'}:${targetValue}`}
+    contextControls={<Stack spacing={1}>
       <Box><Typography variant="subtitle2">{t('aiAssistant.authoring.targetTitle')}</Typography><Typography variant="caption" color="text.secondary">{t('aiAssistant.authoring.targetHelp')}</Typography></Box>
       <TextField select size="small" label={t('aiAssistant.authoring.target')} value={targetValue} onChange={(event) => setTargetValue(event.target.value as TargetValue)}>
         <MenuItem value="course">{t('aiAssistant.authoring.targets.course')}</MenuItem>
@@ -82,17 +88,6 @@ export default function AuthoringAssistant({ course, lesson, validationIssues, o
         {lesson?.activities.map((activity, index) => <MenuItem key={activity.key} value={`activity:${activity.key}`}>{t('aiAssistant.authoring.targets.activity', { index: index + 1, type: t(`education.activities.types.${activity.type}`) })}</MenuItem>)}
         {validationIssues.length > 0 && <MenuItem value="validation">{t('aiAssistant.authoring.targets.validation', { count: validationIssues.length })}</MenuItem>}
       </TextField>
-      <AssistantPanel
-        key={`${course.id}:${lesson?.id || 'course'}:${targetValue}`}
-        adapter={adapter}
-        explainCapability="lesson.draft"
-        suggestCapability="lesson.suggest_changes"
-        primaryLabel={t('aiAssistant.authoring.draft')}
-        secondaryLabel={t('aiAssistant.authoring.revise')}
-        confirmationBody={t('aiAssistant.authoring.confirmBody')}
-        appliedMessage={t('aiAssistant.authoring.applied')}
-        suggestedPrompts={[t('aiAssistant.authoring.prompts.outline'), t('aiAssistant.authoring.prompts.simplify'), t('aiAssistant.authoring.prompts.activity')]}
-      />
-    </Stack>
-  </Paper>;
+    </Stack>}
+  />;
 }
