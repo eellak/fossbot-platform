@@ -10,6 +10,14 @@ logger = logging.getLogger("uvicorn")
 DEV_SAMPLE_TAG = "dev-education-sample"
 DEV_TEST_USERS = (
     {
+        "username": "dev_admin",
+        "firstname": "Dev",
+        "lastname": "Admin",
+        "email": "dev.admin@fossbot.test",
+        "role": UserRole.ADMIN,
+        "beta_tester": True,
+    },
+    {
         "username": "dev_teacher",
         "firstname": "Dev",
         "lastname": "Teacher",

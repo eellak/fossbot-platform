@@ -35,6 +35,12 @@ const adminPages: AdminType[] = [
     subtitle: 'Manage users',
     icon: icon3,
   },
+  {
+    href: '/admin/ai',
+    title: 'aiAdmin.title',
+    subtitle: 'aiAdmin.menuSubtitle',
+    icon: icon3,
+  },
 ];
 
 

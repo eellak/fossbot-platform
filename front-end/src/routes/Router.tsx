@@ -47,6 +47,7 @@ const Error = Loadable(lazy(() => import('../views/authentication/Error')));
 import AuthProvider from '../authentication/AuthProvider'; // Update with actual path
 import PrivateRoute from './PrivateRoute'; // Update with actual path
 import AdminPanelPage from 'src/views/admin-panel-page/AdminPanelPage';
+const AIAdminPage = Loadable(lazy(() => import('../views/ai-admin-page/AIAdminPage')));
 
 const RoleBasedRoute = Loadable(lazy(() => import('./RoleBasedRoute')));
 const AdminRoute = Loadable(lazy(() => import('./AdminRoute')));
@@ -306,6 +307,18 @@ const Router = [
         path: '',
         element: <FullLayout />,
         children: [{ path: '', exact: true, element: <AdminPanelPage /> }],
+      },
+    ],
+  },
+  {
+    path: '/admin/ai',
+    title: 'AI settings',
+    element: <AdminRoute />,
+    children: [
+      {
+        path: '',
+        element: <FullLayout />,
+        children: [{ path: '', exact: true, element: <AIAdminPage /> }],
       },
     ],
   },

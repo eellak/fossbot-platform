@@ -201,6 +201,95 @@ class User(Base):
     provider = Column(String, nullable=False, default='local')  # Auth provider(s): 'local', 'google', 'github', or comma-separated
     access_revoked = Column(Boolean, default=False, nullable=False)  # Blocks user login/access without deleting account
 
+
+class AIProviderConfig(Base):
+    __tablename__ = "ai_provider_configs"
+    __table_args__ = (
+        CheckConstraint(
+            "provider_type IN ('openai', 'google', 'openai_compatible', 'webllm')",
+            name="ck_ai_provider_configs_type",
+        ),
+        CheckConstraint(
+            "runtime IN ('hosted', 'browser', 'user_local')",
+            name="ck_ai_provider_configs_runtime",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(120), nullable=False, unique=True)
+    provider_type = Column(String(32), nullable=False)
+    runtime = Column(String(24), nullable=False)
+    enabled = Column(Boolean, default=False, nullable=False)
+    model = Column(String(160), nullable=False)
+    base_url = Column(String(500))
+    encrypted_secret = Column(Text)
+    settings = Column(JSON_DOCUMENT, nullable=False, default=dict)
+    request_limit = Column(Integer)
+    token_limit = Column(Integer)
+    created_by_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    updated_by_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow, nullable=False)
+
+
+class AIInstanceSettings(Base):
+    __tablename__ = "ai_instance_settings"
+    __table_args__ = (CheckConstraint("id = 1", name="ck_ai_instance_settings_singleton"),)
+
+    id = Column(Integer, primary_key=True, default=1)
+    enabled = Column(Boolean, default=False, nullable=False)
+    default_provider_id = Column(Integer, ForeignKey('ai_provider_configs.id'))
+    request_limit = Column(Integer)
+    token_limit = Column(Integer)
+    registry_version = Column(String(32), nullable=False, default="1")
+    updated_by_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow, nullable=False)
+
+
+class AIPolicyRule(Base):
+    __tablename__ = "ai_policy_rules"
+    __table_args__ = (
+        CheckConstraint(
+            "scope_type IN ('instance', 'role', 'class_group', 'user')",
+            name="ck_ai_policy_rules_scope",
+        ),
+        CheckConstraint("effect IN ('allow', 'deny')", name="ck_ai_policy_rules_effect"),
+        UniqueConstraint('scope_type', 'scope_key', 'capability', name='uq_ai_policy_scope_capability'),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    scope_type = Column(String(24), nullable=False)
+    scope_key = Column(String(80), nullable=False)
+    capability = Column(String(80), nullable=False)
+    effect = Column(String(16), nullable=False)
+    provider_ids = Column(JSON_DOCUMENT)
+    runtimes = Column(JSON_DOCUMENT)
+    created_by_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    updated_by_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow, nullable=False)
+
+
+class AIUsageEvent(Base):
+    __tablename__ = "ai_usage_events"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
+    provider_id = Column(Integer, ForeignKey('ai_provider_configs.id'))
+    capability = Column(String(80), nullable=False)
+    provider_name = Column(String(120))
+    model = Column(String(160))
+    runtime = Column(String(24), nullable=False)
+    request_id = Column(String(80), nullable=False, unique=True)
+    started_at = Column(DateTime, nullable=False)
+    completed_at = Column(DateTime)
+    outcome = Column(String(40), nullable=False)
+    latency_ms = Column(Integer)
+    input_tokens = Column(Integer)
+    output_tokens = Column(Integer)
+    policy_version = Column(String(32), nullable=False)
+    prompt_version = Column(String(32))
+
 class SourceProviderConnection(Base):
     __tablename__ = "source_provider_connections"
     __table_args__ = (UniqueConstraint('user_id', 'provider_name', 'provider_account_login', name='uq_source_provider_connection'),)

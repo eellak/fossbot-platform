@@ -5,11 +5,14 @@ import {
     Grid,
     Box,
     Typography,
+    Button,
 } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import SuccessAlert from 'src/components/alerts/SuccessAlert';
 import ErrorAlert from 'src/components/alerts/ErrorAlert';
 import UsersCard from 'src/components/admin-panel/UsersCard';
+import { Link } from 'react-router-dom';
+import { IconRobot } from '@tabler/icons-react';
 
 const AdminPanelPage = () => {
     const { t } = useTranslation();
@@ -41,6 +44,11 @@ const AdminPanelPage = () => {
                     </Typography>
                 </Grid>
                 <Grid item xs={12} sm={12} mt={3}>
+                    <Box mb={2} display="flex" justifyContent="flex-end">
+                        <Button component={Link} to="/admin/ai" variant="outlined" startIcon={<IconRobot size={18} />}>
+                            {t('aiAdmin.open')}
+                        </Button>
+                    </Box>
                     <UsersCard 
                      onShowSuccessAlert={handleShowSuccessAlert}
                      onShowErrorAlert={handleShowErrorAlert}

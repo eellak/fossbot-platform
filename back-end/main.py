@@ -54,6 +54,8 @@ from routers.marketplace import cached_public_marketplace_index, router as marke
 from routers.local_stages import router as local_stages_router
 from routers.courses import router as courses_router
 from routers.classrooms import router as classrooms_router
+from routers.ai import router as ai_router
+from routers.ai_admin import router as ai_admin_router
 from utils.github_app_auth import create_github_app_jwt
 from utils.beta_access import require_beta_access
 from utils.marketplace_schema import marketplace_entry_path
@@ -85,6 +87,8 @@ app.include_router(marketplace_router)
 app.include_router(local_stages_router)
 app.include_router(courses_router)
 app.include_router(classrooms_router)
+app.include_router(ai_router)
+app.include_router(ai_admin_router)
 
 # Security
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")

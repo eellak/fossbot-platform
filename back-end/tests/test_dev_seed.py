@@ -111,12 +111,13 @@ def test_archived_dev_sample_is_restored_without_replacing_lessons(db, users):
     assert db.query(Lesson).filter(Lesson.course_id == course.id).count() == 12
 
 
-def test_dev_users_include_two_teachers_one_verifier_and_two_students(db):
+def test_dev_users_include_admin_two_teachers_one_verifier_and_two_students(db):
     seeded = seed_dev_test_users(db, "shared-dev-password")
     seeded_again = seed_dev_test_users(db, "shared-dev-password")
 
     assert [user.id for user in seeded_again] == [user.id for user in seeded]
-    assert db.query(User).filter(User.username.in_([item["username"] for item in DEV_TEST_USERS])).count() == 4
+    assert db.query(User).filter(User.username.in_([item["username"] for item in DEV_TEST_USERS])).count() == 5
+    assert len([user for user in seeded if user.role == UserRole.ADMIN]) == 1
     assert len([user for user in seeded if user.role == UserRole.TUTOR]) == 2
     assert len([user for user in seeded if user.role == UserRole.USER]) == 2
     assert all(user.activated and user.provider == "local" for user in seeded)
