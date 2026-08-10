@@ -35,6 +35,7 @@ import SuccessAlert from 'src/components/alerts/SuccessAlert';
 import ErrorAlert from 'src/components/alerts/ErrorAlert';
 import { Project, type ProjectStageReference } from 'src/authentication/AuthInterfaces';
 import { loadStageFromProvider } from 'src/stages/StagesApi';
+import { loadLocalStage } from 'src/stages/LocalStagesApi';
 import type { RawStageConfig } from 'src/simulator/stages';
 import StageLoadScreen from 'src/components/stage-select-popup/StageLoadScreen';
 import { useMediaQuery } from '@mui/material';
@@ -43,14 +44,9 @@ import PhysicalRobotTerminal from 'src/components/robot/PhysicalRobotTerminal';
 import { useRobotConnection } from 'src/robot/RobotConnectionContext';
 import ProjectStageIndicator from 'src/components/editors/ProjectStageIndicator';
 
-function stageNeedsProviderLoad(
-  stage: ProjectStageReference | null,
-): stage is ProjectStageReference & { repoOwner: string; repoName: string } {
-  return (
-    stage?.sourceType === 'github' &&
-    !!stage.repoOwner &&
-    !!stage.repoName
-  );
+function stageNeedsAuthenticatedLoad(stage: ProjectStageReference | null): boolean {
+  return (stage?.sourceType === 'local' && !!stage.localStageId)
+    || (stage?.sourceType === 'github' && !!stage.repoOwner && !!stage.repoName);
 }
 
 const BlocklyPage = () => {
@@ -158,7 +154,7 @@ const BlocklyPage = () => {
             }
             setProjectTitle(fetchedProject.name);
             const stageRef = fetchedProject.stageReference || null;
-            setInitialStageConfig(stageNeedsProviderLoad(stageRef) ? undefined : null);
+            setInitialStageConfig(stageNeedsAuthenticatedLoad(stageRef) ? undefined : null);
             setInitialStageAssetBaseUrl(null);
             setSelectedStage(stageRef);
           }
@@ -179,8 +175,9 @@ const BlocklyPage = () => {
     fetchProject();
   }, [projectId, navigate]);
 
+  // Local and private GitHub stages are loaded through authenticated backend APIs.
   useEffect(() => {
-    if (!stageNeedsProviderLoad(selectedStage)) {
+    if (!stageNeedsAuthenticatedLoad(selectedStage)) {
       setInitialStageConfig(null);
       setInitialStageAssetBaseUrl(null);
       return;
@@ -190,7 +187,10 @@ const BlocklyPage = () => {
     setInitialStageConfig(undefined);
     setInitialStageAssetBaseUrl(null);
     let cancelled = false;
-    loadStageFromProvider(token, selectedStage.repoOwner, selectedStage.repoName)
+    const load = selectedStage?.sourceType === 'local' && selectedStage.localStageId
+      ? loadLocalStage(token, selectedStage.localStageId).then((stage) => ({ record: stage.record, rawBaseUrl: null }))
+      : loadStageFromProvider(token, selectedStage?.repoOwner || '', selectedStage?.repoName || '');
+    load
       .then((loaded) => {
         if (!cancelled) {
           setInitialStageAssetBaseUrl(loaded.rawBaseUrl || null);
@@ -204,12 +204,12 @@ const BlocklyPage = () => {
         }
       });
     return () => { cancelled = true; };
-  }, [token, selectedStage?.repoOwner, selectedStage?.repoName, selectedStage?.sourceType]);
+  }, [token, selectedStage?.localStageId, selectedStage?.repoOwner, selectedStage?.repoName, selectedStage?.sourceType]);
 
   useEffect(() => {
     const handleStageSelected = (event: Event) => {
       const stageRef = (event as CustomEvent<ProjectStageReference>).detail || null;
-      setInitialStageConfig(stageNeedsProviderLoad(stageRef) ? undefined : null);
+      setInitialStageConfig(stageNeedsAuthenticatedLoad(stageRef) ? undefined : null);
       setInitialStageAssetBaseUrl(null);
       setSelectedStage(stageRef);
     };
@@ -301,7 +301,7 @@ const BlocklyPage = () => {
 
   const isResponsive = useMediaQuery('(max-width:1024px)');
   const isStageConfigLoading =
-    stageNeedsProviderLoad(selectedStage) && initialStageConfig === undefined;
+    stageNeedsAuthenticatedLoad(selectedStage) && initialStageConfig === undefined;
   const selectedStageLabel = selectedStage?.title || [selectedStage?.repoOwner, selectedStage?.repoName].filter(Boolean).join('/');
 
   const terminalPanel = (

@@ -8,6 +8,8 @@ from typing import Any, List, Optional
 
 import uvicorn
 from database.database import (
+    LocalStage,
+    MarketplaceModerationOverride,
     MarketplaceRoleAssignment,
     Projects,
     User,
@@ -49,6 +51,7 @@ from routers.stage_sources import (
     stage_repo_list_item,
 )
 from routers.marketplace import cached_public_marketplace_index, router as marketplace_router
+from routers.local_stages import router as local_stages_router
 from routers.courses import router as courses_router
 from routers.classrooms import router as classrooms_router
 from utils.github_app_auth import create_github_app_jwt
@@ -79,6 +82,7 @@ app.add_middleware(
 )
 app.include_router(stage_sources_router)
 app.include_router(marketplace_router)
+app.include_router(local_stages_router)
 app.include_router(courses_router)
 app.include_router(classrooms_router)
 
@@ -738,6 +742,7 @@ async def update_project(project_id: int, project_update: ProjectsCreate, curren
 
 def clear_project_stage_reference(project: Projects) -> None:
     project.stage_source_type = None
+    project.stage_local_id = None
     project.stage_repo_owner = None
     project.stage_repo_name = None
     project.stage_repo_visibility = None
@@ -752,6 +757,7 @@ def set_project_stage_reference(project: Projects, reference: Optional[dict[str,
     if not reference:
         return
     project.stage_source_type = reference.get("sourceType")
+    project.stage_local_id = reference.get("localStageId")
     project.stage_repo_owner = reference.get("repoOwner")
     project.stage_repo_name = reference.get("repoName")
     project.stage_repo_visibility = reference.get("visibility")
@@ -766,6 +772,7 @@ def stage_reference_payload(source: Any) -> Optional[dict[str, Any]]:
         return None
     return {
         "sourceType": source.stage_source_type,
+        "localStageId": source.stage_local_id,
         "repoOwner": source.stage_repo_owner,
         "repoName": source.stage_repo_name,
         "visibility": source.stage_repo_visibility,
@@ -785,6 +792,7 @@ def project_payload(project: Projects) -> dict[str, Any]:
         "date_created": project.date_created,
         "code": project.code,
         "stage_source_type": project.stage_source_type,
+        "stage_local_id": project.stage_local_id,
         "stage_repo_owner": project.stage_repo_owner,
         "stage_repo_name": project.stage_repo_name,
         "stage_repo_visibility": project.stage_repo_visibility,
@@ -801,7 +809,22 @@ def stage_reference_was_provided(payload: Any) -> bool:
     return "stageReference" in fields
 
 
-def published_marketplace_entry(owner: Optional[str], repo: Optional[str], entry_path: Optional[str]) -> dict[str, Any]:
+def published_marketplace_entry(owner: Optional[str], repo: Optional[str], entry_path: Optional[str], db: SessionLocal) -> dict[str, Any]:
+    if entry_path and entry_path.startswith("local:"):
+        from routers.local_stages import local_marketplace_entries
+        try:
+            publication_id = int(entry_path.split(":", 1)[1])
+        except ValueError as error:
+            raise stage_error(400, "validation_failed", "Local marketplace reference is invalid.") from error
+        local_entry = next((entry for entry in local_marketplace_entries(db) if entry.get("localPublicationId") == publication_id), None)
+        suppressed = db.query(MarketplaceModerationOverride.id).filter(
+            MarketplaceModerationOverride.source_type == "local",
+            MarketplaceModerationOverride.local_publication_id == publication_id,
+            MarketplaceModerationOverride.active.is_(True),
+        ).first()
+        if local_entry and not suppressed:
+            return local_entry
+        raise stage_error(404, "marketplace_stage_not_found", "Choose a local stage that is currently published.")
     payload = cached_public_marketplace_index()
     stages = payload.get("stages") or []
     normalized_entry_path = entry_path
@@ -848,6 +871,7 @@ def normalize_stage_reference(reference: Any, current_user: User, db: SessionLoc
     if source_type == "default":
         return {
             "sourceType": "default",
+            "localStageId": None,
             "repoOwner": None,
             "repoName": None,
             "visibility": None,
@@ -856,6 +880,26 @@ def normalize_stage_reference(reference: Any, current_user: User, db: SessionLoc
             "url": reference.url,
             "commitSha": None,
         }
+    if source_type == "local":
+        if not reference.localStageId:
+            raise stage_error(400, "validation_failed", "Local stage references need localStageId.")
+        stage = db.query(LocalStage).filter(
+            LocalStage.id == reference.localStageId,
+            LocalStage.user_id == current_user.id,
+        ).first()
+        if not stage:
+            raise stage_error(404, "local_stage_not_found", "Choose one of your local stages.")
+        return {
+            "sourceType": "local",
+            "localStageId": stage.id,
+            "repoOwner": None,
+            "repoName": None,
+            "visibility": stage.visibility,
+            "marketplaceEntryPath": None,
+            "title": stage.title,
+            "url": None,
+            "commitSha": stage.checksum,
+        }
     if source_type == "github":
         require_beta_access(current_user)
         if not reference.repoOwner or not reference.repoName:
@@ -863,6 +907,7 @@ def normalize_stage_reference(reference: Any, current_user: User, db: SessionLoc
         stage = installed_user_stage_reference(current_user, db, reference.repoOwner, reference.repoName)
         return {
             "sourceType": "github",
+            "localStageId": None,
             "repoOwner": stage["repoOwner"],
             "repoName": stage["repoName"],
             "visibility": stage.get("visibility") or ("private" if stage.get("private") else "public"),
@@ -872,19 +917,21 @@ def normalize_stage_reference(reference: Any, current_user: User, db: SessionLoc
             "commitSha": None,
         }
     if source_type == "marketplace":
+        entry = published_marketplace_entry(reference.repoOwner, reference.repoName, reference.marketplaceEntryPath, db)
+        is_local = entry.get("sourceType") == "local"
         require_beta_access(current_user)
-        entry = published_marketplace_entry(reference.repoOwner, reference.repoName, reference.marketplaceEntryPath)
         return {
             "sourceType": "marketplace",
+            "localStageId": None,
             "repoOwner": entry["repoOwner"],
             "repoName": entry["repoName"],
             "visibility": "public",
-            "marketplaceEntryPath": marketplace_entry_path(entry["repoOwner"], entry["repoName"]),
+            "marketplaceEntryPath": f"local:{entry['localPublicationId']}" if is_local else marketplace_entry_path(entry["repoOwner"], entry["repoName"]),
             "title": entry.get("title") or entry["repoName"],
-            "url": f"{github_raw_base_url(entry['repoOwner'], entry['repoName'], entry['commitSha'])}/stage.json",
+            "url": entry.get("recordUrl") if is_local else f"{github_raw_base_url(entry['repoOwner'], entry['repoName'], entry['commitSha'])}/stage.json",
             "commitSha": entry.get("commitSha"),
         }
-    raise stage_error(400, "validation_failed", "stageReference.sourceType must be default, github, or marketplace.")
+    raise stage_error(400, "validation_failed", "stageReference.sourceType must be default, local, github, or marketplace.")
 
 
 # Run the application

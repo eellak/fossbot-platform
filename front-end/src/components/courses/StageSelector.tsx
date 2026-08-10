@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Grid, Stack, Tab, Tabs, TextField, Typography } from '@mui/material';
 import { IconRefresh, IconSearch } from '@tabler/icons-react';
+import StorageIcon from '@mui/icons-material/Storage';
 import { useAuth } from 'src/authentication/AuthProvider';
 import type { StageReference } from 'src/courses/types';
 import type { MarketplaceStageEntry } from 'src/stages/MarketplaceApi';
@@ -29,6 +30,7 @@ interface StageSelectorProps {
 function keyOf(reference?: StageReference | null): string {
   if (!reference) return 'none';
   if (reference.sourceType === 'default') return `default:${reference.url}`;
+  if (reference.sourceType === 'marketplace' && reference.marketplaceEntryPath) return `marketplace:${reference.marketplaceEntryPath}`;
   return `${reference.sourceType}:${reference.repoOwner}/${reference.repoName}`;
 }
 
@@ -37,7 +39,16 @@ function githubReference(stage: ProviderStageListItem): StageReference {
 }
 
 function marketplaceReference(stage: MarketplaceStageEntry): StageReference {
-  return { sourceType: 'marketplace', repoOwner: stage.repoOwner, repoName: stage.repoName, title: stage.title, visibility: 'public', commitSha: stage.commitSha };
+  return {
+    sourceType: 'marketplace',
+    localStageId: stage.localStageId,
+    repoOwner: stage.repoOwner,
+    repoName: stage.repoName,
+    marketplaceEntryPath: stage.sourceType === 'local' && stage.localPublicationId ? `local:${stage.localPublicationId}` : undefined,
+    title: stage.title,
+    visibility: 'public',
+    commitSha: stage.commitSha,
+  };
 }
 
 export default function StageSelector({ token, value, onChange, labels }: StageSelectorProps) {
@@ -101,7 +112,13 @@ export default function StageSelector({ token, value, onChange, labels }: StageS
           {error && <Alert severity="warning">{labels.unavailable}</Alert>}
           {loading && !filtered.length ? <Box sx={{ py: 8, textAlign: 'center' }}><CircularProgress size={24} /><Typography variant="body2" sx={{ mt: 1 }}>{labels.loading}</Typography></Box> : filtered.length ? <Grid container spacing={2}>{filtered.map((stage) => {
             const marketplaceEntry = stage.sourceType === 'marketplace' ? marketplace.find((entry) => keyOf(marketplaceReference(entry)) === keyOf(stage)) : null;
-            return <Grid item xs={12} sm={6} md={4} key={keyOf(stage)}><Box sx={{ height: '100%', outline: keyOf(value) === keyOf(stage) ? '3px solid' : 'none', outlineColor: 'primary.main', outlineOffset: 2, borderRadius: 2 }}><StageCard title={stage.title || stage.repoName || labels.none} description={marketplaceEntry?.description || (stage.sourceType === 'default' ? labels.builtInHelp : undefined)} previewUrl={marketplaceEntry?.previewUrl} metadata={stage.repoOwner ? <GitHubIdentity username={stage.repoOwner} suffix={`/${stage.repoName}`} /> : <Typography variant="caption" color="text.secondary">{labels.builtIn}</Typography>} badges={<Stack direction="row" gap={0.75}><Chip size="small" label={stage.visibility || (stage.sourceType === 'default' ? labels.pinned : 'public')} /><Chip size="small" variant="outlined" label={stage.commitSha || stage.sourceType === 'default' ? labels.pinned : labels.pinOnSave} /></Stack>} actionLabel={keyOf(value) === keyOf(stage) ? labels.selected : labels.select} onAction={() => choose(stage)} /></Box></Grid>;
+            const localMarketplaceStage = marketplaceEntry?.sourceType === 'local';
+            const metadata = localMarketplaceStage
+              ? <Stack direction="row" spacing={0.5} alignItems="center"><StorageIcon sx={{ fontSize: 16 }} /><Typography variant="caption">@{stage.repoOwner} · Stored here</Typography></Stack>
+              : stage.repoOwner
+                ? <GitHubIdentity username={stage.repoOwner} suffix={`/${stage.repoName}`} />
+                : <Typography variant="caption" color="text.secondary">{labels.builtIn}</Typography>;
+            return <Grid item xs={12} sm={6} md={4} key={keyOf(stage)}><Box sx={{ height: '100%', outline: keyOf(value) === keyOf(stage) ? '3px solid' : 'none', outlineColor: 'primary.main', outlineOffset: 2, borderRadius: 2 }}><StageCard title={stage.title || stage.repoName || labels.none} description={marketplaceEntry?.description || (stage.sourceType === 'default' ? labels.builtInHelp : undefined)} previewUrl={marketplaceEntry?.previewUrl} metadata={metadata} badges={<Stack direction="row" gap={0.75}><Chip size="small" label={stage.visibility || (stage.sourceType === 'default' ? labels.pinned : 'public')} /><Chip size="small" variant="outlined" label={stage.commitSha || stage.sourceType === 'default' ? labels.pinned : labels.pinOnSave} /></Stack>} actionLabel={keyOf(value) === keyOf(stage) ? labels.selected : labels.select} onAction={() => choose(stage)} /></Box></Grid>;
           })}</Grid> : <Alert severity="info">{labels.noResults}</Alert>}
         </Stack>
       </DialogContent>

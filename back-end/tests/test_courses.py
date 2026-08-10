@@ -134,6 +134,7 @@ def test_publish_snapshot_is_immutable_after_draft_edit(client_for, users, db):
         "course": False,
         "outline": False,
         "lesson_keys": [],
+        "remote_stage_changes": [],
     }
     unchanged = client.post(f"/courses/{course['id']}/publish")
     assert unchanged.status_code == 409
@@ -150,6 +151,7 @@ def test_publish_snapshot_is_immutable_after_draft_edit(client_for, users, db):
         "course": False,
         "outline": False,
         "lesson_keys": [lesson["lesson_key"]],
+        "remote_stage_changes": [],
     }
     reverted = client.put(
         f"/courses/{course['id']}/lessons/{lesson['id']}",
@@ -162,6 +164,7 @@ def test_publish_snapshot_is_immutable_after_draft_edit(client_for, users, db):
         "course": False,
         "outline": False,
         "lesson_keys": [],
+        "remote_stage_changes": [],
     }
     edited = client.put(
         f"/courses/{course['id']}/lessons/{lesson['id']}",
@@ -174,6 +177,7 @@ def test_publish_snapshot_is_immutable_after_draft_edit(client_for, users, db):
         "course": False,
         "outline": False,
         "lesson_keys": [lesson["lesson_key"]],
+        "remote_stage_changes": [],
     }
     stored_release = db.query(CourseRelease).filter(CourseRelease.id == release["id"]).one()
     assert stored_release.snapshot["lessons"][0]["title"] == "First move"
@@ -185,6 +189,7 @@ def test_publish_snapshot_is_immutable_after_draft_edit(client_for, users, db):
         "course": False,
         "outline": False,
         "lesson_keys": [],
+        "remote_stage_changes": [],
     }
     read_release = client.get(f"/courses/{course['id']}/releases/{release['id']}")
     assert read_release.status_code == 200
@@ -201,6 +206,7 @@ def test_publish_snapshot_is_immutable_after_draft_edit(client_for, users, db):
         "course": False,
         "outline": False,
         "lesson_keys": [],
+        "remote_stage_changes": [],
     }
 
 
@@ -220,6 +226,7 @@ def test_unpublished_change_summary_tracks_course_and_outline_scopes(client_for,
         "course": True,
         "outline": False,
         "lesson_keys": [],
+        "remote_stage_changes": [],
     }
 
     reverted_course = client.put(
@@ -231,6 +238,7 @@ def test_unpublished_change_summary_tracks_course_and_outline_scopes(client_for,
         "course": False,
         "outline": False,
         "lesson_keys": [],
+        "remote_stage_changes": [],
     }
 
     added = add_lesson(client, course["id"], "New draft lesson")
@@ -239,6 +247,7 @@ def test_unpublished_change_summary_tracks_course_and_outline_scopes(client_for,
         "course": False,
         "outline": True,
         "lesson_keys": [added["lesson_key"]],
+        "remote_stage_changes": [],
     }
 
     assert client.delete(f"/courses/{course['id']}/lessons/{added['id']}").status_code == 204
@@ -248,6 +257,7 @@ def test_unpublished_change_summary_tracks_course_and_outline_scopes(client_for,
         "course": False,
         "outline": False,
         "lesson_keys": [],
+        "remote_stage_changes": [],
     }
 
 
@@ -282,6 +292,7 @@ def test_stage_variants_are_normalized_and_remote_references_are_pinned(client_f
     )
     assert mission_lab["stageReference"] == {
         "sourceType": "default",
+        "localStageId": None,
         "repoOwner": None,
         "repoName": None,
         "visibility": None,

@@ -29,7 +29,8 @@ class UpdateUserPasswordRequest(BaseModel):
     password: str
 
 class LectureStageReference(BaseModel):
-    sourceType: Optional[str] = Field(default=None, pattern="^(default|github|marketplace)$")
+    sourceType: Optional[str] = Field(default=None, pattern="^(default|local|github|marketplace)$")
+    localStageId: Optional[int] = Field(default=None, ge=1)
     repoOwner: Optional[str] = None
     repoName: Optional[str] = None
     marketplaceEntryPath: Optional[str] = None

@@ -148,6 +148,7 @@ export type Activity = RichTextActivity | MultipleChoiceActivity | MultipleSelec
 
 export interface StageReference {
   sourceType: StageSourceType;
+  localStageId?: number | null;
   repoOwner?: string | null;
   repoName?: string | null;
   visibility?: string | null;

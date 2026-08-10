@@ -4,6 +4,7 @@ import {
   Box,
   Button,
   Chip,
+  CircularProgress,
   Divider,
   Dialog,
   DialogActions,
@@ -30,13 +31,16 @@ import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked';
 import SearchIcon from '@mui/icons-material/Search';
 import VerifiedIcon from '@mui/icons-material/Verified';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import StorageIcon from '@mui/icons-material/Storage';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from 'src/authentication/AuthProvider';
-import { completeMarketplaceFork, getMarketplaceForkStatus, getMarketplaceIndex, getMarketplacePermissions, reportMarketplaceStage, MarketplaceRequestError, type MarketplaceIndexResponse, type MarketplacePermissions, type MarketplaceReportCategory, type MarketplaceStageEntry, type MarketplaceValidationState } from 'src/stages/MarketplaceApi';
+import { completeMarketplaceFork, getMarketplaceForkStatus, getMarketplaceIndex, getMarketplacePermissions, reportMarketplaceStage, setModerationOverride, MarketplaceRequestError, type MarketplaceIndexResponse, type MarketplacePermissions, type MarketplaceReportCategory, type MarketplaceStageEntry, type MarketplaceValidationState } from 'src/stages/MarketplaceApi';
 import { invalidateMarketplaceFirstPage, invalidateUserStages, marketplaceFirstPageSnapshot, refreshMarketplaceFirstPage, refreshStageLists, stageListUserKey, subscribeMarketplaceFirstPage } from 'src/stages/stageListCache';
 import { formatStageDate, formatStageRelativeTime, GitHubIdentity, StageCard, StageCardSkeleton, StagePreview } from 'src/stages/StageCard';
 import { MARKETPLACE_COPY, MARKETPLACE_REPORT_CATEGORIES } from 'src/stages/marketplaceCopy';
 import DashboardCard from 'src/components/shared/DashboardCardWithChildren';
+import { copyMarketplaceStageToLocal } from 'src/stages/LocalStagesApi';
 import BetaBadge from 'src/components/shared/BetaBadge';
 
 const validationBadges: Record<MarketplaceValidationState, { label: string; color: 'success' | 'warning' | 'error'; description: string }> = {
@@ -59,6 +63,18 @@ const validationBadges: Record<MarketplaceValidationState, { label: string; colo
 
 function validationMeta(validation?: string | null) {
   return validationBadges[(validation || 'unvalidated') as MarketplaceValidationState] || validationBadges.unvalidated;
+}
+
+function marketplaceEntryKey(entry: MarketplaceStageEntry): string {
+  return entry.entryId || `${entry.repoOwner}/${entry.repoName}`;
+}
+
+function githubAttribution(entry: MarketplaceStageEntry): { repoOwner: string; repoName: string; repoUrl?: string } | null {
+  const provenance = entry.provenance as any;
+  const candidates = [provenance, ...(provenance?.ancestors || [])];
+  const source = candidates.find((item: any) => item?.sourceType === 'github_marketplace');
+  if (!source?.repoOwner || !source?.repoName) return null;
+  return { repoOwner: source.repoOwner, repoName: source.repoName, repoUrl: source.repoUrl };
 }
 
 function ValidationChip({ entry }: { entry: MarketplaceStageEntry }) {
@@ -111,12 +127,14 @@ function MarketplaceStageCard({ entry, onSelect, embedded = false }: { entry: Ma
       title={entry.title}
       description={entry.description || 'A community FOSSBot stage.'}
       previewUrl={entry.previewUrl}
-      metadata={<GitHubIdentity username={entry.author?.githubUsername || entry.repoOwner} />}
+      metadata={entry.author?.platformUsername ? <Typography variant="caption" color="text.secondary">@{entry.author.platformUsername}</Typography> : <GitHubIdentity username={entry.author?.githubUsername || entry.repoOwner} />}
       onOpen={() => onSelect(entry)}
       surface={embedded ? 'embedded' : 'outlined'}
       badges={(
         <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 1 }}>
           {entry.badges?.verified && <Chip size="small" color="primary" icon={<VerifiedIcon />} label="Verified" variant="outlined" />}
+          {entry.sourceType === 'local' && <Chip size="small" icon={<StorageIcon />} label="Local" variant="outlined" sx={{ '& .MuiChip-icon': { fontSize: 15 } }} />}
+          {entry.badges?.github && <Chip size="small" icon={<GitHubIcon />} label="GitHub source" variant="outlined" />}
           <ValidationChip entry={entry} />
           {(entry.tags || []).slice(0, 2).map((tag) => <Chip key={tag} size="small" label={tag} />)}
         </Stack>
@@ -173,30 +191,45 @@ function MarketplaceDetailDrawer({
   open,
   onClose,
   onOpenFork,
+  onCopyLocal,
   onCompleteFork,
   onCancelFork,
   forkStep,
   forkBusy,
   forkError,
   forkInstallationUrl,
+  localCopyBusy,
+  localCopyError,
   reporting,
   onReport,
+  canModerate,
+  moderationBusy,
+  moderationError,
+  onModerate,
 }: {
   entry: MarketplaceStageEntry | null;
   open: boolean;
   onClose: () => void;
   onOpenFork: (entry: MarketplaceStageEntry) => void;
+  onCopyLocal: (entry: MarketplaceStageEntry) => void;
   onCompleteFork: (entry: MarketplaceStageEntry) => void;
   onCancelFork: () => void;
   forkStep: ForkFlowStep | null;
   forkBusy: boolean;
   forkError: string;
   forkInstallationUrl?: string | null;
+  localCopyBusy: boolean;
+  localCopyError: string;
   reporting: MarketplacePermissions | null;
   onReport: () => void;
+  canModerate: boolean;
+  moderationBusy: boolean;
+  moderationError: string;
+  onModerate: (state: 'hidden' | 'removed') => void;
 }) {
   const [moreAnchor, setMoreAnchor] = useState<HTMLElement | null>(null);
-  const stageTestUrl = entry ? `/stage-test?repo=${encodeURIComponent(`${entry.repoOwner}/${entry.repoName}`)}&ref=${encodeURIComponent(entry.commitSha)}` : '#';
+  const githubOrigin = entry ? githubAttribution(entry) : null;
+  const stageTestUrl = entry?.recordUrl ? `/stage-test?stage=${encodeURIComponent(entry.recordUrl)}` : entry ? `/stage-test?repo=${encodeURIComponent(`${entry.repoOwner}/${entry.repoName}`)}&ref=${encodeURIComponent(entry.commitSha)}` : '#';
   return (
     <Drawer anchor="right" open={open} onClose={onClose} PaperProps={{ sx: { width: { xs: '100%', sm: 520 } } }}>
       {!entry ? null : (
@@ -204,7 +237,7 @@ function MarketplaceDetailDrawer({
           <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ p: 2, borderBottom: '1px solid', borderColor: 'divider' }}>
             <Box sx={{ minWidth: 0 }}>
               <Typography variant="h6" fontWeight={850} noWrap>{entry.title}</Typography>
-              <GitHubIdentity username={entry.author?.githubUsername || entry.repoOwner} suffix={`/${entry.repoName}`} />
+              {entry.author?.platformUsername ? <Typography variant="caption" color="text.secondary">@{entry.author.platformUsername} / {entry.repoName}</Typography> : <GitHubIdentity username={entry.author?.githubUsername || entry.repoOwner} suffix={`/${entry.repoName}`} />}
             </Box>
             <Stack direction="row" spacing={0.5}>
               {(reporting?.reportingEnabled || reporting?.reportingContact) && <IconButton onClick={(event) => setMoreAnchor(event.currentTarget)} aria-label="More stage actions"><MoreVertIcon /></IconButton>}
@@ -224,14 +257,17 @@ function MarketplaceDetailDrawer({
                     <Chip size="small" color="primary" icon={<VerifiedIcon />} label="Verified" />
                   </Tooltip>
                 )}
+                {entry.sourceType === 'local' && <Chip size="small" icon={<StorageIcon />} label="Local" variant="outlined" sx={{ '& .MuiChip-icon': { fontSize: 15 } }} />}
+                {entry.badges?.github && <Chip size="small" icon={<GitHubIcon />} label="GitHub source" variant="outlined" />}
                 <ValidationChip entry={entry} />
                 {(entry.tags || []).map((tag) => <Chip key={tag} size="small" label={tag} />)}
               </Stack>
               <Divider />
               <Box sx={{ display: 'grid', gridTemplateColumns: 'auto minmax(0, 1fr)', columnGap: 2, rowGap: 1 }}>
-                <Typography variant="caption" color="text.secondary">Author</Typography><GitHubIdentity username={entry.author?.githubUsername || entry.repoOwner} />
+                <Typography variant="caption" color="text.secondary">Author</Typography>{entry.author?.platformUsername ? <Typography variant="body2">@{entry.author.platformUsername}</Typography> : <GitHubIdentity username={entry.author?.githubUsername || entry.repoOwner} />}
                 <Typography variant="caption" color="text.secondary">Updated</Typography><Typography variant="body2">{formatStageDate(entry.updatedAt)}</Typography>
                 <Typography variant="caption" color="text.secondary">Status</Typography><Typography variant="body2">{entry.badges?.verified ? 'Verified' : 'Community published'} · {validationMeta(entry.badges?.validation).label}</Typography>
+                {githubOrigin && <><Typography variant="caption" color="text.secondary">Original source</Typography><GitHubIdentity username={githubOrigin.repoOwner} suffix={`/${githubOrigin.repoName}`} /></>}
               </Box>
               <Box component="details">
                 <Typography component="summary" variant="body2" fontWeight={700} sx={{ cursor: 'pointer', minHeight: 44, display: 'flex', alignItems: 'center' }}>Revision</Typography>
@@ -244,15 +280,20 @@ function MarketplaceDetailDrawer({
                 <Button component="a" href={stageTestUrl} target="_blank" rel="noreferrer" variant="contained" startIcon={<PlayArrowIcon />}>
                   Test stage
                 </Button>
-                {!forkStep && (
+                <Button variant="outlined" onClick={() => onCopyLocal(entry)} disabled={localCopyBusy} startIcon={<ContentCopyIcon />}>
+                  {localCopyBusy ? 'Copying…' : 'Copy to my stages'}
+                </Button>
+                {entry.sourceType !== 'local' && !forkStep && (
                   <Button variant="outlined" onClick={() => onOpenFork(entry)} disabled={forkBusy} startIcon={<GitHubIcon />}>
-                    {forkBusy ? 'Checking GitHub…' : MARKETPLACE_COPY.forkStage}
+                    {forkBusy ? 'Checking GitHub…' : 'Fork on GitHub'}
                   </Button>
                 )}
-                <Button component="a" href={entry.repoUrl} target="_blank" rel="noreferrer" variant="outlined" startIcon={<GitHubIcon />} endIcon={<OpenInNewIcon />}>
+                {entry.repoUrl && <Button component="a" href={entry.repoUrl} target="_blank" rel="noreferrer" variant="outlined" startIcon={<GitHubIcon />} endIcon={<OpenInNewIcon />}>
                   Source
-                </Button>
+                </Button>}
               </Stack>
+              {localCopyError && <Alert severity="error">{localCopyError}</Alert>}
+              {canModerate && <Box sx={{ p: 1.5, border: '1px solid', borderColor: 'warning.light', borderRadius: 1.5 }}><Stack spacing={1}><Typography variant="subtitle2" fontWeight={800}>Moderator actions</Typography><Typography variant="body2" color="text.secondary">Applies only to this FOSSBot instance. GitHub source content is not changed.</Typography><Stack direction="row" spacing={1}><Button size="small" color="warning" variant="outlined" disabled={moderationBusy} onClick={() => onModerate('hidden')}>{moderationBusy ? <CircularProgress size={14} color="inherit" /> : 'Hide locally'}</Button><Button size="small" color="error" variant="outlined" disabled={moderationBusy} onClick={() => onModerate('removed')}>{moderationBusy ? <CircularProgress size={14} color="inherit" /> : 'Remove locally'}</Button></Stack>{moderationError && <Alert severity="error">{moderationError}</Alert>}</Stack></Box>}
               {forkStep === 'ready' ? (
                 <Box sx={{ p: 2, border: '1px solid', borderColor: 'success.light', borderRadius: 1.5, bgcolor: 'success.light' }}>
                   <Stack spacing={1.5}>
@@ -358,6 +399,8 @@ export default function StageMarketplacePanel({ embedded = false, preview = fals
   const [forkFlow, setForkFlow] = useState<ForkFlow | null>(readForkFlow);
   const [forkBusy, setForkBusy] = useState(false);
   const [forkError, setForkError] = useState('');
+  const [localCopyBusy, setLocalCopyBusy] = useState(false);
+  const [localCopyError, setLocalCopyError] = useState('');
   const [cacheRefreshing, setCacheRefreshing] = useState(false);
   const [cacheUpdatedAt, setCacheUpdatedAt] = useState<number | null>(null);
   const [reporting, setReporting] = useState<MarketplacePermissions | null>(null);
@@ -368,6 +411,8 @@ export default function StageMarketplacePanel({ embedded = false, preview = fals
   const [reportBusy, setReportBusy] = useState(false);
   const [reportError, setReportError] = useState('');
   const [reportSent, setReportSent] = useState(false);
+  const [moderationBusy, setModerationBusy] = useState(false);
+  const [moderationError, setModerationError] = useState('');
 
   useEffect(() => {
     if (!token || preview) return;
@@ -406,6 +451,23 @@ export default function StageMarketplacePanel({ embedded = false, preview = fals
       setForkError(error instanceof Error ? error.message : 'Could not check GitHub for an existing fork.');
     } finally {
       setForkBusy(false);
+    }
+  };
+
+  const handleCopyLocal = async (entry: MarketplaceStageEntry) => {
+    if (!token) {
+      setLocalCopyError('Sign in before copying a stage to your account.');
+      return;
+    }
+    setLocalCopyBusy(true);
+    setLocalCopyError('');
+    try {
+      const copied = await copyMarketplaceStageToLocal(token, entry);
+      navigate(`/stage-builder?open=local&id=${copied.id}`);
+    } catch (error) {
+      setLocalCopyError(error instanceof Error ? error.message : 'Could not copy this stage locally.');
+    } finally {
+      setLocalCopyBusy(false);
     }
   };
 
@@ -461,26 +523,36 @@ export default function StageMarketplacePanel({ embedded = false, preview = fals
     const sync = () => {
       const snapshot = marketplaceFirstPageSnapshot();
       setIndex(snapshot.data);
-      setLoading(!snapshot.data);
+      setLoading(!snapshot.data && !snapshot.refreshError);
       setError(snapshot.refreshError || '');
       setCacheRefreshing(snapshot.refreshing);
       setCacheUpdatedAt(snapshot.updatedAt);
     };
     sync();
     const unsubscribe = subscribeMarketplaceFirstPage(sync);
-    void refreshMarketplaceFirstPage();
+    if (token) void refreshMarketplaceFirstPage(token);
+    else {
+      setLoading(false);
+      setError('Sign in to load the Stage library.');
+    }
     return unsubscribe;
-  }, [canonicalRequest]);
+  }, [canonicalRequest, token]);
 
   useEffect(() => {
     if (canonicalRequest) return undefined;
+    if (!token) {
+      setIndex(null);
+      setLoading(false);
+      setError('Sign in to load the Stage library.');
+      return undefined;
+    }
     const controller = new AbortController();
     setLoading(true);
     setError('');
     setIndex(null);
     setCacheRefreshing(false);
     const timer = window.setTimeout(() => {
-      getMarketplaceIndex({ page, pageSize: PAGE_SIZE, q: query.trim(), tag: activeTag, sort })
+      getMarketplaceIndex(token, { page, pageSize: PAGE_SIZE, q: query.trim(), tag: activeTag, sort })
         .then((payload) => {
           if (!controller.signal.aborted) setIndex(payload);
         })
@@ -495,12 +567,12 @@ export default function StageMarketplacePanel({ embedded = false, preview = fals
       controller.abort();
       window.clearTimeout(timer);
     };
-  }, [activeTag, canonicalRequest, page, query, retryKey, sort]);
+  }, [activeTag, canonicalRequest, page, query, retryKey, sort, token]);
 
   const stages = preview ? (index?.stages || []).slice(0, 3) : index?.stages || [];
   const pagination = index?.pagination;
   const tags = index?.tags || [];
-  const selectedForkFlow = forkFlow && selected && forkFlow.repoOwner === selected.repoOwner && forkFlow.repoName === selected.repoName
+  const selectedForkFlow = forkFlow && selected && selected.sourceType !== 'local' && forkFlow.repoOwner === selected.repoOwner && forkFlow.repoName === selected.repoName
     ? forkFlow
     : null;
 
@@ -513,11 +585,11 @@ export default function StageMarketplacePanel({ embedded = false, preview = fals
       if (detailUnavailable) setDetailUnavailable(false);
       return;
     }
-    if (selected && `${selected.repoOwner}/${selected.repoName}` !== stageKey) {
+    if (selected && marketplaceEntryKey(selected) !== stageKey) {
       setSelected(null);
       return;
     }
-    const match = stages.find((entry) => `${entry.repoOwner}/${entry.repoName}` === stageKey);
+    const match = stages.find((entry) => marketplaceEntryKey(entry) === stageKey);
     if (match && match !== selected) {
       setDetailUnavailable(false);
       setSelected(match);
@@ -526,26 +598,26 @@ export default function StageMarketplacePanel({ embedded = false, preview = fals
     if (!match && index && detailLookupKey !== stageKey) {
       setDetailLookupKey(stageKey);
       setDetailUnavailable(false);
-      void getMarketplaceIndex({ q: stageKey, pageSize: PAGE_SIZE }).then((result) => {
+      void getMarketplaceIndex(token, { q: stageKey, pageSize: PAGE_SIZE }).then((result) => {
         if (!active) return;
-        const exact = result.stages.find((entry) => `${entry.repoOwner}/${entry.repoName}` === stageKey);
+        const exact = result.stages.find((entry) => marketplaceEntryKey(entry) === stageKey);
         if (exact) setSelected(exact);
         else setDetailUnavailable(true);
       }).catch(() => { if (active) setDetailUnavailable(true); });
       return () => { active = false; };
     }
     return () => { active = false; };
-  }, [detailLookupKey, detailUnavailable, index, preview, searchParams, selected, stages]);
+  }, [detailLookupKey, detailUnavailable, index, preview, searchParams, selected, stages, token]);
 
   const selectStage = (entry: MarketplaceStageEntry) => {
     if (preview) {
-      navigate(`/stages?tab=explore&stage=${encodeURIComponent(`${entry.repoOwner}/${entry.repoName}`)}`);
+      navigate(`/stages?tab=explore&stage=${encodeURIComponent(marketplaceEntryKey(entry))}`);
       return;
     }
     setSelected(entry);
     const next = new URLSearchParams(searchParams);
     next.set('tab', 'explore');
-    next.set('stage', `${entry.repoOwner}/${entry.repoName}`);
+    next.set('stage', marketplaceEntryKey(entry));
     setSearchParams(next);
   };
 
@@ -557,6 +629,24 @@ export default function StageMarketplacePanel({ embedded = false, preview = fals
     setSearchParams(next, { replace: true });
   };
 
+  const moderateSelected = async (state: 'hidden' | 'removed') => {
+    if (!token || !selected) return;
+    const action = state === 'hidden' ? 'hide' : 'remove';
+    if (!window.confirm(`${action[0].toUpperCase()}${action.slice(1)} “${selected.title}” on this FOSSBot instance?`)) return;
+    setModerationBusy(true);
+    setModerationError('');
+    try {
+      await setModerationOverride(token, selected.repoOwner, selected.repoName, { state, reason: `Moderator ${action} from stage details.`, sourceType: selected.sourceType || 'github', localPublicationId: selected.localPublicationId });
+      closeStage();
+      invalidateMarketplaceFirstPage();
+      await refreshMarketplaceFirstPage(token, { force: true });
+    } catch (requestError) {
+      setModerationError(requestError instanceof Error ? requestError.message : 'Could not update this stage.');
+    } finally {
+      setModerationBusy(false);
+    }
+  };
+
   const submitReport = async () => {
     if (!reportExplanation.trim()) {
       setReportTouched(true);
@@ -566,7 +656,7 @@ export default function StageMarketplacePanel({ embedded = false, preview = fals
     setReportBusy(true);
     setReportError('');
     try {
-      await reportMarketplaceStage(token, { repoOwner: selected.repoOwner, repoName: selected.repoName, category: reportCategory, explanation: reportExplanation.trim() });
+      await reportMarketplaceStage(token, { repoOwner: selected.repoOwner, repoName: selected.repoName, sourceType: selected.sourceType || 'github', localPublicationId: selected.localPublicationId, category: reportCategory, explanation: reportExplanation.trim() });
       setReportSent(true);
     } catch (submitError) {
       setReportError(submitError instanceof Error ? submitError.message : 'Could not send this report.');
@@ -636,13 +726,13 @@ export default function StageMarketplacePanel({ embedded = false, preview = fals
           <Alert severity="info" sx={{ m: 2 }}>{index.warning}</Alert>
         ) : null}
 
-        {!loading && (
+        {!loading && (index || !error) && (
           stages.length ? (
             <>
               {!preview && pagination && <Typography variant="body2" color="text.secondary" sx={{ px: 2, pt: 2 }}>{pagination.total} stage{pagination.total === 1 ? '' : 's'}</Typography>}
               <Grid container spacing={2} sx={{ p: preview ? 0 : 2 }}>
                 {stages.map((entry) => (
-                  <Grid key={`${entry.repoOwner}/${entry.repoName}`} item xs={12} sm={6} lg={4} xl={preview ? 4 : 3}>
+                  <Grid key={marketplaceEntryKey(entry)} item xs={12} sm={6} lg={4} xl={preview ? 4 : 3}>
                     <MarketplaceStageCard entry={entry} onSelect={selectStage} embedded={preview} />
                   </Grid>
                 ))}
@@ -683,14 +773,21 @@ export default function StageMarketplacePanel({ embedded = false, preview = fals
         open={!!selected}
         onClose={closeStage}
         onOpenFork={handleOpenFork}
+        onCopyLocal={handleCopyLocal}
         onCompleteFork={handleCompleteFork}
         onCancelFork={() => { setActiveForkFlow(null); setForkError(''); }}
         forkStep={selectedForkFlow?.step || null}
         forkBusy={forkBusy}
         forkError={forkError}
         forkInstallationUrl={selectedForkFlow?.installationUrl}
+        localCopyBusy={localCopyBusy}
+        localCopyError={localCopyError}
         reporting={reporting}
         onReport={() => { setReportCategory('broken_misleading'); setReportExplanation(''); setReportTouched(false); setReportError(''); setReportSent(false); setReportOpen(true); }}
+        canModerate={!!reporting?.roles.includes('moderator')}
+        moderationBusy={moderationBusy}
+        moderationError={moderationError}
+        onModerate={(state) => void moderateSelected(state)}
       />
       <Dialog open={reportOpen} onClose={reportBusy ? undefined : () => setReportOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle>Report stage</DialogTitle>

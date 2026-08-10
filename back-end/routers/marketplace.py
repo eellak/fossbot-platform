@@ -95,6 +95,8 @@ MODERATION_STATES = {"hidden", "removed"}
 class MarketplaceReportRequest(BaseModel):
     repoOwner: str
     repoName: str
+    sourceType: Literal["local", "github"] = "github"
+    localPublicationId: Optional[int] = None
     category: str
     explanation: str = Field(min_length=3, max_length=2000)
     reporterContact: Optional[str] = Field(default=None, max_length=320)
@@ -103,11 +105,15 @@ class MarketplaceReportRequest(BaseModel):
 class MarketplaceModerationRequest(BaseModel):
     state: str
     reason: str = Field(min_length=3, max_length=2000)
+    sourceType: Literal["local", "github"] = "github"
+    localPublicationId: Optional[int] = None
     reportId: Optional[int] = None
 
 
 class MarketplaceRestoreRequest(BaseModel):
     reason: str = Field(min_length=3, max_length=2000)
+    sourceType: Literal["local", "github"] = "github"
+    localPublicationId: Optional[int] = None
     reportId: Optional[int] = None
 
 
@@ -203,8 +209,10 @@ def require_marketplace_contributor(provider, db: Session, user: User) -> str:
 
 def moderation_payload(override: MarketplaceModerationOverride) -> dict[str, Any]:
     return {
-        "repoOwner": override.repo_owner,
-        "repoName": override.repo_name,
+        "repoOwner": override.display_owner or override.repo_owner,
+        "repoName": override.display_name or override.repo_name,
+        "sourceType": override.source_type or "github",
+        "localPublicationId": override.local_publication_id,
         "state": override.state,
         "active": override.active,
         "reason": override.reason,
@@ -314,8 +322,10 @@ def marketplace_entry_matches(entry: dict[str, Any], query: str, tag: Optional[s
         for value in (
             entry.get("title"),
             entry.get("description"),
+            entry.get("entryId"),
             entry.get("repoOwner"),
             entry.get("repoName"),
+            (entry.get("author") or {}).get("platformUsername"),
             (entry.get("author") or {}).get("githubUsername"),
             " ".join(entry.get("tags") or []),
         )
@@ -665,11 +675,32 @@ async def marketplace_index(
     db: Session = Depends(get_db),
 ):
     payload = cached_public_marketplace_index(force_refresh=refresh)
-    suppressed = {
+    from routers.local_stages import local_marketplace_entries
+
+    active_overrides = db.query(MarketplaceModerationOverride).filter(MarketplaceModerationOverride.active.is_(True)).all()
+    suppressed_github = {
         (override.repo_owner, override.repo_name)
-        for override in db.query(MarketplaceModerationOverride).filter(MarketplaceModerationOverride.active.is_(True)).all()
+        for override in active_overrides if (override.source_type or "github") == "github"
     }
-    stages = [entry for entry in (payload.get("stages") or []) if (entry.get("repoOwner"), entry.get("repoName")) not in suppressed]
+    suppressed_local = {
+        override.local_publication_id
+        for override in active_overrides if override.source_type == "local" and override.local_publication_id
+    }
+    github_stages = []
+    for source_entry in payload.get("stages") or []:
+        entry = dict(source_entry)
+        entry["entryId"] = entry.get("entryId") or f"github:{entry.get('repoOwner')}/{entry.get('repoName')}"
+        entry["sourceType"] = "github"
+        entry["badges"] = {**(entry.get("badges") or {}), "github": True}
+        github_stages.append(entry)
+    stages = [
+        entry
+        for entry in [*local_marketplace_entries(db), *github_stages]
+        if not (
+            (entry.get("sourceType") == "local" and entry.get("localPublicationId") in suppressed_local)
+            or (entry.get("sourceType") != "local" and (entry.get("repoOwner"), entry.get("repoName")) in suppressed_github)
+        )
+    ]
     query = q.strip()
     tag_value = (tag or "").strip() or None
     entries_for_tags = [entry for entry in stages if marketplace_entry_matches(entry, query, None)]
@@ -720,10 +751,18 @@ async def create_marketplace_report(request: MarketplaceReportRequest, current_u
     has_moderators = db.query(MarketplaceRoleAssignment).filter(MarketplaceRoleAssignment.role == "moderator").first() is not None
     if not has_moderators and getattr(current_user.role, "value", current_user.role) != "admin":
         raise stage_error(503, "reporting_unavailable", "In-app reporting is not available for this marketplace.", extra={"reportingContact": reporting_contact()})
-    entry = published_marketplace_entry(request.repoOwner, request.repoName)
+    if request.sourceType == "local":
+        from routers.local_stages import local_marketplace_entries
+        entry = next((item for item in local_marketplace_entries(db) if item.get("localPublicationId") == request.localPublicationId), None)
+        if not entry:
+            raise stage_error(404, "marketplace_stage_not_found", "Local marketplace stage not found.")
+    else:
+        entry = published_marketplace_entry(request.repoOwner, request.repoName)
     report = MarketplaceReport(
         repo_owner=entry["repoOwner"],
         repo_name=entry["repoName"],
+        source_type=request.sourceType,
+        local_publication_id=entry.get("localPublicationId"),
         commit_sha=entry["commitSha"],
         category=request.category,
         explanation=request.explanation.strip(),
@@ -743,6 +782,8 @@ async def moderation_reports(current_user: User = Depends(get_current_user), db:
         "id": report.id,
         "repoOwner": report.repo_owner,
         "repoName": report.repo_name,
+        "sourceType": report.source_type or "github",
+        "localPublicationId": report.local_publication_id,
         "commitSha": report.commit_sha,
         "category": report.category,
         "explanation": report.explanation,
@@ -765,13 +806,19 @@ async def apply_moderation_override(owner: str, repo_name: str, request: Marketp
     require_marketplace_role(db, current_user, "moderator")
     if request.state not in MODERATION_STATES:
         raise stage_error(400, "validation_failed", "Moderation state must be hidden or removed.")
-    existing = db.query(MarketplaceModerationOverride).filter(MarketplaceModerationOverride.repo_owner == owner, MarketplaceModerationOverride.repo_name == repo_name).first()
+    if request.sourceType == "local" and not request.localPublicationId:
+        raise stage_error(400, "validation_failed", "localPublicationId is required for local moderation.")
+    identity_owner = f"local:{request.localPublicationId}" if request.sourceType == "local" else owner
+    identity_name = "publication" if request.sourceType == "local" else repo_name
+    existing = db.query(MarketplaceModerationOverride).filter(MarketplaceModerationOverride.repo_owner == identity_owner, MarketplaceModerationOverride.repo_name == identity_name).first()
     if existing is None:
-        existing = MarketplaceModerationOverride(repo_owner=owner, repo_name=repo_name, state=request.state, active=True, reason=request.reason.strip(), moderator_user_id=current_user.id)
+        existing = MarketplaceModerationOverride(repo_owner=identity_owner, repo_name=identity_name, source_type=request.sourceType, local_publication_id=request.localPublicationId, display_owner=owner, display_name=repo_name, state=request.state, active=True, reason=request.reason.strip(), moderator_user_id=current_user.id)
         db.add(existing)
     else:
+        existing.source_type, existing.local_publication_id = request.sourceType, request.localPublicationId
+        existing.display_owner, existing.display_name = owner, repo_name
         existing.state, existing.active, existing.reason, existing.moderator_user_id = request.state, True, request.reason.strip(), current_user.id
-    db.add(MarketplaceModerationAction(repo_owner=owner, repo_name=repo_name, action=request.state, reason=request.reason.strip(), moderator_user_id=current_user.id, report_id=request.reportId))
+    db.add(MarketplaceModerationAction(repo_owner=identity_owner, repo_name=identity_name, source_type=request.sourceType, local_publication_id=request.localPublicationId, action=request.state, reason=request.reason.strip(), moderator_user_id=current_user.id, report_id=request.reportId))
     if request.reportId:
         report = db.query(MarketplaceReport).filter(MarketplaceReport.id == request.reportId).first()
         if report:
@@ -784,11 +831,13 @@ async def apply_moderation_override(owner: str, repo_name: str, request: Marketp
 @router.delete("/api/marketplace/moderation/{owner}/{repo_name}")
 async def restore_moderated_stage(owner: str, repo_name: str, request: MarketplaceRestoreRequest, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     require_marketplace_role(db, current_user, "moderator")
-    override = db.query(MarketplaceModerationOverride).filter(MarketplaceModerationOverride.repo_owner == owner, MarketplaceModerationOverride.repo_name == repo_name).first()
+    identity_owner = f"local:{request.localPublicationId}" if request.sourceType == "local" else owner
+    identity_name = "publication" if request.sourceType == "local" else repo_name
+    override = db.query(MarketplaceModerationOverride).filter(MarketplaceModerationOverride.repo_owner == identity_owner, MarketplaceModerationOverride.repo_name == identity_name).first()
     if not override:
         raise stage_error(404, "moderation_not_found", "This stage has no local moderation override.")
     override.active, override.reason, override.moderator_user_id = False, request.reason.strip(), current_user.id
-    db.add(MarketplaceModerationAction(repo_owner=owner, repo_name=repo_name, action="restored", reason=request.reason.strip(), moderator_user_id=current_user.id, report_id=request.reportId))
+    db.add(MarketplaceModerationAction(repo_owner=identity_owner, repo_name=identity_name, source_type=request.sourceType, local_publication_id=request.localPublicationId, action="restored", reason=request.reason.strip(), moderator_user_id=current_user.id, report_id=request.reportId))
     db.commit()
     db.refresh(override)
     return moderation_payload(override)

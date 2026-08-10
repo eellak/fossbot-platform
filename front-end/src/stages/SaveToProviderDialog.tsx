@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  Alert, Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel, Link, Radio, RadioGroup, Stack, TextField, Typography,
+  Alert, Box, Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel, Link, Radio, RadioGroup, Stack, TextField, Typography,
 } from '@mui/material';
 import GitHubIcon from '@mui/icons-material/GitHub';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
@@ -17,6 +17,7 @@ export interface SaveToProviderValues {
 interface SaveToProviderDialogProps {
   open: boolean;
   stageTitle: string;
+  sourceLabel?: string | null;
   status: GitHubProviderStatus | null;
   remoteStage: ProviderStageRef | null;
   bootstrapRepoName?: string | null;
@@ -46,6 +47,7 @@ function slugify(value: string): string {
 export function SaveToProviderDialog({
   open,
   stageTitle,
+  sourceLabel,
   status,
   remoteStage,
   bootstrapRepoName,
@@ -104,7 +106,7 @@ export function SaveToProviderDialog({
       <DialogContent>
         <Stack spacing={2} sx={{ pt: 0.5 }}>
           <Typography variant="body2" color="text.secondary">
-            Public stages can be shared and published. Private stages stay in your GitHub account.
+            {sourceLabel ? `Copies ${sourceLabel} to a GitHub repository. Your local stage remains unchanged.` : 'Public stages can be shared and published. Private stages stay in your GitHub account.'}
           </Typography>
 
           {error && (
@@ -231,8 +233,8 @@ export function SaveToProviderDialog({
         {!connected ? (
           <Button variant="contained" startIcon={<GitHubIcon />} onClick={onConnect}>{MARKETPLACE_COPY.connectGitHub}</Button>
         ) : (
-          <Button variant="contained" disabled={!canSave} onClick={() => onSave({ slug, commitMessage, visibility })}>
-            {busy ? 'Saving…' : remoteStage ? 'Save' : ready ? 'Create repo & save' : allReposSelected ? 'Reinstall with selected repos first' : 'Complete GitHub setup first'}
+          <Button variant="contained" startIcon={busy ? <CircularProgress size={16} color="inherit" /> : undefined} disabled={!canSave} onClick={() => onSave({ slug, commitMessage, visibility })}>
+            {busy ? 'Saving to GitHub…' : remoteStage ? 'Save' : ready ? 'Create repo & save' : allReposSelected ? 'Reinstall with selected repos first' : 'Complete GitHub setup first'}
           </Button>
         )}
       </DialogActions>

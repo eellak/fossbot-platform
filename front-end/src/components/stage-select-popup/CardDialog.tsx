@@ -15,6 +15,7 @@ import {
 } from '@mui/material';
 import GitHubIcon from '@mui/icons-material/GitHub';
 import PublicIcon from '@mui/icons-material/Public';
+import StorageIcon from '@mui/icons-material/Storage';
 import { useAuth } from 'src/authentication/AuthProvider';
 import { resolveStageAssetUrl, stageAssetBaseUrlFromStageUrl } from 'src/simulator/stages/assets';
 import type { MarketplaceStageEntry } from 'src/stages/MarketplaceApi';
@@ -23,14 +24,16 @@ import { marketplaceFirstPageSnapshot, refreshMarketplaceFirstPage, refreshUserS
 import { GitHubIdentity, StageCard, StageCardSkeleton } from 'src/stages/StageCard';
 import { getGitHubLoginUrl, getGitHubProviderStatus, type GitHubProviderStatus } from 'src/stages/ProviderAuthApi';
 import { MARKETPLACE_COPY } from 'src/stages/marketplaceCopy';
+import { listLocalStages, loadLocalStage, type LocalStage } from 'src/stages/LocalStagesApi';
 import { useFeatureFlags } from 'src/config/FeatureFlags';
 
-export type StageSelectionSource = 'default' | 'github' | 'marketplace';
+export type StageSelectionSource = 'default' | 'local' | 'github' | 'marketplace';
 
 export interface StageSelection {
   sourceType: StageSelectionSource;
   title: string;
   url?: string;
+  localStageId?: number;
   repoOwner?: string;
   repoName?: string;
   visibility?: string | null;
@@ -98,6 +101,7 @@ const defaultStages: DefaultStageOption[] = [
 ];
 
 function marketplaceEntryPath(entry: MarketplaceStageEntry): string {
+  if (entry.sourceType === 'local' && entry.localPublicationId) return `local:${entry.localPublicationId}`;
   return `stages/${entry.repoOwner}/${entry.repoName}.json`;
 }
 
@@ -106,6 +110,7 @@ function githubRawStageUrl(stage: ProviderStageListItem): string {
 }
 
 function marketplaceRawStageUrl(stage: MarketplaceStageEntry): string {
+  if (stage.recordUrl) return stage.recordUrl;
   return `https://raw.githubusercontent.com/${stage.repoOwner}/${stage.repoName}/${stage.commitSha}/stage.json`;
 }
 
@@ -148,10 +153,13 @@ const CardDialog: React.FC<CardDialogProps> = ({ open, onClose, onSelect, onSele
   const userKey = stageListUserKey(user);
   const [tab, setTab] = useState<StageSelectionSource>('default');
   const [userStages, setUserStages] = useState<ProviderStageListItem[]>([]);
+  const [localStages, setLocalStages] = useState<LocalStage[]>([]);
   const [marketplaceStages, setMarketplaceStages] = useState<MarketplaceStageEntry[]>([]);
   const [userLoading, setUserLoading] = useState(false);
+  const [localLoading, setLocalLoading] = useState(false);
   const [marketplaceLoading, setMarketplaceLoading] = useState(false);
   const [userError, setUserError] = useState('');
+  const [localError, setLocalError] = useState('');
   const [marketplaceError, setMarketplaceError] = useState('');
   const [providerStatus, setProviderStatus] = useState<GitHubProviderStatus | null>(null);
   const [providerLoading, setProviderLoading] = useState(false);
@@ -161,6 +169,21 @@ const CardDialog: React.FC<CardDialogProps> = ({ open, onClose, onSelect, onSele
     if (!open) return;
     setTab('default');
   }, [open]);
+
+  useEffect(() => {
+    if (!open || !token) {
+      setLocalStages([]);
+      return undefined;
+    }
+    let active = true;
+    setLocalLoading(true);
+    setLocalError('');
+    listLocalStages(token)
+      .then((stages) => { if (active) setLocalStages(stages); })
+      .catch((error) => { if (active) setLocalError(error instanceof Error ? error.message : 'Could not load local stages.'); })
+      .finally(() => { if (active) setLocalLoading(false); });
+    return () => { active = false; };
+  }, [open, token]);
 
   useEffect(() => {
     if (!open || !token || !userKey) return undefined;
@@ -198,7 +221,7 @@ const CardDialog: React.FC<CardDialogProps> = ({ open, onClose, onSelect, onSele
   };
 
   useEffect(() => {
-    if (!open || !marketplaceEnabled) {
+    if (!open || !marketplaceEnabled || !token) {
       setMarketplaceStages([]);
       return undefined;
     }
@@ -210,15 +233,39 @@ const CardDialog: React.FC<CardDialogProps> = ({ open, onClose, onSelect, onSele
     };
     sync();
     const unsubscribe = subscribeMarketplaceFirstPage(sync);
-    void refreshMarketplaceFirstPage();
+    void refreshMarketplaceFirstPage(token);
     return unsubscribe;
-  }, [marketplaceEnabled, open]);
+  }, [marketplaceEnabled, open, token]);
 
   const tabCounts = useMemo(() => ({
     default: defaultStages.length,
-    github: userStages.length,
+    github: localStages.length + userStages.length,
     marketplace: marketplaceStages.length,
-  }), [marketplaceStages.length, userStages.length]);
+  }), [localStages.length, marketplaceStages.length, userStages.length]);
+
+  const handleLocalSelect = async (stage: LocalStage) => {
+    const selection = {
+      sourceType: 'local' as const,
+      localStageId: stage.id,
+      title: stage.title,
+      visibility: stage.visibility,
+      commitSha: stage.checksum,
+    };
+    emitStageSelection(selection);
+    if (onSelectStage) {
+      await onSelectStage(selection);
+    } else if (token) {
+      try {
+        const loaded = await loadLocalStage(token, stage.id);
+        const blob = new Blob([JSON.stringify(loaded.record.config)], { type: 'application/json' });
+        await onSelect(URL.createObjectURL(blob));
+      } catch (error) {
+        setLocalError(error instanceof Error ? error.message : 'Could not prepare this local stage for the simulator.');
+        return;
+      }
+    }
+    onClose();
+  };
 
   const handleDefaultSelect = async (stage: DefaultStageOption) => {
     const selection = { sourceType: 'default' as const, title: stage.title, url: stage.url };
@@ -307,8 +354,35 @@ const CardDialog: React.FC<CardDialogProps> = ({ open, onClose, onSelect, onSele
 
         {tab === 'github' && (
           <Stack spacing={2}>
+            <Box>
+              <Typography variant="subtitle2" sx={{ mb: 1 }}>Local stages</Typography>
+              {localError && <Alert severity={localStages.length ? "warning" : "error"}>{localError}</Alert>}
+              {localLoading ? (
+                <Grid container spacing={2}>{Array.from({ length: 3 }).map((_, item) => <Grid key={item} item xs={12} sm={6} md={4}><StageCardSkeleton /></Grid>)}</Grid>
+              ) : localStages.length ? (
+                <Grid container spacing={2}>
+                  {localStages.map((stage) => (
+                    <Grid key={`local:${stage.id}`} item xs={12} sm={6} md={4}>
+                      <StageCard
+                        title={stage.title}
+                        description={stage.description || 'Saved to your FOSSBot account'}
+                        metadata={<Typography variant="caption" color="text.secondary">Revision {stage.revision} · {(stage.recordBytes / 1024).toFixed(1)} KiB</Typography>}
+                        badges={<Chip size="small" icon={<StorageIcon />} label="Local" variant="outlined" />}
+                        actionLabel="Select"
+                        onAction={() => handleLocalSelect(stage)}
+                      />
+                    </Grid>
+                  ))}
+                </Grid>
+              ) : (
+                <Typography variant="body2" color="text.secondary">No local stages yet. Save one in Stage Builder.</Typography>
+              )}
+            </Box>
+            <Box sx={{ borderTop: 1, borderColor: 'divider', pt: 2 }}>
+              <Typography variant="subtitle2">GitHub stages <Typography component="span" variant="caption" color="text.secondary">(optional)</Typography></Typography>
+            </Box>
             {(!token || (!providerLoading && (!providerStatus?.connected || providerStatus.needsReconnect))) && (
-              <Box sx={{ py: 3, textAlign: 'center' }}><Typography variant="subtitle1" fontWeight={800}>Connect GitHub to use your saved stages.</Typography>{token && <Button variant="contained" startIcon={connecting ? undefined : <GitHubIcon />} onClick={handleConnect} disabled={connecting} sx={{ mt: 2 }}>{connecting ? 'Connecting…' : MARKETPLACE_COPY.connectGitHub}</Button>}</Box>
+              <Box sx={{ py: 2 }}><Typography variant="body2" color="text.secondary">Connect GitHub to also use stages stored in your repositories.</Typography>{token && <Button variant="outlined" startIcon={connecting ? undefined : <GitHubIcon />} onClick={handleConnect} disabled={connecting} sx={{ mt: 1 }}>{connecting ? 'Connecting…' : MARKETPLACE_COPY.connectGitHub}</Button>}</Box>
             )}
             {userError && <Alert severity={userStages.length ? "warning" : "error"}>{userError}</Alert>}
             {userLoading || providerLoading ? (
@@ -342,13 +416,13 @@ const CardDialog: React.FC<CardDialogProps> = ({ open, onClose, onSelect, onSele
             ) : marketplaceStages.length ? (
               <Grid container spacing={2}>
                 {marketplaceStages.map((stage) => (
-                  <Grid key={`${stage.repoOwner}/${stage.repoName}`} item xs={12} sm={6} md={4}>
+                  <Grid key={stage.entryId || `${stage.repoOwner}/${stage.repoName}`} item xs={12} sm={6} md={4}>
                     <StageCard
                       title={stage.title}
                       description={stage.description || `${stage.repoOwner}/${stage.repoName}`}
                       previewUrl={stage.previewUrl}
-                      metadata={<GitHubIdentity username={stage.author?.githubUsername || stage.repoOwner} />}
-                      badges={<Chip size="small" icon={<PublicIcon />} label={stage.badges?.verified ? 'Verified' : 'Published'} color={stage.badges?.verified ? 'primary' : 'default'} variant="outlined" />}
+                      metadata={stage.author?.platformUsername ? <Typography variant="caption" color="text.secondary">@{stage.author.platformUsername}</Typography> : <GitHubIdentity username={stage.author?.githubUsername || stage.repoOwner} />}
+                      badges={<Stack direction="row" spacing={0.5}><Chip size="small" icon={stage.sourceType === 'local' ? <StorageIcon /> : <PublicIcon />} label={stage.sourceType === 'local' ? 'Local' : stage.badges?.verified ? 'Verified' : 'Published'} color={stage.badges?.verified ? 'primary' : 'default'} variant="outlined" />{stage.badges?.github && <Chip size="small" icon={<GitHubIcon />} label="GitHub source" variant="outlined" />}</Stack>}
                       actionLabel="Select"
                       onAction={() => handleMarketplaceSelect(stage)}
                     />

@@ -95,7 +95,7 @@ const StageGitHubTestPage = () => {
   return (
     <Box sx={{ width: '100vw', height: '100vh', display: 'flex', flexDirection: 'column', bgcolor: '#0b1020', color: '#f8fafc' }}>
       <Box sx={{ px: 2, py: 1.25, borderBottom: '1px solid rgba(148,163,184,0.25)', bgcolor: 'rgba(15,23,42,0.92)' }}>
-        <Typography variant="subtitle1" fontWeight={800}>FOSSBot GitHub Stage Test</Typography>
+        <Typography variant="subtitle1" fontWeight={800}>FOSSBot Stage Test</Typography>
         <Typography variant="caption" sx={{ color: '#94a3b8', wordBreak: 'break-all' }}>
           {loadedStage?.title || stageUrl || 'No stage URL'}
         </Typography>
@@ -106,7 +106,7 @@ const StageGitHubTestPage = () => {
         ) : !loadedStage ? (
           <Stack sx={{ height: '100%', alignItems: 'center', justifyContent: 'center' }} spacing={2}>
             <CircularProgress />
-            <Typography variant="body2" sx={{ color: '#94a3b8' }}>Loading GitHub stage…</Typography>
+            <Typography variant="body2" sx={{ color: '#94a3b8' }}>Loading stage…</Typography>
           </Stack>
         ) : (
           <Suspense fallback={<Box sx={{ p: 2 }}>Loading simulator…</Box>}>

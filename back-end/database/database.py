@@ -8,6 +8,7 @@ from sqlalchemy import (
     Float,
     ForeignKey,
     Integer,
+    LargeBinary,
     String,
     Text,
     UniqueConstraint,
@@ -15,6 +16,7 @@ from sqlalchemy import (
     inspect,
     text,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 from models.models import UserRole
@@ -29,6 +31,7 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
 Base = declarative_base()
+JSON_DOCUMENT = JSON().with_variant(JSONB(), "postgresql")
 
 # Function to create the database tables
 def getSessionLocal():
@@ -58,6 +61,7 @@ def migrate_schema():
         project_cols = table_columns['projects']
         project_stage_columns = {
             'stage_source_type': 'VARCHAR',
+            'stage_local_id': 'INTEGER',
             'stage_repo_owner': 'VARCHAR',
             'stage_repo_name': 'VARCHAR',
             'stage_repo_visibility': 'VARCHAR',
@@ -76,6 +80,7 @@ def migrate_schema():
         lesson_cols = table_columns['lessons']
         lesson_stage_columns = {
             'stage_source_type': 'VARCHAR',
+            'stage_local_id': 'INTEGER',
             'stage_repo_owner': 'VARCHAR',
             'stage_repo_name': 'VARCHAR',
             'stage_repo_visibility': 'VARCHAR',
@@ -89,6 +94,69 @@ def migrate_schema():
                 with engine.connect() as conn:
                     conn.execute(text(f"ALTER TABLE lessons ADD COLUMN {column} {column_type}"))
                     conn.commit()
+
+    marketplace_identity_columns = {
+        'marketplace_reports': {
+            'source_type': "VARCHAR NOT NULL DEFAULT 'github'",
+            'local_publication_id': 'INTEGER',
+        },
+        'marketplace_moderation_overrides': {
+            'source_type': "VARCHAR NOT NULL DEFAULT 'github'",
+            'local_publication_id': 'INTEGER',
+            'display_owner': 'VARCHAR',
+            'display_name': 'VARCHAR',
+        },
+        'marketplace_moderation_actions': {
+            'source_type': "VARCHAR NOT NULL DEFAULT 'github'",
+            'local_publication_id': 'INTEGER',
+        },
+        'local_marketplace_publications': {
+            'current_submission_id': 'INTEGER',
+            'unpublished_at': 'TIMESTAMP',
+        },
+    }
+    for table, columns in marketplace_identity_columns.items():
+        if table not in table_columns:
+            continue
+        for column, column_type in columns.items():
+            if column not in table_columns[table]:
+                with engine.connect() as conn:
+                    conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {column_type}"))
+                    conn.commit()
+
+    if 'local_stages' in table_columns:
+        with engine.connect() as conn:
+            conn.execute(text("UPDATE local_stages SET visibility = 'private' WHERE visibility <> 'private'"))
+            conn.commit()
+
+    if {'marketplace_moderation_overrides', 'local_marketplace_publications', 'local_stages', 'users'} <= set(table_columns):
+        with engine.connect() as conn:
+            legacy_local_overrides = conn.execute(text("""
+                SELECT o.id, p.id AS publication_id, u.username, s.slug
+                FROM marketplace_moderation_overrides o
+                JOIN users u ON u.username = o.repo_owner
+                JOIN local_stages s ON s.user_id = u.id AND s.slug = o.repo_name
+                JOIN local_marketplace_publications p ON p.stage_id = s.id
+                WHERE COALESCE(o.source_type, 'github') = 'github'
+                  AND o.local_publication_id IS NULL
+            """)).mappings().all()
+            for row in legacy_local_overrides:
+                conn.execute(text("""
+                    UPDATE marketplace_moderation_overrides
+                    SET repo_owner = :identity_owner,
+                        repo_name = 'publication',
+                        source_type = 'local',
+                        local_publication_id = :publication_id,
+                        display_owner = :display_owner,
+                        display_name = :display_name
+                    WHERE id = :id
+                """), {
+                    "identity_owner": f"local:{row['publication_id']}",
+                    "publication_id": row["publication_id"],
+                    "display_owner": row["username"],
+                    "display_name": row["slug"],
+                    "id": row["id"],
+                })
 
     if 'enrollments' in table_columns and 'release_updated_at' not in table_columns['enrollments']:
         with engine.connect() as conn:
@@ -170,6 +238,8 @@ class MarketplaceReport(Base):
     id = Column(Integer, primary_key=True, index=True)
     repo_owner = Column(String, nullable=False)
     repo_name = Column(String, nullable=False)
+    source_type = Column(String, nullable=False, default="github")
+    local_publication_id = Column(Integer)
     commit_sha = Column(String, nullable=False)
     category = Column(String, nullable=False)
     explanation = Column(Text, nullable=False)
@@ -187,6 +257,10 @@ class MarketplaceModerationOverride(Base):
     id = Column(Integer, primary_key=True, index=True)
     repo_owner = Column(String, nullable=False)
     repo_name = Column(String, nullable=False)
+    source_type = Column(String, nullable=False, default="github")
+    local_publication_id = Column(Integer)
+    display_owner = Column(String)
+    display_name = Column(String)
     state = Column(String, nullable=False)
     active = Column(Boolean, default=True, nullable=False)
     reason = Column(Text, nullable=False)
@@ -202,6 +276,8 @@ class MarketplaceModerationAction(Base):
     id = Column(Integer, primary_key=True, index=True)
     repo_owner = Column(String, nullable=False)
     repo_name = Column(String, nullable=False)
+    source_type = Column(String, nullable=False, default="github")
+    local_publication_id = Column(Integer)
     action = Column(String, nullable=False)
     reason = Column(Text, nullable=False)
     moderator_user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
@@ -227,6 +303,92 @@ class MarketplaceVerificationRequest(Base):
     reviewed_at = Column(DateTime)
     requested_by = relationship("User")
 
+
+class LocalStage(Base):
+    """An editable stage owned by a platform user and stored in this database."""
+
+    __tablename__ = "local_stages"
+    __table_args__ = (UniqueConstraint('user_id', 'slug', name='uq_local_stage_user_slug'),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
+    slug = Column(String(100), nullable=False)
+    title = Column(String(160), nullable=False)
+    description = Column(Text, nullable=False, default="")
+    visibility = Column(String(16), nullable=False, default="private")
+    record = Column(JSON_DOCUMENT, nullable=False)
+    record_bytes = Column(Integer, nullable=False)
+    revision = Column(Integer, nullable=False, default=1)
+    checksum = Column(String(64), nullable=False)
+    provenance = Column(JSON_DOCUMENT)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow, nullable=False)
+
+    user = relationship("User")
+
+
+class LocalMarketplaceSubmission(Base):
+    """An immutable local-stage publication request and reviewed release."""
+
+    __tablename__ = "local_marketplace_submissions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    stage_id = Column(Integer, ForeignKey('local_stages.id'), nullable=False, index=True)
+    owner_user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
+    stage_revision = Column(Integer, nullable=False)
+    checksum = Column(String(64), nullable=False)
+    slug_snapshot = Column(String(100), nullable=False)
+    record_snapshot = Column(JSON_DOCUMENT, nullable=False)
+    record_bytes = Column(Integer, nullable=False)
+    title = Column(String(160), nullable=False)
+    description = Column(Text, nullable=False, default="")
+    tags = Column(JSON_DOCUMENT, nullable=False, default=list)
+    sharing_license = Column(String(32), nullable=False)
+    provenance_snapshot = Column(JSON_DOCUMENT)
+    preview_image = Column(LargeBinary)
+    preview_mime = Column(String(64))
+    status = Column(String(24), nullable=False, default="pending")
+    requested_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+    reviewed_at = Column(DateTime)
+    reviewed_by_user_id = Column(Integer, ForeignKey('users.id'))
+    review_reason = Column(Text)
+    unpublished_at = Column(DateTime)
+
+    stage = relationship("LocalStage")
+    owner = relationship("User", foreign_keys=[owner_user_id])
+    reviewed_by = relationship("User", foreign_keys=[reviewed_by_user_id])
+
+
+class LocalMarketplacePublication(Base):
+    """Stable publication channel pointing at an immutable approved submission."""
+
+    __tablename__ = "local_marketplace_publications"
+    __table_args__ = (UniqueConstraint('stage_id', name='uq_local_marketplace_stage'),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    stage_id = Column(Integer, ForeignKey('local_stages.id'), nullable=False, index=True)
+    owner_user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
+    stage_revision = Column(Integer, nullable=False)
+    checksum = Column(String(64), nullable=False)
+    record_snapshot = Column(JSON_DOCUMENT, nullable=False)
+    record_bytes = Column(Integer, nullable=False)
+    title = Column(String(160), nullable=False)
+    description = Column(Text, nullable=False, default="")
+    tags = Column(JSON_DOCUMENT, nullable=False, default=list)
+    sharing_license = Column(String(32), nullable=False)
+    provenance_snapshot = Column(JSON_DOCUMENT)
+    preview_image = Column(LargeBinary)
+    preview_mime = Column(String(64))
+    current_submission_id = Column(Integer, ForeignKey('local_marketplace_submissions.id'))
+    active = Column(Boolean, nullable=False, default=True)
+    published_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow, nullable=False)
+    unpublished_at = Column(DateTime)
+
+    stage = relationship("LocalStage")
+    owner = relationship("User")
+    current_submission = relationship("LocalMarketplaceSubmission", foreign_keys=[current_submission_id])
+
 class Projects(Base):
     __tablename__ = "projects"
     id = Column(Integer, primary_key=True, index=True)
@@ -236,6 +398,7 @@ class Projects(Base):
     date_created = Column(DateTime, default=datetime.datetime.utcnow)
     code = Column(String)
     stage_source_type = Column(String)
+    stage_local_id = Column(Integer, ForeignKey('local_stages.id'))
     stage_repo_owner = Column(String)
     stage_repo_name = Column(String)
     stage_repo_visibility = Column(String)
@@ -302,6 +465,7 @@ class Lesson(Base):
     image_url = Column(String)
     video_url = Column(String)
     stage_source_type = Column(String)
+    stage_local_id = Column(Integer, ForeignKey('local_stages.id'))
     stage_repo_owner = Column(String)
     stage_repo_name = Column(String)
     stage_repo_visibility = Column(String)

@@ -43,6 +43,7 @@ export interface RegisterData {
 
 export interface ProjectStageReference {
     sourceType: 'default' | 'github' | 'marketplace' | string;
+    localStageId?: number | null;
     repoOwner?: string | null;
     repoName?: string | null;
     visibility?: string | null;

@@ -4,12 +4,63 @@ import CloseIcon from '@mui/icons-material/Close';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import PageContainer from 'src/components/container/PageContainer';
 import StageMarketplacePanel from 'src/components/dashboard/StageMarketplacePanel';
-import UserGitHubStagesPanel from 'src/components/dashboard/UserGitHubStagesPanel';
+import UserStagesDashboardPanel from 'src/components/dashboard/UserStagesDashboardPanel';
 import { useAuth } from 'src/authentication/AuthProvider';
 import { getModerationOverrides, getModerationReports, getMarketplacePermissions, getVerificationQueue, restoreMarketplaceStage, setModerationOverride, submitMarketplaceVerification, type MarketplaceModerationOverride, type MarketplaceReport, type MarketplaceVerificationQueueItem, type MarketplaceVerificationChecklist } from 'src/stages/MarketplaceApi';
+import { getLocalPublicationReviewQueue, reviewLocalPublication, type LocalPublicationReviewItem } from 'src/stages/LocalStagesApi';
 import { useSearchParams } from 'react-router-dom';
 import { MARKETPLACE_COPY, marketplaceReportCategoryLabel } from 'src/stages/marketplaceCopy';
+import { invalidateMarketplaceFirstPage, refreshMarketplaceFirstPage } from 'src/stages/stageListCache';
 import { useFeatureFlags } from 'src/config/FeatureFlags';
+
+function LocalPublicationQueue() {
+  const { token } = useAuth();
+  const [requests, setRequests] = useState<LocalPublicationReviewItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState<number | null>(null);
+  const [error, setError] = useState('');
+  const load = async () => {
+    if (!token) return;
+    try {
+      setLoading(true);
+      setError('');
+      setRequests((await getLocalPublicationReviewQueue(token)).requests);
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : 'Could not load local publication requests.');
+    } finally {
+      setLoading(false);
+    }
+  };
+  useEffect(() => { void load(); }, [token]);
+  const review = async (item: LocalPublicationReviewItem, approved: boolean) => {
+    if (!token) return;
+    const reason = window.prompt(approved ? 'Approval note (optional)' : 'Reason for rejection') ?? (approved ? '' : null);
+    if (reason === null) return;
+    if (!approved && !reason.trim()) {
+      setError('Add a reason when rejecting a publication request.');
+      return;
+    }
+    try {
+      setBusy(item.id);
+      setError('');
+      await reviewLocalPublication(token, item.id, approved, reason.trim() || undefined);
+      if (approved) {
+        invalidateMarketplaceFirstPage();
+        await refreshMarketplaceFirstPage(token, { force: true });
+      }
+      await load();
+    } catch (reviewError) {
+      setError(reviewError instanceof Error ? reviewError.message : 'Could not review this publication request.');
+    } finally {
+      setBusy(null);
+    }
+  };
+  return <Stack spacing={2}>
+    <Box><Typography variant="h6">Local publication queue</Typography><Typography variant="body2" color="text.secondary">Every local release must be approved before it appears in the Stage library.</Typography></Box>
+    {error && <Alert severity="error">{error}</Alert>}
+    {loading ? <Stack direction="row" spacing={1} alignItems="center"><CircularProgress size={20} /><Typography variant="body2">Loading publication requests…</Typography></Stack> : requests.length === 0 ? <Alert severity="info">No local publication requests are waiting for review.</Alert> : <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden' }}>{requests.map((item, index) => <Box key={item.id} sx={{ p: 2, borderTop: index ? '1px solid' : 'none', borderColor: 'divider', display: 'flex', justifyContent: 'space-between', gap: 2, alignItems: { xs: 'flex-start', md: 'center' }, flexDirection: { xs: 'column', md: 'row' } }}><Box><Stack direction="row" spacing={1} alignItems="center"><Typography fontWeight={700}>{item.title}</Typography><Chip size="small" color="warning" label="Pending" /></Stack><Typography variant="body2" color="text.secondary">Local r{item.stageRevision} · {(item.recordBytes / 1024).toFixed(1)} KiB · @{item.requestedBy || 'publisher'}</Typography><Typography variant="body2">{item.description || 'No description provided.'}</Typography></Box><Stack direction="row" spacing={1}><Button size="small" color="error" disabled={busy === item.id} onClick={() => void review(item, false)}>Reject</Button><Button size="small" variant="contained" disabled={busy === item.id} onClick={() => void review(item, true)}>{busy === item.id ? 'Reviewing…' : 'Approve'}</Button></Stack></Box>)}</Box>}
+  </Stack>;
+}
 
 const emptyChecklist: MarketplaceVerificationChecklist = {
   stageRuns: false,
@@ -122,13 +173,14 @@ function ModerationWorkspace({ canModerate, canVerify }: { canModerate: boolean;
     setActionError('');
     try {
       if (action.kind === 'restore') {
-        await restoreMarketplaceStage(token, action.override.repoOwner, action.override.repoName, { reason: 'Restored after moderator review.' });
+        await restoreMarketplaceStage(token, action.override.repoOwner, action.override.repoName, { reason: 'Restored after moderator review.', sourceType: action.override.sourceType, localPublicationId: action.override.localPublicationId });
       } else {
         const state = action.kind === 'hide' ? 'hidden' : 'removed';
-        await setModerationOverride(token, action.report.repoOwner, action.report.repoName, { state, reason: `Report #${action.report.id}: ${action.report.category}`, reportId: action.report.id });
+        await setModerationOverride(token, action.report.repoOwner, action.report.repoName, { state, reason: `Report #${action.report.id}: ${action.report.category}`, sourceType: action.report.sourceType, localPublicationId: action.report.localPublicationId, reportId: action.report.id });
       }
       setAction(null);
-      await load();
+      invalidateMarketplaceFirstPage();
+      await Promise.all([load(), refreshMarketplaceFirstPage(token, { force: true })]);
     } catch (requestError) {
       setActionError(requestError instanceof Error ? requestError.message : 'Could not update this stage.');
     } finally {
@@ -138,6 +190,7 @@ function ModerationWorkspace({ canModerate, canVerify }: { canModerate: boolean;
   const activeOverrides = overrides.filter((override) => override.active);
   const actionTarget = action?.kind === 'restore' ? `${action.override.repoOwner}/${action.override.repoName}` : action ? `${action.report.repoOwner}/${action.report.repoName}` : '';
   return <Stack spacing={3}>
+    {(canVerify || canModerate) && <><LocalPublicationQueue /><Divider /></>}
     {canVerify && <><VerificationQueue /><Divider /></>}
     {canModerate && <>
     {error && <Alert severity="error">{error}</Alert>}
@@ -154,14 +207,14 @@ function ModerationWorkspace({ canModerate, canVerify }: { canModerate: boolean;
     </Box>)}</Box>}
     <Divider />
     <Typography variant="h6">Local overrides</Typography>
-    {!loading && (activeOverrides.length === 0 ? <Alert severity="info">No local moderation overrides.</Alert> : <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden' }}>{activeOverrides.map((override, index) => <Box key={`${override.repoOwner}/${override.repoName}`} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, p: 2, borderTop: index ? '1px solid' : 'none', borderColor: 'divider' }}><Box><Typography fontWeight={700}>{override.repoOwner}/{override.repoName}</Typography><Typography variant="body2" color="text.secondary">{override.state} · {override.reason}</Typography></Box><Button size="small" onClick={() => { setActionError(''); setAction({ kind: 'restore', override }); }}>Restore</Button></Box>)}</Box>)}
+    {!loading && (activeOverrides.length === 0 ? <Alert severity="info">No local moderation overrides.</Alert> : <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden' }}>{activeOverrides.map((override, index) => <Box key={`${override.sourceType}:${override.localPublicationId || `${override.repoOwner}/${override.repoName}`}`} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, p: 2, borderTop: index ? '1px solid' : 'none', borderColor: 'divider' }}><Box><Typography fontWeight={700}>{override.repoOwner}/{override.repoName}</Typography><Typography variant="body2" color="text.secondary">{override.sourceType} · {override.state} · {override.reason}</Typography></Box><Button size="small" onClick={() => { setActionError(''); setAction({ kind: 'restore', override }); }}>Restore</Button></Box>)}</Box>)}
     </>}
     <Dialog open={!!action} onClose={actionBusy ? undefined : () => setAction(null)} maxWidth="xs" fullWidth>
       <DialogTitle>{action?.kind === 'restore' ? 'Restore stage?' : action?.kind === 'hide' ? 'Hide stage locally?' : 'Remove stage locally?'}</DialogTitle>
       <DialogContent>
         <Stack spacing={2} sx={{ pt: 0.5 }}>
           <Typography variant="body2">{actionTarget}</Typography>
-          <Typography variant="body2" color="text.secondary">{action?.kind === 'restore' ? 'The stage will become visible on this FOSSBot instance again.' : action?.kind === 'hide' ? 'The stage will be hidden on this instance and can be restored later.' : 'The stage will be removed on this instance. A moderator can still restore it later.'}</Typography>
+          <Typography variant="body2" color="text.secondary">{action?.kind === 'restore' ? 'The stage will become visible and, if published, directly accessible on this FOSSBot instance again.' : action?.kind === 'hide' ? 'The stage will leave discovery on this instance, but existing pinned references will keep working.' : 'The stage will be quarantined: discovery, direct access, copying, and republishing are blocked until a moderator restores it.'}</Typography>
           {actionError && <Alert severity="error">{actionError}</Alert>}
         </Stack>
       </DialogContent>
@@ -190,11 +243,11 @@ export default function StagesPage() {
     void getMarketplacePermissions(token).then((permissions) => { setCanModerate(permissions.roles.includes('moderator')); setCanVerify(permissions.roles.includes('verifier')); }).catch(() => { setCanModerate(false); setCanVerify(false); });
   }, [marketplace, token]);
   return <PageContainer title="Stages" description="Discover, publish, and manage FOSSBot stages.">
-    <Stack spacing={2}><Box><Typography variant="h4">Stages</Typography><Typography variant="body2" color="text.secondary">Discover public stages or manage your GitHub-backed work.</Typography></Box>
+    <Stack spacing={2}><Box><Typography variant="h4">Stages</Typography><Typography variant="body2" color="text.secondary">Discover public stages or manage stages stored here. GitHub is optional.</Typography></Box>
       <Tabs value={tab} onChange={(_, value) => { const next = new URLSearchParams(searchParams); next.set('tab', value); next.delete('stage'); setSearchParams(next); }} aria-label="Stages sections"><Tab value="mine" label={MARKETPLACE_COPY.myStages} />{marketplace && <Tab value="explore" label="Explore" />}{marketplace && (canModerate || canVerify) && <Tab value="moderation" label="Moderation" />}</Tabs>
       <Box sx={{ pt: 1 }}>
       {marketplace && tab === 'explore' && <StageMarketplacePanel embedded />}
-      {tab === 'mine' && <UserGitHubStagesPanel embedded />}
+      {tab === 'mine' && <UserStagesDashboardPanel showViewAll={false} />}
       {marketplace && tab === 'moderation' && (canModerate || canVerify) && <ModerationWorkspace canModerate={canModerate} canVerify={canVerify} />}
       </Box>
     </Stack>

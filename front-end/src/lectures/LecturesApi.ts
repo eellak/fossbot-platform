@@ -1,11 +1,12 @@
 const backendUrl: string = process.env.REACT_APP_BACKEND_URL;
 
-export type LectureStageSourceType = 'github' | 'marketplace';
+export type LectureStageSourceType = 'local' | 'github' | 'marketplace';
 
 export interface LectureStageReference {
   sourceType: LectureStageSourceType;
-  repoOwner: string;
-  repoName: string;
+  localStageId?: number | null;
+  repoOwner?: string | null;
+  repoName?: string | null;
   visibility?: 'public' | 'private' | string | null;
   marketplaceEntryPath?: string | null;
   title?: string | null;
@@ -21,6 +22,7 @@ export interface Lecture {
   video_url?: string | null;
   curriculum_id: number;
   stage_source_type?: LectureStageSourceType | null;
+  stage_local_id?: number | null;
   stage_repo_owner?: string | null;
   stage_repo_name?: string | null;
   stage_repo_visibility?: string | null;
@@ -37,7 +39,7 @@ export interface LectureSaveRequest {
   image_url?: string | null;
   video_url?: string | null;
   curriculum_id?: number;
-  stageReference?: Pick<LectureStageReference, 'sourceType' | 'repoOwner' | 'repoName' | 'marketplaceEntryPath'> | null;
+  stageReference?: Pick<LectureStageReference, 'sourceType' | 'localStageId' | 'repoOwner' | 'repoName' | 'marketplaceEntryPath'> | null;
 }
 
 export class LectureRequestError extends Error {

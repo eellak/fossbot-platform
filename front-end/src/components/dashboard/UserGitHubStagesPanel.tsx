@@ -19,9 +19,11 @@ import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import EditIcon from '@mui/icons-material/Edit';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import DashboardCard from '../shared/DashboardCardWithChildren';
 import { useAuth } from 'src/authentication/AuthProvider';
 import { getGitHubLoginUrl, getGitHubProviderStatus, type GitHubProviderStatus } from 'src/stages/ProviderAuthApi';
+import { copyInstalledGitHubStageToLocal } from 'src/stages/LocalStagesApi';
 import { cancelMarketplaceVerificationRequest, cancelUnpublishStageRequest, requestMarketplaceVerification, unpublishStageFromMarketplace, type MyMarketplaceStage } from 'src/stages/MarketplaceApi';
 import type { ProviderStageListItem } from 'src/stages/StagesApi';
 import {
@@ -64,7 +66,7 @@ function providerStageFromPublication(publication: MyMarketplaceStage): Provider
   return {
     repoOwner: publication.entry.repoOwner,
     repoName: publication.entry.repoName,
-    repoUrl: publication.entry.repoUrl,
+    repoUrl: publication.entry.repoUrl || `https://github.com/${publication.entry.repoOwner}/${publication.entry.repoName}`,
     title: publication.entry.title,
     description: publication.entry.description,
     defaultBranch: publication.entry.defaultBranch,
@@ -92,6 +94,7 @@ export default function UserGitHubStagesPanel({ embedded = false, preview = fals
   const [unpublishReason, setUnpublishReason] = useState('');
   const [unpublishing, setUnpublishing] = useState(false);
   const [verificationBusy, setVerificationBusy] = useState('');
+  const [localCopyBusy, setLocalCopyBusy] = useState('');
 
   const handleConnect = useCallback(async () => {
     if (!token) {
@@ -171,13 +174,28 @@ export default function UserGitHubStagesPanel({ embedded = false, preview = fals
       await unpublishStageFromMarketplace(token, unpublishStage.entry.repoOwner, unpublishStage.entry.repoName, unpublishReason.trim() || undefined);
       invalidateMyMarketplaceStages(userKey);
       invalidateMarketplaceFirstPage();
-      await Promise.all([refreshMyMarketplaceStages(userKey, token, { force: true }), refreshMarketplaceFirstPage({ force: true })]);
+      await Promise.all([refreshMyMarketplaceStages(userKey, token, { force: true }), refreshMarketplaceFirstPage(token, { force: true })]);
       setUnpublishStage(null);
       setUnpublishReason('');
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Could not create the unpublish request.');
     } finally {
       setUnpublishing(false);
+    }
+  };
+
+  const copyToLocal = async (stage: ProviderStageListItem) => {
+    if (!token) return;
+    const key = stageKey(stage.repoOwner, stage.repoName);
+    setLocalCopyBusy(key);
+    setError('');
+    try {
+      const copied = await copyInstalledGitHubStageToLocal(token, stage.repoOwner, stage.repoName);
+      window.location.assign(`/stage-builder?open=local&id=${copied.id}`);
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'Could not copy this GitHub stage locally.');
+    } finally {
+      setLocalCopyBusy('');
     }
   };
 
@@ -258,7 +276,8 @@ export default function UserGitHubStagesPanel({ embedded = false, preview = fals
                     </Stack>
                   </Box>
                   <Stack direction="row" spacing={1} flexWrap="wrap">
-                    <Button component="a" href={stageEditorUrl(stage)} size="small" variant="contained" startIcon={<EditIcon />}>Open in editor</Button>
+                    <Button component="a" href={stageEditorUrl(stage)} size="small" variant="contained" startIcon={<EditIcon />}>Open on GitHub</Button>
+                    {!preview && <Button size="small" variant="outlined" startIcon={localCopyBusy === key ? <CircularProgress size={15} color="inherit" /> : <ContentCopyIcon />} disabled={!!localCopyBusy} onClick={() => void copyToLocal(stage)}>{localCopyBusy === key ? 'Copying locally…' : 'Copy to local'}</Button>}
                     {!preview && !stage.private && <Button component="a" href={stageTestUrl(stage)} target="_blank" rel="noreferrer" size="small" variant="outlined" startIcon={<PlayArrowIcon />}>Test</Button>}
                     {!preview && <Button component="a" href={stage.repoUrl} target="_blank" rel="noreferrer" size="small" variant="outlined" endIcon={<OpenInNewIcon />}>Source</Button>}
                     {marketplace && !preview && !publication && !stage.private && <Button component="a" href={stageEditorUrl(stage, 'publish')} size="small">Publish</Button>}

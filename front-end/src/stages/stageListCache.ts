@@ -165,10 +165,10 @@ export function subscribeMarketplaceFirstPage(listener: Listener): () => void {
   return subscribe(marketplaceRecord(), listener);
 }
 
-export function refreshMarketplaceFirstPage(options: { force?: boolean } = {}): Promise<void> {
+export function refreshMarketplaceFirstPage(token: string, options: { force?: boolean } = {}): Promise<void> {
   return refresh(
     marketplaceRecord(),
-    () => getMarketplaceIndex({ ...MARKETPLACE_FIRST_PAGE_REQUEST, refresh: !!options.force }),
+    () => getMarketplaceIndex(token, { ...MARKETPLACE_FIRST_PAGE_REQUEST, refresh: !!options.force }),
     options.force,
     MARKETPLACE_REFRESH_AFTER_MS,
   );
@@ -213,7 +213,7 @@ export function invalidateMyMarketplaceStages(userKey: string): void {
 
 /** Refreshes both shared lists without clearing either currently visible result. */
 export async function refreshStageLists(userKey: string | null, token: string, options: { force?: boolean } = {}): Promise<void> {
-  const requests = [refreshMarketplaceFirstPage(options)];
+  const requests = [refreshMarketplaceFirstPage(token, options)];
   if (userKey && token) requests.push(refreshUserStages(userKey, token, options));
   await Promise.all(requests);
 }

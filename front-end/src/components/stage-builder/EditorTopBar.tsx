@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import {
-  Box, Button, ButtonBase, Divider, IconButton, Menu, MenuItem, Stack, Toolbar, Tooltip, Typography,
+  Box, Button, ButtonBase, CircularProgress, Divider, IconButton, Menu, MenuItem, Stack, Toolbar, Tooltip, Typography,
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
@@ -9,6 +9,8 @@ import MoreVertIcon from '@mui/icons-material/MoreVert';
 import GitHubIcon from '@mui/icons-material/GitHub';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import PublishIcon from '@mui/icons-material/Publish';
+import SaveIcon from '@mui/icons-material/Save';
+import FolderOpenIcon from '@mui/icons-material/FolderOpen';
 import { activeValidationResults, validationSummary, type StageBuilderValidationResult } from './stageBuilderValidation';
 import { useEditorTheme } from './stageBuilderEditorTheme';
 import { MARKETPLACE_COPY } from 'src/stages/marketplaceCopy';
@@ -29,6 +31,7 @@ export interface EditorTopBarProps {
   providerLabel?: string;
   providerConnected?: boolean;
   providerBusy?: boolean;
+  localStageBusy?: boolean;
   marketplaceEnabled?: boolean;
   marketplaceBusy?: boolean;
   marketplaceStatusLoading?: boolean;
@@ -36,6 +39,8 @@ export interface EditorTopBarProps {
   marketplacePublishLabel?: string;
   marketplacePublishReady?: boolean;
   onImport: () => void;
+  onSaveLocal: () => void;
+  onOpenLocal: () => void;
   onExport: () => void;
   onRefreshGitHubStatus?: () => void;
   onConnectProvider: () => void;
@@ -123,6 +128,7 @@ export function EditorTopBar({
   providerLabel,
   providerConnected,
   providerBusy,
+  localStageBusy,
   marketplaceEnabled = false,
   marketplaceBusy,
   marketplaceStatusLoading,
@@ -130,6 +136,8 @@ export function EditorTopBar({
   marketplacePublishLabel = MARKETPLACE_COPY.publishStage,
   marketplacePublishReady = false,
   onImport,
+  onSaveLocal,
+  onOpenLocal,
   onExport,
   onRefreshGitHubStatus,
   onConnectProvider,
@@ -215,7 +223,7 @@ export function EditorTopBar({
         <TopStatusText label={validationSummary(validationResults)} tone={hasErrors ? editorColors.danger : hasWarnings ? editorColors.warning : editorColors.success} onClick={onOpenValidation} />
       </Stack>
       <Stack direction="row" spacing={0.75} alignItems="center" sx={{ pl: 0.75, ml: 0.25 }}>
-        <Button size="small" color="inherit" variant="outlined" startIcon={<FileDownloadIcon />} onClick={onExport} sx={{ ...exportButtonSx, display: { xs: 'none', sm: 'inline-flex' } }}>Save JSON</Button>
+        <Button size="small" color="inherit" variant="outlined" startIcon={localStageBusy ? <CircularProgress size={15} color="inherit" /> : <SaveIcon />} onClick={onSaveLocal} disabled={localStageBusy} sx={{ ...exportButtonSx, display: { xs: 'none', sm: 'inline-flex' } }}>{localStageBusy ? 'Saving locally…' : 'Save locally'}</Button>
         <Tooltip title={providerLabel || 'GitHub actions'}>
           <span>
             <Button
@@ -232,6 +240,17 @@ export function EditorTopBar({
             </Button>
           </span>
         </Tooltip>
+        {marketplaceEnabled && <Button
+          size="small"
+          color="inherit"
+          variant={marketplacePublishReady ? 'contained' : 'outlined'}
+          startIcon={marketplaceBusy ? <CircularProgress size={15} color="inherit" /> : <PublishIcon />}
+          onClick={onPublishMarketplace}
+          disabled={marketplaceBusy}
+          sx={{ ...exportButtonSx, display: { xs: 'none', md: 'inline-flex' } }}
+        >
+          {marketplaceBusy ? 'Submitting…' : marketplacePublishLabel}
+        </Button>}
         <Button size="small" variant="contained" disableElevation startIcon={<PlayArrowIcon />} onClick={onRunTest} aria-label="Run test" sx={{ ...runButtonSx, minWidth: { xs: 34, sm: 96 }, px: { xs: 0.75, sm: 1.75 }, '& .MuiButton-startIcon': { mr: { xs: 0, sm: 1 }, ml: 0 } }}><Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>Run test</Box></Button>
         <IconButton size="small" onClick={overflow.openMenu} aria-label="More editor actions" sx={topbarIconButtonSx}><MoreVertIcon fontSize="small" /></IconButton>
       </Stack>
@@ -246,22 +265,6 @@ export function EditorTopBar({
         {!providerConnected && <MenuItem disabled={providerBusy} onClick={() => { github.closeMenu(); onConnectProvider(); }}>{providerBusy ? 'Connecting…' : MARKETPLACE_COPY.connectGitHub}</MenuItem>}
         <MenuItem disabled={providerBusy} onClick={() => { github.closeMenu(); onSaveProvider(); }}>{providerBusy ? 'Saving…' : MARKETPLACE_COPY.saveToGitHub}</MenuItem>
         <MenuItem disabled={providerBusy} onClick={() => { github.closeMenu(); onOpenProvider(); }}>{MARKETPLACE_COPY.openFromGitHub}</MenuItem>
-        {marketplaceEnabled && <MenuItem
-          disabled={marketplaceBusy}
-          onClick={() => { github.closeMenu(); onPublishMarketplace(); }}
-          sx={marketplacePublishReady ? {
-            mx: 0.75,
-            my: 0.5,
-            borderRadius: 1,
-            bgcolor: editorColors.accentSoft,
-            color: editorColors.accentText,
-            fontWeight: 800,
-            '&:hover': { bgcolor: editorColors.accentSoft },
-          } : undefined}
-        >
-          {marketplacePublishReady && <PublishIcon fontSize="small" sx={{ mr: 1 }} />}
-          {marketplaceBusy ? 'Publishing…' : marketplacePublishLabel}
-        </MenuItem>}
         {marketplaceEnabled && marketplacePullRequest?.url && <Divider />}
         {marketplaceEnabled && marketplacePullRequest?.url && (
           <MenuItem component="a" href={marketplacePullRequest.url} target="_blank" rel="noreferrer" onClick={github.closeMenu}>
@@ -270,7 +273,11 @@ export function EditorTopBar({
         )}
       </Menu>
       <Menu anchorEl={overflow.anchorEl} open={overflow.open} onClose={overflow.closeMenu}>
-        <MenuItem onClick={() => { overflow.closeMenu(); onExport(); }}>Save JSON</MenuItem>
+        <MenuItem disabled={localStageBusy} onClick={() => { overflow.closeMenu(); onSaveLocal(); }}><SaveIcon fontSize="small" sx={{ mr: 1 }} />{localStageBusy ? 'Saving…' : 'Save to my account'}</MenuItem>
+        <MenuItem onClick={() => { overflow.closeMenu(); onOpenLocal(); }}><FolderOpenIcon fontSize="small" sx={{ mr: 1 }} />Open my stage…</MenuItem>
+        {marketplaceEnabled && <MenuItem disabled={marketplaceBusy} onClick={() => { overflow.closeMenu(); onPublishMarketplace(); }}>{marketplaceBusy ? <CircularProgress size={16} sx={{ mr: 1 }} /> : <PublishIcon fontSize="small" sx={{ mr: 1 }} />}{marketplaceBusy ? 'Submitting…' : marketplacePublishLabel}</MenuItem>}
+        <Divider />
+        <MenuItem onClick={() => { overflow.closeMenu(); onExport(); }}><FileDownloadIcon fontSize="small" sx={{ mr: 1 }} />Save JSON</MenuItem>
         <Divider />
         <MenuItem onClick={() => { overflow.closeMenu(); onNew(); }}>New stage</MenuItem>
         <MenuItem onClick={() => { overflow.closeMenu(); onDemo(); }}>Load demo</MenuItem>

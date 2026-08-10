@@ -9,7 +9,7 @@ import xml.etree.ElementTree as ElementTree
 from typing import Any, Literal, Optional
 from urllib.parse import urlsplit
 
-from database.database import ActivityAnswer, Course, CourseRelease, Enrollment, Lesson, LessonProgress, LessonWorkspace, MissionAttempt, User
+from database.database import ActivityAnswer, Course, CourseRelease, Enrollment, Lesson, LessonProgress, LessonWorkspace, MarketplaceModerationOverride, MissionAttempt, User
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError
@@ -82,6 +82,7 @@ class StageReference(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     source_type: Literal["default", "github", "marketplace"] = Field(alias="sourceType")
+    local_stage_id: Optional[int] = Field(default=None, alias="localStageId", ge=1)
     repo_owner: Optional[str] = Field(default=None, alias="repoOwner")
     repo_name: Optional[str] = Field(default=None, alias="repoName")
     visibility: Optional[str] = None
@@ -491,6 +492,7 @@ def stage_payload(source: Lesson) -> Optional[dict[str, Any]]:
         return None
     return {
         "sourceType": source.stage_source_type,
+        "localStageId": source.stage_local_id,
         "repoOwner": source.stage_repo_owner,
         "repoName": source.stage_repo_name,
         "visibility": source.stage_repo_visibility,
@@ -504,6 +506,7 @@ def stage_payload(source: Lesson) -> Optional[dict[str, Any]]:
 def set_stage_reference(lesson: Lesson, reference: Optional[dict[str, Any]]) -> None:
     for field in (
         "stage_source_type",
+        "stage_local_id",
         "stage_repo_owner",
         "stage_repo_name",
         "stage_repo_visibility",
@@ -516,6 +519,7 @@ def set_stage_reference(lesson: Lesson, reference: Optional[dict[str, Any]]) -> 
     if not reference:
         return
     lesson.stage_source_type = reference.get("sourceType")
+    lesson.stage_local_id = reference.get("localStageId")
     lesson.stage_repo_owner = reference.get("repoOwner")
     lesson.stage_repo_name = reference.get("repoName")
     lesson.stage_repo_visibility = reference.get("visibility")
@@ -525,8 +529,37 @@ def set_stage_reference(lesson: Lesson, reference: Optional[dict[str, Any]]) -> 
     lesson.stage_commit_sha = reference.get("commitSha")
 
 
-def marketplace_reference(reference: StageReference) -> dict[str, Any]:
+def marketplace_reference(reference: StageReference, db: Session) -> dict[str, Any]:
     requested_path = reference.marketplace_entry_path
+    if requested_path and requested_path.startswith("local:"):
+        from routers.local_stages import local_marketplace_entries
+
+        try:
+            publication_id = int(requested_path.split(":", 1)[1])
+        except ValueError as error:
+            raise stage_error(400, "validation_failed", "Local marketplace reference is invalid.") from error
+        entry = next(
+            (item for item in local_marketplace_entries(db) if item.get("localPublicationId") == publication_id),
+            None,
+        )
+        suppressed = db.query(MarketplaceModerationOverride.id).filter(
+            MarketplaceModerationOverride.source_type == "local",
+            MarketplaceModerationOverride.local_publication_id == publication_id,
+            MarketplaceModerationOverride.active.is_(True),
+        ).first()
+        if not entry or suppressed:
+            raise stage_error(404, "marketplace_stage_not_found", "Choose a local stage that is currently published.")
+        return {
+            "sourceType": "marketplace",
+            "localStageId": entry.get("localStageId"),
+            "repoOwner": entry["repoOwner"],
+            "repoName": entry["repoName"],
+            "visibility": "public",
+            "marketplaceEntryPath": requested_path,
+            "title": entry.get("title") or entry["repoName"],
+            "url": entry.get("recordUrl"),
+            "commitSha": entry.get("commitSha"),
+        }
     try:
         if not requested_path and reference.repo_owner and reference.repo_name:
             requested_path = marketplace_entry_path(reference.repo_owner, reference.repo_name)
@@ -542,6 +575,7 @@ def marketplace_reference(reference: StageReference) -> dict[str, Any]:
                 raise stage_error(400, "stage_not_pinned", "The marketplace stage has no immutable revision.")
             return {
                 "sourceType": "marketplace",
+                "localStageId": None,
                 "repoOwner": entry["repoOwner"],
                 "repoName": entry["repoName"],
                 "visibility": "public",
@@ -610,6 +644,7 @@ def normalize_course_stage_reference(reference: Optional[StageReference], user: 
             raise stage_error(400, "validation_failed", "Choose a built-in FOSSBot stage.")
         return {
             "sourceType": "default",
+            "localStageId": None,
             "repoOwner": None,
             "repoName": None,
             "visibility": None,
@@ -620,7 +655,7 @@ def normalize_course_stage_reference(reference: Optional[StageReference], user: 
         }
     if reference.source_type == "github":
         return github_reference(reference, user, db)
-    return marketplace_reference(reference)
+    return marketplace_reference(reference, db)
 
 
 def lesson_payload(lesson: Lesson) -> dict[str, Any]:

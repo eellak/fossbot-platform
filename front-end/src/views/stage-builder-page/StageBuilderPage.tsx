@@ -41,6 +41,8 @@ import { OpenFromProviderDialog } from 'src/stages/OpenFromProviderDialog';
 import { getMarketplaceStageStatus, publishStageToMarketplace, MarketplaceRequestError, type MarketplaceStageStatusResponse, type PublishMarketplaceResponse } from 'src/stages/MarketplaceApi';
 import { PublishToMarketplaceDialog, type PublishMarketplaceValues } from 'src/stages/PublishToMarketplaceDialog';
 import { invalidateMarketplaceFirstPage, invalidateMyMarketplaceStages, invalidateUserStages, refreshMarketplaceFirstPage, refreshMyMarketplaceStages, refreshUserStages, stageListUserKey, subscribeUserStages, userStagesSnapshot } from 'src/stages/stageListCache';
+import { createLocalStage, listLocalStages, loadLocalStage, LocalStageRequestError, publishLocalStage, updateLocalStage, type LocalPublicationSubmissionSummary, type LocalStage } from 'src/stages/LocalStagesApi';
+import { OpenLocalStageDialog } from 'src/stages/OpenLocalStageDialog';
 import { useFeatureFlags } from 'src/config/FeatureFlags';
 
 function userScope(user: ReturnType<typeof useAuth>['user']): string {
@@ -99,6 +101,14 @@ function githubDeepLinkTargetFromLocation(): GitHubDeepLinkTarget | null {
   const repoName = nameFromRepo || params.get('name') || '';
   if (!repoOwner || !repoName) return null;
   return { repoOwner, repoName, label: `${repoOwner}/${repoName}`, action: params.get('action') === 'publish' ? 'publish' : undefined };
+}
+
+function localDeepLinkStageIdFromLocation(): number | null {
+  if (typeof window === 'undefined') return null;
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('open') !== 'local') return null;
+  const stageId = Number(params.get('id'));
+  return Number.isInteger(stageId) && stageId > 0 ? stageId : null;
 }
 
 function delay(ms: number): Promise<void> {
@@ -386,6 +396,12 @@ const StageBuilderPage = () => {
   const [pendingDraft, setPendingDraft] = useState<StageBuilderDraft | null>(null);
   const [draftReady, setDraftReady] = useState(false);
   const [providerStatus, setProviderStatus] = useState<GitHubProviderStatus | null>(null);
+  const [localStage, setLocalStage] = useState<LocalStage | null>(null);
+  const [localStageSaving, setLocalStageSaving] = useState(false);
+  const [localStages, setLocalStages] = useState<LocalStage[]>([]);
+  const [localStagesLoading, setLocalStagesLoading] = useState(false);
+  const [localStagesError, setLocalStagesError] = useState('');
+  const [openLocalStageOpen, setOpenLocalStageOpen] = useState(false);
   const [providerStatusLoading, setProviderStatusLoading] = useState(false);
   const [saveProviderOpen, setSaveProviderOpen] = useState(false);
   const [providerSaving, setProviderSaving] = useState(false);
@@ -402,9 +418,11 @@ const StageBuilderPage = () => {
   const [marketplacePublishing, setMarketplacePublishing] = useState(false);
   const [marketplaceError, setMarketplaceError] = useState('');
   const [marketplaceResult, setMarketplaceResult] = useState<PublishMarketplaceResponse | null>(null);
+  const [localPublicationRequest, setLocalPublicationRequest] = useState<LocalPublicationSubmissionSummary | null>(null);
   const [marketplaceStatus, setMarketplaceStatus] = useState<MarketplaceStageStatusResponse | null>(null);
   const [marketplaceStatusLoading, setMarketplaceStatusLoading] = useState(false);
   const [githubDeepLinkTarget] = useState<GitHubDeepLinkTarget | null>(() => githubDeepLinkTargetFromLocation());
+  const [localDeepLinkStageId] = useState<number | null>(() => localDeepLinkStageIdFromLocation());
   const [githubDeepLinkRetry, setGithubDeepLinkRetry] = useState(0);
   const [githubDeepLinkLoad, setGithubDeepLinkLoad] = useState<GitHubDeepLinkLoadState>(() => {
     const target = githubDeepLinkTargetFromLocation();
@@ -420,6 +438,7 @@ const StageBuilderPage = () => {
   const selectedGroupObjectIds = selectedGroup ? selectedGroup.objectIds.filter((id) => stage.objects.some((object) => object.id === id)) : [];
   const selectedCount = selectedGroup ? selectedGroupObjectIds.length : selectedIds.length || (selectedId ? 1 : 0);
   const dirty = useMemo(() => stageFingerprint(stage) !== lastExportFingerprint, [stage, lastExportFingerprint]);
+  const localStageHasChanges = useMemo(() => localStage ? stageFingerprint(stage) !== stageFingerprint(configToEditorStage(localStage.record)) : dirty, [dirty, localStage, stage]);
   const gridVisible = stage.metadata.gridVisible ?? true;
   const gridSize = stage.metadata.gridSize ?? 0.5;
   const selectedStatus = selectedGroup ? selectedGroup.name : selectedObject ? selectedObject.name : selectedCount ? `${selectedCount} objects` : inspectorTab === 'stage' ? 'Stage' : 'None';
@@ -568,6 +587,7 @@ const StageBuilderPage = () => {
           private: loaded.private,
           visibility: loaded.visibility,
         });
+        setLocalStage(null);
         if (marketplaceEnabled && githubDeepLinkTarget.action === 'publish') setPublishMarketplaceOpen(true);
         window.history.replaceState(null, '', window.location.pathname);
         setGithubDeepLinkLoad({ status: 'idle' });
@@ -587,6 +607,26 @@ const StageBuilderPage = () => {
     openDeepLinkedStage();
     return () => { cancelled = true; };
   }, [featureFlagsReady, githubDeepLinkRetry, githubDeepLinkTarget, marketplaceEnabled, token]);
+
+  useEffect(() => {
+    if (!localDeepLinkStageId || !token) return;
+    let cancelled = false;
+    setLocalStagesLoading(true);
+    loadLocalStage(token, localDeepLinkStageId)
+      .then((loaded) => {
+        if (cancelled) return;
+        const publishAfterOpen = new URLSearchParams(window.location.search).get('action') === 'publish';
+        replaceStage(configToEditorStage(loaded.record), { undoable: false, clean: true, message: 'Opened stage from your account.' });
+        setLocalStage(loaded);
+        setRemoteStage(null);
+        if (publishAfterOpen) setPublishMarketplaceOpen(true);
+        if (new URLSearchParams(window.location.search).get('action') === 'github-copy') setSaveProviderOpen(true);
+        window.history.replaceState(null, '', window.location.pathname);
+      })
+      .catch((error) => { if (!cancelled) setMessage(error instanceof Error ? error.message : 'Could not open local stage.'); })
+      .finally(() => { if (!cancelled) setLocalStagesLoading(false); });
+    return () => { cancelled = true; };
+  }, [localDeepLinkStageId, token]);
 
   useEffect(() => {
     setPrefs(readStageBuilderPreferences(scope));
@@ -924,11 +964,15 @@ const StageBuilderPage = () => {
     if (!confirmIfDirty('Create a new blank stage? Unsaved changes will remain only as a recovery draft.')) return;
     const next = emptyEditorStage();
     replaceStage(next, { undoable: false, clean: true, message: 'New blank stage created.' });
+    setLocalStage(null);
+    setRemoteStage(null);
   };
 
   const handleDemo = () => {
     if (!confirmIfDirty('Load the demo stage? Unsaved changes will remain only as a recovery draft.')) return;
     replaceStage(createDemoEditorStage(), { undoable: true, clean: false, message: 'Demo stage loaded.' });
+    setLocalStage(null);
+    setRemoteStage(null);
   };
 
   const readFileAsDataUrl = (file: File): Promise<string> => new Promise((resolve, reject) => {
@@ -986,6 +1030,8 @@ const StageBuilderPage = () => {
       const record = stageRecordFromImportedJson(JSON.parse(await file.text()));
       const imported = configToEditorStage(record);
       replaceStage(imported, { undoable: true, clean: true, message: 'Imported stage JSON.' });
+      setLocalStage(null);
+      setRemoteStage(null);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Import failed.');
     } finally {
@@ -1013,6 +1059,63 @@ const StageBuilderPage = () => {
     return getGitHubBootstrapLinks(token, slug, visibility);
   };
 
+  const handleLocalSave = async () => {
+    if (!token) {
+      setMessage('Sign in before saving a stage to your account.');
+      return;
+    }
+    if (localStage && !localStageHasChanges) {
+      setMessage(`No changes to save. ${localStage.title} is already at r${localStage.revision}.`);
+      return;
+    }
+    setLocalStageSaving(true);
+    try {
+      const record = editorStageToRecord(stage);
+      const saved = localStage
+        ? await updateLocalStage(token, localStage, record)
+        : await createLocalStage(token, record);
+      setLocalStage(saved);
+      setRemoteStage(null);
+      setLastExportFingerprint(stageFingerprint(stage));
+      setExportedAt(new Date().toISOString());
+      clearStageBuilderDraft(scope);
+      setMessage(`Saved to your account: ${saved.title} · r${saved.revision}`);
+      if (openLocalStageOpen) setLocalStages(await listLocalStages(token));
+    } catch (error) {
+      if (error instanceof LocalStageRequestError && error.code === 'revision_conflict') {
+        setMessage(`${error.message} Current revision: r${error.currentRevision || '?'}.`);
+      } else {
+        setMessage(error instanceof Error ? error.message : 'Local stage save failed.');
+      }
+    } finally {
+      setLocalStageSaving(false);
+    }
+  };
+
+  const refreshLocalStageList = async () => {
+    if (!token) {
+      setLocalStagesError('Sign in before opening stages from your account.');
+      return;
+    }
+    setLocalStagesLoading(true);
+    setLocalStagesError('');
+    try {
+      setLocalStages(await listLocalStages(token));
+    } catch (error) {
+      setLocalStagesError(error instanceof Error ? error.message : 'Could not load your stages.');
+    } finally {
+      setLocalStagesLoading(false);
+    }
+  };
+
+  const handleOpenLocalStage = (item: LocalStage) => {
+    if (!confirmIfDirty('Open this saved stage and replace the current editor stage? Unsaved changes will remain only as a recovery draft.')) return;
+    replaceStage(configToEditorStage(item.record), { undoable: true, clean: true, message: 'Opened stage from your account.' });
+    setLocalStage(item);
+    setRemoteStage(null);
+    setOpenLocalStageOpen(false);
+  };
+
   const handleProviderSave = async ({ slug, commitMessage, visibility }: SaveToProviderValues) => {
     if (!token) {
       setProviderError('Sign in before saving to GitHub.');
@@ -1034,6 +1137,7 @@ const StageBuilderPage = () => {
         })
         : await createStageOnProvider(token, { record, slug, commitMessage, visibility });
       setRemoteStage(saved);
+      setLocalStage(null);
       if (stageListUser) {
         invalidateUserStages(stageListUser);
         await refreshUserStages(stageListUser, token, { force: true });
@@ -1080,17 +1184,29 @@ const StageBuilderPage = () => {
       setMarketplaceError('Sign in before publishing to the marketplace.');
       return;
     }
-    if (!remoteStage) {
-      setMarketplaceError('Save this stage to GitHub before publishing.');
+    if (!localStage && !remoteStage) {
+      setMarketplaceError('Save this stage to your account or GitHub before publishing.');
+      return;
+    }
+    if (localStage ? localStageHasChanges : dirty) {
+      setMarketplaceError('Save the latest editor changes before publishing.');
       return;
     }
     setMarketplacePublishing(true);
     setMarketplaceError('');
     setMarketplaceResult(null);
+    setLocalPublicationRequest(null);
     try {
+      if (localStage) {
+        const response = await publishLocalStage(token, localStage, { title, description, tags, previewDataUrl, sharingLicense });
+        setLocalPublicationRequest(response.submission);
+        setLocalStage(await loadLocalStage(token, localStage.id));
+        setMessage(`Publication review requested for ${localStage.title}.`);
+        return;
+      }
       const result = await publishStageToMarketplace(token, {
-        repoOwner: remoteStage.repoOwner,
-        repoName: remoteStage.repoName,
+        repoOwner: remoteStage!.repoOwner,
+        repoName: remoteStage!.repoName,
         title,
         description,
         tags,
@@ -1099,9 +1215,11 @@ const StageBuilderPage = () => {
         commitMessage,
       });
       setMarketplaceResult(result);
+      const sourceOwner = remoteStage!.repoOwner;
+      const sourceName = remoteStage!.repoName;
       setMarketplaceStatus({
-        repoOwner: remoteStage.repoOwner,
-        repoName: remoteStage.repoName,
+        repoOwner: sourceOwner,
+        repoName: sourceName,
         entryPath: result.entryPath,
         entry: result.entry,
         lifecycle: {
@@ -1117,12 +1235,12 @@ const StageBuilderPage = () => {
         } : null),
         rawBaseUrl: result.rawBaseUrl,
       });
-      marketplaceStatusCacheRef.current = { key: `${remoteStage.repoOwner}/${remoteStage.repoName}`, checkedAt: Date.now() };
+      marketplaceStatusCacheRef.current = { key: `${sourceOwner}/${sourceName}`, checkedAt: Date.now() };
       invalidateMarketplaceFirstPage();
       if (stageListUser) invalidateMyMarketplaceStages(stageListUser);
-      await refreshMarketplaceFirstPage({ force: true });
+      await refreshMarketplaceFirstPage(token, { force: true });
       if (stageListUser) await refreshMyMarketplaceStages(stageListUser, token, { force: true });
-      setMessage(`Marketplace PR created for ${remoteStage.repoOwner}/${remoteStage.repoName}.`);
+      setMessage(`Marketplace PR created for ${remoteStage!.repoOwner}/${remoteStage!.repoName}.`);
     } catch (error) {
       if (error instanceof MarketplaceRequestError) {
         setMarketplaceError(error.message);
@@ -1138,6 +1256,7 @@ const StageBuilderPage = () => {
     if (!marketplaceEnabled) return;
     setMarketplaceError('');
     setMarketplaceResult(null);
+    setLocalPublicationRequest(null);
     setPublishMarketplaceOpen(true);
   };
 
@@ -1175,6 +1294,7 @@ const StageBuilderPage = () => {
         private: loaded.private,
         visibility: loaded.visibility,
       });
+      setLocalStage(null);
       setOpenProviderOpen(false);
     } catch (error) {
       setProviderListError(error instanceof Error ? error.message : 'Could not open GitHub stage.');
@@ -1491,6 +1611,7 @@ const StageBuilderPage = () => {
         providerLabel={providerLabel}
         providerConnected={!!providerStatus?.connected}
         providerBusy={providerSaving || providerStatusLoading}
+        localStageBusy={localStageSaving}
         marketplaceEnabled={marketplaceEnabled}
         marketplaceBusy={marketplacePublishing}
         marketplaceStatusLoading={marketplaceStatusLoading}
@@ -1498,6 +1619,8 @@ const StageBuilderPage = () => {
         marketplacePublishLabel={marketplacePublishLabel}
         marketplacePublishReady={marketplacePublishReady}
         onImport={() => importInputRef.current?.click()}
+        onSaveLocal={handleLocalSave}
+        onOpenLocal={() => { setOpenLocalStageOpen(true); void refreshLocalStageList(); }}
         onExport={handleExport}
         onRefreshGitHubStatus={() => { refreshProviderStatus(); refreshMarketplaceStatus(); }}
         onConnectProvider={handleProviderConnect}
@@ -1708,6 +1831,7 @@ const StageBuilderPage = () => {
       <SaveToProviderDialog
         open={saveProviderOpen}
         stageTitle={stage.title}
+        sourceLabel={localStage ? `local revision ${localStage.title} · r${localStage.revision}` : null}
         status={providerStatus}
         remoteStage={remoteStage}
         bootstrapRepoName={bootstrapRepoName}
@@ -1734,17 +1858,31 @@ const StageBuilderPage = () => {
         onOpenStage={handleOpenProviderStage}
       />
 
+      <OpenLocalStageDialog
+        open={openLocalStageOpen}
+        stages={localStages}
+        busy={localStagesLoading}
+        error={localStagesError}
+        onClose={() => setOpenLocalStageOpen(false)}
+        onRefresh={refreshLocalStageList}
+        onOpenStage={handleOpenLocalStage}
+      />
+
       {marketplaceEnabled && <PublishToMarketplaceDialog
         open={publishMarketplaceOpen}
         stageTitle={stage.title}
         stageDescription={stage.description}
         remoteStage={remoteStage}
+        localStage={localStage}
+        sourceDirty={localStage ? localStageHasChanges : dirty}
         busy={marketplacePublishing}
         error={marketplaceError}
         result={marketplaceResult}
+        localRequest={localPublicationRequest}
         lifecycle={marketplaceStatus?.lifecycle}
         onClose={() => setPublishMarketplaceOpen(false)}
         onSaveToGitHub={() => { setPublishMarketplaceOpen(false); setSaveProviderOpen(true); }}
+        onSaveLocal={() => { setPublishMarketplaceOpen(false); void handleLocalSave(); }}
         onPublish={handlePublishMarketplace}
       />}
 

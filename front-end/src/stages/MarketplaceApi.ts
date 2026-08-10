@@ -37,9 +37,15 @@ export interface MarketplaceSourceStatus {
 
 export interface MarketplaceStageEntry {
   marketplaceVersion: number;
+  entryId?: string;
+  sourceType?: 'local' | 'github';
+  localPublicationId?: number | null;
+  localReleaseId?: number | null;
+  localStageId?: number | null;
   repoOwner: string;
   repoName: string;
-  repoUrl: string;
+  repoUrl?: string | null;
+  recordUrl?: string | null;
   defaultBranch: string;
   commitSha: string;
   title: string;
@@ -59,7 +65,11 @@ export interface MarketplaceStageEntry {
   badges: {
     verified: boolean;
     validation: MarketplaceValidationState;
+    github?: boolean;
   };
+  provenance?: Record<string, unknown> | null;
+  sharingLicense?: string | null;
+  recordBytes?: number | null;
   validation?: MarketplaceValidationDetails | null;
   verification?: MarketplaceVerificationDetails | null;
   sourceStatus?: MarketplaceSourceStatus | null;
@@ -199,6 +209,8 @@ export interface MarketplaceReport {
   id: number;
   repoOwner: string;
   repoName: string;
+  sourceType: 'local' | 'github';
+  localPublicationId?: number | null;
   commitSha: string;
   category: MarketplaceReportCategory;
   explanation: string;
@@ -211,6 +223,8 @@ export interface MarketplaceReport {
 export interface MarketplaceModerationOverride {
   repoOwner: string;
   repoName: string;
+  sourceType: 'local' | 'github';
+  localPublicationId?: number | null;
   state: 'hidden' | 'removed';
   active: boolean;
   reason: string;
@@ -268,7 +282,12 @@ async function parseJsonResponse<T>(response: Response): Promise<T> {
   return payload as T;
 }
 
-export async function getMarketplaceIndex(request: MarketplaceIndexRequest = {}): Promise<MarketplaceIndexResponse> {
+function withBackendAssetUrls(entry: MarketplaceStageEntry): MarketplaceStageEntry {
+  const absolute = (value?: string | null) => value?.startsWith('/') ? `${backendUrl}${value}` : value;
+  return { ...entry, previewUrl: absolute(entry.previewUrl), recordUrl: absolute(entry.recordUrl) };
+}
+
+export async function getMarketplaceIndex(token: string, request: MarketplaceIndexRequest = {}): Promise<MarketplaceIndexResponse> {
   const params = new URLSearchParams();
   if (request.page) params.set('page', String(request.page));
   if (request.pageSize) params.set('pageSize', String(request.pageSize));
@@ -277,8 +296,12 @@ export async function getMarketplaceIndex(request: MarketplaceIndexRequest = {})
   if (request.sort) params.set('sort', request.sort);
   if (request.refresh) params.set('refresh', 'true');
   const suffix = params.toString() ? `?${params.toString()}` : '';
-  const response = await fetch(`${backendUrl}/api/marketplace/index${suffix}`, { method: 'GET' });
-  return parseJsonResponse<MarketplaceIndexResponse>(response);
+  const response = await fetch(`${backendUrl}/api/marketplace/index${suffix}`, {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const payload = await parseJsonResponse<MarketplaceIndexResponse>(response);
+  return { ...payload, stages: payload.stages.map(withBackendAssetUrls) };
 }
 
 export async function getMarketplaceStageStatus(token: string, owner: string, repo: string): Promise<MarketplaceStageStatusResponse> {
@@ -304,7 +327,7 @@ export async function getMarketplacePermissions(token: string): Promise<Marketpl
   return parseJsonResponse<MarketplacePermissions>(await fetch(`${backendUrl}/api/marketplace/permissions`, { headers: { Authorization: `Bearer ${token}` } }));
 }
 
-export async function reportMarketplaceStage(token: string, report: { repoOwner: string; repoName: string; category: MarketplaceReportCategory; explanation: string; reporterContact?: string }): Promise<{ id: number }> {
+export async function reportMarketplaceStage(token: string, report: { repoOwner: string; repoName: string; sourceType?: 'local' | 'github'; localPublicationId?: number | null; category: MarketplaceReportCategory; explanation: string; reporterContact?: string }): Promise<{ id: number }> {
   return parseJsonResponse<{ id: number }>(await fetch(`${backendUrl}/api/marketplace/reports`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify(report) }));
 }
 
@@ -332,11 +355,11 @@ export async function submitMarketplaceVerification(token: string, owner: string
   return parseJsonResponse(await fetch(`${backendUrl}/api/marketplace/verification/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify(request) }));
 }
 
-export async function setModerationOverride(token: string, owner: string, repo: string, request: { state: 'hidden' | 'removed'; reason: string; reportId?: number }): Promise<MarketplaceModerationOverride> {
+export async function setModerationOverride(token: string, owner: string, repo: string, request: { state: 'hidden' | 'removed'; reason: string; sourceType?: 'local' | 'github'; localPublicationId?: number | null; reportId?: number }): Promise<MarketplaceModerationOverride> {
   return parseJsonResponse(await fetch(`${backendUrl}/api/marketplace/moderation/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify(request) }));
 }
 
-export async function restoreMarketplaceStage(token: string, owner: string, repo: string, request: { reason: string; reportId?: number }): Promise<MarketplaceModerationOverride> {
+export async function restoreMarketplaceStage(token: string, owner: string, repo: string, request: { reason: string; sourceType?: 'local' | 'github'; localPublicationId?: number | null; reportId?: number }): Promise<MarketplaceModerationOverride> {
   return parseJsonResponse(await fetch(`${backendUrl}/api/marketplace/moderation/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`, { method: 'DELETE', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify(request) }));
 }
 
