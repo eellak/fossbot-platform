@@ -8,7 +8,7 @@ Current contracts:
 
 - capability registry, access/admin schema, and policy: version `1`;
 - context: version `1`, maximum encoded context 48,000 characters;
-- prompt: `fossbot-assistant-v1`, FOSSBot API reference version `1`;
+- prompt: `fossbot-assistant-v2`, FOSSBot API reference version `1`;
 - suggestion schemas: version `1`, maximum provider suggestion 32,000 characters;
 - runtime interface and local device settings: version `1`;
 - evaluation corpus/results: version `1`.

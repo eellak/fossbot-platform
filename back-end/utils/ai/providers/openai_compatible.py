@@ -4,7 +4,7 @@ from typing import AsyncIterator
 
 import httpx
 
-from utils.ai.providers.base import HostedProvider, ProviderError, ProviderEvent, endpoint_url, iter_sse_data, json_event, validate_endpoint
+from utils.ai.providers.base import MAX_PROVIDER_RESPONSE_BYTES, HostedProvider, ProviderError, ProviderEvent, endpoint_url, iter_sse_data, json_event, validate_endpoint
 from utils.ai.schemas import ProviderStreamRequest
 
 
@@ -71,7 +71,7 @@ class OpenAICompatibleProvider(HostedProvider):
             async with self.client(health=True) as client:
                 response = await client.get(url, headers=self.headers())
                 await self.checked(response)
-                if len(response.content) > 256 * 1024:
+                if len(response.content) > MAX_PROVIDER_RESPONSE_BYTES:
                     raise ProviderError("provider_response_too_large", "Provider health response exceeded the allowed size.")
                 payload = response.json()
         except (ValueError, httpx.HTTPError) as error:

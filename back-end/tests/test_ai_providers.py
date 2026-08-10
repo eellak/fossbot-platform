@@ -126,3 +126,27 @@ def test_compatible_provider_rejects_redirects_oversize_and_timeouts(monkeypatch
         asyncio.run(collect(timed_out))
     assert timeout_error.value.code == "provider_timeout"
     assert timeout_error.value.retryable is True
+
+
+def test_compatible_provider_health_accepts_large_catalog_but_keeps_response_bound(monkeypatch):
+    monkeypatch.setattr(socket, "getaddrinfo", lambda *args, **kwargs: [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 443))])
+
+    large_catalog = json.dumps({"data": [{"id": "test-model", "description": "x" * (256 * 1024)}]})
+    provider = OpenAICompatibleProvider(
+        secret="secret",
+        base_url="https://example.test/v1",
+        settings={},
+        transport=httpx.MockTransport(lambda request: httpx.Response(200, text=large_catalog)),
+    )
+    assert asyncio.run(provider.health("test-model")) == {"ok": True, "model": "test-model", "modelFound": True}
+
+    oversized_catalog = json.dumps({"data": [{"id": "test-model", "description": "x" * MAX_PROVIDER_RESPONSE_BYTES}]})
+    oversized = OpenAICompatibleProvider(
+        secret="secret",
+        base_url="https://example.test/v1",
+        settings={},
+        transport=httpx.MockTransport(lambda request: httpx.Response(200, text=oversized_catalog)),
+    )
+    with pytest.raises(ProviderError) as too_large:
+        asyncio.run(oversized.health("test-model"))
+    assert too_large.value.code == "provider_response_too_large"

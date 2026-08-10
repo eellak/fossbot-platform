@@ -27,6 +27,32 @@ def test_python_suggestion_requires_valid_syntax_and_fingerprint():
         }), "code.suggest_changes", fingerprint)
 
 
+def test_suggestion_accepts_one_json_object_wrapped_in_reasoning_and_markdown():
+    fingerprint = hashlib.sha256(b"print('before')").hexdigest()
+    raw = """<think>I should return a complete replacement.</think>
+```json
+{"version":"1","type":"python_replace","baseFingerprint":"%s","replacement":"print('after')\\n","summary":"Update the output."}
+```""" % fingerprint
+
+    parsed = parse_suggestion(raw, "code.suggest_changes", fingerprint)
+
+    assert parsed.replacement == "print('after')\n"
+
+
+def test_suggestion_rejects_ambiguous_multiple_json_objects():
+    fingerprint = hashlib.sha256(b"print('before')").hexdigest()
+    payload = json.dumps({
+        "version": "1",
+        "type": "python_replace",
+        "baseFingerprint": fingerprint,
+        "replacement": "print('after')\n",
+        "summary": "Update the output.",
+    })
+
+    with pytest.raises(SuggestionError, match="invalid suggestion"):
+        parse_suggestion(f"{payload}\n{payload}", "code.suggest_changes", fingerprint)
+
+
 def test_blockly_suggestion_requires_well_formed_xml_and_matching_fingerprint():
     fingerprint = hashlib.sha256(b"<xml></xml>").hexdigest()
     valid = parse_suggestion(json.dumps({

@@ -20,11 +20,59 @@ class SuggestionError(ValueError):
     pass
 
 
+def _load_json_object(raw: str) -> dict[str, Any]:
+    try:
+        direct = json.loads(raw.strip())
+        if isinstance(direct, dict):
+            return direct
+    except json.JSONDecodeError:
+        pass
+
+    candidates: list[dict[str, Any]] = []
+    start: Optional[int] = None
+    depth = 0
+    in_string = False
+    escaped = False
+    for index, character in enumerate(raw):
+        if depth == 0:
+            if character == "{":
+                start = index
+                depth = 1
+                in_string = False
+                escaped = False
+            continue
+        if in_string:
+            if escaped:
+                escaped = False
+            elif character == "\\":
+                escaped = True
+            elif character == '"':
+                in_string = False
+            continue
+        if character == '"':
+            in_string = True
+        elif character == "{":
+            depth += 1
+        elif character == "}":
+            depth -= 1
+            if depth == 0 and start is not None:
+                try:
+                    decoded = json.loads(raw[start:index + 1])
+                    if isinstance(decoded, dict):
+                        candidates.append(decoded)
+                except json.JSONDecodeError:
+                    pass
+                start = None
+    if len(candidates) != 1:
+        raise TypeError("Expected exactly one JSON object")
+    return candidates[0]
+
+
 def parse_suggestion(raw: str, capability: str, expected_fingerprint: str, context: Optional[dict[str, Any]] = None) -> Suggestion:
     if len(raw) > MAX_SUGGESTION_RESPONSE_CHARACTERS:
         raise SuggestionError("The provider suggestion exceeded the allowed size")
     try:
-        payload = json.loads(raw.strip())
+        payload = _load_json_object(raw)
         if capability == "code.suggest_changes":
             suggestion = PythonReplaceSuggestion.model_validate(payload)
         elif capability == "blockly.suggest_changes":
