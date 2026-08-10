@@ -93,4 +93,9 @@ export interface AIProviderInput {
   model: string;
   baseUrl?: string | null;
   settings: Record<string, unknown> & { version: '1' };
+  secret?: string;
+  secretAction?: 'preserve' | 'rotate' | 'clear';
 }
+
+export type AIStreamEventType = 'start' | 'text_delta' | 'suggestion' | 'usage' | 'done' | 'error';
+export interface AIStreamEvent { type: AIStreamEventType; data: Record<string, unknown> }

@@ -1,0 +1,167 @@
+{
+  "commands": [
+    {
+      "constraints": [
+        "distance is converted to an absolute value"
+      ],
+      "description": "Move forward by a distance in simulator units.",
+      "example": "move_forward_distance(0.5)",
+      "name": "move_forward_distance",
+      "signature": "move_forward_distance(distance: number) -> None"
+    },
+    {
+      "constraints": [
+        "direction must be forward or backward"
+      ],
+      "description": "Move one fixed 0.4-unit step.",
+      "example": "move_step('forward')",
+      "name": "move_step",
+      "signature": "move_step(direction: 'forward' | 'backward') -> None"
+    },
+    {
+      "constraints": [
+        "distance is converted to an absolute value"
+      ],
+      "description": "Move backward by a distance in simulator units.",
+      "example": "move_reverse_distance(0.5)",
+      "name": "move_reverse_distance",
+      "signature": "move_reverse_distance(distance: number) -> None"
+    },
+    {
+      "constraints": [
+        "direction must be left or right"
+      ],
+      "description": "Rotate 90 degrees.",
+      "example": "rotate_90('left')",
+      "name": "rotate_90",
+      "signature": "rotate_90(direction: 'left' | 'right') -> None"
+    },
+    {
+      "constraints": [
+        "direction must be left or right"
+      ],
+      "description": "Rotate 45 degrees.",
+      "example": "rotate_45('right')",
+      "name": "rotate_45",
+      "signature": "rotate_45(direction: 'left' | 'right') -> None"
+    },
+    {
+      "constraints": [
+        "positive and negative angles are supported"
+      ],
+      "description": "Rotate by an angle in degrees.",
+      "example": "rotate_degrees(30)",
+      "name": "rotate_degrees",
+      "signature": "rotate_degrees(angle: number) -> None"
+    },
+    {
+      "constraints": [],
+      "description": "Rotate one degree clockwise.",
+      "example": "rotate_clockwise()",
+      "name": "rotate_clockwise",
+      "signature": "rotate_clockwise() -> None"
+    },
+    {
+      "constraints": [],
+      "description": "Rotate one degree counterclockwise.",
+      "example": "rotate_counterclockwise()",
+      "name": "rotate_counterclockwise",
+      "signature": "rotate_counterclockwise() -> None"
+    },
+    {
+      "constraints": [
+        "returns 3 when no obstacle is detected"
+      ],
+      "description": "Read the nearest front obstacle distance.",
+      "example": "distance = get_obstacle_distance()",
+      "name": "get_obstacle_distance",
+      "signature": "get_obstacle_distance() -> number"
+    },
+    {
+      "constraints": [
+        "supported UI colors include red, green, blue, white, violet, and off"
+      ],
+      "description": "Set the robot RGB light.",
+      "example": "rgb_set_color('green')",
+      "name": "rgb_set_color",
+      "signature": "rgb_set_color(color: string) -> None"
+    },
+    {
+      "constraints": [
+        "frequency is Hz",
+        "duration is milliseconds"
+      ],
+      "description": "Play a buzzer tone.",
+      "example": "buzzer_beep(440, 200)",
+      "name": "buzzer_beep",
+      "signature": "buzzer_beep(frequency_hz: number, duration_ms: number) -> None"
+    },
+    {
+      "constraints": [],
+      "description": "Enable or disable drawing a trail.",
+      "example": "draw(True)",
+      "name": "draw",
+      "signature": "draw(status: boolean) -> None"
+    },
+    {
+      "constraints": [
+        "call stop() to stop"
+      ],
+      "description": "Start continuous movement.",
+      "example": "just_move('forward')",
+      "name": "just_move",
+      "signature": "just_move(direction: 'forward' | 'backward') -> None"
+    },
+    {
+      "constraints": [
+        "call stop() to stop"
+      ],
+      "description": "Start continuous rotation.",
+      "example": "just_rotate('right')",
+      "name": "just_rotate",
+      "signature": "just_rotate(direction: 'left' | 'right') -> None"
+    },
+    {
+      "constraints": [],
+      "description": "Stop continuous robot motion.",
+      "example": "stop()",
+      "name": "stop",
+      "signature": "stop() -> None"
+    },
+    {
+      "constraints": [
+        "axis must be x, y, or z"
+      ],
+      "description": "Read acceleration for one axis.",
+      "example": "x = get_acceleration('x')",
+      "name": "get_acceleration",
+      "signature": "get_acceleration(axis: 'x' | 'y' | 'z') -> number"
+    },
+    {
+      "constraints": [],
+      "description": "Read the light sensor.",
+      "example": "light = get_light_sensor()",
+      "name": "get_light_sensor",
+      "signature": "get_light_sensor() -> number"
+    },
+    {
+      "constraints": [
+        "axis must be x, y, or z"
+      ],
+      "description": "Read gyroscope data for one axis.",
+      "example": "z = get_gyroscope('z')",
+      "name": "get_gyroscope",
+      "signature": "get_gyroscope(axis: 'x' | 'y' | 'z') -> number"
+    },
+    {
+      "constraints": [
+        "0 is left, 1 is middle, 2 is right"
+      ],
+      "description": "Read a floor sensor.",
+      "example": "on_line = get_floor_sensor(1)",
+      "name": "get_floor_sensor",
+      "signature": "get_floor_sensor(sensor_id: 0 | 1 | 2) -> boolean"
+    }
+  ],
+  "version": "1"
+}

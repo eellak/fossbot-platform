@@ -20,6 +20,9 @@ from sqlalchemy.orm import Session
 from routers.ai import decision_payload, resolve_for_user
 from routers.stage_sources import get_current_user, get_db
 from utils.ai.capabilities import AI_ADMIN_SCHEMA_VERSION, CAPABILITIES, CAPABILITY_IDS, CAPABILITY_REGISTRY_VERSION
+from utils.ai.providers import hosted_provider
+from utils.ai.providers.base import ProviderError
+from utils.ai.secrets import decrypt_ai_secret, encrypt_ai_secret
 
 
 router = APIRouter(prefix="/api/admin/ai", tags=["ai-admin"])
@@ -82,7 +85,7 @@ def _validate_settings(provider_type: str, runtime: str, settings: dict[str, Any
     allowed_keys = {
         ("openai", "hosted"): {"version", "organization", "project"},
         ("google", "hosted"): {"version", "apiVersion"},
-        ("openai_compatible", "hosted"): {"version", "apiStyle", "path", "supportsUsage"},
+        ("openai_compatible", "hosted"): {"version", "apiStyle", "path", "supportsUsage", "allowPrivateNetwork"},
         ("openai_compatible", "user_local"): {"version", "apiStyle", "path", "supportsUsage"},
         ("webllm", "browser"): {
             "version", "modelUrl", "wasmUrl", "tokenizerUrl", "modelSizeBytes",
@@ -95,6 +98,17 @@ def _validate_settings(provider_type: str, runtime: str, settings: dict[str, Any
         raise ValueError("Provider settings cannot contain credentials")
     if str(settings.get("version", "1")) != "1":
         raise ValueError("Unsupported provider settings version")
+    for key in ("supportsUsage", "allowPrivateNetwork"):
+        if key in settings and not isinstance(settings[key], bool):
+            raise ValueError(f"{key} must be a boolean")
+    path = settings.get("path")
+    if path is not None:
+        if not isinstance(path, str) or not path.strip():
+            raise ValueError("Provider path must be a non-empty relative path")
+        parsed_path = urlparse(path)
+        path_parts = parsed_path.path.split("/")
+        if parsed_path.scheme or parsed_path.netloc or parsed_path.query or parsed_path.fragment or path.startswith("/") or ".." in path_parts:
+            raise ValueError("Provider path must stay within the configured base URL")
     if len(json.dumps(settings, separators=(",", ":"))) > 32_768:
         raise ValueError("Provider settings are too large")
 
@@ -109,6 +123,7 @@ class ProviderCreate(APIModel):
     settings: dict[str, Any] = Field(default_factory=lambda: {"version": "1"})
     request_limit: Optional[int] = Field(default=None, ge=1)
     token_limit: Optional[int] = Field(default=None, ge=1)
+    secret: Optional[str] = Field(default=None, min_length=1, max_length=10_000)
 
     @field_validator("name", "model")
     @classmethod
@@ -143,6 +158,8 @@ class ProviderUpdate(APIModel):
     settings: Optional[dict[str, Any]] = None
     request_limit: Optional[int] = Field(default=None, ge=1)
     token_limit: Optional[int] = Field(default=None, ge=1)
+    secret_action: Literal["preserve", "rotate", "clear"] = "preserve"
+    secret: Optional[str] = Field(default=None, min_length=1, max_length=10_000)
 
     @field_validator("name", "model")
     @classmethod
@@ -162,6 +179,14 @@ class ProviderUpdate(APIModel):
         if value is not None and (_contains_secret_key(value) or str(value.get("version", "1")) != "1" or len(json.dumps(value, separators=(",", ":"))) > 32_768):
             raise ValueError("Invalid provider settings")
         return value
+
+    @model_validator(mode="after")
+    def validate_secret_action(self):
+        if self.secret_action == "rotate" and not self.secret:
+            raise ValueError("A new credential is required when rotating")
+        if self.secret_action != "rotate" and self.secret is not None:
+            raise ValueError("Credentials require the explicit rotate action")
+        return self
 
 
 class SettingsUpdate(APIModel):
@@ -316,6 +341,7 @@ def create_provider(request: ProviderCreate, current_user: User = Depends(get_cu
         settings=request.settings,
         request_limit=request.request_limit,
         token_limit=request.token_limit,
+        encrypted_secret=encrypt_ai_secret(request.secret),
         created_by_id=current_user.id,
         updated_by_id=current_user.id,
     )
@@ -335,9 +361,13 @@ def update_provider(provider_id: int, request: ProviderUpdate, current_user: Use
     provider = db.query(AIProviderConfig).filter(AIProviderConfig.id == provider_id).first()
     if provider is None:
         raise HTTPException(status_code=404, detail="AI provider not found")
-    updates = request.model_dump(exclude_unset=True)
+    updates = request.model_dump(exclude_unset=True, exclude={"secret", "secret_action"})
     for key, value in updates.items():
         setattr(provider, key, value)
+    if request.secret_action == "rotate":
+        provider.encrypted_secret = encrypt_ai_secret(request.secret)
+    elif request.secret_action == "clear":
+        provider.encrypted_secret = None
     if provider.provider_type == "openai_compatible" and provider.runtime == "hosted" and not provider.base_url:
         raise HTTPException(status_code=422, detail="Hosted OpenAI-compatible providers require a base URL")
     if provider.base_url:
@@ -355,6 +385,31 @@ def update_provider(provider_id: int, request: ProviderUpdate, current_user: Use
         raise HTTPException(status_code=409, detail="Provider name already exists") from error
     db.refresh(provider)
     return provider_payload(provider)
+
+
+@router.post("/providers/{provider_id}/test")
+async def test_provider(provider_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    require_admin(current_user)
+    provider = db.query(AIProviderConfig).filter(AIProviderConfig.id == provider_id).first()
+    if provider is None:
+        raise HTTPException(status_code=404, detail="AI provider not found")
+    if provider.runtime != "hosted":
+        raise HTTPException(status_code=422, detail="Only hosted providers can be tested by the backend")
+    try:
+        adapter = hosted_provider(
+            provider.provider_type,
+            secret=decrypt_ai_secret(provider.encrypted_secret),
+            base_url=provider.base_url,
+            settings=provider.settings or {},
+        )
+        result = await adapter.health(provider.model)
+    except ProviderError as error:
+        raise HTTPException(status_code=error.status_code, detail={
+            "code": error.code,
+            "message": error.safe_message,
+            "retryable": error.retryable,
+        }) from error
+    return {**result, "providerId": provider.id, "provider": provider.name, "runtime": provider.runtime}
 
 
 @router.delete("/providers/{provider_id}", status_code=204)

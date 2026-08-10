@@ -8,6 +8,7 @@ import type {
   AIProviderConfig,
   AIProviderInput,
   AIScopeType,
+  AIStreamEvent,
 } from './types';
 
 const backendUrl: string = process.env.REACT_APP_BACKEND_URL;
@@ -69,4 +70,39 @@ export async function deleteAIPolicy(token: string, scopeType: AIScopeType, scop
 
 export function resolveAIAccess(token: string, userId: number, capability: AICapabilityId): Promise<AIAccessDecision> {
   return fetch(`${backendUrl}/api/admin/ai/resolve`, { method: 'POST', headers: headers(token), body: JSON.stringify({ userId, capability }) }).then(parse<AIAccessDecision>);
+}
+
+export function testAIProvider(token: string, providerId: number): Promise<{ ok: boolean; modelFound?: boolean | null }> {
+  return fetch(`${backendUrl}/api/admin/ai/providers/${providerId}/test`, { method: 'POST', headers: headers(token) }).then(parse<{ ok: boolean; modelFound?: boolean | null }>);
+}
+
+export async function streamAIAssist(
+  token: string,
+  input: { capability: AICapabilityId; providerId?: number; surface: 'probe'; question: string; context: { note?: string } },
+  onEvent: (event: AIStreamEvent) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const response = await fetch(`${backendUrl}/api/ai/assist/stream`, {
+    method: 'POST',
+    headers: { ...headers(token), Accept: 'text/event-stream' },
+    body: JSON.stringify(input),
+    signal,
+  });
+  if (!response.ok) await parse(response);
+  if (!response.body) throw new AIRequestError('Streaming is unavailable', 502);
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  while (true) {
+    const { done, value } = await reader.read();
+    buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
+    const frames = buffer.split('\n\n');
+    buffer = frames.pop() || '';
+    for (const frame of frames) {
+      const eventType = frame.split('\n').find((line) => line.startsWith('event:'))?.slice(6).trim();
+      const data = frame.split('\n').filter((line) => line.startsWith('data:')).map((line) => line.slice(5).trim()).join('\n');
+      if (eventType && data) onEvent({ type: eventType as AIStreamEvent['type'], data: JSON.parse(data) });
+    }
+    if (done) break;
+  }
 }

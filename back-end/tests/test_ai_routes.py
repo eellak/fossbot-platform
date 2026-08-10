@@ -1,3 +1,6 @@
+import asyncio
+import datetime
+
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -5,11 +8,14 @@ from database.database import (
     AIInstanceSettings,
     AIPolicyRule,
     AIProviderConfig,
+    AIUsageEvent,
     ClassGroup,
     ClassMembership,
 )
 from models.models import UserRole
 from routers import ai, ai_admin
+from utils.ai.providers.base import ProviderEvent
+from utils.ai.schemas import AssistantRequest
 
 
 def client_for(db, user):
@@ -90,6 +96,15 @@ def test_provider_response_is_secret_free_and_validated(db, users):
             "baseUrl": "https://user:password@example.test/v1",
         })
         assert credential_url.status_code == 422
+        escaped_path = client.post("/api/admin/ai/providers", json={
+            "name": "Escaped path",
+            "providerType": "openai_compatible",
+            "runtime": "hosted",
+            "model": "model",
+            "baseUrl": "https://example.test/v1",
+            "settings": {"version": "1", "path": "../admin", "allowPrivateNetwork": "yes"},
+        })
+        assert escaped_path.status_code == 422
         public_browser = client.post("/api/admin/ai/providers", json={
             "name": "Browser model",
             "providerType": "webllm",
@@ -159,3 +174,189 @@ def test_admin_resolve_cannot_be_used_by_students(db, users):
     with client_for(db, student) as client:
         response = client.post("/api/admin/ai/resolve", json={"userId": student.id, "capability": "code.explain"})
         assert response.status_code == 403
+
+
+def test_provider_secret_create_preserve_rotate_and_clear(db, users, monkeypatch):
+    admin = users[3]
+    monkeypatch.setenv("SECRET_KEY", "deterministic-test-secret")
+    with client_for(db, admin) as client:
+        created = client.post("/api/admin/ai/providers", json={
+            "name": "Secret lifecycle",
+            "providerType": "openai",
+            "runtime": "hosted",
+            "model": "test-model",
+            "secret": "first-credential",
+        })
+        assert created.status_code == 201
+        provider_id = created.json()["id"]
+        row = db.query(AIProviderConfig).filter(AIProviderConfig.id == provider_id).one()
+        original = row.encrypted_secret
+        assert original and "first-credential" not in original
+        assert "first-credential" not in created.text
+
+        assert client.put(f"/api/admin/ai/providers/{provider_id}", json={"name": "Renamed"}).status_code == 200
+        assert row.encrypted_secret == original
+        assert client.put(f"/api/admin/ai/providers/{provider_id}", json={
+            "secretAction": "rotate",
+            "secret": "second-credential",
+        }).status_code == 200
+        db.refresh(row)
+        assert row.encrypted_secret != original
+        assert "second-credential" not in row.encrypted_secret
+        assert client.put(f"/api/admin/ai/providers/{provider_id}", json={"secretAction": "clear"}).status_code == 200
+        db.refresh(row)
+        assert row.encrypted_secret is None
+
+
+class FakeHostedProvider:
+    async def stream(self, request):
+        yield ProviderEvent("text_delta", {"text": "A safe hint."})
+        yield ProviderEvent("usage", {"inputTokens": 12, "outputTokens": 4})
+
+
+def enable_streaming(db, admin, student, *, request_limit=None):
+    provider = seed_provider(db, admin)
+    provider.encrypted_secret = None
+    provider.request_limit = request_limit
+    settings = AIInstanceSettings(
+        id=1,
+        enabled=True,
+        default_provider_id=provider.id,
+        registry_version="1",
+        updated_by_id=admin.id,
+    )
+    db.add_all([
+        settings,
+        AIPolicyRule(
+            scope_type="role",
+            scope_key="user",
+            capability="code.explain",
+            effect="allow",
+            created_by_id=admin.id,
+            updated_by_id=admin.id,
+        ),
+    ])
+    db.commit()
+    return provider
+
+
+def test_stream_is_normalized_and_records_content_free_usage(db, users, monkeypatch):
+    student, admin = users[2], users[3]
+    provider = enable_streaming(db, admin, student)
+    monkeypatch.setattr(ai, "hosted_provider", lambda *args, **kwargs: FakeHostedProvider())
+    with client_for(db, student) as client:
+        response = client.post("/api/ai/assist/stream", json={
+            "capability": "code.explain",
+            "providerId": provider.id,
+            "surface": "python",
+            "question": "Why does this fail?",
+            "context": {"source": "print(undefined_name)"},
+        })
+    assert response.status_code == 200, response.text
+    assert "event: start" in response.text
+    assert 'event: text_delta' in response.text
+    assert "A safe hint." in response.text
+    assert "event: usage" in response.text
+    assert "event: done" in response.text
+    row = db.query(AIUsageEvent).one()
+    assert row.provider_id == provider.id
+    assert row.outcome == "completed"
+    assert row.input_tokens == 12 and row.output_tokens == 4
+    assert "undefined_name" not in str(row.__dict__)
+    assert not ({"prompt", "response", "code", "answer"} & set(row.__table__.columns.keys()))
+
+
+def test_denied_and_over_budget_requests_do_not_invoke_provider(db, users, monkeypatch):
+    student, admin = users[2], users[3]
+    calls = {"count": 0}
+
+    def factory(*args, **kwargs):
+        calls["count"] += 1
+        return FakeHostedProvider()
+
+    monkeypatch.setattr(ai, "hosted_provider", factory)
+    with client_for(db, student) as client:
+        denied = client.post("/api/ai/assist/stream", json={
+            "capability": "code.explain", "surface": "python", "question": "Help", "context": {},
+        })
+    assert denied.status_code == 403
+    assert calls["count"] == 0
+
+    provider = enable_streaming(db, admin, student, request_limit=1)
+    db.add(AIUsageEvent(
+        user_id=student.id,
+        provider_id=provider.id,
+        capability="code.explain",
+        provider_name=provider.name,
+        model=provider.model,
+        runtime="hosted",
+        request_id="prior-request",
+        started_at=datetime.datetime.utcnow(),
+        completed_at=datetime.datetime.utcnow(),
+        outcome="completed",
+        policy_version="1",
+        prompt_version="test",
+    ))
+    db.commit()
+    with client_for(db, student) as client:
+        limited = client.post("/api/ai/assist/stream", json={
+            "capability": "code.explain", "surface": "python", "question": "Help", "context": {},
+        })
+    assert limited.status_code == 429
+    assert calls["count"] == 0
+
+
+def test_deterministic_provider_is_explicitly_test_only(db, users, monkeypatch):
+    student = users[2]
+    monkeypatch.delenv("AI_ENABLE_TEST_PROVIDER", raising=False)
+    with client_for(db, student) as client:
+        assert client.get("/api/ai/test/mock/v1/models").status_code == 404
+    monkeypatch.setenv("AI_ENABLE_TEST_PROVIDER", "true")
+    with client_for(db, student) as client:
+        models = client.get("/api/ai/test/mock/v1/models")
+        streamed = client.post("/api/ai/test/mock/v1/chat/completions", json={"model": "fossbot-test", "stream": True})
+    assert models.status_code == 200
+    assert models.json()["data"][0]["owned_by"] == "test-only"
+    assert "Deterministic test-only provider" in streamed.text
+    assert "data: [DONE]" in streamed.text
+
+
+def test_disconnect_closes_upstream_and_records_cancellation(db, users, monkeypatch):
+    student, admin = users[2], users[3]
+    provider = enable_streaming(db, admin, student)
+    state = {"closed": False}
+
+    class CancellableProvider:
+        async def stream(self, request):
+            try:
+                yield ProviderEvent("text_delta", {"text": "must not reach client"})
+            finally:
+                state["closed"] = True
+
+    class DisconnectedRequest:
+        async def is_disconnected(self):
+            return True
+
+    monkeypatch.setattr(ai, "hosted_provider", lambda *args, **kwargs: CancellableProvider())
+
+    async def run():
+        response = await ai.stream_assistance(
+            AssistantRequest(
+                capability="code.explain",
+                surface="python",
+                question="Help",
+                context={},
+            ),
+            DisconnectedRequest(),
+            student,
+            db,
+        )
+        chunks = [chunk async for chunk in response.body_iterator]
+        return b"".join(chunk.encode() if isinstance(chunk, str) else chunk for chunk in chunks).decode()
+
+    body = asyncio.run(run())
+    assert "event: start" in body
+    assert "must not reach client" not in body
+    assert state["closed"] is True
+    usage = db.query(AIUsageEvent).filter(AIUsageEvent.provider_id == provider.id).one()
+    assert usage.outcome == "cancelled"

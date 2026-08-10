@@ -11,7 +11,7 @@ import { useAuth } from 'src/authentication/AuthProvider';
 import PageContainer from 'src/components/container/PageContainer';
 import {
   createAIProvider, deleteAIPolicy, putAIPolicy, readAIAdminBootstrap, resolveAIAccess,
-  updateAIProvider, updateAISettings,
+  streamAIAssist, testAIProvider, updateAIProvider, updateAISettings,
 } from 'src/ai/AssistantApi';
 import type {
   AIAdminBootstrap, AIAccessDecision, AICapabilityId, AIPolicyEffect, AIProviderConfig,
@@ -56,6 +56,7 @@ export default function AIAdminPage() {
   if (!data) return <Box sx={{ p: 3 }}><Alert severity="error" action={<Button color="inherit" onClick={() => void load()}>{t('retry')}</Button>}>{error || t('aiAdmin.errors.load')}</Alert></Box>;
 
   const saveProvider = async (input: AIProviderInput) => {
+    const createInput = { ...input, secretAction: undefined };
     const action = editingProvider
       ? () => updateAIProvider(token, editingProvider.id, {
           name: input.name,
@@ -63,8 +64,10 @@ export default function AIAdminPage() {
           model: input.model,
           baseUrl: input.baseUrl,
           settings: input.settings,
+          secret: input.secret,
+          secretAction: input.secretAction,
         })
-      : () => createAIProvider(token, input);
+      : () => createAIProvider(token, createInput);
     const saved = await run(action, t(editingProvider ? 'aiAdmin.messages.providerUpdated' : 'aiAdmin.messages.providerCreated'));
     if (saved) setProviderDialog(false);
   };
@@ -87,6 +90,7 @@ export default function AIAdminPage() {
           <Tab label={t('aiAdmin.tabs.defaults')} />
           <Tab label={t('aiAdmin.tabs.overrides')} />
           <Tab label={t('aiAdmin.tabs.inspector')} />
+          <Tab label={t('aiAdmin.tabs.probe')} />
         </Tabs>
         <Divider />
         <Box role="tabpanel" hidden={tab !== 0} sx={{ p: { xs: 2, md: 3 } }}>
@@ -100,6 +104,9 @@ export default function AIAdminPage() {
         </Box>
         <Box role="tabpanel" hidden={tab !== 3} sx={{ p: { xs: 2, md: 3 } }}>
           {tab === 3 && <InspectorTab data={data} token={token} t={t} />}
+        </Box>
+        <Box role="tabpanel" hidden={tab !== 4} sx={{ p: { xs: 2, md: 3 } }}>
+          {tab === 4 && <ProbeTab data={data} token={token} t={t} />}
         </Box>
       </Paper>
     </Box>
@@ -121,6 +128,7 @@ function ProvidersTab({ data, token, saving, run, openCreate, openEdit, t }: { d
         <Stack direction={{ xs: 'column', md: 'row' }} alignItems={{ md: 'center' }} gap={2}>
           <Box sx={{ flex: 1, minWidth: 0 }}><Stack direction="row" gap={1} flexWrap="wrap" alignItems="center"><Typography fontWeight={700}>{provider.name}</Typography><Chip size="small" label={t(`aiAdmin.runtimes.${provider.runtime}`)} /><Chip size="small" variant="outlined" label={t(`aiAdmin.providerTypes.${provider.providerType}`)} /></Stack><Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, overflowWrap: 'anywhere' }}>{provider.model}{provider.baseUrl ? ` · ${provider.baseUrl}` : ''}</Typography></Box>
           <FormControlLabel control={<Switch checked={provider.enabled} disabled={saving} onChange={(event) => void run(() => updateAIProvider(token, provider.id, { enabled: event.target.checked }), t('aiAdmin.messages.providerUpdated'))} />} label={provider.enabled ? t('aiAdmin.providers.available') : t('aiAdmin.providers.unavailable')} />
+          {provider.runtime === 'hosted' && <Button disabled={saving} onClick={() => void run(() => testAIProvider(token, provider.id), t('aiAdmin.messages.providerHealthy'))}>{t('aiAdmin.providers.test')}</Button>}
           <Button disabled={saving} onClick={() => openEdit(provider)}>{t('edit')}</Button>
         </Stack>
       </Paper>)}
@@ -216,8 +224,39 @@ function InspectorTab({ data, token, t }: { data: AIAdminBootstrap; token: strin
   </>;
 }
 
+function ProbeTab({ data, token, t }: { data: AIAdminBootstrap; token: string; t: any }) {
+  const hosted = data.providers.filter((provider) => provider.enabled && provider.runtime === 'hosted');
+  const [providerId, setProviderId] = useState<number | ''>(hosted[0]?.id || '');
+  const [capability, setCapability] = useState<AICapabilityId>('code.explain');
+  const [question, setQuestion] = useState('');
+  const [output, setOutput] = useState('');
+  const [status, setStatus] = useState<'idle' | 'streaming' | 'done' | 'error'>('idle');
+  const runProbe = async () => {
+    setOutput(''); setStatus('streaming');
+    try {
+      await streamAIAssist(token, { capability, providerId: providerId || undefined, surface: 'probe', question, context: { note: 'Administrator transport probe' } }, (event) => {
+        if (event.type === 'text_delta') setOutput((current) => current + String(event.data.text || ''));
+        if (event.type === 'error') setStatus('error');
+        if (event.type === 'done') setStatus('done');
+      });
+    } catch { setStatus('error'); }
+  };
+  return <>
+    <SectionHeading title={t('aiAdmin.probe.title')} description={t('aiAdmin.probe.description')} />
+    <Stack direction={{ xs: 'column', md: 'row' }} gap={2} alignItems={{ md: 'flex-end' }}>
+      <TextField select label={t('aiAdmin.probe.provider')} value={providerId} onChange={(event) => setProviderId(Number(event.target.value))} sx={{ minWidth: 220 }}>{hosted.map((provider) => <MenuItem key={provider.id} value={provider.id}>{provider.name}</MenuItem>)}</TextField>
+      <TextField select label={t('aiAdmin.policy.capability')} value={capability} onChange={(event) => setCapability(event.target.value as AICapabilityId)} sx={{ minWidth: 220 }}>{data.capabilities.map((item) => <MenuItem key={item.id} value={item.id}>{t(`aiAdmin.capabilities.${item.id}`)}</MenuItem>)}</TextField>
+      <TextField fullWidth label={t('aiAdmin.probe.question')} value={question} onChange={(event) => setQuestion(event.target.value)} inputProps={{ maxLength: 2000 }} />
+      <Button variant="contained" disabled={!providerId || !question.trim() || status === 'streaming'} onClick={() => void runProbe()}>{status === 'streaming' ? t('aiAdmin.probe.streaming') : t('aiAdmin.probe.run')}</Button>
+    </Stack>
+    {!hosted.length && <Alert severity="info" sx={{ mt: 2 }}>{t('aiAdmin.probe.noProviders')}</Alert>}
+    {status === 'error' && <Alert severity="error" sx={{ mt: 2 }}>{t('aiAdmin.probe.failed')}</Alert>}
+    {(output || status === 'streaming') && <Paper variant="outlined" sx={{ mt: 2, p: 2 }}><Typography variant="overline">{t('aiAdmin.probe.output')}</Typography><Typography sx={{ whiteSpace: 'pre-wrap' }}>{output || t('aiAdmin.probe.waiting')}</Typography></Paper>}
+  </>;
+}
+
 function ProviderDialog({ open, provider, saving, onClose, onSave, t }: { open: boolean; provider: AIProviderConfig | null; saving: boolean; onClose: () => void; onSave: (input: AIProviderInput) => Promise<void>; t: any }) {
-  const initial = useMemo<AIProviderInput>(() => provider ? { name: provider.name, providerType: provider.providerType, runtime: provider.runtime, enabled: provider.enabled, model: provider.model, baseUrl: provider.baseUrl, settings: { ...provider.settings, version: '1' } } : providerDefaults, [provider]);
+  const initial = useMemo<AIProviderInput>(() => provider ? { name: provider.name, providerType: provider.providerType, runtime: provider.runtime, enabled: provider.enabled, model: provider.model, baseUrl: provider.baseUrl, settings: { ...provider.settings, version: '1' }, secretAction: 'preserve' } : providerDefaults, [provider]);
   const [form, setForm] = useState(initial);
   useEffect(() => { if (open) setForm(initial); }, [initial, open]);
   const compatibleRuntimes: AIRuntime[] = form.providerType === 'webllm' ? ['browser'] : form.providerType === 'openai_compatible' ? ['hosted', 'user_local'] : ['hosted'];
@@ -230,6 +269,9 @@ function ProviderDialog({ open, provider, saving, onClose, onSave, t }: { open: 
       <TextField select required disabled={Boolean(provider)} label={t('aiAdmin.providers.runtime')} value={form.runtime} onChange={(event) => setForm({ ...form, runtime: event.target.value as AIRuntime })}>{compatibleRuntimes.map((runtime) => <MenuItem key={runtime} value={runtime}>{t(`aiAdmin.runtimes.${runtime}`)}</MenuItem>)}</TextField>
       <TextField required label={t('aiAdmin.providers.model')} value={form.model} onChange={(event) => setForm({ ...form, model: event.target.value })} />
       {form.providerType === 'openai_compatible' && form.runtime === 'hosted' && <TextField required label={t('aiAdmin.providers.baseUrl')} value={form.baseUrl || ''} onChange={(event) => setForm({ ...form, baseUrl: event.target.value })} helperText={t('aiAdmin.providers.baseUrlHelp')} />}
+      {form.runtime === 'hosted' && <TextField type="password" label={t('aiAdmin.providers.secret')} value={form.secret || ''} disabled={form.secretAction === 'clear'} onChange={(event) => setForm({ ...form, secret: event.target.value || undefined, secretAction: event.target.value ? 'rotate' : 'preserve' })} helperText={provider ? t('aiAdmin.providers.secretPreserve') : t('aiAdmin.providers.secretCreate')} />}
+      {provider?.hasSecret && <FormControlLabel control={<Switch checked={form.secretAction === 'clear'} onChange={(event) => setForm({ ...form, secret: undefined, secretAction: event.target.checked ? 'clear' : 'preserve' })} />} label={t('aiAdmin.providers.clearSecret')} />}
+      {form.providerType === 'openai_compatible' && form.runtime === 'hosted' && <FormControlLabel control={<Switch checked={Boolean(form.settings.allowPrivateNetwork)} onChange={(event) => setForm({ ...form, settings: { ...form.settings, allowPrivateNetwork: event.target.checked } })} />} label={t('aiAdmin.providers.allowPrivateNetwork')} />}
       <FormControlLabel control={<Switch checked={form.enabled} onChange={(event) => setForm({ ...form, enabled: event.target.checked })} />} label={t('aiAdmin.providers.available')} />
       <Alert severity="info">{t('aiAdmin.providers.secretLater')}</Alert>
     </Stack></DialogContent>

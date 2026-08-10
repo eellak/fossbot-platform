@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+import asyncio
+import datetime
+import json
+import os
+import uuid
+
 from database.database import (
     AIInstanceSettings,
     AIPolicyRule,
@@ -8,15 +14,50 @@ from database.database import (
     ClassMembership,
     User,
 )
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Body, Depends, HTTPException, Request
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from routers.stage_sources import get_current_user, get_db
 from utils.ai.capabilities import AI_ACCESS_SCHEMA_VERSION, CAPABILITIES, CAPABILITY_REGISTRY_VERSION
+from utils.ai.context import ContextError, assemble_context
 from utils.ai.policy import PolicyRuleInput, ProviderInventoryItem, resolve_capability
+from utils.ai.prompts import build_prompt
+from utils.ai.providers import hosted_provider
+from utils.ai.providers.base import ProviderError
+from utils.ai.schemas import AssistantRequest, ProviderStreamRequest
+from utils.ai.secrets import decrypt_ai_secret
+from utils.ai.usage import QuotaError, ensure_quota, record_usage
 
 
 router = APIRouter(prefix="/api/ai", tags=["ai"])
+
+
+def require_test_provider() -> None:
+    if os.getenv("AI_ENABLE_TEST_PROVIDER", "false").lower() not in {"1", "true", "yes"}:
+        raise HTTPException(status_code=404, detail="Not found")
+
+
+@router.get("/test/mock/v1/models", include_in_schema=False)
+def test_provider_models():
+    require_test_provider()
+    return {"object": "list", "data": [{"id": "fossbot-test", "object": "model", "owned_by": "test-only"}]}
+
+
+@router.post("/test/mock/v1/chat/completions", include_in_schema=False)
+def test_provider_stream(payload: dict = Body(...)):
+    require_test_provider()
+    if payload.get("model") != "fossbot-test" or not payload.get("stream"):
+        raise HTTPException(status_code=422, detail="The test-only provider requires model fossbot-test with streaming enabled")
+
+    async def chunks():
+        response = "Deterministic test-only provider: hosted streaming is working."
+        for text_delta in (response[:34], response[34:]):
+            yield f"data: {json.dumps({'choices': [{'delta': {'content': text_delta}, 'finish_reason': None}]})}\n\n"
+        yield f"data: {json.dumps({'choices': [{'delta': {}, 'finish_reason': 'stop'}], 'usage': {'prompt_tokens': 32, 'completion_tokens': 9}})}\n\n"
+        yield "data: [DONE]\n\n"
+
+    return StreamingResponse(chunks(), media_type="text/event-stream", headers={"Cache-Control": "no-store"})
 
 
 def provider_inventory(provider: AIProviderConfig) -> ProviderInventoryItem:
@@ -96,6 +137,10 @@ def decision_payload(capability: str, decision) -> dict:
     }
 
 
+def sse_event(event_type: str, data: dict) -> str:
+    return f"event: {event_type}\ndata: {json.dumps(data, ensure_ascii=False, separators=(',', ':'))}\n\n"
+
+
 @router.get("/access")
 def read_ai_access(
     current_user: User = Depends(get_current_user),
@@ -123,3 +168,128 @@ def read_ai_access(
             for provider in providers
         ],
     }
+
+
+@router.post("/assist/stream")
+async def stream_assistance(
+    payload: AssistantRequest,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    try:
+        payload.validate_capability()
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    decision = resolve_for_user(db, current_user, payload.capability)
+    if not decision.allowed:
+        raise HTTPException(status_code=403, detail={"code": decision.reason_code, "message": "Assistant access is not available."})
+    provider_id = payload.provider_id or decision.default_provider_id
+    if provider_id not in decision.provider_ids:
+        raise HTTPException(status_code=403, detail={"code": "provider_not_allowed", "message": "The selected provider is not allowed."})
+    provider = db.query(AIProviderConfig).filter(
+        AIProviderConfig.id == provider_id,
+        AIProviderConfig.enabled.is_(True),
+    ).first()
+    if provider is None or provider.runtime != "hosted":
+        raise HTTPException(status_code=422, detail={"code": "hosted_provider_required", "message": "Select an available hosted provider."})
+    settings = db.query(AIInstanceSettings).filter(AIInstanceSettings.id == 1).first()
+    if settings is None:
+        raise HTTPException(status_code=503, detail={"code": "instance_disabled", "message": "Assistant access is not available."})
+    try:
+        context = assemble_context(db, current_user, payload)
+        prompt = build_prompt(current_user.role, payload, context)
+        ensure_quota(
+            db,
+            user_id=current_user.id,
+            capability=payload.capability,
+            provider=provider,
+            settings=settings,
+            request_limit=decision.request_limit,
+            token_limit=decision.token_limit,
+            estimated_input_tokens=(len(prompt.system) + sum(len(turn.content) for turn in prompt.messages) + 3) // 4,
+        )
+        adapter = hosted_provider(
+            provider.provider_type,
+            secret=decrypt_ai_secret(provider.encrypted_secret),
+            base_url=provider.base_url,
+            settings=provider.settings or {},
+        )
+    except ContextError as error:
+        raise HTTPException(status_code=422, detail={"code": "invalid_context", "message": str(error)}) from error
+    except QuotaError as error:
+        raise HTTPException(status_code=429, detail={"code": error.code, "message": error.safe_message, "retryAfter": error.retry_after}) from error
+    except (ProviderError, RuntimeError, ValueError) as error:
+        message = error.safe_message if isinstance(error, ProviderError) else "The AI provider is not configured correctly."
+        code = error.code if isinstance(error, ProviderError) else "invalid_provider_config"
+        status_code = error.status_code if isinstance(error, ProviderError) else 422
+        raise HTTPException(status_code=status_code, detail={"code": code, "message": message}) from error
+
+    request_id = uuid.uuid4().hex
+    started_at = datetime.datetime.utcnow()
+    provider_request = ProviderStreamRequest(
+        model=provider.model,
+        system=prompt.system,
+        messages=prompt.messages,
+        max_output_tokens=min(decision.token_limit or 1_024, 8_192),
+    )
+
+    async def events():
+        outcome = "completed"
+        input_tokens = None
+        output_tokens = None
+        yield sse_event("start", {
+            "requestId": request_id,
+            "providerId": provider.id,
+            "provider": provider.name,
+            "model": provider.model,
+            "runtime": provider.runtime,
+            "promptVersion": prompt.prompt_version,
+            "policyVersion": decision.policy_version,
+            "context": prompt.context_report.model_dump(),
+        })
+        upstream = adapter.stream(provider_request)
+        try:
+            async for event in upstream:
+                if await request.is_disconnected():
+                    outcome = "cancelled"
+                    break
+                if event.type == "usage":
+                    input_tokens = event.data.get("inputTokens")
+                    output_tokens = event.data.get("outputTokens")
+                yield sse_event(event.type, event.data)
+            if outcome == "completed":
+                yield sse_event("done", {"requestId": request_id})
+        except asyncio.CancelledError:
+            outcome = "cancelled"
+            raise
+        except ProviderError as error:
+            outcome = error.code
+            yield sse_event("error", {"code": error.code, "message": error.safe_message, "retryable": error.retryable})
+        except Exception:
+            outcome = "provider_error"
+            yield sse_event("error", {"code": "provider_error", "message": "The AI provider request failed.", "retryable": True})
+        finally:
+            await upstream.aclose()
+            try:
+                record_usage(
+                    db,
+                    user_id=current_user.id,
+                    provider=provider,
+                    capability=payload.capability,
+                    request_id=request_id,
+                    started_at=started_at,
+                    outcome=outcome,
+                    policy_version=decision.policy_version,
+                    prompt_version=prompt.prompt_version,
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                )
+            except Exception:
+                db.rollback()
+
+    return StreamingResponse(
+        events(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
+    )
