@@ -79,6 +79,7 @@ const NavItem = ({ item, level, pathDirect, hideMenu, onClick }: ItemType) => {
   );
 
   const itemSubtitle = item?.subtitle ? t(item?.subtitle) : '';
+  const itemPath = item?.href?.split('?')[0];
 
   const listItemProps: {
     component: any;
@@ -101,7 +102,7 @@ const NavItem = ({ item, level, pathDirect, hideMenu, onClick }: ItemType) => {
       <ListItemStyled
         {...listItemProps}
         disabled={item?.disabled}
-        selected={pathDirect === item?.href}
+        selected={pathDirect === itemPath}
         onClick={onClick}
       >
         <ListItemIcon

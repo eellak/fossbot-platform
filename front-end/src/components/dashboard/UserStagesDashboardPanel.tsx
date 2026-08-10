@@ -7,7 +7,9 @@ import CloseIcon from '@mui/icons-material/Close';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import StorageIcon from '@mui/icons-material/Storage';
+import AddIcon from '@mui/icons-material/Add';
 import DashboardCard from 'src/components/shared/DashboardCardWithChildren';
+import CardDialog, { type StageSelection } from 'src/components/stage-select-popup/CardDialog';
 import { useAuth } from 'src/authentication/AuthProvider';
 import { listLocalStages, unpublishLocalStage, type LocalStage } from 'src/stages/LocalStagesApi';
 import { getGitHubLoginUrl, getGitHubProviderStatus, type GitHubProviderStatus } from 'src/stages/ProviderAuthApi';
@@ -28,6 +30,7 @@ import {
 } from 'src/stages/stageListCache';
 import { formatStageRelativeTime } from 'src/stages/StageCard';
 import { MARKETPLACE_COPY } from 'src/stages/marketplaceCopy';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 type DashboardStage = {
   key: string;
@@ -73,6 +76,8 @@ function localStatus(stage: LocalStage): Pick<DashboardStage, 'status' | 'status
 
 export default function UserStagesDashboardPanel({ showViewAll = true }: { showViewAll?: boolean }) {
   const { token, user } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
   const userKey = stageListUserKey(user);
   const [localStages, setLocalStages] = useState<LocalStage[]>([]);
   const [githubStages, setGitHubStages] = useState<ProviderStageListItem[]>([]);
@@ -84,6 +89,33 @@ export default function UserStagesDashboardPanel({ showViewAll = true }: { showV
   const [localStageBusy, setLocalStageBusy] = useState<number | null>(null);
   const [actionMessage, setActionMessage] = useState('');
   const [stageMenu, setStageMenu] = useState<{ anchorEl: HTMLElement; stage: DashboardStage } | null>(null);
+  const [stagePickerOpen, setStagePickerOpen] = useState(false);
+
+  useEffect(() => {
+    if (new URLSearchParams(location.search).get('create') === '1') setStagePickerOpen(true);
+  }, [location.search]);
+
+  const closeStagePicker = () => {
+    setStagePickerOpen(false);
+    const params = new URLSearchParams(location.search);
+    if (params.has('create')) {
+      params.delete('create');
+      const search = params.toString();
+      navigate(`${location.pathname}${search ? `?${search}` : ''}`, { replace: true });
+    }
+  };
+
+  const openStageInBuilder = (selection: StageSelection) => {
+    if (selection.sourceType === 'local' && selection.localStageId) {
+      navigate(`/stage-builder?${new URLSearchParams({ open: 'local', id: String(selection.localStageId) })}`);
+      return;
+    }
+    if (selection.sourceType === 'github' && selection.repoOwner && selection.repoName) {
+      navigate(`/stage-builder?${new URLSearchParams({ open: 'github', repo: `${selection.repoOwner}/${selection.repoName}` })}`);
+      return;
+    }
+    if (selection.url) navigate(`/stage-builder?${new URLSearchParams({ open: 'url', url: selection.url })}`);
+  };
 
   const connectGitHub = useCallback(async () => {
     if (!token) {
@@ -211,8 +243,9 @@ export default function UserStagesDashboardPanel({ showViewAll = true }: { showV
 
   const showConnect = !loading && (!providerStatus?.connected || providerStatus.needsReconnect);
   const actions = (
-    <Stack direction="row" spacing={1} alignItems="center">
-      {showConnect && <Button size="small" variant="contained" startIcon={connecting ? <CircularProgress size={16} color="inherit" /> : <GitHubIcon />} disabled={connecting} onClick={connectGitHub}>{connecting ? 'Connecting…' : MARKETPLACE_COPY.connectGitHub}</Button>}
+    <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" justifyContent="flex-end">
+      <Button size="small" variant="contained" startIcon={<AddIcon />} onClick={() => setStagePickerOpen(true)}>Create new stage</Button>
+      {showConnect && <Button size="small" variant="outlined" startIcon={connecting ? <CircularProgress size={16} color="inherit" /> : <GitHubIcon />} disabled={connecting} onClick={connectGitHub}>{connecting ? 'Connecting…' : MARKETPLACE_COPY.connectGitHub}</Button>}
       {showViewAll && <Button component="a" href="/stages?tab=mine" size="small" variant="outlined">View all</Button>}
     </Stack>
   );
@@ -273,5 +306,13 @@ export default function UserStagesDashboardPanel({ showViewAll = true }: { showV
         {stageMenu.stage.localStage.publication?.active ? 'Unpublish' : 'Cancel request'}
       </MenuItem>}
     </Menu>
+    <CardDialog
+      open={stagePickerOpen}
+      onClose={closeStagePicker}
+      onSelect={() => undefined}
+      onSelectStage={openStageInBuilder}
+      onCreateStage={() => navigate('/stage-builder')}
+      stageActionLabel="Use stage"
+    />
   </DashboardCard>;
 }

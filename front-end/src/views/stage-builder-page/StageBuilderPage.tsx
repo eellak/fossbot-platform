@@ -114,6 +114,21 @@ function localDeepLinkStageIdFromLocation(): number | null {
   return Number.isInteger(stageId) && stageId > 0 ? stageId : null;
 }
 
+function remoteStageUrlFromLocation(): string | null {
+  if (typeof window === 'undefined') return null;
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('open') !== 'url') return null;
+  const stageUrl = params.get('url');
+  if (!stageUrl) return null;
+  try {
+    const resolved = new URL(stageUrl, window.location.origin);
+    if (resolved.protocol !== 'https:' && resolved.origin !== window.location.origin) return null;
+    return resolved.toString();
+  } catch {
+    return null;
+  }
+}
+
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -434,6 +449,7 @@ const StageBuilderPage = () => {
   const [marketplaceStatusLoading, setMarketplaceStatusLoading] = useState(false);
   const [githubDeepLinkTarget] = useState<GitHubDeepLinkTarget | null>(() => githubDeepLinkTargetFromLocation());
   const [localDeepLinkStageId] = useState<number | null>(() => localDeepLinkStageIdFromLocation());
+  const [remoteStageUrl] = useState<string | null>(() => remoteStageUrlFromLocation());
   const [githubDeepLinkRetry, setGithubDeepLinkRetry] = useState(0);
   const [githubDeepLinkLoad, setGithubDeepLinkLoad] = useState<GitHubDeepLinkLoadState>(() => {
     const target = githubDeepLinkTargetFromLocation();
@@ -639,6 +655,28 @@ const StageBuilderPage = () => {
       .finally(() => { if (!cancelled) setLocalStagesLoading(false); });
     return () => { cancelled = true; };
   }, [localDeepLinkStageId, token]);
+
+  useEffect(() => {
+    if (!remoteStageUrl) return;
+    let cancelled = false;
+    setLocalStagesLoading(true);
+    fetch(remoteStageUrl)
+      .then((response) => {
+        if (!response.ok) throw new Error(`Could not load stage (${response.status}).`);
+        return response.json();
+      })
+      .then((value) => {
+        if (cancelled) return;
+        const record = stageRecordFromImportedJson(value);
+        replaceStage(configToEditorStage(record), { undoable: false, clean: false, message: 'Opened stage as a new editable copy.' });
+        setLocalStage(null);
+        setRemoteStage(null);
+        window.history.replaceState(null, '', window.location.pathname);
+      })
+      .catch((error) => { if (!cancelled) setMessage(error instanceof Error ? error.message : 'Could not open the selected stage.'); })
+      .finally(() => { if (!cancelled) setLocalStagesLoading(false); });
+    return () => { cancelled = true; };
+  }, [remoteStageUrl]);
 
   useEffect(() => {
     setPrefs(readStageBuilderPreferences(scope));

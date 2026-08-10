@@ -58,7 +58,7 @@ const Menuitems: MenuitemsType[] = [
     id: uniqueId(),
     title: 'Stages',
     icon: IconWorld,
-    href: '/stages',
+    href: '/stages?create=1',
     betaOnly: true,
     betaFeature: 'stages',
   },

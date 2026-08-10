@@ -5,6 +5,7 @@ import {
   Button,
   Chip,
   Dialog,
+  DialogActions,
   DialogContent,
   DialogTitle,
   Grid,
@@ -53,6 +54,8 @@ interface CardDialogProps {
   onClose: () => void;
   onSelect: (url: string) => void | Promise<void>;
   onSelectStage?: (stage: StageSelection) => void | Promise<void>;
+  onCreateStage?: () => void;
+  stageActionLabel?: string;
 }
 
 const defaultStages: DefaultStageOption[] = [
@@ -147,7 +150,7 @@ function emitStageSelection(stage: StageSelection): void {
   window.dispatchEvent(new CustomEvent<StageSelection>('fossbot:stage-selected', { detail: stage }));
 }
 
-const CardDialog: React.FC<CardDialogProps> = ({ open, onClose, onSelect, onSelectStage }) => {
+const CardDialog: React.FC<CardDialogProps> = ({ open, onClose, onSelect, onSelectStage, onCreateStage, stageActionLabel = 'Select' }) => {
   const { token, user } = useAuth();
   const { marketplace: marketplaceEnabled } = useFeatureFlags();
   const userKey = stageListUserKey(user);
@@ -346,7 +349,7 @@ const CardDialog: React.FC<CardDialogProps> = ({ open, onClose, onSelect, onSele
           <Grid container spacing={2}>
             {defaultStages.map((stage) => (
               <Grid key={stage.url} item xs={12} sm={6} md={3}>
-                <StageCard title={stage.title} description={stage.description} previewUrl={stage.image} actionLabel="Select" onAction={() => handleDefaultSelect(stage)} />
+                <StageCard title={stage.title} description={stage.description} previewUrl={stage.image} actionLabel={stageActionLabel} onAction={() => handleDefaultSelect(stage)} />
               </Grid>
             ))}
           </Grid>
@@ -368,7 +371,7 @@ const CardDialog: React.FC<CardDialogProps> = ({ open, onClose, onSelect, onSele
                         description={stage.description || 'Saved to your FOSSBot account'}
                         metadata={<Typography variant="caption" color="text.secondary">Revision {stage.revision} · {(stage.recordBytes / 1024).toFixed(1)} KiB</Typography>}
                         badges={<Chip size="small" icon={<StorageIcon />} label="Local" variant="outlined" />}
-                        actionLabel="Select"
+                        actionLabel={stageActionLabel}
                         onAction={() => handleLocalSelect(stage)}
                       />
                     </Grid>
@@ -396,7 +399,7 @@ const CardDialog: React.FC<CardDialogProps> = ({ open, onClose, onSelect, onSele
                         description={stage.description || `${stage.repoOwner}/${stage.repoName}`}
                         metadata={<GitHubIdentity username={stage.repoOwner} />}
                         badges={<Chip size="small" label={stage.private ? 'Private' : 'Public'} color={stage.private ? 'warning' : 'success'} variant="outlined" />}
-                        actionLabel="Select"
+                        actionLabel={stageActionLabel}
                         onAction={() => handleUserSelect(stage)}
                       />
                     </Grid>
@@ -423,7 +426,7 @@ const CardDialog: React.FC<CardDialogProps> = ({ open, onClose, onSelect, onSele
                       previewUrl={stage.previewUrl}
                       metadata={stage.author?.platformUsername ? <Typography variant="caption" color="text.secondary">@{stage.author.platformUsername}</Typography> : <GitHubIdentity username={stage.author?.githubUsername || stage.repoOwner} />}
                       badges={<Stack direction="row" spacing={0.5}><Chip size="small" icon={stage.sourceType === 'local' ? <StorageIcon /> : <PublicIcon />} label={stage.sourceType === 'local' ? 'Local' : stage.badges?.verified ? 'Verified' : 'Published'} color={stage.badges?.verified ? 'primary' : 'default'} variant="outlined" />{stage.badges?.github && <Chip size="small" icon={<GitHubIcon />} label="GitHub source" variant="outlined" />}</Stack>}
-                      actionLabel="Select"
+                      actionLabel={stageActionLabel}
                       onAction={() => handleMarketplaceSelect(stage)}
                     />
                   </Grid>
@@ -435,6 +438,10 @@ const CardDialog: React.FC<CardDialogProps> = ({ open, onClose, onSelect, onSele
           </Stack>
         )}
       </DialogContent>
+      {onCreateStage && <DialogActions>
+        <Button onClick={onClose}>Cancel</Button>
+        <Button variant="contained" onClick={onCreateStage}>Create blank stage</Button>
+      </DialogActions>}
     </Dialog>
   );
 };
