@@ -16,10 +16,13 @@ class CompatibilityProfile:
     def request_options(self, *, schema: Optional[dict[str, Any]], deterministic: bool) -> dict[str, Any]:
         options: dict[str, Any] = {}
         if schema is not None:
-            options["response_format"] = {
-                "type": "json_schema",
-                "json_schema": {"name": "fossbot_suggestion", "schema": schema},
-            }
+            if self.id == "llamacpp":
+                options["response_format"] = {"type": "json_object"}
+            else:
+                options["response_format"] = {
+                    "type": "json_schema",
+                    "json_schema": {"name": "fossbot_suggestion", "schema": schema},
+                }
             options["temperature"] = 0
         if deterministic:
             options["temperature"] = 0

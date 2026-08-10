@@ -15,14 +15,15 @@ class OpenAICompatibleProvider(HostedProvider):
     max_provider_retries = 2
 
     @staticmethod
-    def _openrouter_schema_fallback(error: ProviderError, profile_id: str, payload: dict[str, object]) -> dict[str, object] | None:
-        if profile_id != "openrouter" or error.status_code not in {400, 404, 422} or "response_format" not in payload:
+    def _structured_output_fallback(error: ProviderError, profile_id: str, payload: dict[str, object]) -> dict[str, object] | None:
+        if profile_id not in {"openrouter", "llamacpp"} or error.status_code not in {400, 404, 422} or "response_format" not in payload:
             return None
         fallback = dict(payload)
         fallback.pop("response_format", None)
-        fallback.pop("provider", None)
-        fallback.pop("reasoning", None)
-        fallback.pop("reasoning_effort", None)
+        if profile_id == "openrouter":
+            fallback.pop("provider", None)
+            fallback.pop("reasoning", None)
+            fallback.pop("reasoning_effort", None)
         return fallback
 
     @staticmethod
@@ -82,11 +83,14 @@ class OpenAICompatibleProvider(HostedProvider):
         }
         if self.settings.get("supportsUsage", True):
             payload["stream_options"] = {"include_usage": True}
+        response_format = payload.get("response_format")
+        structured_output_mode = response_format.get("type") if isinstance(response_format, dict) else None
         try:
             yield ProviderEvent("metadata", {
                 "compatibilityProfile": profile.id,
                 "profileStatus": profile.status,
-                "structuredOutput": request.response_schema is not None,
+                "structuredOutput": structured_output_mode is not None,
+                "structuredOutputMode": structured_output_mode,
                 "deterministic": request.deterministic,
             })
             async with self.client() as client:
@@ -98,7 +102,7 @@ class OpenAICompatibleProvider(HostedProvider):
                             yield event
                         break
                     except ProviderError as error:
-                        fallback = self._openrouter_schema_fallback(error, profile.id, current_payload)
+                        fallback = self._structured_output_fallback(error, profile.id, current_payload)
                         if fallback is not None:
                             current_payload = fallback
                             yield ProviderEvent("metadata", {
@@ -106,7 +110,7 @@ class OpenAICompatibleProvider(HostedProvider):
                                 "profileStatus": profile.status,
                                 "structuredOutput": False,
                                 "structuredOutputFallback": True,
-                                "fallbackReason": "model_route_rejected_json_schema",
+                                "fallbackReason": "model_route_rejected_json_schema" if profile.id == "openrouter" else "llamacpp_rejected_json_object",
                                 "upstreamStatus": error.status_code,
                                 "deterministic": request.deterministic,
                             })

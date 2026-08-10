@@ -72,7 +72,7 @@ def test_compatible_profiles_build_provider_specific_structured_requests():
 
     llama_options = PROFILES["llamacpp"].request_options(schema=schema, deterministic=False)
     assert llama_options["reasoning_effort"] == "none"
-    assert llama_options["response_format"]["type"] == "json_schema"
+    assert llama_options["response_format"] == {"type": "json_object"}
     assert PROFILES["ollama"].status == "stub"
     assert PROFILES["openai"].status == "stub"
 
@@ -114,6 +114,40 @@ def test_openrouter_retries_without_schema_when_model_route_rejects_it(monkeypat
     fallback = next(data for kind, data in events if kind == "metadata" and data.get("structuredOutputFallback"))
     assert fallback["upstreamStatus"] == 404
     assert ("text_delta", {"text": '{"ok":true}'}) in events
+
+
+def test_llamacpp_uses_simple_json_mode_and_falls_back_to_prompt_validation(monkeypatch):
+    monkeypatch.setattr(socket, "getaddrinfo", lambda *args, **kwargs: [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 443))])
+    requests = []
+    response_text = '{"ok":true}'
+    body = "".join((
+        f"data: {json.dumps({'choices': [{'delta': {'content': response_text}, 'finish_reason': None}]})}\n\n",
+        f"data: {json.dumps({'choices': [{'delta': {}, 'finish_reason': 'stop'}]})}\n\n",
+        "data: [DONE]\n\n",
+    ))
+
+    def transport(request):
+        requests.append(json.loads(request.content))
+        if len(requests) == 1:
+            return httpx.Response(400, json={"error": {"message": "Unsupported response format"}})
+        return httpx.Response(200, headers={"content-type": "text/event-stream"}, text=body)
+
+    provider = OpenAICompatibleProvider(
+        secret=None,
+        base_url="https://example.test/v1",
+        settings={"compatibilityProfile": "llamacpp"},
+        transport=httpx.MockTransport(transport),
+    )
+    request = provider_request().model_copy(update={"response_schema": {"type": "object"}})
+    events = asyncio.run(collect_request(provider, request))
+
+    assert requests[0]["response_format"] == {"type": "json_object"}
+    assert requests[0]["reasoning_effort"] == "none"
+    assert "response_format" not in requests[1]
+    assert requests[1]["reasoning_effort"] == "none"
+    fallback = next(data for kind, data in events if kind == "metadata" and data.get("structuredOutputFallback"))
+    assert fallback["fallbackReason"] == "llamacpp_rejected_json_object"
+    assert ("text_delta", {"text": response_text}) in events
 
 
 def test_openrouter_retries_retryable_stream_error_before_output(monkeypatch):
