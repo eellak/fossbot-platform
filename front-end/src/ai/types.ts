@@ -117,8 +117,17 @@ export interface AIProviderInput {
   secretAction?: 'preserve' | 'rotate' | 'clear';
 }
 
-export type AIStreamEventType = 'start' | 'text_delta' | 'suggestion' | 'usage' | 'done' | 'error';
+export type AIStreamEventType = 'start' | 'text_delta' | 'suggestion' | 'usage' | 'done' | 'error' | 'debug';
 export interface AIStreamEvent { type: AIStreamEventType; data: Record<string, unknown> }
+
+export interface AIDebugTraceEntry {
+  version: '1';
+  sequence: number;
+  timestamp: string;
+  source: string;
+  step: string;
+  data: unknown;
+}
 
 export type AIRuntimeReadiness = 'idle' | 'checking' | 'loading' | 'ready' | 'unavailable' | 'error';
 
@@ -137,6 +146,8 @@ export interface AIAssistInput {
   question: string;
   history?: Array<{ role: 'user' | 'assistant'; content: string }>;
   context: Record<string, unknown>;
+  debug?: boolean;
+  benchmark?: boolean;
 }
 
 export interface PythonReplaceSuggestion {

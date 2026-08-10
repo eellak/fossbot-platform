@@ -14,6 +14,8 @@ export type AIRuntimeRequest = {
   question: string;
   history: Array<{ role: 'user' | 'assistant'; content: string }>;
   context: Record<string, unknown>;
+  debug?: boolean;
+  benchmark?: boolean;
 };
 
 export type AIRuntimePrepareOptions = {

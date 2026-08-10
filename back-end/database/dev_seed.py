@@ -63,9 +63,9 @@ DEV_TEST_USERS = (
     },
 )
 DEV_VERIFIER_USERNAME = "dev_teacher_verifier"
-DEV_SAMPLE_PHASE_5_TAG = "education-phase-5"
-DEV_SAMPLE_PHASE_6_TAG = "education-phase-6"
-PHASE_8_EXAMPLE_TAG = "education-phase-8-example"
+DEV_SAMPLE_LESSONS_TAG = "education-lessons-sample"
+DEV_SAMPLE_MISSIONS_TAG = "education-missions-sample"
+EDUCATION_EXAMPLE_TAG = "education-examples"
 DEV_AI_PROVIDER_NAME = "FOSSBot deterministic test provider"
 
 
@@ -87,7 +87,7 @@ def seed_dev_ai_data(db: Session, admin_username: str) -> AIProviderConfig | Non
             enabled=True,
             model="fossbot-test",
             base_url="http://localhost:8000/api/ai/test/mock/v1",
-            settings={"version": "1", "path": "chat/completions", "supportsUsage": True, "allowPrivateNetwork": True},
+            settings={"version": "1", "path": "chat/completions", "supportsUsage": True, "allowPrivateNetwork": True, "compatibilityProfile": "llamacpp"},
             request_limit=1_000,
             token_limit=1_000_000,
             created_by_id=admin.id,
@@ -188,8 +188,8 @@ def rich_text_activity(key: str, *paragraphs: str) -> list[dict]:
     ]
 
 
-def phase_five_sample_lessons(course_id: int, start_position: int = 4) -> list[Lesson]:
-    """Return focused lessons covering every Phase 5 authoring and student flow."""
+def sample_activity_lessons(course_id: int, start_position: int = 4) -> list[Lesson]:
+    """Return focused lessons covering activity authoring and student flow."""
     return [
         Lesson(
             lesson_key="dev-activities-mixed",
@@ -198,7 +198,7 @@ def phase_five_sample_lessons(course_id: int, start_position: int = 4) -> list[L
             position=start_position,
             activities=rich_text_activity(
                 "dev-mixed-intro",
-                "Phase 5 lessons are readable activity sequences rather than a single instruction block.",
+                "Activity lessons are readable sequences rather than a single instruction block.",
                 "Answer the questions, reflect privately, and open the hint only if you need it.",
             )
             + [
@@ -480,11 +480,11 @@ def phase_five_sample_lessons(course_id: int, start_position: int = 4) -> list[L
     ]
 
 
-def phase_six_sample_lessons(course_id: int, start_position: int = 8) -> list[Lesson]:
-    """Return evaluation lessons covering every Phase 6 mission primitive and lifecycle."""
+def sample_evaluation_lessons(course_id: int, start_position: int = 8) -> list[Lesson]:
+    """Return evaluation lessons covering mission primitives and lifecycle."""
     stage = {
         "stage_source_type": "default",
-        "stage_title": "Phase 6 mission lab",
+        "stage_title": "Mission lab",
         "stage_url": "/js-simulator/stages/stage_missions_phase6.json",
     }
     return [
@@ -796,6 +796,11 @@ def phase_six_sample_lessons(course_id: int, start_position: int = 8) -> list[Le
 
 def phase_eight_example_definitions() -> list[dict]:
     """Return the three public Phase 8 examples (eight lessons total)."""
+    return education_example_definitions()
+
+
+def education_example_definitions() -> list[dict]:
+    """Return the three public education examples (eight lessons total)."""
     mission_stage = {
         "sourceType": "default",
         "title": "Mission challenge field",
@@ -804,11 +809,15 @@ def phase_eight_example_definitions() -> list[dict]:
     return [
         {
             "course": {
-                "title": "Getting Started with FOSSBot",
-                "description": "Learn how FOSSBot moves, repeats commands, and observes distance.",
-                "learning_objectives": ["Move and turn safely", "Use a loop", "Read a distance sensor"],
+                "title": "Getting started with FOSSBot",
+                "description": "An introductory course for early robotics learners covering foundational concepts and single-step movements.",
+                "learning_objectives": ["Identify robot components", "Issue single-movement commands", "Predict robot paths"],
                 "visibility": "public",
-                "tags": [PHASE_8_EXAMPLE_TAG, "getting-started"],
+                "tags": [EDUCATION_EXAMPLE_TAG, "getting-started"],
+                "age_range": "8–14",
+                "difficulty": "Beginner",
+                "estimated_duration_minutes": 45,
+                "prerequisites": "No prior programming experience required.",
             },
             "lessons": [
                 {
@@ -882,7 +891,7 @@ def phase_eight_example_definitions() -> list[dict]:
                 "description": "Use collisions, ultrasonic sensing, and checkpoints to plan safe routes.",
                 "learning_objectives": ["Explain safe obstacle detection", "Navigate checkpoints", "Design a wall-following strategy"],
                 "visibility": "public",
-                "tags": [PHASE_8_EXAMPLE_TAG, "navigation"],
+                "tags": [EDUCATION_EXAMPLE_TAG, "navigation"],
             },
             "lessons": [
                 {
@@ -947,7 +956,7 @@ def phase_eight_example_definitions() -> list[dict]:
                 "description": "Combine sensor evidence with open-ended simulator challenges.",
                 "learning_objectives": ["Combine several sensor signals", "Optimize a successful mission without making score a completion barrier"],
                 "visibility": "public",
-                "tags": [PHASE_8_EXAMPLE_TAG, "advanced"],
+                "tags": [EDUCATION_EXAMPLE_TAG, "advanced"],
             },
             "lessons": [
                 {
@@ -1015,7 +1024,7 @@ def phase_eight_example_definitions() -> list[dict]:
     ]
 
 
-def seed_phase_eight_example_courses(db: Session, teacher_username: str = "dev_teacher") -> list[Course]:
+def seed_education_example_courses(db: Session, teacher_username: str = "dev_teacher") -> list[Course]:
     """Create and publish the examples through canonical course API functions."""
     from routers.courses import CourseCreate, LessonCreate, add_lesson, create_course, publish_course
 
@@ -1024,9 +1033,9 @@ def seed_phase_eight_example_courses(db: Session, teacher_username: str = "dev_t
         raise RuntimeError(f"Education example seed requires tutor user {teacher_username!r}")
 
     examples: list[Course] = []
-    for definition in phase_eight_example_definitions():
+    for definition in education_example_definitions():
         existing = next(
-            (course for course in db.query(Course).filter(Course.author_id == teacher.id).all() if PHASE_8_EXAMPLE_TAG in (course.tags or []) and course.title == definition["course"]["title"]),
+            (course for course in db.query(Course).filter(Course.author_id == teacher.id).all() if EDUCATION_EXAMPLE_TAG in (course.tags or []) and course.title == definition["course"]["title"]),
             None,
         )
         if existing:
@@ -1037,81 +1046,60 @@ def seed_phase_eight_example_courses(db: Session, teacher_username: str = "dev_t
             add_lesson(created["id"], LessonCreate.model_validate(lesson), teacher, db)
         publish_course(created["id"], teacher, db)
         examples.append(db.query(Course).filter(Course.id == created["id"]).one())
-    logger.info("Phase 8 education examples ready: %s", ", ".join(str(course.id) for course in examples))
+    logger.info("Education examples ready: %s", ", ".join(str(course.id) for course in examples))
     return examples
 
 
-def add_missing_phase_five_lessons(db: Session, course: Course) -> int:
+def add_missing_activity_lessons(db: Session, course: Course) -> int:
     existing_lessons = db.query(Lesson).filter(Lesson.course_id == course.id).all()
     existing_keys = {lesson.lesson_key for lesson in existing_lessons}
-    next_position = (
-        max(
-            (lesson.position for lesson in existing_lessons if lesson.position > 0),
-            default=0,
-        )
-        + 1
-    )
+    next_position = max((lesson.position for lesson in existing_lessons), default=0) + 1
     added = 0
-    for lesson in phase_five_sample_lessons(course.id, next_position):
-        if lesson.lesson_key in existing_keys:
-            continue
-        lesson.position = next_position + added
-        db.add(lesson)
-        added += 1
+    for lesson in sample_activity_lessons(course.id, next_position):
+        if lesson.lesson_key not in existing_keys:
+            db.add(lesson)
+            added += 1
+            next_position += 1
     return added
 
 
-def add_missing_phase_six_lessons(db: Session, course: Course) -> int:
+def add_missing_evaluation_lessons(db: Session, course: Course) -> int:
     existing_lessons = db.query(Lesson).filter(Lesson.course_id == course.id).all()
     existing_keys = {lesson.lesson_key for lesson in existing_lessons}
-    next_position = (
-        max(
-            (lesson.position for lesson in existing_lessons if lesson.position > 0),
-            default=0,
-        )
-        + 1
-    )
+    next_position = max((lesson.position for lesson in existing_lessons), default=0) + 1
     added = 0
-    for lesson in phase_six_sample_lessons(course.id, next_position):
-        if lesson.lesson_key in existing_keys:
-            continue
-        lesson.position = next_position + added
-        db.add(lesson)
-        added += 1
+    for lesson in sample_evaluation_lessons(course.id, next_position):
+        if lesson.lesson_key not in existing_keys:
+            db.add(lesson)
+            added += 1
+            next_position += 1
     return added
+
+
+def seed_dev_education_data(db: Session, admin_username: str) -> Course:
+    return seed_dev_sample_course(db, admin_username)
 
 
 def seed_dev_sample_course(db: Session, admin_username: str) -> Course:
-    """Create or extend the editable education sample without replacing developer changes."""
-    admin = (
-        db.query(User)
-        .filter(User.username == admin_username, User.role == UserRole.ADMIN)
-        .first()
-    )
+    admin = db.query(User).filter(User.username == admin_username).first()
     if admin is None:
-        raise RuntimeError(
-            f"Development course seed requires admin user {admin_username!r}"
-        )
+        raise RuntimeError(f"Development education seed requires user {admin_username!r}")
 
     existing = next(
-        (
-            course
-            for course in db.query(Course).filter(Course.author_id == admin.id).all()
-            if DEV_SAMPLE_TAG in (course.tags or [])
-        ),
+        (course for course in db.query(Course).filter(Course.author_id == admin.id).all() if DEV_SAMPLE_TAG in (course.tags or [])),
         None,
     )
     if existing:
-        phase_five_added = add_missing_phase_five_lessons(db, existing)
-        phase_six_added = add_missing_phase_six_lessons(db, existing)
-        if DEV_SAMPLE_PHASE_5_TAG not in (existing.tags or []):
-            existing.tags = [*(existing.tags or []), DEV_SAMPLE_PHASE_5_TAG]
-        if DEV_SAMPLE_PHASE_6_TAG not in (existing.tags or []):
-            existing.tags = [*(existing.tags or []), DEV_SAMPLE_PHASE_6_TAG]
+        phase_five_added = add_missing_activity_lessons(db, existing)
+        phase_six_added = add_missing_evaluation_lessons(db, existing)
+        if DEV_SAMPLE_LESSONS_TAG not in (existing.tags or []):
+            existing.tags = [*(existing.tags or []), DEV_SAMPLE_LESSONS_TAG]
+        if DEV_SAMPLE_MISSIONS_TAG not in (existing.tags or []):
+            existing.tags = [*(existing.tags or []), DEV_SAMPLE_MISSIONS_TAG]
         if (
             existing.description
             in {
-                "A compact development course for exercising the Phase 2 teacher authoring workflow.",
+                "A compact development course for exercising the teacher authoring workflow.",
                 "A development course covering education authoring, activities, completion policies, and simulator sensor observations.",
             }
         ):
@@ -1147,7 +1135,7 @@ def seed_dev_sample_course(db: Session, admin_username: str) -> Course:
         db.commit()
         db.refresh(existing)
         logger.info(
-            "Development education sample ready (%s Phase 5 and %s Phase 6 lessons added)",
+            "Development education sample ready (%s activity and %s evaluation lessons added)",
             phase_five_added,
             phase_six_added,
         )
@@ -1174,26 +1162,22 @@ def seed_dev_sample_course(db: Session, admin_username: str) -> Course:
         prerequisites="No prior robotics experience required.",
         tags=[
             DEV_SAMPLE_TAG,
-            DEV_SAMPLE_PHASE_5_TAG,
-            DEV_SAMPLE_PHASE_6_TAG,
+            DEV_SAMPLE_LESSONS_TAG,
+            DEV_SAMPLE_MISSIONS_TAG,
             "education",
             "development",
         ],
     )
     db.add(course)
-    db.flush()
-
-    lessons = [
+    db.commit()
+    db.refresh(course)
+    lessons: list[Lesson] = [
         Lesson(
-            lesson_key="dev-python-fresh",
+            lesson_key="dev-intro",
             course_id=course.id,
-            title="Move from a fresh Python workspace",
+            title="Introduction to FOSSBot concepts",
             position=1,
-            activities=rich_text_activity(
-                "dev-python-intro",
-                "Read the instructions, inspect the built-in stage, and edit the starter program.",
-                "Use Check starter to validate syntax without running the simulator.",
-            ),
+            activities=[],
             completion_policy="self",
             start_mode="fresh",
             editor_type="python",
@@ -1241,8 +1225,8 @@ def seed_dev_sample_course(db: Session, admin_username: str) -> Course:
             stage_url="/js-simulator/stages/stage_white_rect.json",
         ),
     ]
-    lessons.extend(phase_five_sample_lessons(course.id, len(lessons) + 1))
-    lessons.extend(phase_six_sample_lessons(course.id, len(lessons) + 1))
+    lessons.extend(sample_activity_lessons(course.id, len(lessons) + 1))
+    lessons.extend(sample_evaluation_lessons(course.id, len(lessons) + 1))
     db.add_all(lessons)
     db.commit()
     db.refresh(course)
@@ -1256,5 +1240,5 @@ def seed_dev_data(db: Session, admin_username: str, test_user_password: str) -> 
     seed_dev_test_users(db, test_user_password)
     seed_dev_ai_data(db, admin_username)
     sample = seed_dev_sample_course(db, admin_username)
-    seed_phase_eight_example_courses(db)
+    seed_education_example_courses(db)
     return sample

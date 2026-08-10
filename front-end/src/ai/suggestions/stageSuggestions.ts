@@ -173,6 +173,7 @@ export function previewStageSuggestion(suggestion: StageAuthoringSuggestion, sta
       newIssues: result.afterIssues.filter((item) => !beforeIds.has(item.id)).map((item) => item.message),
       floor: result.stage.floor.dimensions,
       objects: result.stage.objects.slice(0, 80).map((object) => ({ id: object.id, kind: object.semanticKind || object.kind, position: objectPosition(object) })),
+      editorStage: result.stage,
     },
   };
 }

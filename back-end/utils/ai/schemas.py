@@ -88,6 +88,8 @@ class AssistantRequest(StrictModel):
     question: str = Field(min_length=1, max_length=2_000)
     history: list[ConversationTurn] = Field(default_factory=list, max_length=8)
     context: dict[str, Any] = Field(default_factory=dict)
+    debug: bool = False
+    benchmark: bool = False
 
     def validate_capability(self) -> None:
         if self.capability not in CAPABILITY_IDS:
@@ -129,10 +131,12 @@ class ProviderStreamRequest(StrictModel):
     system: str
     messages: list[ConversationTurn]
     max_output_tokens: int = Field(default=1_024, ge=1, le=8_192)
+    response_schema: Optional[dict[str, Any]] = None
+    deterministic: bool = False
 
 
 class StreamEvent(StrictModel):
-    type: Literal["start", "text_delta", "suggestion", "usage", "done", "error"]
+    type: Literal["start", "text_delta", "suggestion", "usage", "done", "error", "debug"]
     data: dict[str, Any] = Field(default_factory=dict)
 
 

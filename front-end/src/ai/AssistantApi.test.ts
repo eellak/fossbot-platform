@@ -14,6 +14,13 @@ describe('parseAIStreamFrame', () => {
     });
   });
 
+  it('parses debug events', () => {
+    expect(parseAIStreamFrame('event: debug\ndata: {"version":"1","sequence":1,"source":"backend","step":"prompt.built","data":{}}')).toEqual({
+      type: 'debug',
+      data: { version: '1', sequence: 1, source: 'backend', step: 'prompt.built', data: {} },
+    });
+  });
+
   it.each([
     'data: {"text":"missing event"}',
     'event: unknown\ndata: {}',

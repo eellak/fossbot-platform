@@ -1,14 +1,15 @@
+import database.dev_seed as dev_seed
 from database.database import AIInstanceSettings, AIPolicyRule, AIProviderConfig, Course, CourseRelease, Lesson, MarketplaceRoleAssignment, User
 from database.dev_seed import (
-    DEV_SAMPLE_PHASE_5_TAG,
-    DEV_SAMPLE_PHASE_6_TAG,
+    DEV_SAMPLE_LESSONS_TAG,
+    DEV_SAMPLE_MISSIONS_TAG,
     DEV_SAMPLE_TAG,
     DEV_TEST_USERS,
     DEV_AI_PROVIDER_NAME,
-    PHASE_8_EXAMPLE_TAG,
-    phase_eight_example_definitions,
-    seed_phase_eight_example_courses,
-    seed_dev_sample_course,
+    EDUCATION_EXAMPLE_TAG,
+    education_example_definitions,
+    seed_education_example_courses,
+    seed_dev_education_data,
     seed_dev_test_users,
     seed_dev_ai_data,
 )
@@ -16,17 +17,17 @@ from models.models import UserRole
 from utils.utils_hash import verify_hashed
 
 
-def test_dev_sample_course_covers_phase_five_and_six_and_is_idempotent(db, users):
+def test_dev_sample_course_covers_activity_and_evaluation_lessons_and_is_idempotent(db, users):
     *_, admin = users
 
-    created = seed_dev_sample_course(db, admin.username)
-    seeded_again = seed_dev_sample_course(db, admin.username)
+    created = seed_dev_education_data(db, admin.username)
+    seeded_again = seed_dev_education_data(db, admin.username)
 
     assert seeded_again.id == created.id
     assert db.query(Course).filter(Course.author_id == admin.id).count() == 1
     assert DEV_SAMPLE_TAG in created.tags
-    assert DEV_SAMPLE_PHASE_5_TAG in created.tags
-    assert DEV_SAMPLE_PHASE_6_TAG in created.tags
+    assert DEV_SAMPLE_LESSONS_TAG in created.tags
+    assert DEV_SAMPLE_MISSIONS_TAG in created.tags
     assert created.status == "draft"
     assert created.visibility == "unlisted"
 
@@ -100,12 +101,12 @@ def test_dev_sample_course_covers_phase_five_and_six_and_is_idempotent(db, users
 
 def test_archived_dev_sample_is_restored_without_replacing_lessons(db, users):
     *_, admin = users
-    course = seed_dev_sample_course(db, admin.username)
+    course = seed_dev_education_data(db, admin.username)
     course.status = "archived"
     course.title = "Locally edited sample"
     db.commit()
 
-    restored = seed_dev_sample_course(db, admin.username)
+    restored = seed_dev_education_data(db, admin.username)
 
     assert restored.id == course.id
     assert restored.status == "draft"
@@ -151,17 +152,17 @@ def test_dev_ai_seed_is_test_only_complete_and_idempotent(db, users, monkeypatch
     assert seed_dev_ai_data(db, admin.username) is None
 
 
-def test_phase_eight_examples_publish_three_courses_and_eight_lessons(db, users):
+def test_education_examples_publish_three_courses_and_eight_lessons(db, users):
     tutor, *_ = users
-    created = seed_phase_eight_example_courses(db, tutor.username)
-    seeded_again = seed_phase_eight_example_courses(db, tutor.username)
+    created = seed_education_example_courses(db, tutor.username)
+    seeded_again = seed_education_example_courses(db, tutor.username)
 
     assert [course.id for course in seeded_again] == [course.id for course in created]
     assert len(created) == 3
     assert sum(db.query(Lesson).filter(Lesson.course_id == course.id).count() for course in created) == 8
     assert all(course.status == "published" and course.latest_published_release_id for course in created)
     assert db.query(CourseRelease).filter(CourseRelease.course_id.in_([course.id for course in created])).count() == 3
-    assert all(PHASE_8_EXAMPLE_TAG in course.tags for course in created)
+    assert all(EDUCATION_EXAMPLE_TAG in course.tags for course in created)
 
     lessons = db.query(Lesson).filter(Lesson.course_id.in_([course.id for course in created])).all()
     assert any(lesson.start_mode == "inherit_previous_code" for lesson in lessons)
@@ -169,4 +170,23 @@ def test_phase_eight_examples_publish_three_courses_and_eight_lessons(db, users)
     assert any(any(activity["type"] == "simulator_observation" for activity in lesson.activities) for lesson in lessons)
     assert any(any(activity["type"] == "mission" for activity in lesson.activities) for lesson in lessons)
     assert any(any(activity.get("scoreConfig", {}).get("enabled") for activity in lesson.activities) for lesson in lessons)
-    assert len(phase_eight_example_definitions()) == 3
+    assert len(education_example_definitions()) == 3
+
+
+def test_seed_dev_data_runs_all_current_seed_steps(db, monkeypatch):
+    calls = []
+    sample = object()
+    monkeypatch.setattr(dev_seed, "seed_dev_test_users", lambda session, password: calls.append(("users", session, password)))
+    monkeypatch.setattr(dev_seed, "seed_dev_ai_data", lambda session, username: calls.append(("ai", session, username)))
+    monkeypatch.setattr(dev_seed, "seed_dev_sample_course", lambda session, username: calls.append(("course", session, username)) or sample)
+    monkeypatch.setattr(dev_seed, "seed_education_example_courses", lambda session: calls.append(("examples", session)))
+
+    result = dev_seed.seed_dev_data(db, "dev_admin", "password")
+
+    assert result is sample
+    assert calls == [
+        ("users", db, "password"),
+        ("ai", db, "dev_admin"),
+        ("course", db, "dev_admin"),
+        ("examples", db),
+    ]

@@ -29,7 +29,7 @@ export class AIRequestError extends Error {
 export function parseAIStreamFrame(frame: string): AIStreamEvent {
   const eventType = frame.split('\n').find((line) => line.startsWith('event:'))?.slice(6).trim();
   const data = frame.split('\n').filter((line) => line.startsWith('data:')).map((line) => line.slice(5).trim()).join('\n');
-  if (!eventType || !data || !['start', 'text_delta', 'suggestion', 'usage', 'done', 'error'].includes(eventType)) throw new AIRequestError('Malformed assistant stream', 502, 'malformed_response');
+  if (!eventType || !data || !['start', 'text_delta', 'suggestion', 'usage', 'done', 'error', 'debug'].includes(eventType)) throw new AIRequestError('Malformed assistant stream', 502, 'malformed_response');
   let payload: unknown;
   try { payload = JSON.parse(data); }
   catch { throw new AIRequestError('Malformed assistant stream', 502, 'malformed_response'); }

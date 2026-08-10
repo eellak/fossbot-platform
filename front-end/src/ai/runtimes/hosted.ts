@@ -19,6 +19,8 @@ export class HostedRuntime implements AIAssistantRuntime {
       question: request.question,
       history: request.history,
       context: request.context,
+      debug: request.debug,
+      benchmark: request.benchmark,
     }, onEvent, signal);
   }
 

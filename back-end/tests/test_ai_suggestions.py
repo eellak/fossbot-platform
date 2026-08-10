@@ -3,7 +3,8 @@ import json
 
 import pytest
 
-from utils.ai.suggestions import SuggestionError, parse_suggestion, suggestion_payload
+from utils.ai.schemas import ConversationTurn, ProviderStreamRequest
+from utils.ai.suggestions import SuggestionError, build_suggestion_repair_request, parse_suggestion, parse_suggestion_with_normalizations, repair_incomplete_json_object, suggestion_payload
 
 
 def test_python_suggestion_requires_valid_syntax_and_fingerprint():
@@ -51,6 +52,50 @@ def test_suggestion_rejects_ambiguous_multiple_json_objects():
 
     with pytest.raises(SuggestionError, match="invalid suggestion"):
         parse_suggestion(f"{payload}\n{payload}", "code.suggest_changes", fingerprint)
+
+
+def test_suggestion_repairs_only_an_incomplete_json_tail():
+    fingerprint = hashlib.sha256(b"print('before')").hexdigest()
+    payload = json.dumps({
+        "version": "1",
+        "type": "python_replace",
+        "baseFingerprint": fingerprint,
+        "replacement": "print('after')\n",
+        "summary": "Update the output.",
+    })
+
+    assert parse_suggestion(payload[:-1], "code.suggest_changes", fingerprint).summary == "Update the output."
+    assert parse_suggestion(payload[:-2], "code.suggest_changes", fingerprint).summary == "Update the output."
+    assert repair_incomplete_json_object('{"version":"1","oper') is None
+    assert repair_incomplete_json_object(f"{payload}\n{payload}") is None
+
+
+def test_suggestion_repair_turns_stay_within_provider_message_limits():
+    request = ProviderStreamRequest(
+        model="test",
+        system="system",
+        messages=[ConversationTurn(role="user", content="Create a stage")],
+    )
+
+    repaired = build_suggestion_repair_request(
+        request,
+        '{"operations":[' + ("x" * 5_000),
+        SuggestionError("The provider returned an invalid suggestion"),
+        1,
+    )
+
+    assert len(repaired.messages[-2].content) <= 2_000
+    assert "truncated for repair" in repaired.messages[-2].content
+    assert len(repaired.messages[-1].content) <= 2_000
+
+
+def test_repair_instruction_prescribes_flat_operation_shape():
+    request = ProviderStreamRequest(model="test", system="system", messages=[ConversationTurn(role="user", content="Create a stage")])
+    error = SuggestionError("The provider returned an invalid suggestion")
+    error.__cause__ = ValueError("operations.0.op Field required; add_object extra")
+    repaired = build_suggestion_repair_request(request, '{"operations":[{"add_object":{}}]}', error, 1)
+    assert 'Wrong: {"add_object"' in repaired.messages[-1].content
+    assert 'Correct: {"op":"add_object"' in repaired.messages[-1].content
 
 
 def test_blockly_suggestion_requires_well_formed_xml_and_matching_fingerprint():
@@ -147,6 +192,35 @@ def test_stage_create_requires_supported_spawn_and_target():
     suggestion["operations"][2]["semanticKind"] = "downloadedModel"
     with pytest.raises(SuggestionError, match="not supported"):
         parse_suggestion(json.dumps(suggestion), "stage.create", fingerprint, context)
+
+
+def test_stage_suggestion_normalizes_only_known_unambiguous_shapes():
+    fingerprint = "9" * 64
+    context = {"target": "create", "selected_object_ids": [], "stage_payload": {"objects": [], "summary": {"knownObjectIds": []}}}
+    nested = {
+        "version": 1,
+        "type": "stage_operations",
+        "baseFingerprint": fingerprint,
+        "rationale": "Create a minimal stage.",
+        "expectedValidation": "Spawn and target exist.",
+        "summary": "Create stage.",
+        "operations": [
+            {"add_object": {"tempId": "ai-spawn", "semanticKind": "robotSpawn", "position": [-1, 0, -1]}},
+            {"op": "add_object", "add_object": {"tempId": "ai-target", "semanticKind": "target", "position": [1, 0, 1]}},
+        ],
+    }
+    parsed, actions = parse_suggestion_with_normalizations(json.dumps(nested), "stage.create", fingerprint, context)
+    assert parsed.version == "1"
+    assert [operation.op for operation in parsed.operations] == ["add_object", "add_object"]
+    assert actions == [
+        "version:number-to-string",
+        "operations.0:flatten-add_object-wrapper",
+        "operations.1:flatten-add_object-wrapper",
+    ]
+
+    ambiguous = nested | {"operations": [{"add_object": {}, "unexpected": {}}]}
+    with pytest.raises(SuggestionError):
+        parse_suggestion(json.dumps(ambiguous), "stage.create", fingerprint, context)
 
 
 def test_stage_selection_rejects_unknown_unselected_and_invalid_geometry():

@@ -18,6 +18,7 @@ from database.database import (
 )
 from models.models import UserRole
 from routers import ai, ai_admin
+from utils.ai.admin_debug import scrub_debug_value
 from utils.ai.providers.base import ProviderEvent
 from utils.ai.schemas import AssistantRequest
 
@@ -109,6 +110,25 @@ def test_provider_response_is_secret_free_and_validated(db, users):
             "settings": {"version": "1", "path": "../admin", "allowPrivateNetwork": "yes"},
         })
         assert escaped_path.status_code == 422
+        profiled = client.post("/api/admin/ai/providers", json={
+            "name": "Profiled compatible",
+            "providerType": "openai_compatible",
+            "runtime": "hosted",
+            "model": "model",
+            "baseUrl": "https://openrouter.ai/api/v1",
+            "settings": {"version": "1", "compatibilityProfile": "openrouter"},
+        })
+        assert profiled.status_code == 201
+        assert profiled.json()["settings"]["compatibilityProfile"] == "openrouter"
+        unknown_profile = client.post("/api/admin/ai/providers", json={
+            "name": "Unknown profile",
+            "providerType": "openai_compatible",
+            "runtime": "hosted",
+            "model": "model",
+            "baseUrl": "https://example.test/v1",
+            "settings": {"version": "1", "compatibilityProfile": "invented"},
+        })
+        assert unknown_profile.status_code == 422
         public_browser = client.post("/api/admin/ai/providers", json={
             "name": "Browser model",
             "providerType": "webllm",
@@ -375,6 +395,18 @@ class FakeSuggestionProvider:
         yield ProviderEvent("usage", {"inputTokens": 20, "outputTokens": 10})
 
 
+class SequencedSuggestionProvider:
+    def __init__(self, payloads):
+        self.payloads = [payload if isinstance(payload, str) else json.dumps(payload) for payload in payloads]
+        self.requests = []
+
+    async def stream(self, request):
+        self.requests.append(request)
+        payload = self.payloads[min(len(self.requests) - 1, len(self.payloads) - 1)]
+        yield ProviderEvent("text_delta", {"text": payload})
+        yield ProviderEvent("usage", {"inputTokens": 20, "outputTokens": 10})
+
+
 def test_stream_is_normalized_and_records_content_free_usage(db, users, monkeypatch):
     student, admin = users[2], users[3]
     provider = enable_streaming(db, admin, student)
@@ -529,18 +561,104 @@ def test_stage_suggestion_is_typed_and_never_streams_raw_json(db, users, monkeyp
     assert db.query(AIUsageEvent).filter(AIUsageEvent.capability == "stage.create").one().outcome == "completed"
 
 
+def test_invalid_stage_suggestion_is_repaired_before_reaching_the_client(db, users, monkeypatch):
+    admin = users[3]
+    provider = enable_streaming(db, admin, admin, capability="stage.create")
+    stage_payload = {
+        "title": "Untitled Stage", "description": "", "floor": {"name": "floor", "dimensions": [10, 10], "color": "dodgerblue"},
+        "objects": [], "metadata": {"groups": []}, "summary": {"objectCount": 0, "knownObjectIds": [], "kinds": {}},
+    }
+    fingerprint = hashlib.sha256(json.dumps(stage_payload, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    invalid = {
+        "version": "1", "type": "stage_operations", "baseFingerprint": fingerprint,
+        "rationale": "Create a sample.", "summary": "Create a sample.",
+        "expectedValidation": {"errors": [], "warnings": []},
+        "operations": [
+            {"op": "set_metadata", "title": "Sample Stage", "description": "A small stage."},
+            {"op": "add_object", "tempId": "ai-spawn", "semanticKind": "robotSpawn", "position": [0, 0, 0]},
+            {"op": "add_object", "tempId": "ai-target", "semanticKind": "target", "position": [2, 0, 2]},
+        ],
+    }
+    repaired = {
+        "version": "1", "type": "stage_operations", "baseFingerprint": fingerprint,
+        "rationale": "Create a sample.", "summary": "Create a sample.",
+        "expectedValidation": "A spawn and target are present.",
+        "operations": [
+            {"op": "set_metadata", "patch": {"title": "Sample Stage", "description": "A small stage."}},
+            {"op": "add_object", "tempId": "ai-spawn", "semanticKind": "robotSpawn", "position": [0, 0, 0]},
+            {"op": "add_object", "tempId": "ai-target", "semanticKind": "target", "position": [2, 0, 2]},
+        ],
+    }
+    adapter = SequencedSuggestionProvider([invalid, repaired])
+    monkeypatch.setattr(ai, "hosted_provider", lambda *args, **kwargs: adapter)
+    with client_for(db, admin) as client:
+        response = client.post("/api/ai/assist/stream", json={
+            "capability": "stage.create", "providerId": provider.id, "surface": "stage", "question": "Small sample stage",
+            "context": {"target": "create", "baseFingerprint": fingerprint, "stagePayload": stage_payload, "catalog": ["robotSpawn", "target"]},
+            "debug": True,
+        })
+    assert response.status_code == 200
+    assert len(adapter.requests) == 2
+    assert "suggestion.repair_requested" in response.text
+    assert '"willRepair":true' in response.text
+    assert '"type":"stage_operations"' in response.text
+    assert '"code":"invalid_suggestion"' not in response.text
+    assert "Suggestion repair attempt 1" in adapter.requests[1].messages[-1].content
+    assert adapter.requests[1].messages[-2].role == "assistant"
+    usage = db.query(AIUsageEvent).filter(AIUsageEvent.capability == "stage.create").one()
+    assert usage.input_tokens == 40
+    assert usage.output_tokens == 20
+
+
+def test_incomplete_suggestion_json_is_closed_before_provider_retry(db, users, monkeypatch):
+    admin = users[3]
+    provider = enable_streaming(db, admin, admin, capability="stage.create")
+    stage_payload = {
+        "title": "Untitled Stage", "description": "", "floor": {"name": "floor", "dimensions": [10, 10], "color": "dodgerblue"},
+        "objects": [], "metadata": {"groups": []}, "summary": {"objectCount": 0, "knownObjectIds": [], "kinds": {}},
+    }
+    fingerprint = hashlib.sha256(json.dumps(stage_payload, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    suggestion = {
+        "version": "1", "type": "stage_operations", "baseFingerprint": fingerprint,
+        "rationale": "Create a small stage.", "summary": "Create a small stage.",
+        "expectedValidation": "A spawn and target are present.",
+        "operations": [
+            {"op": "add_object", "tempId": "ai-spawn", "semanticKind": "robotSpawn", "position": [0, 0, 0]},
+            {"op": "add_object", "tempId": "ai-target", "semanticKind": "target", "position": [2, 0, 2]},
+        ],
+    }
+    adapter = SequencedSuggestionProvider([json.dumps(suggestion)[:-1]])
+    monkeypatch.setattr(ai, "hosted_provider", lambda *args, **kwargs: adapter)
+    with client_for(db, admin) as client:
+        response = client.post("/api/ai/assist/stream", json={
+            "capability": "stage.create", "providerId": provider.id, "surface": "stage", "question": "Small stage",
+            "context": {"target": "create", "baseFingerprint": fingerprint, "stagePayload": stage_payload, "catalog": ["robotSpawn", "target"]},
+            "debug": True,
+        })
+
+    assert len(adapter.requests) == 1
+    assert adapter.requests[0].max_output_tokens == 4_096
+    assert adapter.requests[0].response_schema["properties"]["type"]["const"] == "stage_operations"
+    assert "suggestion.json_repaired" in response.text
+    assert "suggestion.repair_requested" not in response.text
+    assert '"type":"stage_operations"' in response.text
+    assert "event: done" in response.text
+
+
 def test_invalid_suggestion_emits_safe_error_without_done(db, users, monkeypatch):
     student, admin = users[2], users[3]
     provider = enable_streaming(db, admin, student, capability="code.suggest_changes")
     source = "print('before')"
     fingerprint = hashlib.sha256(source.encode()).hexdigest()
-    monkeypatch.setattr(ai, "hosted_provider", lambda *args, **kwargs: FakeSuggestionProvider({
+    invalid = {
         "version": "1",
         "type": "python_replace",
         "baseFingerprint": fingerprint,
         "replacement": "if :",
         "summary": "Malformed on purpose.",
-    }))
+    }
+    adapter = SequencedSuggestionProvider([invalid])
+    monkeypatch.setattr(ai, "hosted_provider", lambda *args, **kwargs: adapter)
     with client_for(db, student) as client:
         response = client.post("/api/ai/assist/stream", json={
             "capability": "code.suggest_changes",
@@ -551,6 +669,135 @@ def test_invalid_suggestion_emits_safe_error_without_done(db, users, monkeypatch
         })
     assert '"code":"invalid_suggestion"' in response.text
     assert "event: done" not in response.text
+    assert len(adapter.requests) == 3
+    assert len(adapter.requests[2].messages) == len(adapter.requests[1].messages) + 2
+    assert "Suggestion repair attempt 1" in adapter.requests[2].messages[-3].content
+
+
+def test_non_admin_users_cannot_enable_assistant_debug(db, users, monkeypatch):
+    tutor, _, student, _ = users
+    calls = {"count": 0}
+
+    def factory(*args, **kwargs):
+        calls["count"] += 1
+        return FakeHostedProvider()
+
+    monkeypatch.setattr(ai, "hosted_provider", factory)
+    request = {
+        "capability": "code.explain",
+        "surface": "python",
+        "question": "Show the trace",
+        "context": {},
+        "debug": True,
+    }
+    for actor in (tutor, student):
+        with client_for(db, actor) as client:
+            response = client.post("/api/ai/assist/stream", json=request)
+            benchmark = client.post("/api/ai/assist/stream", json={**request, "debug": False, "benchmark": True})
+        assert response.status_code == 403
+        assert response.json()["detail"]["code"] == "admin_debug_forbidden"
+        assert benchmark.status_code == 403
+        assert benchmark.json()["detail"]["code"] == "admin_debug_forbidden"
+    assert calls["count"] == 0
+
+
+def test_admin_debug_trace_exposes_pipeline_without_credentials(db, users, monkeypatch):
+    admin = users[3]
+    provider = enable_streaming(db, admin, admin, capability="code.suggest_changes")
+    provider.encrypted_secret = "must-never-appear-in-debug"
+    db.commit()
+    source = "print('before')"
+    fingerprint = hashlib.sha256(source.encode()).hexdigest()
+    monkeypatch.setattr(ai, "decrypt_ai_secret", lambda value: "decrypted-secret-must-not-appear")
+    monkeypatch.setattr(ai, "hosted_provider", lambda *args, **kwargs: FakeSuggestionProvider({
+        "version": "1",
+        "type": "python_replace",
+        "baseFingerprint": fingerprint,
+        "replacement": "if :",
+        "summary": "Malformed on purpose.",
+    }))
+    with client_for(db, admin) as client:
+        response = client.post("/api/ai/assist/stream", json={
+            "capability": "code.suggest_changes",
+            "providerId": provider.id,
+            "surface": "python",
+            "question": "Suggest a change",
+            "context": {"source": source, "sourceFingerprint": fingerprint},
+            "debug": True,
+        })
+    assert response.status_code == 200
+    assert "event: debug" in response.text
+    for step in (
+        "request.accepted",
+        "policy.resolved",
+        "provider.selected",
+        "context.assembled",
+        "prompt.built",
+        "provider.request",
+        "suggestion.raw",
+        "suggestion.rejected",
+    ):
+        assert step in response.text
+    assert "Malformed on purpose" in response.text
+    assert "The suggested Python is not syntactically valid" in response.text
+    assert "must-never-appear-in-debug" not in response.text
+    assert "decrypted-secret-must-not-appear" not in response.text
+    assert '"code":"invalid_suggestion"' in response.text
+    assert scrub_debug_value({"apiKey": "context-secret", "tokenLimit": 512}) == {"apiKey": "<redacted>", "tokenLimit": 512}
+
+
+def test_admin_requests_do_not_emit_debug_events_by_default(db, users, monkeypatch):
+    admin = users[3]
+    provider = enable_streaming(db, admin, admin)
+    monkeypatch.setattr(ai, "hosted_provider", lambda *args, **kwargs: FakeHostedProvider())
+    with client_for(db, admin) as client:
+        response = client.post("/api/ai/assist/stream", json={
+            "capability": "code.explain",
+            "providerId": provider.id,
+            "surface": "python",
+            "question": "Explain this",
+            "context": {"source": "print('safe')"},
+        })
+    assert response.status_code == 200
+    assert "event: debug" not in response.text
+    assert "event: done" in response.text
+
+
+def test_admin_debug_trace_covers_course_authoring(db, users, monkeypatch):
+    admin = users[3]
+    provider = enable_streaming(db, admin, admin, capability="lesson.draft")
+    course = Course(title="Debug course", description="Course", author_id=admin.id, learning_objectives=["Trace"], status="draft", visibility="public")
+    db.add(course)
+    db.commit()
+    target = {
+        "course": {"title": course.title, "description": course.description, "objectives": course.learning_objectives, "ageRange": "", "difficulty": ""},
+        "outline": [],
+    }
+    revision = hashlib.sha256(json.dumps(target, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    suggestion = {
+        "version": "1",
+        "type": "lesson_operations",
+        "baseRevision": revision,
+        "summary": "Update the description.",
+        "operations": [{"op": "update_course", "coursePatch": {"description": "Traced course"}}],
+    }
+    monkeypatch.setattr(ai, "hosted_provider", lambda *args, **kwargs: FakeSuggestionProvider(suggestion))
+    with client_for(db, admin) as client:
+        response = client.post("/api/ai/assist/stream", json={
+            "capability": "lesson.draft",
+            "providerId": provider.id,
+            "surface": "lesson",
+            "question": "Improve this course",
+            "context": {"courseId": course.id, "target": "course", "baseRevision": revision, "targetPayload": target},
+            "debug": True,
+        })
+    assert response.status_code == 200
+    assert "event: debug" in response.text
+    assert "context.assembled" in response.text
+    assert "prompt.built" in response.text
+    assert "suggestion.validated" in response.text
+    assert '"type":"lesson_operations"' in response.text
+    assert "event: done" in response.text
 
 
 def test_deterministic_provider_is_explicitly_test_only(db, users, monkeypatch):

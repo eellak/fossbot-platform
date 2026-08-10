@@ -8,6 +8,7 @@ from database.database import Course, CourseRelease, Lesson
 from utils.ai.context import ContextError, assemble_context
 from utils.ai.prompts import PROMPT_VERSION, build_prompt
 from utils.ai.schemas import AssistantRequest
+from utils.ai.suggestion_contracts import suggestion_json_schema
 
 
 def request(surface, capability, context):
@@ -165,3 +166,17 @@ def test_student_prompt_is_hint_first_and_versioned(db, users):
     assert "hint-first" in prompt.system
     assert prompt.prompt_version == PROMPT_VERSION
     assert "student@example.test" not in prompt.system
+
+
+def test_stage_prompt_uses_canonical_flat_contract_without_python_api(db, users):
+    student = users[2]
+    stage = {"title": "Stage", "description": "", "floor": {"name": "Floor", "dimensions": [10, 10], "color": "#fff"}, "objects": [], "metadata": {}, "summary": {"objectCount": 0, "knownObjectIds": []}}
+    payload = request("stage", "stage.create", stage_context(stage))
+    prompt = build_prompt(student.role, payload, assemble_context(db, student, payload))
+    assert "Canonical response contract (JSON Schema)" in prompt.system
+    assert '"op":"add_object","tempId":"ai-spawn"' in prompt.system
+    assert '"add_object":{"' not in prompt.system
+    assert "Public FOSSBot Python API" not in prompt.system
+    schema = suggestion_json_schema("stage.create")
+    assert "$ref" not in json.dumps(schema)
+    assert schema["additionalProperties"] is False

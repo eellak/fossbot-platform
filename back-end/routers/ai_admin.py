@@ -22,6 +22,7 @@ from routers.stage_sources import get_current_user, get_db
 from utils.ai.capabilities import AI_ADMIN_SCHEMA_VERSION, CAPABILITIES, CAPABILITY_IDS, CAPABILITY_REGISTRY_VERSION
 from utils.ai.providers import hosted_provider
 from utils.ai.providers.base import ProviderError
+from utils.ai.providers.compatibility_profiles import PROFILE_IDS
 from utils.ai.secrets import decrypt_ai_secret, encrypt_ai_secret
 from utils.ai.usage import purge_expired_usage
 
@@ -86,8 +87,8 @@ def _validate_settings(provider_type: str, runtime: str, settings: dict[str, Any
     allowed_keys = {
         ("openai", "hosted"): {"version", "organization", "project"},
         ("google", "hosted"): {"version", "apiVersion"},
-        ("openai_compatible", "hosted"): {"version", "apiStyle", "path", "supportsUsage", "allowPrivateNetwork"},
-        ("openai_compatible", "user_local"): {"version", "apiStyle", "path", "supportsUsage"},
+        ("openai_compatible", "hosted"): {"version", "apiStyle", "path", "supportsUsage", "allowPrivateNetwork", "compatibilityProfile"},
+        ("openai_compatible", "user_local"): {"version", "apiStyle", "path", "supportsUsage", "compatibilityProfile"},
         ("webllm", "browser"): {
             "version", "modelUrl", "wasmUrl", "tokenizerUrl", "modelSizeBytes",
             "memorySizeBytes", "bufferSizeRequiredBytes", "requiredWebGpuFeatures",
@@ -103,6 +104,9 @@ def _validate_settings(provider_type: str, runtime: str, settings: dict[str, Any
     for key in ("supportsUsage", "allowPrivateNetwork"):
         if key in settings and not isinstance(settings[key], bool):
             raise ValueError(f"{key} must be a boolean")
+    compatibility_profile = settings.get("compatibilityProfile")
+    if compatibility_profile is not None and compatibility_profile not in PROFILE_IDS:
+        raise ValueError("Unknown OpenAI-compatible provider profile")
     path = settings.get("path")
     if path is not None:
         if not isinstance(path, str) or not path.strip():

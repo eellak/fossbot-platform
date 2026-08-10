@@ -25,6 +25,7 @@ export type SuggestionPreview = {
     newIssues: string[];
     floor: [number, number];
     objects: Array<{ id: string; kind: string; position: [number, number, number] }>;
+    editorStage?: any;
   };
 };
 

@@ -3,7 +3,8 @@ import * as THREE from 'three';
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { Alert, Box, Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Snackbar, Stack, Typography } from '@mui/material';
+import { Alert, Box, Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Paper, Snackbar, Stack, Typography } from '@mui/material';
+import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from 'src/authentication/AuthProvider';
 import type { EditorStage, EditorStageObject, StageBuilderMode, StageLabelAttachment, StageSemanticKind, Vec3 } from 'src/components/stage-builder/types';
@@ -361,6 +362,7 @@ function GitHubStageLoadScreen({ state, onRetry, onBack, onOpenPicker }: { state
 }
 
 const StageBuilderPage = () => {
+  const { t } = useTranslation();
   const { user, token } = useAuth();
   const { marketplace: marketplaceEnabled, ready: featureFlagsReady } = useFeatureFlags();
   const navigate = useNavigate();
@@ -412,6 +414,8 @@ const StageBuilderPage = () => {
   const [remoteStage, setRemoteStage] = useState<ProviderStageRef | null>(null);
   const [bootstrapRepoName, setBootstrapRepoName] = useState<string | null>(null);
   const [openProviderOpen, setOpenProviderOpen] = useState(false);
+  const [livePreviewStage, setLivePreviewStage] = useState<EditorStage | null>(null);
+  const activeStage = livePreviewStage || stage;
   const [providerStages, setProviderStages] = useState<ProviderStageListItem[]>([]);
   const [providerListLoading, setProviderListLoading] = useState(false);
   const [providerListError, setProviderListError] = useState('');
@@ -1690,16 +1694,16 @@ const StageBuilderPage = () => {
 
         <Box sx={{ flex: '1 1 0%', minWidth: 0, minHeight: 0, position: 'relative', bgcolor: editorColors.viewport }}>
           <StageBuilderScene
-            objects={stage.objects}
-            groups={stage.metadata.groups}
+            objects={activeStage.objects}
+            groups={activeStage.metadata.groups}
             selectedId={selectedId}
             selectedIds={selectedIds}
             selectedGroupId={selectedGroupId}
             transformMode={transformMode}
             builderMode={builderMode}
-            stageDimensions={stage.floor.dimensions}
-            floorColor={stage.floor.color}
-            skybox={stage.metadata.skybox}
+            stageDimensions={activeStage.floor.dimensions}
+            floorColor={activeStage.floor.color}
+            skybox={activeStage.metadata.skybox}
             gridVisible={gridVisible}
             gridSize={gridSize}
             snapSettings={snapSettings}
@@ -1720,6 +1724,19 @@ const StageBuilderPage = () => {
             onObjectsChange={updateObjects}
             onLockedSelectionAttempt={() => setMessage('Selection is locked to the current object. Change Selection behavior in Settings to select through objects.')}
           />
+          {livePreviewStage && (
+            <Paper sx={{ position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)', zIndex: 10, px: 2, py: 1, bgcolor: 'warning.light', color: 'warning.contrastText', display: 'flex', alignItems: 'center', gap: 1.5, borderRadius: 2, boxShadow: 6 }}>
+              <Typography variant="subtitle2" fontWeight={700}>
+                {t('aiAssistant.stage.previewingLive', 'Previewing proposed stage changes in Stage Builder')}
+              </Typography>
+              <Button size="small" variant="contained" color="success" onClick={() => { applyAssistantStage(livePreviewStage, 'stage'); setLivePreviewStage(null); }}>
+                {t('aiAssistant.apply', 'Apply')}
+              </Button>
+              <Button size="small" variant="outlined" color="inherit" onClick={() => setLivePreviewStage(null)}>
+                {t('cancel', 'Cancel')}
+              </Button>
+            </Paper>
+          )}
           <Box sx={{ position: 'absolute', top: 12, left: 12, zIndex: 5 }}>
             <EditorViewportToolRail
               transformMode={transformMode}
@@ -1743,9 +1760,9 @@ const StageBuilderPage = () => {
             />
           </Box>
           <Box sx={{ position: 'absolute', top: 12, right: 12, zIndex: 5 }}>
-            <EditorViewportCameraGizmo currentView={lookThroughCameraId && lookThroughCamera ? 'camera' : (cameraViewRequest?.view || 'perspective')} hasActiveCamera={hasVisibleStageCamera(stage)} onCameraViewChange={requestCameraView} />
+            <EditorViewportCameraGizmo currentView={lookThroughCameraId && lookThroughCamera ? 'camera' : (cameraViewRequest?.view || 'perspective')} hasActiveCamera={hasVisibleStageCamera(activeStage)} onCameraViewChange={requestCameraView} />
           </Box>
-          <StageAuthoringAssistant stage={stage} selectedIds={assistantSelectedIds} validation={validationResults} localStageId={localStage?.id} onApply={applyAssistantStage} />
+          <StageAuthoringAssistant stage={stage} selectedIds={assistantSelectedIds} validation={validationResults} localStageId={localStage?.id} onApply={applyAssistantStage} onPreviewStageChange={setLivePreviewStage} />
           {lookThroughCamera && lookThroughCamera.kind === 'camera' && (
             <Box sx={{ position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)', zIndex: 6, maxWidth: 'min(420px, calc(100% - 32px))', pointerEvents: 'none' }}>
               <Stack

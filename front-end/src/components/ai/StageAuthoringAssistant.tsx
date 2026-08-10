@@ -15,9 +15,10 @@ type Props = {
   validation: StageBuilderValidationResult[];
   localStageId?: number | null;
   onApply: (stage: EditorStage, target: StageAuthoringTarget) => boolean | void;
+  onPreviewStageChange?: (stage: EditorStage | null) => void;
 };
 
-export default function StageAuthoringAssistant({ stage, selectedIds, validation, localStageId, onApply }: Props) {
+export default function StageAuthoringAssistant({ stage, selectedIds, validation, localStageId, onApply, onPreviewStageChange }: Props) {
   const { t } = useTranslation();
   const [target, setTarget] = useState<StageAuthoringTarget>('create');
   useEffect(() => {
@@ -56,7 +57,14 @@ export default function StageAuthoringAssistant({ stage, selectedIds, validation
     singleMode
     confirmationBody={t('aiAssistant.stage.confirmBody')}
     appliedMessage={t('aiAssistant.stage.applied')}
-    contextKey={`${target}:${bounded.selectedObjectIds.join(',')}:${bounded.validation.map((item) => item.id).join(',')}`}
+    contextKey={`${localStageId || 'draft'}:${target}`}
+    onPreviewStageChange={onPreviewStageChange}
+    benchmarkPrompts={target === 'create' ? [{
+      id: 'small-building',
+      label: t('aiAssistant.debug.benchmarks.stageBuilding'),
+      prompt: t('aiAssistant.debug.benchmarks.stageBuildingPrompt'),
+      mode: 'suggest',
+    }] : []}
     contextControls={<Stack spacing={1}>
       <Box><Typography variant="subtitle2">{t('aiAssistant.stage.targetTitle')}</Typography><Typography variant="caption" color="text.secondary">{t('aiAssistant.stage.targetHelp')}</Typography></Box>
       <TextField select size="small" label={t('aiAssistant.stage.target')} value={target} onChange={(event) => setTarget(event.target.value as StageAuthoringTarget)}>

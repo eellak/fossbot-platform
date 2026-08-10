@@ -43,3 +43,17 @@ def test_user_local_secret_is_session_only_and_login_body_is_not_logged():
     assert "sessionStorage.setItem(secretKey" in device_settings
     assert "localStorage.setItem(secretKey" not in device_settings
     assert 'logger.info(f"Request body: {login_request}")' not in backend_main
+
+
+def test_admin_debug_ui_is_role_gated_and_transient():
+    panel = (FRONTEND / "components" / "ai" / "AssistantPanel.tsx").read_text(encoding="utf-8")
+    debug_panel = (FRONTEND / "components" / "ai" / "AdminDebugTrace.tsx").read_text(encoding="utf-8")
+    course_assistant = (FRONTEND / "components" / "ai" / "AuthoringAssistant.tsx").read_text(encoding="utf-8")
+    stage_assistant = (FRONTEND / "components" / "ai" / "StageAuthoringAssistant.tsx").read_text(encoding="utf-8")
+    assert "user?.role === 'admin'" in panel
+    assert "isAdmin && <AdminDebugToggle" in panel
+    assert "isAdmin && debugEnabled && <AdminDebugTrace" in panel
+    assert "<AssistantPanel" in course_assistant
+    assert "<AssistantPanel" in stage_assistant
+    assert "localStorage" not in debug_panel
+    assert "sessionStorage" not in debug_panel

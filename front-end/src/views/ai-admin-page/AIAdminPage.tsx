@@ -285,6 +285,9 @@ function ProviderDialog({ open, provider, saving, onClose, onSave, t }: { open: 
       <TextField select required disabled={Boolean(provider)} label={t('aiAdmin.providers.runtime')} value={form.runtime} onChange={(event) => setForm({ ...form, runtime: event.target.value as AIRuntime })}>{compatibleRuntimes.map((runtime) => <MenuItem key={runtime} value={runtime}>{t(`aiAdmin.runtimes.${runtime}`)}</MenuItem>)}</TextField>
       <TextField required label={t('aiAdmin.providers.model')} value={form.model} onChange={(event) => setForm({ ...form, model: event.target.value })} />
       {form.providerType === 'openai_compatible' && form.runtime === 'hosted' && <TextField required label={t('aiAdmin.providers.baseUrl')} value={form.baseUrl || ''} onChange={(event) => setForm({ ...form, baseUrl: event.target.value })} helperText={t('aiAdmin.providers.baseUrlHelp')} />}
+      {form.providerType === 'openai_compatible' && <TextField select label={t('aiAdmin.providers.compatibilityProfile')} value={String(form.settings.compatibilityProfile || 'auto')} onChange={(event) => setForm({ ...form, settings: { ...form.settings, compatibilityProfile: event.target.value } })} helperText={t('aiAdmin.providers.compatibilityProfileHelp')}>
+        {(['auto', 'openrouter', 'llamacpp', 'ollama', 'openai'] as const).map((profile) => <MenuItem key={profile} value={profile}>{t(`aiAdmin.compatibilityProfiles.${profile}`)}</MenuItem>)}
+      </TextField>}
       {form.providerType === 'openai_compatible' && form.runtime === 'user_local' && <Alert severity="info">{t('aiAdmin.providers.userLocalHelp')}</Alert>}
       {form.providerType === 'webllm' && <>
         <Alert severity="info">{t('aiAdmin.providers.webllmHelp')}</Alert>

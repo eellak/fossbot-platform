@@ -19,12 +19,13 @@ HEALTH_TIMEOUT = httpx.Timeout(connect=3.0, read=8.0, write=5.0, pool=3.0)
 
 
 class ProviderError(Exception):
-    def __init__(self, code: str, message: str, *, retryable: bool = False, status_code: int = 502):
+    def __init__(self, code: str, message: str, *, retryable: bool = False, status_code: int = 502, details: Optional[dict[str, Any]] = None):
         super().__init__(message)
         self.code = code
         self.safe_message = message
         self.retryable = retryable
         self.status_code = status_code
+        self.details = details or {}
 
 
 @dataclass(frozen=True)
@@ -120,4 +121,9 @@ class HostedProvider(ABC):
             return
         retryable = response.status_code in {408, 409, 429} or response.status_code >= 500
         code = "provider_rate_limited" if response.status_code == 429 else "provider_rejected"
-        raise ProviderError(code, "The AI provider rejected the request.", retryable=retryable)
+        raise ProviderError(
+            code,
+            "The AI provider rejected the request.",
+            retryable=retryable,
+            status_code=response.status_code,
+        )

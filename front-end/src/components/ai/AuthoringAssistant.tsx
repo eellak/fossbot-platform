@@ -80,6 +80,12 @@ export default function AuthoringAssistant({ course, lesson, validationIssues, o
     confirmationBody={t('aiAssistant.authoring.confirmBody')}
     appliedMessage={t('aiAssistant.authoring.applied')}
     contextKey={`${course.id}:${lesson?.id || 'course'}:${targetValue}`}
+    benchmarkPrompts={target.type === 'lesson' ? [{
+      id: 'lesson-title',
+      label: t('aiAssistant.debug.benchmarks.lessonTitle'),
+      prompt: t('aiAssistant.debug.benchmarks.lessonTitlePrompt'),
+      mode: 'suggest',
+    }] : []}
     contextControls={<Stack spacing={1}>
       <Box><Typography variant="subtitle2">{t('aiAssistant.authoring.targetTitle')}</Typography><Typography variant="caption" color="text.secondary">{t('aiAssistant.authoring.targetHelp')}</Typography></Box>
       <TextField select size="small" label={t('aiAssistant.authoring.target')} value={targetValue} onChange={(event) => setTargetValue(event.target.value as TargetValue)}>

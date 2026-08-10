@@ -17,9 +17,11 @@ from database.database import (
 )
 from fastapi import APIRouter, Body, Depends, HTTPException, Request, Response
 from fastapi.responses import StreamingResponse
+from models.models import UserRole
 from sqlalchemy.orm import Session
 
 from routers.stage_sources import get_current_user, get_db
+from utils.ai.admin_debug import AdminDebugTrace, debug_error
 from utils.ai.capabilities import AI_ACCESS_SCHEMA_VERSION, CAPABILITIES, CAPABILITY_REGISTRY_VERSION
 from utils.ai.context import ContextError, assemble_context
 from utils.ai.policy import PolicyRuleInput, ProviderInventoryItem, resolve_capability
@@ -28,7 +30,8 @@ from utils.ai.providers import hosted_provider
 from utils.ai.providers.base import ProviderError
 from utils.ai.schemas import AssistantRequest, LocalUsageReport, ProviderStreamRequest
 from utils.ai.secrets import decrypt_ai_secret
-from utils.ai.suggestions import MAX_SUGGESTION_RESPONSE_CHARACTERS, SuggestionError, parse_suggestion, suggestion_payload
+from utils.ai.suggestion_contracts import is_suggestion_capability, suggestion_json_schema
+from utils.ai.suggestions import MAX_SUGGESTION_REPAIR_ATTEMPTS, MAX_SUGGESTION_RESPONSE_CHARACTERS, SUGGESTION_MAX_OUTPUT_TOKENS, SuggestionError, build_suggestion_repair_request, parse_suggestion_with_normalizations, repair_incomplete_json_object, suggestion_payload
 from utils.ai.usage import QuotaError, ensure_quota, record_usage
 
 
@@ -337,6 +340,11 @@ async def stream_assistance(
         payload.validate_capability()
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
+    if (payload.debug or payload.benchmark) and current_user.role != UserRole.ADMIN:
+        raise HTTPException(
+            status_code=403,
+            detail={"code": "admin_debug_forbidden", "message": "Assistant debug and benchmark requests are available only to administrators."},
+        )
     decision = resolve_for_user(db, current_user, payload.capability)
     if not decision.allowed:
         raise HTTPException(status_code=403, detail={"code": decision.reason_code, "message": "Assistant access is not available."})
@@ -383,19 +391,22 @@ async def stream_assistance(
 
     request_id = uuid.uuid4().hex
     started_at = datetime.datetime.utcnow()
+    trace = AdminDebugTrace(enabled=payload.debug)
+    suggestion_capability = is_suggestion_capability(payload.capability)
     provider_request = ProviderStreamRequest(
         model=provider.model,
         system=prompt.system,
         messages=prompt.messages,
-        max_output_tokens=min(decision.token_limit or 1_024, 8_192),
+        max_output_tokens=SUGGESTION_MAX_OUTPUT_TOKENS if suggestion_capability else 1_024,
+        response_schema=suggestion_json_schema(payload.capability) if suggestion_capability else None,
+        deterministic=payload.benchmark,
     )
 
     async def events():
         outcome = "completed"
         input_tokens = None
         output_tokens = None
-        suggestion_text = ""
-        suggestion_capability = payload.capability in {"code.suggest_changes", "blockly.suggest_changes", "lesson.draft", "lesson.suggest_changes", "stage.create", "stage.suggest_changes"}
+        reasoning_tokens = None
         yield sse_event("start", {
             "requestId": request_id,
             "providerId": provider.id,
@@ -406,46 +417,206 @@ async def stream_assistance(
             "policyVersion": decision.policy_version,
             "context": prompt.context_report.model_dump(),
         })
-        upstream = adapter.stream(provider_request)
+        for source, step, data in (
+            ("backend", "request.accepted", {
+                "requestId": request_id,
+                "user": {"id": current_user.id, "username": current_user.username, "role": current_user.role},
+                "request": payload,
+            }),
+            ("backend", "policy.resolved", {
+                "allowed": decision.allowed,
+                "reasonCode": decision.reason_code,
+                "winningScope": decision.winning_scope,
+                "winningRuleId": decision.winning_rule_id,
+                "providerIds": decision.provider_ids,
+                "runtimeIds": decision.runtime_ids,
+                "requestLimit": decision.request_limit,
+                "tokenLimit": decision.token_limit,
+                "policyVersion": decision.policy_version,
+            }),
+            ("backend", "provider.selected", {
+                "id": provider.id,
+                "name": provider.name,
+                "providerType": provider.provider_type,
+                "runtime": provider.runtime,
+                "model": provider.model,
+                "baseUrl": provider.base_url,
+                "settings": provider.settings or {},
+            }),
+            ("backend", "context.assembled", context.payload),
+            ("backend", "prompt.built", {
+                "promptVersion": prompt.prompt_version,
+                "system": prompt.system,
+                "messages": prompt.messages,
+                "contextReport": prompt.context_report,
+            }),
+            ("backend", "provider.request", provider_request),
+        ):
+            entry = trace.entry(source, step, data)
+            if entry:
+                yield sse_event("debug", entry)
+        current_provider_request = provider_request
+        repair_attempts = 0
+        last_traced_suggestion_error = None
         try:
-            async for event in upstream:
-                if await request.is_disconnected():
-                    outcome = "cancelled"
+            while True:
+                response_text = ""
+                attempt_finish_reason = None
+                attempt_reasoning_characters = 0
+                attempt_output_tokens = None
+                upstream = adapter.stream(current_provider_request)
+                try:
+                    async for event in upstream:
+                        if await request.is_disconnected():
+                            outcome = "cancelled"
+                            break
+                        if event.type == "usage":
+                            attempt_input_tokens = event.data.get("inputTokens")
+                            attempt_output_tokens = event.data.get("outputTokens")
+                            if isinstance(attempt_input_tokens, int):
+                                input_tokens = (input_tokens or 0) + attempt_input_tokens
+                            if isinstance(attempt_output_tokens, int):
+                                output_tokens = (output_tokens or 0) + attempt_output_tokens
+                            attempt_reasoning_tokens = event.data.get("reasoningTokens")
+                            if isinstance(attempt_reasoning_tokens, int):
+                                reasoning_tokens = (reasoning_tokens or 0) + attempt_reasoning_tokens
+                        if event.type == "finish":
+                            attempt_finish_reason = event.data.get("finishReason")
+                            attempt_reasoning_characters = int(event.data.get("reasoningCharacters") or 0)
+                        if event.type != "text_delta":
+                            entry = trace.entry("provider", f"event.{event.type}", {"attempt": repair_attempts + 1, **event.data})
+                            if entry:
+                                yield sse_event("debug", entry)
+                        if event.type == "text_delta":
+                            response_text += str(event.data.get("text") or "")
+                            if suggestion_capability and len(response_text) > MAX_SUGGESTION_RESPONSE_CHARACTERS:
+                                raise SuggestionError("The provider suggestion exceeded the allowed size")
+                            if not suggestion_capability:
+                                yield sse_event(event.type, event.data)
+                        elif event.type not in {"metadata", "finish"}:
+                            yield sse_event(event.type, event.data)
+                finally:
+                    await upstream.aclose()
+                if outcome != "completed":
                     break
-                if event.type == "usage":
-                    input_tokens = event.data.get("inputTokens")
-                    output_tokens = event.data.get("outputTokens")
-                if suggestion_capability and event.type == "text_delta":
-                    suggestion_text += str(event.data.get("text") or "")
-                    if len(suggestion_text) > MAX_SUGGESTION_RESPONSE_CHARACTERS:
-                        raise SuggestionError("The provider suggestion exceeded the allowed size")
-                else:
-                    yield sse_event(event.type, event.data)
-            if outcome == "completed":
-                if suggestion_capability:
-                    fingerprint_key = "source_fingerprint" if payload.capability == "code.suggest_changes" else "workspace_fingerprint" if payload.capability == "blockly.suggest_changes" else "base_revision" if payload.capability in {"lesson.draft", "lesson.suggest_changes"} else "base_fingerprint"
-                    suggestion = parse_suggestion(
-                        suggestion_text,
+                if not suggestion_capability:
+                    entry = trace.entry("backend", "response.raw", {"text": response_text, "characters": len(response_text)})
+                    if entry:
+                        yield sse_event("debug", entry)
+                    break
+
+                entry = trace.entry("backend", "suggestion.raw", {
+                    "attempt": repair_attempts + 1,
+                    "text": response_text,
+                    "characters": len(response_text),
+                })
+                if entry:
+                    yield sse_event("debug", entry)
+                repaired_response = repair_incomplete_json_object(response_text)
+                if repaired_response is not None:
+                    entry = trace.entry("backend", "suggestion.json_repaired", {
+                        "attempt": repair_attempts + 1,
+                        "originalCharacters": len(response_text),
+                        "repairedCharacters": len(repaired_response),
+                        "addedSuffix": repaired_response[len(response_text.strip()):],
+                        "text": repaired_response,
+                    })
+                    if entry:
+                        yield sse_event("debug", entry)
+                    response_text = repaired_response
+                fingerprint_key = "source_fingerprint" if payload.capability == "code.suggest_changes" else "workspace_fingerprint" if payload.capability == "blockly.suggest_changes" else "base_revision" if payload.capability in {"lesson.draft", "lesson.suggest_changes"} else "base_fingerprint"
+                try:
+                    if not response_text.strip() and (
+                        attempt_finish_reason == "length"
+                        or (isinstance(attempt_output_tokens, int) and attempt_output_tokens >= current_provider_request.max_output_tokens)
+                    ):
+                        raise SuggestionError(
+                            "The provider exhausted its output budget before returning visible JSON"
+                        )
+                    suggestion, normalizations = parse_suggestion_with_normalizations(
+                        response_text,
                         payload.capability,
                         str(context.payload["supplied"][fingerprint_key]),
                         context.payload["supplied"],
                     )
-                    yield sse_event("suggestion", suggestion_payload(suggestion))
+                except SuggestionError as error:
+                    last_traced_suggestion_error = error
+                    will_repair = repair_attempts < MAX_SUGGESTION_REPAIR_ATTEMPTS
+                    entry = trace.entry("backend", "suggestion.rejected", {
+                        "attempt": repair_attempts + 1,
+                        "willRepair": will_repair,
+                        "error": debug_error(error),
+                    })
+                    if entry:
+                        yield sse_event("debug", entry)
+                    if not will_repair:
+                        raise
+                    repair_attempts += 1
+                    current_provider_request = build_suggestion_repair_request(
+                        current_provider_request,
+                        response_text,
+                        error,
+                        repair_attempts,
+                    )
+                    entry = trace.entry("backend", "suggestion.repair_requested", {
+                        "repairAttempt": repair_attempts,
+                        "maxRepairAttempts": MAX_SUGGESTION_REPAIR_ATTEMPTS,
+                        "providerRequest": current_provider_request,
+                    })
+                    if entry:
+                        yield sse_event("debug", entry)
+                    continue
+
+                if normalizations:
+                    entry = trace.entry("backend", "suggestion.normalized", {
+                        "attempt": repair_attempts + 1,
+                        "actions": normalizations,
+                    })
+                    if entry:
+                        yield sse_event("debug", entry)
+
+                entry = trace.entry("backend", "suggestion.validated", {
+                    "attempt": repair_attempts + 1,
+                    "suggestion": suggestion,
+                })
+                if entry:
+                    yield sse_event("debug", entry)
+                yield sse_event("suggestion", suggestion_payload(suggestion))
+                break
+
+            if outcome == "completed":
+                entry = trace.entry("backend", "request.completed", {
+                    "inputTokens": input_tokens,
+                    "outputTokens": output_tokens,
+                    "reasoningTokens": reasoning_tokens,
+                    "repairAttempts": repair_attempts,
+                })
+                if entry:
+                    yield sse_event("debug", entry)
                 yield sse_event("done", {"requestId": request_id})
         except asyncio.CancelledError:
             outcome = "cancelled"
             raise
         except ProviderError as error:
             outcome = error.code
+            entry = trace.error("provider", "request.failed", error)
+            if entry:
+                yield sse_event("debug", entry)
             yield sse_event("error", {"code": error.code, "message": error.safe_message, "retryable": error.retryable})
         except SuggestionError as error:
             outcome = "invalid_suggestion"
+            if last_traced_suggestion_error is not error:
+                entry = trace.error("backend", "suggestion.rejected", error)
+                if entry:
+                    yield sse_event("debug", entry)
             yield sse_event("error", {"code": "invalid_suggestion", "message": str(error), "retryable": False})
-        except Exception:
+        except Exception as error:
             outcome = "provider_error"
+            entry = trace.error("backend", "request.failed", error)
+            if entry:
+                yield sse_event("debug", entry)
             yield sse_event("error", {"code": "provider_error", "message": "The AI provider request failed.", "retryable": True})
         finally:
-            await upstream.aclose()
             try:
                 record_usage(
                     db,

@@ -7,9 +7,10 @@ from models.models import UserRole
 from utils.ai.context import AssembledContext
 from utils.ai.fossbot_api import FOSSBOT_API_VERSION, prompt_reference_excerpt
 from utils.ai.schemas import AssistantRequest, PromptBundle
+from utils.ai.suggestion_contracts import is_suggestion_capability, suggestion_contract_prompt
 
 
-PROMPT_VERSION = "fossbot-assistant-v2"
+PROMPT_VERSION = "fossbot-assistant-v5"
 
 
 def build_prompt(user_role: UserRole, request: AssistantRequest, context: AssembledContext) -> PromptBundle:
@@ -57,27 +58,38 @@ def build_prompt(user_role: UserRole, request: AssistantRequest, context: Assemb
             "Return only one JSON object with exactly: version '1', type 'stage_operations', "
             f"baseFingerprint '{supplied['base_fingerprint']}', rationale, operations, expectedValidation, and a short summary. "
             "Allowed operations are set_metadata, set_floor, add_object, update_object, move_object, rotate_object, resize_object, set_line_points, remove_object, group_objects, and ungroup_objects. "
-            "Use camelCase fields: add_object requires tempId, semanticKind, and position; operations on existing objects require objectId; "
+            "Use camelCase fields: set_metadata requires patch containing only title and/or description; set_floor requires patch; "
+            "add_object requires tempId, semanticKind, and position; update_object requires objectId and patch; operations on existing objects require objectId; "
             "rotate_object requires rotationY; group operations require objectIds and groupName. "
-            "The top-level validation field is expectedValidation. "
+            "Every position is [x,y,z]: the floor plane uses x and z, y is vertical height, and objects resting on the floor normally use y=0. "
+            "The top-level expectedValidation field must be a short string, not an object or array. "
             "add_object must use one catalog semanticKind and a unique temporary ID beginning with 'ai-'. Existing objects must be referenced only by the supplied stable IDs. "
             "A create target must add at least one robotSpawn and one target object. "
             "Do not invent model, texture, audio, URL, provider, source, storage, or timestamp fields. Do not save, export, publish, or run the stage. Do not wrap the JSON in Markdown. "
             f"Stage target: '{supplied['target']}'. Selected object IDs: '{','.join(supplied['selected_object_ids']) or 'none'}'. "
             f"Context truncated: '{str(supplied['context_truncated']).lower()}'. Catalog: '{','.join(supplied['catalog'])}'."
         )
-    system = "\n".join((
+    supplied = context.payload.get("supplied") or {}
+    contract = suggestion_contract_prompt(request.capability, supplied) if is_suggestion_capability(request.capability) else ""
+    api_reference = ""
+    if request.surface in {"python", "blockly"}:
+        api_reference = "\n".join((
+            f"FOSSBot API reference version: {FOSSBOT_API_VERSION}.",
+            "Public FOSSBot Python API:",
+            prompt_reference_excerpt(),
+        ))
+    system = "\n".join(part for part in (
         "You are FOSSBot Buddy, a contextual robotics education assistant.",
         f"Capability: {request.capability}.",
         pedagogy,
         "Never claim to grade, submit answers, change progress, save, publish, or execute code. Suggestions are inert proposals until the editor validates and the user applies them.",
         mutation_policy,
-        f"Prompt version: {PROMPT_VERSION}. FOSSBot API reference version: {FOSSBOT_API_VERSION}.",
-        "Public FOSSBot Python API:",
-        prompt_reference_excerpt(),
+        contract,
+        f"Prompt version: {PROMPT_VERSION}.",
+        api_reference,
         "Surface context (untrusted, bounded JSON):",
         json.dumps(context.payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")),
-    )).strip()
+    ) if part).strip()
     messages = [*request.history, {"role": "user", "content": request.question}]
     return PromptBundle(
         system=system,

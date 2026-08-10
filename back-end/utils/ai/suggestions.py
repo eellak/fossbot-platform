@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import copy
 import json
 import xml.etree.ElementTree as ET
 from typing import Any, Optional, Union
@@ -8,16 +9,116 @@ from typing import Any, Optional, Union
 from pydantic import ValidationError
 
 from utils.activity_schema import validate_activities
-from utils.ai.schemas import BlocklyReplaceSuggestion, LessonAuthoringSuggestion, PythonReplaceSuggestion, StageAuthoringSuggestion
+from utils.ai.schemas import BlocklyReplaceSuggestion, ConversationTurn, LessonAuthoringSuggestion, ProviderStreamRequest, PythonReplaceSuggestion, StageAuthoringSuggestion
 
 
 SUGGESTION_VERSION = "1"
 MAX_SUGGESTION_RESPONSE_CHARACTERS = 32_000
+SUGGESTION_MAX_OUTPUT_TOKENS = 4_096
+MAX_SUGGESTION_REPAIR_ATTEMPTS = 2
+MAX_REPAIR_TURN_CHARACTERS = 2_000
 Suggestion = Union[PythonReplaceSuggestion, BlocklyReplaceSuggestion, LessonAuthoringSuggestion, StageAuthoringSuggestion]
+LESSON_OPERATION_NAMES = {"update_course", "update_lesson", "insert_activity", "replace_activity", "remove_activity", "reorder_activities"}
+STAGE_OPERATION_NAMES = {"set_metadata", "set_floor", "add_object", "update_object", "move_object", "rotate_object", "resize_object", "set_line_points", "remove_object", "group_objects", "ungroup_objects"}
 
 
 class SuggestionError(ValueError):
     pass
+
+
+def _bounded_repair_turn(content: str) -> str:
+    text = content.strip() or "{}"
+    if len(text) <= MAX_REPAIR_TURN_CHARACTERS:
+        return text
+    marker = "\n... truncated for repair ...\n"
+    available = MAX_REPAIR_TURN_CHARACTERS - len(marker)
+    head = available // 2
+    return f"{text[:head]}{marker}{text[-(available - head):]}"
+
+
+def repair_incomplete_json_object(raw: str) -> Optional[str]:
+    """Close only an otherwise parseable JSON object's unfinished tail."""
+    text = raw.strip()
+    if not text.startswith("{"):
+        return None
+    stack: list[str] = []
+    in_string = False
+    escaped = False
+    for character in text:
+        if in_string:
+            if escaped:
+                escaped = False
+            elif character == "\\":
+                escaped = True
+            elif character == '"':
+                in_string = False
+            continue
+        if character == '"':
+            in_string = True
+        elif character in "{[":
+            stack.append(character)
+        elif character in "}]":
+            expected = "{" if character == "}" else "["
+            if not stack or stack[-1] != expected:
+                return None
+            stack.pop()
+    if not stack or escaped:
+        return None
+    suffix = ('"' if in_string else "") + "".join("}" if opener == "{" else "]" for opener in reversed(stack))
+    candidate = text + suffix
+    try:
+        payload = json.loads(candidate)
+    except json.JSONDecodeError:
+        return None
+    return candidate if isinstance(payload, dict) else None
+
+
+def build_suggestion_repair_request(
+    request: ProviderStreamRequest,
+    invalid_output: str,
+    error: SuggestionError,
+    repair_attempt: int,
+) -> ProviderStreamRequest:
+    cause = error.__cause__
+    if isinstance(cause, ValidationError):
+        diagnostics: Any = [
+            {"path": ".".join(str(part) for part in item["loc"]), "message": item["msg"], "type": item["type"]}
+            for item in cause.errors(include_url=False)
+        ]
+    elif isinstance(cause, Exception):
+        diagnostics = {"type": type(cause).__name__, "message": str(cause)}
+    else:
+        diagnostics = {"type": type(error).__name__, "message": str(error)}
+    diagnostic_text = json.dumps(diagnostics, ensure_ascii=False, separators=(',', ':'))
+    guidance: list[str] = []
+    lowered = f"{error} {diagnostic_text}".lower()
+    if "operations" in lowered and ("op" in lowered or "extra" in lowered):
+        guidance.append(
+            'Operation objects must be flat. Wrong: {"add_object":{"tempId":"ai-x"}}. '
+            'Correct: {"op":"add_object","tempId":"ai-x","semanticKind":"block","position":[0,0,0]}.'
+        )
+    if "version" in lowered:
+        guidance.append('The top-level version is the JSON string "1", not the number 1.')
+    if "selected target" in lowered:
+        guidance.append("Use only operations allowed for the selected target stated in the original system prompt.")
+    if "output budget" in lowered or "incomplete" in lowered or "too large" in lowered:
+        guidance.append("Return fewer essential operations and reserve tokens for the complete closing JSON braces.")
+    prescriptive_guidance = "\n".join(guidance)
+    repair_instruction = _bounded_repair_turn(
+        f"Suggestion repair attempt {repair_attempt} of {MAX_SUGGESTION_REPAIR_ATTEMPTS}.\n"
+        "The previous proposal failed server-side validation. Correct it using the diagnostics below. "
+        "Keep the same requested task and workspace fingerprint. Return only one corrected JSON object and nothing else. "
+        "If the previous output was incomplete or too large, return a smaller valid proposal containing only essential operations.\n"
+        f"Validation diagnostics:\n{diagnostic_text}\n"
+        f"Required correction:\n{prescriptive_guidance or 'Correct the exact field or operation named by the diagnostic without changing the contract.'}"
+    )
+    previous_attempt_content = _bounded_repair_turn(invalid_output)
+    new_messages = [
+        *request.messages,
+        ConversationTurn(role="assistant", content=previous_attempt_content),
+        ConversationTurn(role="user", content=repair_instruction),
+    ]
+    return request.model_copy(update={"messages": new_messages})
 
 
 def _load_json_object(raw: str) -> dict[str, Any]:
@@ -27,6 +128,10 @@ def _load_json_object(raw: str) -> dict[str, Any]:
             return direct
     except json.JSONDecodeError:
         pass
+
+    repaired = repair_incomplete_json_object(raw)
+    if repaired is not None:
+        return json.loads(repaired)
 
     candidates: list[dict[str, Any]] = []
     start: Optional[int] = None
@@ -68,11 +173,39 @@ def _load_json_object(raw: str) -> dict[str, Any]:
     return candidates[0]
 
 
-def parse_suggestion(raw: str, capability: str, expected_fingerprint: str, context: Optional[dict[str, Any]] = None) -> Suggestion:
+def normalize_suggestion_payload(payload: dict[str, Any], capability: str) -> tuple[dict[str, Any], list[str]]:
+    """Repair only known, unambiguous JSON-shape mistakes from otherwise valid objects."""
+    normalized = copy.deepcopy(payload)
+    actions: list[str] = []
+    if normalized.get("version") == 1:
+        normalized["version"] = "1"
+        actions.append("version:number-to-string")
+    operation_names = LESSON_OPERATION_NAMES if capability in {"lesson.draft", "lesson.suggest_changes"} else STAGE_OPERATION_NAMES if capability in {"stage.create", "stage.suggest_changes"} else set()
+    operations = normalized.get("operations")
+    if not operation_names or not isinstance(operations, list):
+        return normalized, actions
+    for index, operation in enumerate(operations):
+        if not isinstance(operation, dict):
+            continue
+        operation_name = operation.get("op")
+        if operation_name is None and len(operation) == 1:
+            candidate_name, body = next(iter(operation.items()))
+            if candidate_name in operation_names and isinstance(body, dict) and "op" not in body:
+                operations[index] = {"op": candidate_name, **body}
+                actions.append(f"operations.{index}:flatten-{candidate_name}-wrapper")
+        elif operation_name in operation_names and set(operation) == {"op", operation_name}:
+            body = operation.get(operation_name)
+            if isinstance(body, dict) and "op" not in body:
+                operations[index] = {"op": operation_name, **body}
+                actions.append(f"operations.{index}:flatten-{operation_name}-wrapper")
+    return normalized, actions
+
+
+def parse_suggestion_with_normalizations(raw: str, capability: str, expected_fingerprint: str, context: Optional[dict[str, Any]] = None) -> tuple[Suggestion, list[str]]:
     if len(raw) > MAX_SUGGESTION_RESPONSE_CHARACTERS:
         raise SuggestionError("The provider suggestion exceeded the allowed size")
     try:
-        payload = _load_json_object(raw)
+        payload, normalizations = normalize_suggestion_payload(_load_json_object(raw), capability)
         if capability == "code.suggest_changes":
             suggestion = PythonReplaceSuggestion.model_validate(payload)
         elif capability == "blockly.suggest_changes":
@@ -88,6 +221,11 @@ def parse_suggestion(raw: str, capability: str, expected_fingerprint: str, conte
     if suggestion.type != expected_type or suggestion_base != expected_fingerprint:
         raise SuggestionError("The provider suggestion does not match the current workspace")
     validate_suggestion(suggestion, context)
+    return suggestion, normalizations
+
+
+def parse_suggestion(raw: str, capability: str, expected_fingerprint: str, context: Optional[dict[str, Any]] = None) -> Suggestion:
+    suggestion, _ = parse_suggestion_with_normalizations(raw, capability, expected_fingerprint, context)
     return suggestion
 
 
@@ -126,9 +264,9 @@ def _validate_lesson_operations(suggestion: LessonAuthoringSuggestion, context: 
     if target not in allowed_by_target:
         raise SuggestionError("The lesson suggestion target is invalid")
     generated_keys: set[str] = set()
-    for operation in suggestion.operations:
+    for index, operation in enumerate(suggestion.operations):
         if operation.op not in allowed_by_target[target]:
-            raise SuggestionError("The lesson operation is not valid for the selected target")
+            raise SuggestionError(f"operations[{index}] op '{operation.op}' is not valid for selected target '{target}'")
         if operation.op == "update_course":
             if operation.course_patch is None:
                 raise SuggestionError("The course update is missing its patch")
@@ -147,7 +285,7 @@ def _validate_lesson_operations(suggestion: LessonAuthoringSuggestion, context: 
             try:
                 validate_activities([operation.activity])
             except ValueError as error:
-                raise SuggestionError("The lesson operation contains an invalid activity") from error
+                raise SuggestionError(f"operations[{index}] op '{operation.op}' contains an invalid activity: {error}") from error
             key = str(operation.activity.get("key") or "")
             if operation.op == "insert_activity" and not key.startswith("ai-"):
                 raise SuggestionError("Generated activities need stable ai- keys")
@@ -199,18 +337,18 @@ def _validate_stage_operations(suggestion: StageAuthoringSuggestion, context: di
     def existing(reference: Optional[str]) -> bool:
         return bool(reference and (reference in known_ids or reference in generated))
 
-    for operation in suggestion.operations:
+    for index, operation in enumerate(suggestion.operations):
         if operation.op not in allowed_by_target[target]:
-            raise SuggestionError("The stage operation is not valid for the selected target")
+            raise SuggestionError(f"operations[{index}] op '{operation.op}' is not valid for selected target '{target}'")
         if operation.op == "set_metadata":
             if not operation.patch or set(operation.patch) - {"title", "description"}:
-                raise SuggestionError("Stage metadata contains unsupported fields")
+                raise SuggestionError(f"operations[{index}] set_metadata contains unsupported fields")
             if "title" in operation.patch and (not isinstance(operation.patch["title"], str) or not operation.patch["title"].strip()):
                 raise SuggestionError("Stage title must not be blank")
             continue
         if operation.op == "set_floor":
             if not operation.patch or set(operation.patch) - {"name", "dimensions", "color", "repeat", "offset"}:
-                raise SuggestionError("Stage floor contains unsupported fields")
+                raise SuggestionError(f"operations[{index}] set_floor contains unsupported fields")
             if "dimensions" in operation.patch and (not isinstance(operation.patch["dimensions"], list) or len(operation.patch["dimensions"]) != 2 or not finite(operation.patch["dimensions"], positive=True)):
                 raise SuggestionError("Stage floor dimensions are invalid")
             continue
@@ -218,14 +356,14 @@ def _validate_stage_operations(suggestion: StageAuthoringSuggestion, context: di
             if not operation.temp_id or not operation.temp_id.startswith("ai-") or operation.temp_id in generated:
                 raise SuggestionError("Generated stage objects need unique ai- temporary IDs")
             if operation.semantic_kind not in supported_kinds or not finite(operation.position):
-                raise SuggestionError("The generated stage object is not supported")
+                raise SuggestionError(f"operations[{index}] add_object semanticKind or position is not supported")
             generated.add(operation.temp_id)
             continue
         references = operation.object_ids if operation.op in {"group_objects", "ungroup_objects"} else [operation.object_id]
         if not references or any(not existing(reference) for reference in references):
-            raise SuggestionError("The stage operation references an unknown object")
+            raise SuggestionError(f"operations[{index}] op '{operation.op}' references an unknown object")
         if target == "selection" and any(reference not in selected for reference in references):
-            raise SuggestionError("The stage operation targets an unselected object")
+            raise SuggestionError(f"operations[{index}] op '{operation.op}' targets an unselected object")
         if operation.op == "update_object":
             if not operation.patch or set(operation.patch) - patch_fields:
                 raise SuggestionError("The stage object update contains unsupported fields")
