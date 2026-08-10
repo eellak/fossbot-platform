@@ -1,4 +1,4 @@
-"""education system phase 1 foundation
+"""education system foundation
 
 Revision ID: 20260718_01
 Revises:

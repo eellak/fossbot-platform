@@ -59,7 +59,7 @@ DEFAULT_STAGE_URLS = {
     "/js-simulator/stages/stage_white_rect.json",
     "/js-simulator/stages/stage_object.json",
     "/js-simulator/stages/stage_maze.json",
-    "/js-simulator/stages/stage_missions_phase6.json",
+    "/js-simulator/stages/stage_mission_challenge.json",
     "/js-simulator/stages/stage_numbers.json",
     "/js-simulator/stages/stage_eiffel.json",
     "/js-simulator/stages/stage_animals.json",

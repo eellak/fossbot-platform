@@ -485,7 +485,7 @@ def sample_evaluation_lessons(course_id: int, start_position: int = 8) -> list[L
     stage = {
         "stage_source_type": "default",
         "stage_title": "Mission lab",
-        "stage_url": "/js-simulator/stages/stage_missions_phase6.json",
+        "stage_url": "/js-simulator/stages/stage_mission_challenge.json",
     }
     return [
         Lesson(
@@ -794,17 +794,12 @@ def sample_evaluation_lessons(course_id: int, start_position: int = 8) -> list[L
     ]
 
 
-def phase_eight_example_definitions() -> list[dict]:
-    """Return the three public Phase 8 examples (eight lessons total)."""
-    return education_example_definitions()
-
-
 def education_example_definitions() -> list[dict]:
     """Return the three public education examples (eight lessons total)."""
     mission_stage = {
         "sourceType": "default",
         "title": "Mission challenge field",
-        "url": "/js-simulator/stages/stage_missions_phase6.json",
+        "url": "/js-simulator/stages/stage_mission_challenge.json",
     }
     return [
         {
@@ -1090,8 +1085,8 @@ def seed_dev_sample_course(db: Session, admin_username: str) -> Course:
         None,
     )
     if existing:
-        phase_five_added = add_missing_activity_lessons(db, existing)
-        phase_six_added = add_missing_evaluation_lessons(db, existing)
+        activity_lessons_added = add_missing_activity_lessons(db, existing)
+        evaluation_lessons_added = add_missing_evaluation_lessons(db, existing)
         if DEV_SAMPLE_LESSONS_TAG not in (existing.tags or []):
             existing.tags = [*(existing.tags or []), DEV_SAMPLE_LESSONS_TAG]
         if DEV_SAMPLE_MISSIONS_TAG not in (existing.tags or []):
@@ -1136,8 +1131,8 @@ def seed_dev_sample_course(db: Session, admin_username: str) -> Course:
         db.refresh(existing)
         logger.info(
             "Development education sample ready (%s activity and %s evaluation lessons added)",
-            phase_five_added,
-            phase_six_added,
+            activity_lessons_added,
+            evaluation_lessons_added,
         )
         return existing
 

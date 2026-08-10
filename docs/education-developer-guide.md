@@ -76,7 +76,7 @@ Development startup creates three idempotent public examples through the canonic
 - **Obstacle Navigation** — three lessons;
 - **Advanced Challenges** — two lessons.
 
-Definitions live in `back-end/database/dev_seed.py` under `phase_eight_example_definitions`. They include inherited code, a later fresh workspace, a no-stage reading, a no-code observation, checkpoint/target missions, and optional scoring. They use built-in stages only.
+Definitions live in `back-end/database/dev_seed.py` under `education_example_definitions`. They include inherited code, a later fresh workspace, a no-stage reading, a no-code observation, checkpoint/target missions, and optional scoring. They use built-in stages only.
 
 ## Compatibility and future GitHub boundary
 

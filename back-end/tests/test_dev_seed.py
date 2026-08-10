@@ -64,7 +64,7 @@ def test_dev_sample_course_covers_activity_and_evaluation_lessons_and_is_idempot
 
     mission_lessons = lessons[7:]
     assert {lesson.stage_url for lesson in mission_lessons} == {
-        "/js-simulator/stages/stage_missions_phase6.json"
+        "/js-simulator/stages/stage_mission_challenge.json"
     }
     missions = [
         activity

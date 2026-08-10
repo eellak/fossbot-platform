@@ -1,4 +1,4 @@
-"""education system phase 3 student progress
+"""education system student progress
 
 Revision ID: 20260720_02
 Revises: 20260718_01

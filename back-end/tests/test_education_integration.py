@@ -16,7 +16,7 @@ COURSE = {
 STAGE = {
     "sourceType": "default",
     "title": "Mission stage",
-    "url": "/js-simulator/stages/stage_missions_phase6.json",
+    "url": "/js-simulator/stages/stage_mission_challenge.json",
 }
 
 
@@ -103,7 +103,7 @@ def attempt_payload(definition_hash, *, client_id, succeeded=True, elapsed=5_000
             "hints_used": 0,
             "sensor_summaries": {},
         },
-        "simulator_revision": "sim-v2-phase-7",
+        "simulator_revision": "sim-v2-education",
         "stage_revision": STAGE["url"],
         "mission_definition_hash": definition_hash,
         "client_total": 999_999,

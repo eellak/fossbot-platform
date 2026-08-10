@@ -1,4 +1,4 @@
-"""education system phase 6 mission attempts
+"""education system mission attempts
 
 Revision ID: 20260727_05
 Revises: 20260725_04

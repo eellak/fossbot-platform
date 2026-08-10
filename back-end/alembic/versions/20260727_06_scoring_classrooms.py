@@ -1,4 +1,4 @@
-"""education system phase 7 scoring and classrooms
+"""education system scoring and classrooms
 
 Revision ID: 20260727_06
 Revises: 20260727_05

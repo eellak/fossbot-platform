@@ -122,9 +122,9 @@ test('push-object contact is not classified as a mission collision incident', ()
   assert.equal(isMissionIncidentCollision(undefined, markers), true)
 })
 
-test('Phase 6 mission lab exposes every challenge marker kind with stable IDs', async () => {
-  const source = JSON.parse(await readFile(new URL('../src/stages/data/stage_missions_phase6.json', import.meta.url), 'utf8'))
-  const deployed = JSON.parse(await readFile(new URL('../../front-end/public/js-simulator/stages/stage_missions_phase6.json', import.meta.url), 'utf8'))
+test('mission challenge stage exposes every marker kind with stable IDs', async () => {
+  const source = JSON.parse(await readFile(new URL('../src/stages/data/stage_mission_challenge.json', import.meta.url), 'utf8'))
+  const deployed = JSON.parse(await readFile(new URL('../../front-end/public/js-simulator/stages/stage_mission_challenge.json', import.meta.url), 'utf8'))
   assert.deepEqual(deployed, source)
 
   const markers = source.map(challengeForEntry).filter(Boolean)

@@ -286,8 +286,8 @@ def test_stage_variants_are_normalized_and_remote_references_are_pinned(client_f
         title="Mission lab",
         stageReference={
             "sourceType": "default",
-            "title": "Phase 6 mission lab",
-            "url": "/js-simulator/stages/stage_missions_phase6.json",
+            "title": "Mission challenge lab",
+            "url": "/js-simulator/stages/stage_mission_challenge.json",
         },
     )
     assert mission_lab["stageReference"] == {
@@ -297,8 +297,8 @@ def test_stage_variants_are_normalized_and_remote_references_are_pinned(client_f
         "repoName": None,
         "visibility": None,
         "marketplaceEntryPath": None,
-        "title": "Phase 6 mission lab",
-        "url": "/js-simulator/stages/stage_missions_phase6.json",
+        "title": "Mission challenge lab",
+        "url": "/js-simulator/stages/stage_mission_challenge.json",
         "commitSha": None,
     }
     assert client.post(f"/courses/{built_in_course['id']}/publish").status_code == 201
@@ -370,7 +370,7 @@ def test_publication_validation_and_deprecated_aliases(client_for, users):
     ).status_code == 400
 
 
-def test_phase_two_structured_content_and_validation_are_non_persistent(client_for, users, db):
+def test_structured_content_and_validation_are_non_persistent(client_for, users, db):
     tutor, _, _, _ = users
     client = client_for(tutor)
     course = create_course(client)
@@ -550,7 +550,7 @@ def test_release_update_preserves_only_unchanged_progress_and_history(client_for
     ).count() == 3
 
 
-def test_phase_eight_update_review_targets_release_and_exposes_owned_read_only_code(client_for, users):
+def test_update_review_targets_release_and_exposes_owned_read_only_code(client_for, users):
     tutor, _, student, admin = users
     teacher = client_for(tutor)
     learner = client_for(student)
@@ -601,7 +601,7 @@ def test_phase_eight_update_review_targets_release_and_exposes_owned_read_only_c
     assert stale.json()["detail"]["error"] == "active_release_changed"
 
 
-def test_phase_eight_rejects_unsafe_urls_and_rich_text_embeds(client_for, users):
+def test_rejects_unsafe_urls_and_rich_text_embeds(client_for, users):
     tutor, *_ = users
     teacher = client_for(tutor)
     assert teacher.post("/courses", json=REQUIRED_COURSE | {"cover_image_url": "javascript:alert(1)"}).status_code == 422
@@ -621,7 +621,7 @@ def test_phase_eight_rejects_unsafe_urls_and_rich_text_embeds(client_for, users)
     assert "unsupported formatting" in response.text
 
 
-def test_phase_eight_teacher_to_student_core_regression(client_for, users):
+def test_teacher_to_student_core_regression(client_for, users):
     tutor, _, student, _ = users
     teacher = client_for(tutor)
     learner = client_for(student)
@@ -768,7 +768,7 @@ def test_unchanged_workspace_is_carried_to_new_release_without_deleting_history(
     assert db.query(LessonWorkspace).filter(LessonWorkspace.enrollment_id == enrollment["id"]).count() == 2
 
 
-def phase_five_activities():
+def sample_activities():
     return [
         {
             "key": "explain-sensors", "type": "rich_text", "version": 1, "required": False,
@@ -824,7 +824,7 @@ def test_numeric_percentage_boundaries_and_activity_validation():
     assert grade_submission(activity, 190)[0] is True
     assert grade_submission(activity, 210)[0] is True
     assert grade_submission(activity, 210.01)[0] is False
-    invalid = phase_five_activities()
+    invalid = sample_activities()
     invalid[5]["allowedSensors"] = ["teacher-entered-getter"]
     try:
         validate_activities(invalid)
@@ -832,23 +832,23 @@ def test_numeric_percentage_boundaries_and_activity_validation():
     except ValueError as error:
         assert "platform sensor IDs" in str(error)
 
-    invalid_hint = phase_five_activities()
+    invalid_hint = sample_activities()
     invalid_hint[-1]["forActivityKey"] = "missing"
     with pytest.raises(ValueError, match="forActivityKey"):
         validate_activities(invalid_hint)
 
-    private_required = phase_five_activities()
+    private_required = sample_activities()
     private_required[4]["collectResponse"] = False
     private_required[4]["required"] = True
     with pytest.raises(ValueError, match="private reflection"):
         validate_activities(private_required)
 
 
-def test_phase_five_activity_schema_and_student_payload_are_safe(client_for, users):
+def test_activity_schema_and_student_payload_are_safe(client_for, users):
     tutor, _, student, _ = users
     teacher = client_for(tutor)
     course = create_course(teacher)
-    lesson = add_lesson(teacher, course["id"], activities=phase_five_activities(), stageReference=observation_stage())
+    lesson = add_lesson(teacher, course["id"], activities=sample_activities(), stageReference=observation_stage())
     assert [item["type"] for item in lesson["activities"]] == [
         "rich_text", "multiple_choice", "multiple_select", "numeric_answer",
         "short_reflection", "simulator_observation", "hint",
@@ -872,7 +872,7 @@ def test_objective_grading_tolerance_idempotency_summary_and_activity_completion
     tutor, _, student, _ = users
     teacher = client_for(tutor)
     course = create_course(teacher)
-    activities = phase_five_activities()
+    activities = sample_activities()
     activities[1]["required"] = False
     lesson = add_lesson(teacher, course["id"], activities=activities, completion_policy="activity", stageReference=observation_stage())
     teacher.post(f"/courses/{course['id']}/publish")
@@ -907,14 +907,14 @@ def test_self_hybrid_reflection_and_activity_authorization(client_for, users, db
     teacher = client_for(tutor)
 
     self_course = create_course(teacher, title="Self course")
-    self_lesson = add_lesson(teacher, self_course["id"], activities=phase_five_activities(), completion_policy="self", stageReference=observation_stage())
+    self_lesson = add_lesson(teacher, self_course["id"], activities=sample_activities(), completion_policy="self", stageReference=observation_stage())
     teacher.post(f"/courses/{self_course['id']}/publish")
     learner = client_for(student)
     self_enrollment = learner.post(f"/courses/{self_course['id']}/enroll").json()
     assert learner.post(f"/enrollments/{self_enrollment['id']}/lessons/{self_lesson['lesson_key']}/complete").status_code == 200
 
     hybrid_course = create_course(teacher, title="Hybrid course")
-    activities = phase_five_activities()
+    activities = sample_activities()
     activities[3]["required"] = False
     hybrid_lesson = add_lesson(teacher, hybrid_course["id"], activities=activities, completion_policy="hybrid", stageReference=observation_stage())
     teacher.post(f"/courses/{hybrid_course['id']}/publish")
@@ -953,7 +953,7 @@ def test_self_hybrid_reflection_and_activity_authorization(client_for, users, db
         assert acknowledged["state"]["satisfied"] is True
 
     other = User(
-        username="phase-five-other", firstname="Other", lastname="Student", email="phase-five-other@example.test",
+        username="activity-other", firstname="Other", lastname="Student", email="activity-other@example.test",
         hashed_password="unused", role=UserRole.USER, beta_tester=True, activated=True,
     )
     db.add(other)
@@ -963,7 +963,7 @@ def test_self_hybrid_reflection_and_activity_authorization(client_for, users, db
     ).status_code == 404
 
 
-def phase_six_mission(required=True):
+def mission_activity(required=True):
     return {
         "key": "drive-mission",
         "type": "mission",
@@ -1013,19 +1013,19 @@ def mission_attempt_payload(definition_hash, stage_revision, *, client_id="attem
                 },
             },
         },
-        "simulator_revision": "sim-v2-phase-6",
+        "simulator_revision": "sim-v2-missions",
         "stage_revision": stage_revision,
         "mission_definition_hash": definition_hash,
     }
 
 
-def test_phase_six_mission_schema_and_publication_require_visible_stage(client_for, users):
+def test_mission_schema_and_publication_require_visible_stage(client_for, users):
     tutor, _, _, _ = users
     teacher = client_for(tutor)
-    mission = phase_six_mission()
+    mission = mission_activity()
     validate_activities([mission])
 
-    executable = phase_six_mission()
+    executable = mission_activity()
     executable["objectives"][0]["condition"]["expression"] = "robot.x > 1"
     with pytest.raises(ValueError, match="executable"):
         validate_activities([executable])
@@ -1045,7 +1045,7 @@ def test_phase_six_mission_schema_and_publication_require_visible_stage(client_f
     assert teacher.post(f"/courses/{course['id']}/publish").status_code == 201
 
 
-def test_phase_six_mission_attempt_lifecycle_versions_and_activity_completion(client_for, users, db):
+def test_mission_attempt_lifecycle_versions_and_activity_completion(client_for, users, db):
     tutor, _, student, _ = users
     teacher = client_for(tutor)
     course = create_course(teacher, title="Mission attempts")
@@ -1053,7 +1053,7 @@ def test_phase_six_mission_attempt_lifecycle_versions_and_activity_completion(cl
     lesson = add_lesson(
         teacher,
         course["id"],
-        activities=[phase_six_mission()],
+        activities=[mission_activity()],
         completion_policy="activity",
         stageReference=stage,
     )
@@ -1078,10 +1078,10 @@ def test_phase_six_mission_attempt_lifecycle_versions_and_activity_completion(cl
     assert learner.post(path, json=raw_samples).status_code == 422
 
     other_student = User(
-        username="phase-six-other",
+        username="mission-other",
         firstname="Other",
         lastname="Learner",
-        email="phase-six-other@example.test",
+        email="mission-other@example.test",
         hashed_password="unused",
         role=UserRole.USER,
         beta_tester=True,
@@ -1091,7 +1091,7 @@ def test_phase_six_mission_attempt_lifecycle_versions_and_activity_completion(cl
     db.commit()
     assert client_for(other_student).post(path, json=payload).status_code == 404
 
-    changed = phase_six_mission()
+    changed = mission_activity()
     changed["title"] = "Changed mission release"
     assert teacher.put(
         f"/courses/{course['id']}/lessons/{lesson['id']}",
@@ -1138,14 +1138,14 @@ def test_phase_six_mission_attempt_lifecycle_versions_and_activity_completion(cl
     assert answer.attempt_count == 2
 
 
-def test_phase_six_mission_does_not_replace_self_completion(client_for, users):
+def test_mission_does_not_replace_self_completion(client_for, users):
     tutor, _, student, _ = users
     teacher = client_for(tutor)
     course = create_course(teacher, title="Self-paced mission")
     lesson = add_lesson(
         teacher,
         course["id"],
-        activities=[phase_six_mission(required=False)],
+        activities=[mission_activity(required=False)],
         completion_policy="self",
         stageReference=observation_stage(),
     )

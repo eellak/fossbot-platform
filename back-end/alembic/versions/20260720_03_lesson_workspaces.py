@@ -1,4 +1,4 @@
-"""education system phase 4 lesson workspaces
+"""education system lesson workspaces
 
 Revision ID: 20260720_03
 Revises: 20260720_02
