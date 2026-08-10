@@ -114,9 +114,30 @@ def test_provider_response_is_secret_free_and_validated(db, users):
             "providerType": "webllm",
             "runtime": "browser",
             "model": "browser-model",
-            "settings": {"version": "1", "tokenizerUrl": "https://models.example.test/tokenizer.json"},
+            "settings": {
+                "version": "1",
+                "modelUrl": "https://models.example.test/browser-model/",
+                "wasmUrl": "https://models.example.test/browser-model.wasm",
+                "modelSizeBytes": 400_000_000,
+                "memorySizeBytes": 900_000_000,
+                "cacheBackend": "cache",
+            },
         })
         assert public_browser.status_code == 201
+        assert public_browser.json()["settings"]["modelSizeBytes"] == 400_000_000
+
+        unsafe_browser = client.post("/api/admin/ai/providers", json={
+            "name": "Unsafe browser model",
+            "providerType": "webllm",
+            "runtime": "browser",
+            "model": "browser-model",
+            "settings": {
+                "version": "1",
+                "modelUrl": "http://models.example.test/browser-model/",
+                "wasmUrl": "https://models.example.test/browser-model.wasm",
+            },
+        })
+        assert unsafe_browser.status_code == 422
 
 
 def test_policy_routes_reject_unknown_references(db, users):
@@ -178,6 +199,65 @@ def test_admin_resolve_cannot_be_used_by_students(db, users):
     with client_for(db, student) as client:
         response = client.post("/api/admin/ai/resolve", json={"userId": student.id, "capability": "code.explain"})
         assert response.status_code == 403
+
+
+def test_local_usage_reporting_is_opt_in_content_free_and_policy_checked(db, users):
+    student, admin = users[2], users[3]
+    provider = AIProviderConfig(
+        name="Approved browser model",
+        provider_type="webllm",
+        runtime="browser",
+        enabled=True,
+        model="browser-model",
+        settings={
+            "version": "1",
+            "modelUrl": "https://models.example.test/browser-model/",
+            "wasmUrl": "https://models.example.test/browser-model.wasm",
+        },
+        created_by_id=admin.id,
+        updated_by_id=admin.id,
+    )
+    db.add(provider)
+    db.commit()
+    db.refresh(provider)
+    settings = AIInstanceSettings(id=1, enabled=True, report_local_usage=True, registry_version="1", updated_by_id=admin.id)
+    db.add_all([
+        settings,
+        AIPolicyRule(
+            scope_type="role",
+            scope_key=student.role.value,
+            capability="code.explain",
+            effect="allow",
+            provider_ids=[provider.id],
+            runtimes=["browser"],
+            created_by_id=admin.id,
+            updated_by_id=admin.id,
+        ),
+    ])
+    db.commit()
+    report = {
+        "providerId": provider.id,
+        "capability": "code.explain",
+        "requestId": "browser_local_1234567890",
+        "startedAt": datetime.datetime.utcnow().isoformat() + "Z",
+        "outcome": "completed",
+        "inputTokens": 30,
+        "outputTokens": 12,
+        "estimated": True,
+    }
+    with client_for(db, student) as client:
+        assert client.post("/api/ai/usage", json=report).status_code == 204
+        assert client.post("/api/ai/usage", json=report).status_code == 204
+    usage = db.query(AIUsageEvent).filter(AIUsageEvent.request_id == report["requestId"]).one()
+    assert usage.runtime == "browser"
+    assert usage.input_tokens == 30
+    assert usage.output_tokens == 12
+    assert "prompt" not in usage.__dict__
+    settings.report_local_usage = False
+    db.commit()
+    with client_for(db, student) as client:
+        denied = client.post("/api/ai/usage", json=report | {"requestId": "browser_local_abcdefghij"})
+        assert denied.status_code == 403
 
 
 def test_provider_secret_create_preserve_rotate_and_clear(db, users, monkeypatch):

@@ -241,6 +241,7 @@ class AIInstanceSettings(Base):
     default_provider_id = Column(Integer, ForeignKey('ai_provider_configs.id'))
     request_limit = Column(Integer)
     token_limit = Column(Integer)
+    report_local_usage = Column(Boolean, nullable=False, default=False)
     registry_version = Column(String(32), nullable=False, default="1")
     updated_by_id = Column(Integer, ForeignKey('users.id'), nullable=False)
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow, nullable=False)

@@ -10,11 +10,12 @@ from database.database import (
     AIInstanceSettings,
     AIPolicyRule,
     AIProviderConfig,
+    AIUsageEvent,
     ClassGroup,
     ClassMembership,
     User,
 )
-from fastapi import APIRouter, Body, Depends, HTTPException, Request
+from fastapi import APIRouter, Body, Depends, HTTPException, Request, Response
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -25,7 +26,7 @@ from utils.ai.policy import PolicyRuleInput, ProviderInventoryItem, resolve_capa
 from utils.ai.prompts import build_prompt
 from utils.ai.providers import hosted_provider
 from utils.ai.providers.base import ProviderError
-from utils.ai.schemas import AssistantRequest, ProviderStreamRequest
+from utils.ai.schemas import AssistantRequest, LocalUsageReport, ProviderStreamRequest
 from utils.ai.secrets import decrypt_ai_secret
 from utils.ai.suggestions import MAX_SUGGESTION_RESPONSE_CHARACTERS, SuggestionError, parse_suggestion, suggestion_payload
 from utils.ai.usage import QuotaError, ensure_quota, record_usage
@@ -238,6 +239,7 @@ def read_ai_access(
         "schemaVersion": AI_ACCESS_SCHEMA_VERSION,
         "registryVersion": CAPABILITY_REGISTRY_VERSION,
         "instanceEnabled": bool(settings and settings.enabled),
+        "reportLocalUsage": bool(settings and settings.report_local_usage),
         "capabilities": [
             decision_payload(capability.id, resolve_for_user(db, current_user, capability.id))
             for capability in CAPABILITIES
@@ -254,6 +256,51 @@ def read_ai_access(
             for provider in providers
         ],
     }
+
+
+@router.post("/usage", status_code=204)
+def report_local_usage(
+    payload: LocalUsageReport,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    try:
+        payload.validate_capability()
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    settings = db.query(AIInstanceSettings).filter(AIInstanceSettings.id == 1).first()
+    if not settings or not settings.enabled or not settings.report_local_usage:
+        raise HTTPException(status_code=403, detail="Local usage reporting is disabled")
+    decision = resolve_for_user(db, current_user, payload.capability)
+    if not decision.allowed or payload.provider_id not in decision.provider_ids:
+        raise HTTPException(status_code=403, detail="Provider is not allowed")
+    provider = db.query(AIProviderConfig).filter(
+        AIProviderConfig.id == payload.provider_id,
+        AIProviderConfig.enabled.is_(True),
+        AIProviderConfig.runtime.in_(("browser", "user_local")),
+    ).first()
+    if provider is None:
+        raise HTTPException(status_code=422, detail="A browser or user-local provider is required")
+    started_at = payload.started_at.replace(tzinfo=None)
+    now = datetime.datetime.utcnow()
+    if abs((now - started_at).total_seconds()) > 86_400:
+        raise HTTPException(status_code=422, detail="Usage start time is outside the reporting window")
+    if db.query(AIUsageEvent.id).filter(AIUsageEvent.request_id == payload.request_id).first():
+        return Response(status_code=204)
+    record_usage(
+        db,
+        user_id=current_user.id,
+        provider=provider,
+        capability=payload.capability,
+        request_id=payload.request_id,
+        started_at=started_at,
+        outcome=payload.outcome,
+        policy_version=decision.policy_version,
+        prompt_version="fossbot-browser-v1",
+        input_tokens=payload.input_tokens,
+        output_tokens=payload.output_tokens,
+    )
+    return Response(status_code=204)
 
 
 @router.post("/assist/stream")

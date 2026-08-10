@@ -53,8 +53,22 @@ export function updateAIProvider(token: string, providerId: number, input: Parti
   return fetch(`${backendUrl}/api/admin/ai/providers/${providerId}`, { method: 'PUT', headers: headers(token), body: JSON.stringify(input) }).then(parse<AIProviderConfig>);
 }
 
-export function updateAISettings(token: string, settings: Pick<AIInstanceSettings, 'enabled' | 'defaultProviderId' | 'requestLimit' | 'tokenLimit'>): Promise<AIInstanceSettings> {
+export function updateAISettings(token: string, settings: Pick<AIInstanceSettings, 'enabled' | 'defaultProviderId' | 'requestLimit' | 'tokenLimit' | 'reportLocalUsage'>): Promise<AIInstanceSettings> {
   return fetch(`${backendUrl}/api/admin/ai/settings`, { method: 'PUT', headers: headers(token), body: JSON.stringify(settings) }).then(parse<AIInstanceSettings>);
+}
+
+export async function reportAILocalUsage(token: string, input: {
+  providerId: number;
+  capability: AICapabilityId;
+  requestId: string;
+  startedAt: string;
+  outcome: 'completed' | 'cancelled' | 'runtime_error';
+  inputTokens?: number;
+  outputTokens?: number;
+  estimated: boolean;
+}): Promise<void> {
+  const response = await fetch(`${backendUrl}/api/ai/usage`, { method: 'POST', headers: headers(token), body: JSON.stringify(input) });
+  if (!response.ok) await parse(response);
 }
 
 export function putAIPolicy(token: string, input: {

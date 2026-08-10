@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime
 from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -87,6 +88,21 @@ class AssistantRequest(StrictModel):
     question: str = Field(min_length=1, max_length=2_000)
     history: list[ConversationTurn] = Field(default_factory=list, max_length=8)
     context: dict[str, Any] = Field(default_factory=dict)
+
+    def validate_capability(self) -> None:
+        if self.capability not in CAPABILITY_IDS:
+            raise ValueError("Unknown AI capability")
+
+
+class LocalUsageReport(StrictModel):
+    provider_id: int = Field(ge=1)
+    capability: str = Field(min_length=1, max_length=80)
+    request_id: str = Field(min_length=16, max_length=80, pattern=r"^[A-Za-z0-9_-]+$")
+    started_at: datetime.datetime
+    outcome: Literal["completed", "cancelled", "runtime_error"]
+    input_tokens: Optional[int] = Field(default=None, ge=0, le=1_000_000)
+    output_tokens: Optional[int] = Field(default=None, ge=0, le=1_000_000)
+    estimated: bool = True
 
     def validate_capability(self) -> None:
         if self.capability not in CAPABILITY_IDS:

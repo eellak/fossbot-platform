@@ -89,7 +89,8 @@ def _validate_settings(provider_type: str, runtime: str, settings: dict[str, Any
         ("openai_compatible", "user_local"): {"version", "apiStyle", "path", "supportsUsage"},
         ("webllm", "browser"): {
             "version", "modelUrl", "wasmUrl", "tokenizerUrl", "modelSizeBytes",
-            "requiredWebGpuFeatures", "contextWindow", "licenseUrl",
+            "memorySizeBytes", "bufferSizeRequiredBytes", "requiredWebGpuFeatures",
+            "contextWindow", "licenseUrl", "cacheBackend", "integrity",
         },
     }[(provider_type, runtime)]
     if set(settings) - allowed_keys:
@@ -109,6 +110,26 @@ def _validate_settings(provider_type: str, runtime: str, settings: dict[str, Any
         path_parts = parsed_path.path.split("/")
         if parsed_path.scheme or parsed_path.netloc or parsed_path.query or parsed_path.fragment or path.startswith("/") or ".." in path_parts:
             raise ValueError("Provider path must stay within the configured base URL")
+    if (provider_type, runtime) == ("webllm", "browser"):
+        for key in ("modelUrl", "wasmUrl"):
+            value = settings.get(key)
+            parsed = urlparse(value) if isinstance(value, str) else None
+            if not parsed or parsed.scheme != "https" or not parsed.netloc or parsed.username or parsed.password or parsed.query or parsed.fragment:
+                raise ValueError(f"{key} must be a credential-free absolute HTTPS URL")
+        license_url = settings.get("licenseUrl")
+        if license_url and not _valid_base_url(str(license_url)):
+            raise ValueError("licenseUrl must be a credential-free absolute HTTP(S) URL")
+        for key in ("modelSizeBytes", "memorySizeBytes", "bufferSizeRequiredBytes", "contextWindow"):
+            if key in settings and (not isinstance(settings[key], int) or isinstance(settings[key], bool) or settings[key] <= 0):
+                raise ValueError(f"{key} must be a positive integer")
+        features = settings.get("requiredWebGpuFeatures", [])
+        if not isinstance(features, list) or len(features) > 16 or any(not isinstance(value, str) or not value.strip() for value in features):
+            raise ValueError("requiredWebGpuFeatures must be a short string list")
+        if settings.get("cacheBackend", "cache") not in {"cache", "indexeddb"}:
+            raise ValueError("cacheBackend must be cache or indexeddb")
+        integrity = settings.get("integrity")
+        if integrity is not None and not isinstance(integrity, dict):
+            raise ValueError("integrity must be an object")
     if len(json.dumps(settings, separators=(",", ":"))) > 32_768:
         raise ValueError("Provider settings are too large")
 
@@ -194,6 +215,7 @@ class SettingsUpdate(APIModel):
     default_provider_id: Optional[int] = None
     request_limit: Optional[int] = Field(default=None, ge=1)
     token_limit: Optional[int] = Field(default=None, ge=1)
+    report_local_usage: bool = False
 
 
 class PolicyUpdate(APIModel):
@@ -249,6 +271,7 @@ def settings_payload(settings: AIInstanceSettings) -> dict:
         "defaultProviderId": settings.default_provider_id,
         "requestLimit": settings.request_limit,
         "tokenLimit": settings.token_limit,
+        "reportLocalUsage": settings.report_local_usage,
         "registryVersion": settings.registry_version,
         "updatedAt": settings.updated_at,
     }
@@ -443,6 +466,7 @@ def update_settings(request: SettingsUpdate, current_user: User = Depends(get_cu
     settings.default_provider_id = request.default_provider_id
     settings.request_limit = request.request_limit
     settings.token_limit = request.token_limit
+    settings.report_local_usage = request.report_local_usage
     settings.registry_version = CAPABILITY_REGISTRY_VERSION
     settings.updated_by_id = current_user.id
     db.commit()

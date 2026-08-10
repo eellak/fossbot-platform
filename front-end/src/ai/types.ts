@@ -46,6 +46,7 @@ export interface AIPublicProvider {
 
 export interface AIInstanceSettings {
   enabled: boolean;
+  reportLocalUsage: boolean;
   defaultProviderId?: number | null;
   requestLimit?: number | null;
   tokenLimit?: number | null;
@@ -98,6 +99,7 @@ export interface AIAccessBootstrap {
   schemaVersion: '1';
   registryVersion: string;
   instanceEnabled: boolean;
+  reportLocalUsage: boolean;
   capabilities: AIAccessDecision[];
   providers: AIPublicProvider[];
 }
@@ -116,6 +118,15 @@ export interface AIProviderInput {
 
 export type AIStreamEventType = 'start' | 'text_delta' | 'suggestion' | 'usage' | 'done' | 'error';
 export interface AIStreamEvent { type: AIStreamEventType; data: Record<string, unknown> }
+
+export type AIRuntimeReadiness = 'idle' | 'checking' | 'loading' | 'ready' | 'unavailable' | 'error';
+
+export interface AIRuntimeStatus {
+  readiness: AIRuntimeReadiness;
+  progress?: number;
+  message?: string;
+  cached?: boolean;
+}
 
 export type AIAssistantSurface = 'python' | 'blockly' | 'lesson' | 'stage' | 'probe';
 export interface AIAssistInput {

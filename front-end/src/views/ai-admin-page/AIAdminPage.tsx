@@ -139,8 +139,9 @@ function ProvidersTab({ data, token, saving, run, openCreate, openEdit, t }: { d
 
 function DefaultsTab({ data, token, saving, run, t }: { data: AIAdminBootstrap; token: string; saving: boolean; run: RunAction; t: any }) {
   const [enabled, setEnabled] = useState(data.settings.enabled);
+  const [reportLocalUsage, setReportLocalUsage] = useState(data.settings.reportLocalUsage);
   const [defaultProviderId, setDefaultProviderId] = useState<number | ''>(data.providers.some((provider) => provider.enabled && provider.id === data.settings.defaultProviderId) ? data.settings.defaultProviderId! : '');
-  const saveSettings = () => run(() => updateAISettings(token, { enabled, defaultProviderId: defaultProviderId || null, requestLimit: data.settings.requestLimit, tokenLimit: data.settings.tokenLimit }), t('aiAdmin.messages.settingsSaved'));
+  const saveSettings = () => run(() => updateAISettings(token, { enabled, reportLocalUsage, defaultProviderId: defaultProviderId || null, requestLimit: data.settings.requestLimit, tokenLimit: data.settings.tokenLimit }), t('aiAdmin.messages.settingsSaved'));
   return <Stack spacing={3}>
     <Box>
       <SectionHeading title={t('aiAdmin.instance.title')} description={t('aiAdmin.instance.description')} />
@@ -149,6 +150,7 @@ function DefaultsTab({ data, token, saving, run, t }: { data: AIAdminBootstrap; 
         <TextField select size="small" label={t('aiAdmin.instance.defaultProvider')} value={defaultProviderId} onChange={(event) => setDefaultProviderId(event.target.value === '' ? '' : Number(event.target.value))} sx={{ minWidth: 240 }}>
           <MenuItem value="">{t('aiAdmin.instance.automatic')}</MenuItem>{data.providers.filter((provider) => provider.enabled).map((provider) => <MenuItem key={provider.id} value={provider.id}>{provider.name}</MenuItem>)}
         </TextField>
+        <FormControlLabel control={<Switch checked={reportLocalUsage} onChange={(event) => setReportLocalUsage(event.target.checked)} />} label={t('aiAdmin.instance.reportLocalUsage')} />
         <Button variant="contained" disabled={saving} onClick={() => void saveSettings()}>{saving ? t('saving') : t('save')}</Button>
       </Stack>
       {!enabled && <Alert severity="warning" sx={{ mt: 2 }}>{t('aiAdmin.instance.absolute')}</Alert>}
@@ -260,20 +262,41 @@ function ProviderDialog({ open, provider, saving, onClose, onSave, t }: { open: 
   const [form, setForm] = useState(initial);
   useEffect(() => { if (open) setForm(initial); }, [initial, open]);
   const compatibleRuntimes: AIRuntime[] = form.providerType === 'webllm' ? ['browser'] : form.providerType === 'openai_compatible' ? ['hosted', 'user_local'] : ['hosted'];
-  const valid = Boolean(form.name.trim() && form.model.trim() && (form.providerType !== 'openai_compatible' || form.runtime !== 'hosted' || form.baseUrl?.trim()));
+  const valid = Boolean(
+    form.name.trim()
+    && form.model.trim()
+    && (form.providerType !== 'openai_compatible' || form.runtime !== 'hosted' || form.baseUrl?.trim())
+    && (form.providerType !== 'webllm' || (String(form.settings.modelUrl || '').trim() && String(form.settings.wasmUrl || '').trim())),
+  );
   return <Dialog open={open} onClose={saving ? undefined : onClose} fullWidth maxWidth="sm">
     <DialogTitle>{t(provider ? 'aiAdmin.providers.edit' : 'aiAdmin.providers.add')}</DialogTitle>
     <DialogContent><Stack spacing={2} sx={{ pt: 1 }}>
       <TextField autoFocus required label={t('aiAdmin.providers.name')} value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} />
-      <TextField select required disabled={Boolean(provider)} label={t('aiAdmin.providers.type')} value={form.providerType} onChange={(event) => { const providerType = event.target.value as AIProviderInput['providerType']; const runtime = providerType === 'webllm' ? 'browser' : 'hosted'; setForm({ ...form, providerType, runtime }); }}>{(['openai', 'google', 'openai_compatible', 'webllm'] as const).map((type) => <MenuItem key={type} value={type}>{t(`aiAdmin.providerTypes.${type}`)}</MenuItem>)}</TextField>
+      <TextField select required disabled={Boolean(provider)} label={t('aiAdmin.providers.type')} value={form.providerType} onChange={(event) => { const providerType = event.target.value as AIProviderInput['providerType']; const runtime = providerType === 'webllm' ? 'browser' : 'hosted'; setForm({ ...form, providerType, runtime, settings: { version: '1' } }); }}>{(['openai', 'google', 'openai_compatible', 'webllm'] as const).map((type) => <MenuItem key={type} value={type}>{t(`aiAdmin.providerTypes.${type}`)}</MenuItem>)}</TextField>
       <TextField select required disabled={Boolean(provider)} label={t('aiAdmin.providers.runtime')} value={form.runtime} onChange={(event) => setForm({ ...form, runtime: event.target.value as AIRuntime })}>{compatibleRuntimes.map((runtime) => <MenuItem key={runtime} value={runtime}>{t(`aiAdmin.runtimes.${runtime}`)}</MenuItem>)}</TextField>
       <TextField required label={t('aiAdmin.providers.model')} value={form.model} onChange={(event) => setForm({ ...form, model: event.target.value })} />
       {form.providerType === 'openai_compatible' && form.runtime === 'hosted' && <TextField required label={t('aiAdmin.providers.baseUrl')} value={form.baseUrl || ''} onChange={(event) => setForm({ ...form, baseUrl: event.target.value })} helperText={t('aiAdmin.providers.baseUrlHelp')} />}
+      {form.providerType === 'openai_compatible' && form.runtime === 'user_local' && <Alert severity="info">{t('aiAdmin.providers.userLocalHelp')}</Alert>}
+      {form.providerType === 'webllm' && <>
+        <Alert severity="info">{t('aiAdmin.providers.webllmHelp')}</Alert>
+        <TextField required label={t('aiAdmin.providers.modelUrl')} value={String(form.settings.modelUrl || '')} onChange={(event) => setForm({ ...form, settings: { ...form.settings, modelUrl: event.target.value } })} />
+        <TextField required label={t('aiAdmin.providers.wasmUrl')} value={String(form.settings.wasmUrl || '')} onChange={(event) => setForm({ ...form, settings: { ...form.settings, wasmUrl: event.target.value } })} />
+        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+          <TextField fullWidth type="number" label={t('aiAdmin.providers.downloadBytes')} value={String(form.settings.modelSizeBytes || '')} onChange={(event) => setForm({ ...form, settings: { ...form.settings, modelSizeBytes: event.target.value ? Number(event.target.value) : undefined } })} inputProps={{ min: 1 }} />
+          <TextField fullWidth type="number" label={t('aiAdmin.providers.memoryBytes')} value={String(form.settings.memorySizeBytes || '')} onChange={(event) => setForm({ ...form, settings: { ...form.settings, memorySizeBytes: event.target.value ? Number(event.target.value) : undefined } })} inputProps={{ min: 1 }} />
+        </Stack>
+        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+          <TextField fullWidth type="number" label={t('aiAdmin.providers.contextWindow')} value={String(form.settings.contextWindow || '')} onChange={(event) => setForm({ ...form, settings: { ...form.settings, contextWindow: event.target.value ? Number(event.target.value) : undefined } })} inputProps={{ min: 1 }} />
+          <TextField select fullWidth label={t('aiAdmin.providers.cacheBackend')} value={String(form.settings.cacheBackend || 'cache')} onChange={(event) => setForm({ ...form, settings: { ...form.settings, cacheBackend: event.target.value } })}><MenuItem value="cache">Cache API</MenuItem><MenuItem value="indexeddb">IndexedDB</MenuItem></TextField>
+        </Stack>
+        <TextField label={t('aiAdmin.providers.webgpuFeatures')} value={Array.isArray(form.settings.requiredWebGpuFeatures) ? form.settings.requiredWebGpuFeatures.join(', ') : ''} onChange={(event) => setForm({ ...form, settings: { ...form.settings, requiredWebGpuFeatures: event.target.value.split(',').map((value) => value.trim()).filter(Boolean) } })} helperText={t('aiAdmin.providers.webgpuFeaturesHelp')} />
+        <TextField label={t('aiAdmin.providers.licenseUrl')} value={String(form.settings.licenseUrl || '')} onChange={(event) => setForm({ ...form, settings: { ...form.settings, licenseUrl: event.target.value || undefined } })} />
+      </>}
       {form.runtime === 'hosted' && <TextField type="password" label={t('aiAdmin.providers.secret')} value={form.secret || ''} disabled={form.secretAction === 'clear'} onChange={(event) => setForm({ ...form, secret: event.target.value || undefined, secretAction: event.target.value ? 'rotate' : 'preserve' })} helperText={provider ? t('aiAdmin.providers.secretPreserve') : t('aiAdmin.providers.secretCreate')} />}
       {provider?.hasSecret && <FormControlLabel control={<Switch checked={form.secretAction === 'clear'} onChange={(event) => setForm({ ...form, secret: undefined, secretAction: event.target.checked ? 'clear' : 'preserve' })} />} label={t('aiAdmin.providers.clearSecret')} />}
       {form.providerType === 'openai_compatible' && form.runtime === 'hosted' && <FormControlLabel control={<Switch checked={Boolean(form.settings.allowPrivateNetwork)} onChange={(event) => setForm({ ...form, settings: { ...form.settings, allowPrivateNetwork: event.target.checked } })} />} label={t('aiAdmin.providers.allowPrivateNetwork')} />}
       <FormControlLabel control={<Switch checked={form.enabled} onChange={(event) => setForm({ ...form, enabled: event.target.checked })} />} label={t('aiAdmin.providers.available')} />
-      <Alert severity="info">{t('aiAdmin.providers.secretLater')}</Alert>
+      {form.runtime === 'hosted' && <Alert severity="info">{t('aiAdmin.providers.secretLater')}</Alert>}
     </Stack></DialogContent>
     <DialogActions><Button disabled={saving} onClick={onClose}>{t('cancel')}</Button><Button variant="contained" disabled={!valid || saving} onClick={() => void onSave(form)}>{saving ? t('saving') : t('save')}</Button></DialogActions>
   </Dialog>;

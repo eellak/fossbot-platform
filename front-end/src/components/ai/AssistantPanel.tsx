@@ -1,16 +1,21 @@
 import { useRef, useState } from 'react';
 import {
   Alert, Box, Button, Chip, CircularProgress, Collapse, Dialog, DialogActions, DialogContent,
-  DialogTitle, Divider, Drawer, Paper, Stack, TextField, Typography, useMediaQuery, useTheme,
+  DialogTitle, Divider, Drawer, LinearProgress, MenuItem, Paper, Stack, TextField, Typography,
+  useMediaQuery, useTheme,
 } from '@mui/material';
 import { IconRobot, IconSparkles, IconX } from '@tabler/icons-react';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from 'src/authentication/AuthProvider';
-import { AIRequestError, streamAIAssist } from 'src/ai/AssistantApi';
+import { AIRequestError, reportAILocalUsage } from 'src/ai/AssistantApi';
 import { useAssistantAccess } from 'src/ai/AssistantProvider';
 import type { SuggestionPreview } from 'src/ai/suggestions/codeSuggestions';
 import { parseAssistantSuggestion } from 'src/ai/suggestions/parseSuggestion';
-import type { AIAssistantSuggestion, AICapabilityId, AIAssistantSurface } from 'src/ai/types';
+import type { AIAssistantSuggestion, AICapabilityId, AIAssistantSurface, AIPublicProvider, AIRuntimeStatus } from 'src/ai/types';
+import { parseClientSuggestionText } from 'src/ai/runtimes/prompt';
+import { runtimeFor } from 'src/ai/runtimes/registry';
+import type { AIAssistantRuntime } from 'src/ai/runtimes/types';
+import { WebLLMRuntime, webLLMConsentKey, webLLMDownloadGuidance } from 'src/ai/runtimes/webllm';
 import StageSuggestionPreview from './StageSuggestionPreview';
 
 type ConversationTurn = { role: 'user' | 'assistant'; content: string };
@@ -56,7 +61,11 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
   const [previewCapability, setPreviewCapability] = useState<AICapabilityId | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [lastRequest, setLastRequest] = useState<{ question: string; mode: RequestMode } | null>(null);
+  const [selectedProviderId, setSelectedProviderId] = useState<number | ''>('');
+  const [runtimeStatus, setRuntimeStatus] = useState<AIRuntimeStatus>({ readiness: 'idle' });
+  const [consent, setConsent] = useState<{ provider: AIPublicProvider; question: string; mode: RequestMode; kind: 'download' | 'local' } | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const runtimeRef = useRef<AIAssistantRuntime | null>(null);
 
   const explain = access?.capabilities.find((item) => item.capability === explainCapability);
   const suggest = access?.capabilities.find((item) => item.capability === suggestCapability);
@@ -64,8 +73,13 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
   const activeCapability = mode === 'explain' ? explainCapability : suggestCapability;
   const canSuggest = !singleMode && Boolean(suggest?.allowed);
   const unavailableReason = activeDecision && !activeDecision.allowed ? t(`aiAdmin.reasons.${activeDecision.reasonCode}`, activeDecision.detail) : '';
+  const allowedProviders = access?.providers.filter((provider) => activeDecision?.providerIds.includes(provider.id)) || [];
+  const selectedProvider = allowedProviders.find((provider) => provider.id === selectedProviderId)
+    || allowedProviders.find((provider) => provider.id === activeDecision?.defaultProviderId)
+    || allowedProviders[0];
+  const suggestionCapabilities: AICapabilityId[] = ['code.suggest_changes', 'blockly.suggest_changes', 'lesson.draft', 'lesson.suggest_changes', 'stage.create', 'stage.suggest_changes'];
 
-  const run = async (nextQuestion = question, nextMode = mode) => {
+  const run = async (nextQuestion = question, nextMode = mode, consentGranted = false, providerOverrideId?: number) => {
     const trimmed = nextQuestion.trim();
     if (!trimmed) return;
     setRequestError(''); setOutput(''); setPreview(null); setPreviewCapability(null); setAttribution(null); setStatus('streaming');
@@ -76,23 +90,58 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
     let receivedSuggestion: AIAssistantSuggestion | null = null;
     let streamFailed = '';
     try {
-      if (!navigator.onLine) throw new Error('offline');
       const currentAccess = await refresh();
       const capability = nextMode === 'explain' ? explainCapability : suggestCapability;
       const decision = currentAccess?.capabilities.find((item) => item.capability === capability);
       if (!decision?.allowed) throw new Error('capability_denied');
-      const providerId = decision.defaultProviderId || decision.providerIds[0];
+      const preferredProviderId = providerOverrideId || Number(selectedProviderId);
+      const providerId = decision.providerIds.includes(preferredProviderId) ? preferredProviderId : decision.defaultProviderId || decision.providerIds[0];
       const provider = currentAccess?.providers.find((item) => item.id === providerId);
-      if (!provider || provider.runtime !== 'hosted') throw new Error('hosted_provider_unavailable');
+      if (!provider) throw new Error('provider_unavailable');
+      const runtime = runtimeFor(provider, token);
+      runtimeRef.current = runtime;
+      if (!consentGranted && provider.runtime === 'user_local') {
+        await runtime.prepare({ signal: controller.signal, onStatus: setRuntimeStatus });
+        setConsent({ provider, question: trimmed, mode: nextMode, kind: 'local' });
+        setStatus('idle');
+        return;
+      }
+      if (!consentGranted && runtime instanceof WebLLMRuntime) {
+        setRuntimeStatus({ readiness: 'checking' });
+        await runtime.checkSupport();
+        const cached = await runtime.cached();
+        setRuntimeStatus({ readiness: 'idle', cached });
+        if (localStorage.getItem(webLLMConsentKey(provider)) !== 'accepted' && !cached) {
+          setConsent({ provider, question: trimmed, mode: nextMode, kind: 'download' });
+          setStatus('idle');
+          return;
+        }
+      }
       const context = await adapter.getContext();
-      await streamAIAssist(token, {
+      const localRequestId = `local_${crypto.randomUUID().replace(/-/g, '')}`;
+      const localStartedAt = new Date().toISOString();
+      let localInputTokens: number | undefined;
+      let localOutputTokens: number | undefined;
+      let localTokensEstimated = true;
+      let localOutcome: 'completed' | 'cancelled' | 'runtime_error' = 'completed';
+      const policyTimer = window.setInterval(() => {
+        void refresh().then((latest) => {
+          const latestDecision = latest?.capabilities.find((item) => item.capability === capability);
+          if (!latestDecision?.allowed || !latestDecision.providerIds.includes(provider.id)) {
+            controller.abort();
+            void runtime.dispose();
+          }
+        });
+      }, 5_000);
+      try { await runtime.stream({
+        request: {
         capability,
-        providerId,
         surface: adapter.surface,
         question: trimmed,
         history: history.slice(-8),
         context,
-      }, (event) => {
+        },
+        onEvent: (event) => {
         if (event.type === 'start') setAttribution({
           provider: String(event.data.provider || provider.name),
           model: String(event.data.model || provider.model),
@@ -103,9 +152,26 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
           setOutput(streamed);
         }
         if (event.type === 'suggestion') receivedSuggestion = parseAssistantSuggestion(event.data);
+        if (event.type === 'usage') {
+          localInputTokens = typeof event.data.inputTokens === 'number' ? event.data.inputTokens : undefined;
+          localOutputTokens = typeof event.data.outputTokens === 'number' ? event.data.outputTokens : undefined;
+          localTokensEstimated = event.data.estimated !== false;
+        }
         if (event.type === 'error') streamFailed = String(event.data.code || 'provider_error');
-      }, controller.signal);
+        },
+        signal: controller.signal,
+        onStatus: setRuntimeStatus,
+      }); } catch (reason) {
+        localOutcome = controller.signal.aborted ? 'cancelled' : 'runtime_error';
+        throw reason;
+      } finally {
+        window.clearInterval(policyTimer);
+        if (currentAccess?.reportLocalUsage && provider.runtime !== 'hosted') {
+          void reportAILocalUsage(token, { providerId: provider.id, capability, requestId: localRequestId, startedAt: localStartedAt, outcome: localOutcome, inputTokens: localInputTokens, outputTokens: localOutputTokens, estimated: localTokensEstimated }).catch(() => undefined);
+        }
+      }
       if (streamFailed) throw new Error(streamFailed);
+      if (!receivedSuggestion && suggestionCapabilities.includes(capability)) receivedSuggestion = parseAssistantSuggestion(parseClientSuggestionText(streamed));
       if (receivedSuggestion) {
         const currentFingerprint = await adapter.getFingerprint();
         if (suggestionBase(receivedSuggestion) !== currentFingerprint) throw new Error('stale_suggestion');
@@ -157,11 +223,14 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
         <Box sx={{ flex: 1 }}><Typography variant="h6">{t('aiAssistant.title')}</Typography><Typography variant="caption" color="text.secondary">{t('aiAssistant.subtitle')}</Typography></Box>
         {compact && <Button aria-label={t('aiAssistant.close')} onClick={() => setOpen(false)}><IconX size={19} /></Button>}
       </Stack>
-      <Alert severity="info">{t('aiAssistant.hostedNotice')}</Alert>
+      <Alert severity="info">{t(`aiAssistant.runtimeNotices.${selectedProvider?.runtime || 'hosted'}`)}</Alert>
       {loading && <Stack direction="row" spacing={1} alignItems="center"><CircularProgress size={18} /><Typography>{t('loading')}</Typography></Stack>}
       {accessError && <Alert severity="warning" action={<Button onClick={() => void refresh()}>{t('retry')}</Button>}>{t('aiAssistant.errors.access')}</Alert>}
       {!loading && !accessError && !explain?.allowed && !suggest?.allowed && <Alert severity="info">{t('aiAssistant.unavailable')}</Alert>}
       {(explain?.allowed || suggest?.allowed) && <>
+        {allowedProviders.length > 0 && <TextField select size="small" label={t('aiAssistant.runtime')} value={selectedProvider?.id || ''} onChange={(event) => { setSelectedProviderId(Number(event.target.value)); setRuntimeStatus({ readiness: 'idle' }); }} disabled={status === 'streaming'}>{allowedProviders.map((provider) => <MenuItem key={provider.id} value={provider.id}>{provider.name} · {t(`aiAdmin.runtimes.${provider.runtime}`)}</MenuItem>)}</TextField>}
+        {runtimeStatus.readiness === 'loading' && <Box><Typography variant="caption">{runtimeStatus.message || t('aiAssistant.runtimeLoading')}</Typography><LinearProgress variant={typeof runtimeStatus.progress === 'number' ? 'determinate' : 'indeterminate'} value={(runtimeStatus.progress || 0) * 100} /></Box>}
+        {selectedProvider?.runtime === 'browser' && <Button size="small" color="error" disabled={status === 'streaming'} onClick={() => { const runtime = runtimeFor(selectedProvider, token); if (runtime instanceof WebLLMRuntime) void runtime.clearCache().then(() => { localStorage.removeItem(webLLMConsentKey(selectedProvider)); setRuntimeStatus({ readiness: 'idle', cached: false }); }); }}>{t('aiAssistant.clearModel')}</Button>}
         <Stack direction="row" spacing={1}>
           <Button variant={mode === 'explain' ? 'contained' : 'outlined'} disabled={!explain?.allowed || status === 'streaming'} onClick={() => setMode('explain')}>{primaryLabel || t('aiAssistant.explain')}</Button>
           {canSuggest && <Button variant={mode === 'suggest' ? 'contained' : 'outlined'} disabled={status === 'streaming'} onClick={() => setMode('suggest')}>{secondaryLabel || t('aiAssistant.suggest')}</Button>}
@@ -171,7 +240,7 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
         <TextField label={t('aiAssistant.question')} value={question} onChange={(event) => setQuestion(event.target.value)} multiline minRows={2} inputProps={{ maxLength: 2000 }} disabled={status === 'streaming'} />
         <Stack direction="row" spacing={1} flexWrap="wrap">
           <Button variant="contained" startIcon={<IconSparkles size={18} />} disabled={!activeDecision?.allowed || !question.trim() || status === 'streaming'} onClick={() => void run()}>{status === 'streaming' ? t('aiAssistant.streaming') : t('aiAssistant.ask')}</Button>
-          {status === 'streaming' && <Button color="error" onClick={() => { abortRef.current?.abort(); setStatus('stopped'); }}>{t('aiAssistant.stop')}</Button>}
+          {status === 'streaming' && <Button color="error" onClick={() => { runtimeRef.current?.cancel(); abortRef.current?.abort(); setStatus('stopped'); }}>{t('aiAssistant.stop')}</Button>}
           {(status === 'error' || status === 'stopped') && lastRequest && <Button onClick={() => void run(lastRequest.question, lastRequest.mode)}>{t('aiAssistant.retry')}</Button>}
         </Stack>
         {status === 'stopped' && <Alert severity="info">{t('aiAssistant.stopped')}</Alert>}
@@ -186,5 +255,14 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
     <Button startIcon={<IconRobot size={19} />} aria-expanded={open} onClick={() => setOpen((value) => !value)}>{open ? t('aiAssistant.hide') : t('aiAssistant.open')}</Button>
     {compact ? <Drawer anchor="right" open={open} onClose={() => setOpen(false)}>{panel}</Drawer> : <Collapse in={open}>{panel}</Collapse>}
     <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)}><DialogTitle>{t('aiAssistant.confirmTitle')}</DialogTitle><DialogContent><Typography>{confirmationBody || t('aiAssistant.confirmBody')}</Typography></DialogContent><DialogActions><Button onClick={() => setConfirmOpen(false)}>{t('cancel')}</Button><Button variant="contained" onClick={() => void apply()}>{t('aiAssistant.apply')}</Button></DialogActions></Dialog>
+    <Dialog open={Boolean(consent)} onClose={() => setConsent(null)} fullWidth maxWidth="sm"><DialogTitle>{t(consent?.kind === 'download' ? 'aiAssistant.consent.downloadTitle' : 'aiAssistant.consent.localTitle')}</DialogTitle><DialogContent><Stack spacing={1.5}>{consent?.kind === 'download' ? <><Typography>{t('aiAssistant.consent.downloadBody', { size: formatBytes(webLLMDownloadGuidance(consent.provider).downloadBytes), memory: formatBytes(webLLMDownloadGuidance(consent.provider).memoryBytes) })}</Typography><Typography variant="caption" sx={{ overflowWrap: 'anywhere' }}>{t('aiAssistant.consent.source', { source: webLLMDownloadGuidance(consent.provider).source })}</Typography></> : <Alert severity="warning">{t('aiAssistant.consent.localBody')}</Alert>}</Stack></DialogContent><DialogActions><Button onClick={() => setConsent(null)}>{t('cancel')}</Button><Button variant="contained" onClick={() => { if (!consent) return; const pending = consent; if (pending.kind === 'download') localStorage.setItem(webLLMConsentKey(pending.provider), 'accepted'); setSelectedProviderId(pending.provider.id); setConsent(null); void run(pending.question, pending.mode, true, pending.provider.id); }}>{t(consent?.kind === 'download' ? 'aiAssistant.consent.download' : 'aiAssistant.consent.send')}</Button></DialogActions></Dialog>
   </Box>;
+}
+
+function formatBytes(value: number) {
+  if (!value) return 'unknown';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  let amount = value; let unit = 0;
+  while (amount >= 1024 && unit < units.length - 1) { amount /= 1024; unit += 1; }
+  return `${amount.toFixed(unit > 1 ? 1 : 0)} ${units[unit]}`;
 }
