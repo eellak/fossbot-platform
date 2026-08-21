@@ -4,10 +4,11 @@ WORKDIR /usr/src/app
 
 COPY sim ./sim
 COPY front-end/package*.json ./front-end/
+COPY front-end ./front-end
 
 WORKDIR /usr/src/app/front-end
 
-RUN npm install
+RUN npm ci
 
 RUN cat <<'EOF' >/usr/local/bin/front-end-dev-start
 #!/bin/sh

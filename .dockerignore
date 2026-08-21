@@ -1,0 +1,10 @@
+**
+!front-end/
+!front-end/**
+!sim/
+!sim/**
+
+front-end/build
+front-end/node_modules
+sim/dist
+sim/node_modules
