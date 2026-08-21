@@ -17,6 +17,7 @@ export interface FossbotSimulatorHandle {
   getFloorSensor(sensorId: number): boolean
   getLightSensor(): number
   rgbSetColor(color: string): void
+  rcDrive(throttle: number, steering: number): void
   justMove(direction: 'forward' | 'backward' | string): void
   justRotate(direction: 'left' | 'right' | string): void
   drawLine(status: boolean): void
@@ -51,6 +52,7 @@ export const FossbotSimulator = forwardRef<FossbotSimulatorHandle, FossbotSimula
       getFloorSensor: (sensorId) => engineRef.current?.getFloorSensor(sensorId) ?? false,
       getLightSensor: () => engineRef.current?.getLightSensor() ?? 0,
       rgbSetColor: (color) => engineRef.current?.rgbSetColor(color),
+      rcDrive: (throttle, steering) => engineRef.current?.rcDrive(throttle, steering),
       justMove: (direction) => engineRef.current?.justMove(direction),
       justRotate: (direction) => engineRef.current?.justRotate(direction),
       drawLine: (status) => engineRef.current?.drawLine(status),

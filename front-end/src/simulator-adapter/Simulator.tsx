@@ -23,6 +23,7 @@ import {
   get_floor_sensor as legacyGetFloorSensor,
   just_move as legacyJustMove,
   just_rotate as legacyJustRotate,
+  rc_drive as legacyRcDrive,
   get_light_sensor as legacyGetLightSensor,
   drawLine as legacyDrawLine,
 } from 'src/components/js-simulator/Simulator';
@@ -76,7 +77,7 @@ export function getSimulatorVersion(): SimulatorVersion {
   }
 
   const envVersion = process.env.REACT_APP_SIMULATOR_VERSION;
-  return isSimulatorVersion(envVersion) ? envVersion : 'v1';
+  return isSimulatorVersion(envVersion) ? envVersion : 'v2';
 }
 
 function isV2DevMode(): boolean {
@@ -338,6 +339,12 @@ export function just_rotate(direction: string): void {
   const handle = getActiveV2Handle();
   if (handle) handle.justRotate(direction);
   else if (getSimulatorVersion() !== 'v2') legacyJustRotate(direction);
+}
+
+export function rc_drive(throttle: number, steering: number): void {
+  const handle = getActiveV2Handle();
+  if (handle) handle.rcDrive(throttle, steering);
+  else if (getSimulatorVersion() !== 'v2') legacyRcDrive(throttle, steering);
 }
 
 export function get_light_sensor(): number {

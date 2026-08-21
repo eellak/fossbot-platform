@@ -515,6 +515,14 @@ export class SimEngine {
     this.topRgb?.setColor(rgb[0], rgb[1], rgb[2])
   }
 
+  rcDrive(throttle: number, steering: number): void {
+    const normalizedThrottle = THREE.MathUtils.clamp(Number(throttle) || 0, -1, 1)
+    const normalizedSteering = THREE.MathUtils.clamp(Number(steering) || 0, -1, 1)
+    const leftInput = THREE.MathUtils.clamp(normalizedThrottle + normalizedSteering, -1, 1)
+    const rightInput = THREE.MathUtils.clamp(normalizedThrottle - normalizedSteering, -1, 1)
+    this.setBenchmarkDrive(leftInput, rightInput)
+  }
+
   justMove(direction: 'forward' | 'backward' | string): void {
     this.resolvePendingMotion()
     if (direction !== 'forward' && direction !== 'backward') {
