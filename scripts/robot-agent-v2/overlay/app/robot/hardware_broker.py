@@ -5,6 +5,7 @@ This module runs in its own process.  It is the only process that constructs a
 all serialize access to that instance through a small Unix-domain RPC service.
 """
 
+import json
 import os
 import socket
 import subprocess
@@ -16,13 +17,46 @@ from multiprocessing.connection import Client, Listener
 
 DEFAULT_SOCKET_PATH = "/tmp/fossbot-hardware-v2.sock"
 MOTOR_OUTPUT_PINS = (12, 13, 5, 0, 19, 26)
+MOTOR_DIRECTION_PINS = (5, 0, 19, 26)
 RC_DEADMAN_SECONDS = 0.35
+DETECTIONS_FILE = os.getenv(
+    "FOSSBOT_DETECTIONS_FILE",
+    "/tmp/fossbot-yolo11-detections.json",
+)
+ARUCO_FILE = os.getenv(
+    "FOSSBOT_ARUCO_FILE",
+    "/tmp/fossbot-aruco-markers.json",
+)
+ROAD_FILE = os.getenv(
+    "FOSSBOT_ROAD_FILE",
+    "/tmp/fossbot-road-detection.json",
+)
+ROAD_CONFIG_FILE = os.getenv(
+    "FOSSBOT_ROAD_CONFIG_FILE",
+    "/tmp/fossbot-road-config.json",
+)
+DEPTH_FILE = os.getenv(
+    "FOSSBOT_DEPTH_FILE",
+    "/tmp/fossbot-fastdepth.json",
+)
 
 
 def _hold_motor_outputs_low():
-    for pin in MOTOR_OUTPUT_PINS:
+    for channel in (0, 1):
+        duty = f"/sys/class/pwm/pwmchip0/pwm{channel}/duty_cycle"
+        try:
+            with open(duty, "w", encoding="ascii") as stream:
+                stream.write("0")
+        except OSError:
+            pass
+    for pin in MOTOR_DIRECTION_PINS:
+        command = (
+            ["/usr/bin/pinctrl", "set", str(pin), "op", "dl"]
+            if os.path.exists("/usr/bin/pinctrl")
+            else ["/usr/bin/raspi-gpio", "set", str(pin), "op", "dl"]
+        )
         subprocess.run(
-            ["sudo", "-n", "/usr/bin/raspi-gpio", "set", str(pin), "op", "dl"],
+            command,
             check=False,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
@@ -98,6 +132,119 @@ class RobotProxy:
     def rgb_set_color(self, color):
         normalized = "closed" if str(color).lower() in ("off", "closed") else color
         return self._call_root("rgb_set_color", normalized)
+
+    def get_detections(self, max_age=1.0):
+        """Return fresh YOLO detections, or an empty list if vision is stale."""
+        try:
+            with open(DETECTIONS_FILE, encoding="utf-8") as source:
+                payload = json.load(source)
+            age = time.time() - float(payload.get("timestamp", 0))
+            if age < 0 or age > max(0.05, float(max_age)):
+                return []
+            detections = payload.get("detections", [])
+            return detections if isinstance(detections, list) else []
+        except (OSError, TypeError, ValueError, json.JSONDecodeError):
+            return []
+
+    def get_detection(self, label, min_confidence=0.0, max_age=1.0):
+        """Return the strongest fresh detection for a label, otherwise None."""
+        wanted = str(label).strip().lower().replace("_", " ").replace("-", " ")
+        matches = [
+            detection
+            for detection in self.get_detections(max_age=max_age)
+            if str(detection.get("label", "")).strip().lower() == wanted
+            and float(detection.get("confidence", 0)) >= float(min_confidence)
+        ]
+        return max(matches, key=lambda detection: detection["confidence"], default=None)
+
+    def get_depth(self, max_age=1.5):
+        """Return the latest FastDepth regions, or None when depth mode is stale."""
+        try:
+            with open(DEPTH_FILE, encoding="utf-8") as source:
+                payload = json.load(source)
+            age = time.time() - float(payload.get("timestamp", 0))
+            if age < 0 or age > max(0.1, float(max_age)):
+                return None
+            regions = payload.get("regions")
+            if not isinstance(regions, dict):
+                return None
+            return payload
+        except (OSError, TypeError, ValueError, json.JSONDecodeError):
+            return None
+
+    def get_aruco_markers(self, max_age=0.5):
+        """Return fresh ArUco marker metadata, or [] when the stream is stale."""
+        try:
+            with open(ARUCO_FILE, encoding="utf-8") as source:
+                payload = json.load(source)
+            age = time.time() - float(payload.get("timestamp", 0))
+            if age < 0 or age > max(0.05, float(max_age)):
+                return []
+            markers = payload.get("markers", [])
+            return markers if isinstance(markers, list) else []
+        except (OSError, TypeError, ValueError, json.JSONDecodeError):
+            return []
+
+    def get_aruco_marker(self, marker_id, max_age=0.5):
+        """Return a fresh marker by numeric ID, otherwise None."""
+        wanted = int(marker_id)
+        return next(
+            (
+                marker
+                for marker in self.get_aruco_markers(max_age=max_age)
+                if int(marker.get("id", -1)) == wanted
+            ),
+            None,
+        )
+
+    def get_road_detection(self, max_age=0.5, black_threshold=None):
+        """Return a fresh two-boundary road center, otherwise None."""
+        configuration_changed_at = None
+        if black_threshold is not None:
+            threshold = max(20, min(200, int(black_threshold)))
+            configured_threshold = None
+            try:
+                with open(ROAD_CONFIG_FILE, encoding="utf-8") as source:
+                    configured_threshold = int(
+                        json.load(source).get("black_threshold")
+                    )
+            except (OSError, TypeError, ValueError, json.JSONDecodeError):
+                pass
+            if configured_threshold != threshold:
+                configuration_changed_at = time.time()
+                payload = {
+                    "timestamp": configuration_changed_at,
+                    "black_threshold": threshold,
+                }
+                temporary = (
+                    f"{ROAD_CONFIG_FILE}.{os.getpid()}.{threading.get_ident()}.tmp"
+                )
+                with open(temporary, "w", encoding="utf-8") as output:
+                    json.dump(payload, output, separators=(",", ":"))
+                os.replace(temporary, ROAD_CONFIG_FILE)
+        if configuration_changed_at is not None:
+            deadline = time.monotonic() + 0.4
+            while time.monotonic() < deadline:
+                try:
+                    with open(ROAD_FILE, encoding="utf-8") as source:
+                        road_payload = json.load(source)
+                    if int(road_payload.get("black_threshold", -1)) == threshold:
+                        break
+                except (OSError, TypeError, ValueError, json.JSONDecodeError):
+                    pass
+                time.sleep(0.02)
+        try:
+            with open(ROAD_FILE, encoding="utf-8") as source:
+                payload = json.load(source)
+            age = time.time() - float(payload.get("timestamp", 0))
+            if age < 0 or age > max(0.05, float(max_age)):
+                return None
+            road = payload.get("road")
+            if not payload.get("detected") or not isinstance(road, dict):
+                return None
+            return road
+        except (OSError, TypeError, ValueError, json.JSONDecodeError):
+            return None
 
     def move_distance(self, distance, direction="forward"):
         target = abs(float(distance))

@@ -19,9 +19,21 @@ def emergency_motor_stop():
         return
     except Exception as broker_error:
         print('[safety] Hardware broker stop failed:', broker_error, flush=True)
-    for pin in MOTOR_OUTPUT_PINS:
+    for channel in (0, 1):
+        duty = f'/sys/class/pwm/pwmchip0/pwm{channel}/duty_cycle'
+        try:
+            with open(duty, 'w', encoding='ascii') as stream:
+                stream.write('0')
+        except OSError:
+            pass
+    for pin in (5, 0, 19, 26):
+        command = (
+            ['/usr/bin/pinctrl', 'set', str(pin), 'op', 'dl']
+            if os.path.exists('/usr/bin/pinctrl')
+            else ['/usr/bin/raspi-gpio', 'set', str(pin), 'op', 'dl']
+        )
         subprocess.run(
-            ['sudo', '-n', '/usr/bin/raspi-gpio', 'set', str(pin), 'op', 'dl'],
+            command,
             check=False,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,

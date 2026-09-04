@@ -1,4 +1,4 @@
-from flask import Flask
+from flask import Flask, jsonify
 from flask_cors import CORS
 from flask_socketio import SocketIO
 from multiprocessing import freeze_support
@@ -8,6 +8,8 @@ from blockly_server.config import Config
 import webbrowser
 import blockly_server.app.control_utils.utils as utils
 import os
+import socket
+import subprocess
 
 
 def _socketio_allowed_origins():
@@ -23,6 +25,22 @@ def _socketio_allowed_origins():
     return origins or None
 
 
+def _network_addresses():
+    try:
+        output = subprocess.check_output(
+            ['hostname', '-I'],
+            stderr=subprocess.DEVNULL,
+            text=True,
+        )
+        return [
+            address
+            for address in output.split()
+            if address and not address.startswith('127.')
+        ]
+    except Exception:
+        return []
+
+
 def create_app():
     # Initialize Flask app
     template_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), 'templates'))
@@ -33,11 +51,45 @@ def create_app():
 
     app.config.from_object(Config)
 
+    @app.get('/api/fossbot/discovery')
+    def fossbot_discovery():
+        """Small CORS-readable identity endpoint used by browser LAN scans."""
+        hostname = socket.gethostname()
+        return jsonify({
+            'service': 'fossbot-agent',
+            'protocolVersion': '1.0',
+            'agentVersion': '2.6.0',
+            'hostname': hostname,
+            'localName': f'{hostname}.local',
+            'port': Config.PORT,
+            'addresses': _network_addresses(),
+            'capabilities': [
+                'programs', 'interactive', 'rc', 'telemetry', 'oled-menu', 'camera',
+                'object-detection',
+                *(
+                    ['depth-estimation']
+                    if (
+                        os.path.isfile('/usr/share/imx500-models/fossbot_fastdepth.rpk')
+                        and os.path.isfile('/usr/local/lib/fossbot/fastdepth-camera.py')
+                    )
+                    else []
+                ),
+                'aruco',
+                'road-detection',
+            ],
+        })
+
     # Initialize Flask extensions
-    CORS(app)
+    # Chrome's Local Network Access / Private Network Access preflight requires
+    # this header before an HTTPS-hosted platform may read the robot's LAN
+    # discovery response.
+    CORS(app, allow_private_network=True)
     socketio = SocketIO(
         app,
         cors_allowed_origins=_socketio_allowed_origins(),
+        # Hardware, camera and program workers use real OS threads/processes.
+        # Eventlet cannot safely emit binary camera frames from those threads.
+        async_mode='threading',
     )
     #db = SQLAlchemy(app)
     db.init_app(app)

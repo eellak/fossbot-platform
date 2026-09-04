@@ -1,0 +1,6 @@
+numpy>=1.24
+Pillow>=10.0
+pygame>=2.5
+python-socketio[client]>=5.11
+requests>=2.31
+torch>=2.2

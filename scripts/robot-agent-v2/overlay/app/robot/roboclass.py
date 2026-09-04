@@ -12,13 +12,26 @@ from blockly_server.config import Config
 from blockly_server.app.robot.hardware_broker import HardwareBrokerClient
 
 MOTOR_OUTPUT_PINS = (12, 13, 5, 0, 19, 26)
+MOTOR_DIRECTION_PINS = (5, 0, 19, 26)
 
 
 def hold_motor_outputs_low():
     """Keep both motor enable and direction pins low after GPIO cleanup."""
-    for pin in MOTOR_OUTPUT_PINS:
+    for channel in (0, 1):
+        duty = f'/sys/class/pwm/pwmchip0/pwm{channel}/duty_cycle'
+        try:
+            with open(duty, 'w', encoding='ascii') as stream:
+                stream.write('0')
+        except OSError:
+            pass
+    for pin in MOTOR_DIRECTION_PINS:
+        command = (
+            ['/usr/bin/pinctrl', 'set', str(pin), 'op', 'dl']
+            if os.path.exists('/usr/bin/pinctrl')
+            else ['/usr/bin/raspi-gpio', 'set', str(pin), 'op', 'dl']
+        )
         subprocess.run(
-            ['sudo', '-n', '/usr/bin/raspi-gpio', 'set', str(pin), 'op', 'dl'],
+            command,
             check=False,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
@@ -122,7 +135,18 @@ class Agent():
             stderr_writer = SocketWriter(coms, 'stderr')
             with contextlib.redirect_stdout(stdout_writer), contextlib.redirect_stderr(stderr_writer):
                 try:
-                    exec(code)
+                    # Use one explicit namespace for both globals and locals.
+                    # Calling exec() with this method's implicit local scope
+                    # lets top-level code see Monaco variables, but functions
+                    # defined by that code cannot resolve those same variables.
+                    # A shared namespace gives submitted programs normal Python
+                    # module semantics without exposing the agent's internals.
+                    program_namespace = {
+                        '__name__': '__fossbot_program__',
+                        'robot': robot,
+                        'transmit': transmit,
+                    }
+                    exec(code, program_namespace, program_namespace)
                 except Exception:
                     traceback.print_exc(file=stderr_writer)
                     raise

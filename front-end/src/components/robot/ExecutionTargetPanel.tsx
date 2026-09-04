@@ -18,7 +18,9 @@ import {
 } from '@mui/material';
 import LinkOffIcon from '@mui/icons-material/LinkOff';
 import RobotTelemetryPanel from './RobotTelemetryPanel';
+import RobotCameraPanel from './RobotCameraPanel';
 import {
+  DISCOVERY_PREFIX_STORAGE_KEY,
   DiscoveredRobot,
   useRobotConnection,
 } from 'src/robot/RobotConnectionContext';
@@ -52,7 +54,13 @@ const ExecutionTargetPanel: React.FC<ExecutionTargetPanelProps> = ({
     disconnect,
     discover,
   } = useRobotConnection();
-  const [networkPrefix, setNetworkPrefix] = useState('');
+  const [networkPrefix, setNetworkPrefix] = useState(() => {
+    try {
+      return window.localStorage.getItem(DISCOVERY_PREFIX_STORAGE_KEY) || '';
+    } catch {
+      return '';
+    }
+  });
   const [robots, setRobots] = useState<DiscoveredRobot[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -78,7 +86,7 @@ const ExecutionTargetPanel: React.FC<ExecutionTargetPanelProps> = ({
         throw new Error(
           networkPrefix.trim()
             ? `No device responded on port 8081 in ${networkPrefix.trim()}.0/24.`
-            : 'The standard FOSSBot addresses did not respond. Enter your network prefix or the robot IP.',
+            : 'No FOSSBot agent was found in the saved or common local-network ranges. Enter your network prefix or robot IP.',
         );
       }
       if (discovered.length === 1) {
@@ -161,7 +169,7 @@ const ExecutionTargetPanel: React.FC<ExecutionTargetPanelProps> = ({
                   size="small"
                   value={robotUrl}
                   onChange={(event) => setRobotUrl(event.target.value)}
-                  placeholder="http://fossbot-000.local:8081"
+                  placeholder="http://fossbot-friendly-name.local:8081"
                   fullWidth
                 />
                 <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
@@ -171,7 +179,7 @@ const ExecutionTargetPanel: React.FC<ExecutionTargetPanelProps> = ({
                     value={networkPrefix}
                     onChange={(event) => setNetworkPrefix(event.target.value)}
                     placeholder="192.168.1"
-                    helperText="Browsers cannot reveal your subnet; enter it only for a /24 scan."
+                    helperText="Leave blank to scan the saved/common subnet, or enter a prefix for an exact /24 scan."
                     fullWidth
                   />
                   <Button
@@ -226,7 +234,10 @@ const ExecutionTargetPanel: React.FC<ExecutionTargetPanelProps> = ({
             )}
 
             {status === 'connected' && telemetry && (
-              <RobotTelemetryPanel telemetry={telemetry} programState={programState} />
+              <>
+                <RobotCameraPanel />
+                <RobotTelemetryPanel telemetry={telemetry} programState={programState} />
+              </>
             )}
 
           </Stack>

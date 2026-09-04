@@ -1,0 +1,6 @@
+data/
+models/
+*.pt
+__pycache__/
+*.pyc
+.venv/

@@ -11,6 +11,7 @@ import { io, Socket } from 'socket.io-client';
 
 export type ExecutionTarget = 'simulation' | 'robot';
 export type RobotConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
+export type CameraVisionMode = 'normal' | 'objects' | 'depth' | 'aruco' | 'road';
 
 export type DiscoveredRobot = {
   url: string;
@@ -103,6 +104,19 @@ type RobotConnectionContextValue = {
   terminalLines: RobotTerminalLine[];
   clearTerminal: () => void;
   telemetry?: RobotTelemetry;
+  cameraSupported: boolean;
+  cameraInferenceSupported: boolean;
+  cameraDepthSupported: boolean;
+  cameraArucoSupported: boolean;
+  cameraRoadSupported: boolean;
+  cameraInferenceEnabled: boolean;
+  cameraVisionMode: CameraVisionMode;
+  cameraStreaming: boolean;
+  cameraFrameUrl?: string;
+  cameraError: string;
+  setCameraEnabled: (enabled: boolean) => void;
+  setCameraInferenceEnabled: (enabled: boolean) => void;
+  setCameraVisionMode: (mode: CameraVisionMode) => void;
   programState: RobotProgramState;
   connect: (url?: string) => Promise<void>;
   disconnect: () => Promise<void>;
@@ -130,12 +144,16 @@ type ProgramSubmitResult = {
   programId?: string;
 };
 
-const DEFAULT_ROBOT_URL = 'http://fossbot-000.local:8081';
+const DEFAULT_ROBOT_URL = 'http://fossbot.local:8081';
 const STORAGE_KEY = 'fossbot.robotUrl';
 const TARGET_STORAGE_KEY = 'fossbot.executionTarget';
+export const DISCOVERY_PREFIX_STORAGE_KEY = 'fossbot.discoveryPrefix';
+const CAMERA_INFERENCE_STORAGE_KEY = 'fossbot.cameraInference';
+const CAMERA_VISION_MODE_STORAGE_KEY = 'fossbot.cameraVisionMode';
 const CONNECT_TIMEOUT_MS = 6000;
-const DISCOVERY_TIMEOUT_MS = 1200;
+const DISCOVERY_TIMEOUT_MS = 1800;
 const ROBOT_EVENT_TIMEOUT_MS = 3000;
+const COMMON_PRIVATE_PREFIXES = ['192.168.1', '192.168.0', '10.0.0', '10.41.0'];
 const RobotConnectionContext = createContext<RobotConnectionContextValue | undefined>(undefined);
 
 const delay = (milliseconds: number): Promise<void> =>
@@ -225,8 +243,8 @@ const normalizeRobotUrl = (value: string): string => {
 
 const createRobotSocket = (url: string, timeout = CONNECT_TIMEOUT_MS): Socket =>
   io(url, {
-    // FOSSBot's Flask-SocketIO agent is served by Werkzeug and uses polling.
-    transports: ['polling'],
+    // Begin with broadly compatible polling and upgrade to WebSocket when the
+    // browser's local-network/mixed-content policy permits it.
     reconnection: false,
     timeout,
   });
@@ -359,17 +377,36 @@ const probeRobot = async (
   const controller = new AbortController();
   const timer = window.setTimeout(() => controller.abort(), timeout);
   try {
-    // An opaque response is sufficient for reachability. We deliberately probe
-    // the home page instead of creating an Engine.IO session that we cannot read
-    // until the robot allows this website's origin.
-    await fetch(`${url}/?fossbot_probe=${Date.now()}`, {
-      mode: 'no-cors',
+    const response = await fetch(`${url}/api/fossbot/discovery?ts=${Date.now()}`, {
+      mode: 'cors',
       cache: 'no-store',
       signal: controller.signal,
     });
-    return { url, label: 'Device responding on the FOSSBot port' };
+    if (!response.ok) {
+      throw new Error(`Discovery endpoint returned HTTP ${response.status}.`);
+    }
+    const identity = (await response.json()) as {
+      service?: string;
+      hostname?: string;
+      agentVersion?: string;
+    };
+    if (identity.service !== 'fossbot-agent') return undefined;
+    const name = identity.hostname || 'FOSSBot';
+    const version = identity.agentVersion ? ` · agent ${identity.agentVersion}` : '';
+    return { url, label: `${name}${version}` };
   } catch {
-    return undefined;
+    // Older agents cannot return an identifying JSON response. An opaque probe
+    // still lets their known or explicitly entered address remain discoverable.
+    try {
+      await fetch(`${url}/?fossbot_probe=${Date.now()}`, {
+        mode: 'no-cors',
+        cache: 'no-store',
+        signal: controller.signal,
+      });
+      return { url, label: 'Legacy FOSSBot-compatible service' };
+    } catch {
+      return undefined;
+    }
   } finally {
     window.clearTimeout(timer);
   }
@@ -399,12 +436,39 @@ export const RobotConnectionProvider: React.FC<React.PropsWithChildren> = ({ chi
   const [output, setOutput] = useState<string[]>([]);
   const [terminalLines, setTerminalLines] = useState<RobotTerminalLine[]>([]);
   const [telemetry, setTelemetry] = useState<RobotTelemetry>();
+  const [cameraSupported, setCameraSupported] = useState(false);
+  const [cameraInferenceSupported, setCameraInferenceSupported] = useState(false);
+  const [cameraDepthSupported, setCameraDepthSupported] = useState(false);
+  const [cameraArucoSupported, setCameraArucoSupported] = useState(false);
+  const [cameraRoadSupported, setCameraRoadSupported] = useState(false);
+  const [cameraVisionMode, setCameraVisionModeState] = useState<CameraVisionMode>(() => {
+    try {
+      const savedMode = window.localStorage.getItem(CAMERA_VISION_MODE_STORAGE_KEY);
+      if (
+        savedMode === 'objects'
+        || savedMode === 'depth'
+        || savedMode === 'aruco'
+        || savedMode === 'road'
+      ) return savedMode;
+      return window.localStorage.getItem(CAMERA_INFERENCE_STORAGE_KEY) === 'true'
+        ? 'objects'
+        : 'normal';
+    } catch {
+      return 'normal';
+    }
+  });
+  const cameraInferenceEnabled = cameraVisionMode === 'objects';
+  const [cameraStreaming, setCameraStreaming] = useState(false);
+  const [cameraFrameUrl, setCameraFrameUrl] = useState<string>();
+  const [cameraError, setCameraError] = useState('');
   const [programState, setProgramState] = useState<RobotProgramState>('idle');
   const socketRef = useRef<Socket>();
   const supportsV2Ref = useRef(false);
   const robotUrlRef = useRef(robotUrl);
   const runQueueRef = useRef<Promise<void>>(Promise.resolve());
   const rcActionQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const cameraFrameUrlRef = useRef<string>();
+  const cameraVisionModeRef = useRef<CameraVisionMode>(cameraVisionMode);
 
   const appendOutput = useCallback((line: string) => {
     setOutput((current) => [...current.slice(-199), line]);
@@ -429,20 +493,79 @@ export const RobotConnectionProvider: React.FC<React.PropsWithChildren> = ({ chi
 
   const clearTerminal = useCallback(() => setTerminalLines([]), []);
 
+  const clearCameraFrame = useCallback(() => {
+    if (cameraFrameUrlRef.current) {
+      URL.revokeObjectURL(cameraFrameUrlRef.current);
+      cameraFrameUrlRef.current = undefined;
+    }
+    setCameraFrameUrl(undefined);
+  }, []);
+
+  const setCameraEnabled = useCallback((enabled: boolean) => {
+    const socket = socketRef.current;
+    if (!socket?.connected || !cameraSupported) return;
+    setCameraError('');
+    socket.emit(
+      enabled ? 'camera:start' : 'camera:stop',
+      enabled ? { mode: cameraVisionModeRef.current } : undefined,
+    );
+    if (!enabled) {
+      setCameraStreaming(false);
+      clearCameraFrame();
+    }
+  }, [cameraSupported, clearCameraFrame]);
+
+  const setCameraVisionMode = useCallback(
+    (mode: CameraVisionMode) => {
+      cameraVisionModeRef.current = mode;
+      setCameraVisionModeState(mode);
+      try {
+        window.localStorage.setItem(CAMERA_VISION_MODE_STORAGE_KEY, mode);
+        window.localStorage.setItem(
+          CAMERA_INFERENCE_STORAGE_KEY,
+          String(mode === 'objects'),
+        );
+      } catch {
+        // Local storage can be unavailable in privacy-restricted browsers.
+      }
+      const socket = socketRef.current;
+      if (socket?.connected && cameraSupported && cameraStreaming) {
+        setCameraError('');
+        clearCameraFrame();
+        socket.emit('camera:start', { mode });
+      }
+    },
+    [cameraStreaming, cameraSupported, clearCameraFrame],
+  );
+
+  const setCameraInferenceEnabled = useCallback(
+    (enabled: boolean) => setCameraVisionMode(enabled ? 'objects' : 'normal'),
+    [setCameraVisionMode],
+  );
+
   const disconnectSocket = useCallback(() => {
     const socket = socketRef.current;
     socketRef.current = undefined;
     if (socket) {
       if (socket.connected && supportsV2Ref.current) {
         socket.emit('rc:action', { action: 'stop' });
+        socket.emit('camera:stop');
       }
       socket.removeAllListeners();
       socket.disconnect();
     }
     supportsV2Ref.current = false;
     setTelemetry(undefined);
+    setCameraSupported(false);
+    setCameraInferenceSupported(false);
+    setCameraDepthSupported(false);
+    setCameraArucoSupported(false);
+    setCameraRoadSupported(false);
+    setCameraStreaming(false);
+    setCameraError('');
+    clearCameraFrame();
     setProgramState('idle');
-  }, []);
+  }, [clearCameraFrame]);
 
   const disconnect = useCallback(async () => {
     disconnectSocket();
@@ -542,6 +665,61 @@ export const RobotConnectionProvider: React.FC<React.PropsWithChildren> = ({ chi
         setTelemetry(snapshot);
         setProgramState(snapshot.program?.state || 'idle');
       });
+      socket.on('camera:status', (cameraStatus: {
+        streaming?: boolean;
+        error?: unknown;
+        inference?: boolean;
+        mode?: CameraVisionMode;
+      }) => {
+        setCameraStreaming(Boolean(cameraStatus?.streaming));
+        setCameraError(cameraStatus?.error ? String(cameraStatus.error) : '');
+        const reportedMode: CameraVisionMode | undefined =
+          cameraStatus?.mode === 'normal'
+          || cameraStatus?.mode === 'objects'
+          || cameraStatus?.mode === 'depth'
+          || cameraStatus?.mode === 'aruco'
+          || cameraStatus?.mode === 'road'
+            ? cameraStatus.mode
+            : typeof cameraStatus?.inference === 'boolean'
+              ? cameraStatus.inference
+                ? 'objects'
+                : 'normal'
+              : undefined;
+        if (reportedMode) {
+          cameraVisionModeRef.current = reportedMode;
+          setCameraVisionModeState(reportedMode);
+        }
+      });
+      socket.on('camera:frame', (packet: {
+        jpeg?: ArrayBuffer | Uint8Array | Blob | { data?: number[] };
+        timestamp?: number;
+      }) => {
+        const jpeg = packet?.jpeg;
+        let blob: Blob | undefined;
+        if (jpeg instanceof Blob) {
+          blob = jpeg;
+        } else if (jpeg instanceof ArrayBuffer) {
+          blob = new Blob([jpeg], { type: 'image/jpeg' });
+        } else if (ArrayBuffer.isView(jpeg)) {
+          blob = new Blob([new Uint8Array(jpeg.buffer, jpeg.byteOffset, jpeg.byteLength)], {
+            type: 'image/jpeg',
+          });
+        } else if (jpeg && 'data' in jpeg && Array.isArray(jpeg.data)) {
+          blob = new Blob([new Uint8Array(jpeg.data)], { type: 'image/jpeg' });
+        }
+        if (!blob) {
+          socket.emit('camera:ack', { timestamp: packet?.timestamp });
+          return;
+        }
+        const nextUrl = URL.createObjectURL(blob);
+        const previousUrl = cameraFrameUrlRef.current;
+        cameraFrameUrlRef.current = nextUrl;
+        setCameraFrameUrl(nextUrl);
+        if (previousUrl) URL.revokeObjectURL(previousUrl);
+        // The agent keeps only a two-frame pipeline per browser. This prevents
+        // delayed frames accumulating during polling or slow renders.
+        socket.emit('camera:ack', { timestamp: packet?.timestamp });
+      });
       ['accepted', 'started', 'stopping', 'completed', 'stopped', 'failed'].forEach(
         (eventState) => {
           socket.on(`program:${eventState}`, (program: { programId?: string; error?: unknown }) => {
@@ -614,7 +792,12 @@ export const RobotConnectionProvider: React.FC<React.PropsWithChildren> = ({ chi
         setStatusMessage(`Browser connected directly to ${normalizedUrl}.`);
         appendOutput(`[connection] Connected to ${normalizedUrl}`);
         try {
-          const hello = await emitPayloadAndWait<{ agentVersion?: string; state?: RobotTelemetry }>(
+          const hello = await emitPayloadAndWait<{
+            agentVersion?: string;
+            state?: RobotTelemetry;
+            capabilities?: string[];
+            addresses?: string[];
+          }>(
             socket,
             'robot:hello',
             'robot:hello',
@@ -623,12 +806,45 @@ export const RobotConnectionProvider: React.FC<React.PropsWithChildren> = ({ chi
             1800,
           );
           supportsV2Ref.current = true;
+          const supportsCamera = Boolean(hello.capabilities?.includes('camera'));
+          setCameraSupported(supportsCamera);
+          setCameraInferenceSupported(
+            Boolean(hello.capabilities?.includes('object-detection')),
+          );
+          const supportsDepth = Boolean(
+            hello.capabilities?.includes('depth-estimation'),
+          );
+          setCameraDepthSupported(supportsDepth);
+          setCameraArucoSupported(Boolean(hello.capabilities?.includes('aruco')));
+          setCameraRoadSupported(
+            Boolean(hello.capabilities?.includes('road-detection')),
+          );
+          const privateAddress = hello.addresses?.find((address) =>
+            /^(10|192\.168|172\.(1[6-9]|2\d|3[01]))\./.test(address),
+          );
+          if (privateAddress) {
+            const prefix = privateAddress.split('.').slice(0, 3).join('.');
+            try {
+              window.localStorage.setItem(DISCOVERY_PREFIX_STORAGE_KEY, prefix);
+            } catch {
+              // Local storage can be unavailable in privacy-restricted browsers.
+            }
+          }
           if (hello.state) {
             setTelemetry({ ...hello.state, agentVersion: hello.agentVersion });
             setProgramState(hello.state.program?.state || 'idle');
           }
           appendOutput(`[agent] Platform protocol v2 (${hello.agentVersion || 'unknown version'})`);
           socket.emit('telemetry:get_snapshot');
+          if (supportsCamera) {
+            if (cameraVisionModeRef.current === 'depth' && !supportsDepth) {
+              cameraVisionModeRef.current = 'normal';
+              setCameraVisionModeState('normal');
+            }
+            socket.emit('camera:start', {
+              mode: cameraVisionModeRef.current,
+            });
+          }
         } catch {
           supportsV2Ref.current = false;
           appendOutput('[agent] Legacy FOSSBot protocol');
@@ -649,12 +865,24 @@ export const RobotConnectionProvider: React.FC<React.PropsWithChildren> = ({ chi
   );
 
   const discover = useCallback(async (networkPrefix?: string) => {
-    const prefix = networkPrefix?.trim();
-    if (prefix && !isPrivateNetworkPrefix(prefix)) {
+    const requestedPrefix = networkPrefix?.trim();
+    if (requestedPrefix && !isPrivateNetworkPrefix(requestedPrefix)) {
       throw new Error('Enter a private IPv4 prefix such as 192.168.1.');
     }
+    let savedPrefix = '';
+    try {
+      savedPrefix = window.localStorage.getItem(DISCOVERY_PREFIX_STORAGE_KEY) || '';
+    } catch {
+      // Local storage can be unavailable in privacy-restricted browsers.
+    }
+    const prefixes = requestedPrefix
+      ? [requestedPrefix]
+      : savedPrefix && isPrivateNetworkPrefix(savedPrefix)
+        ? [savedPrefix]
+        : COMMON_PRIVATE_PREFIXES;
     const standardCandidates = new Set<string>([
       normalizeRobotUrl(robotUrlRef.current),
+      'http://fossbot.local:8081',
       'http://fossbot-000.local:8081',
       'http://10.41.0.1:8081',
     ]);
@@ -665,25 +893,30 @@ export const RobotConnectionProvider: React.FC<React.PropsWithChildren> = ({ chi
     for (const url of standardCandidates) {
       const robot = await probeRobot(url, url.includes('.local') ? 5000 : 2500);
       if (robot) found.push(robot);
-      if (robot && !prefix) return found;
     }
-    if (!prefix) return found;
-
-    const candidates: string[] = [];
-    if (prefix) {
+    for (const prefix of prefixes) {
+      const candidates: string[] = [];
       for (let host = 1; host < 255; host += 1) {
         candidates.push(`http://${prefix}.${host}:8081`);
       }
-    }
-    let next = 0;
-    const worker = async () => {
-      while (next < candidates.length) {
-        const url = candidates[next++];
-        const robot = await probeRobot(url);
-        if (robot && !found.some((item) => item.url === robot.url)) found.push(robot);
+      let next = 0;
+      const worker = async () => {
+        while (next < candidates.length) {
+          const url = candidates[next++];
+          const robot = await probeRobot(url);
+          if (robot && !found.some((item) => item.url === robot.url)) found.push(robot);
+        }
+      };
+      await Promise.all(Array.from({ length: Math.min(32, candidates.length) }, worker));
+      if (found.length > 0) {
+        try {
+          window.localStorage.setItem(DISCOVERY_PREFIX_STORAGE_KEY, prefix);
+        } catch {
+          // Local storage can be unavailable in privacy-restricted browsers.
+        }
+        break;
       }
-    };
-    await Promise.all(Array.from({ length: Math.min(24, candidates.length) }, worker));
+    }
     return found.sort((left, right) => left.url.localeCompare(right.url));
   }, []);
 
@@ -850,6 +1083,19 @@ export const RobotConnectionProvider: React.FC<React.PropsWithChildren> = ({ chi
       terminalLines,
       clearTerminal,
       telemetry,
+      cameraSupported,
+      cameraInferenceSupported,
+      cameraDepthSupported,
+      cameraArucoSupported,
+      cameraRoadSupported,
+      cameraInferenceEnabled,
+      cameraVisionMode,
+      cameraStreaming,
+      cameraFrameUrl,
+      cameraError,
+      setCameraEnabled,
+      setCameraInferenceEnabled,
+      setCameraVisionMode,
       programState,
       connect,
       disconnect,
@@ -868,6 +1114,19 @@ export const RobotConnectionProvider: React.FC<React.PropsWithChildren> = ({ chi
       terminalLines,
       clearTerminal,
       telemetry,
+      cameraSupported,
+      cameraInferenceSupported,
+      cameraDepthSupported,
+      cameraArucoSupported,
+      cameraRoadSupported,
+      cameraInferenceEnabled,
+      cameraVisionMode,
+      cameraStreaming,
+      cameraFrameUrl,
+      cameraError,
+      setCameraEnabled,
+      setCameraInferenceEnabled,
+      setCameraVisionMode,
       programState,
       robotUrl,
       runCode,
