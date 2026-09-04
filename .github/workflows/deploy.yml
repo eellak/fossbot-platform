@@ -2,6 +2,12 @@ name: Deploy to SSH Server
 
 on:
   workflow_dispatch:
+    inputs:
+      recover_disk_pressure:
+        description: Verify the latest backup and reclaim unused Docker cache before taking a new backup
+        required: false
+        default: false
+        type: boolean
 
 concurrency:
   group: production-deploy
@@ -66,6 +72,17 @@ jobs:
             backup_checksum="$backup_file.sha256"
             sudo mkdir -p "$backup_dir"
 
+            # Recovery mode is only for a host that ran out of disk during a
+            # previous guarded deployment. It refuses to reclaim cache unless
+            # the latest pre-deploy backup still passes its checksum first.
+            if [[ "${{ inputs.recover_disk_pressure }}" == "true" ]]; then
+              latest_checksum=$(sudo sh -c 'ls -1t /fossbot-backups/*.dump.sha256 2>/dev/null | head -n 1')
+              sudo test -n "$latest_checksum"
+              sudo sha256sum --check "$latest_checksum"
+              sudo docker builder prune --all --force
+              sudo docker image prune --force
+            fi
+
             # Pre-create the partial dump privately. Rename it only after both
             # pg_dump and pg_restore's archive validation succeed, so a failed
             # deployment cannot leave a partial file looking like a valid dump.
@@ -125,6 +142,18 @@ jobs:
 
             sudo docker compose -f docker-compose-production.yml config --quiet
             sudo docker compose -f docker-compose-production.yml build --pull
+
+            # Build stages for the large frontend are not needed at runtime.
+            # Reclaim them before PostgreSQL performs startup migrations.
+            sudo docker builder prune --all --force
+            sudo docker image prune --force
+            docker_root=$(sudo docker info --format '{{.DockerRootDir}}')
+            available_kb=$(df -Pk "$docker_root" | awk 'NR == 2 {print $4}')
+            if (( available_kb < 1048576 )); then
+              echo "Refusing container restart: less than 1 GiB is free on the Docker filesystem." >&2
+              exit 1
+            fi
+
             sudo docker compose -f docker-compose-production.yml up -d
 
             ready=false
