@@ -67,7 +67,9 @@ jobs:
               latest_checksum=$(sudo sh -c 'ls -1t /fossbot-backups/*.dump.sha256 2>/dev/null | head -n 1')
               sudo test -n "$latest_checksum"
               sudo sha256sum --check "$latest_checksum"
-              sudo docker builder prune --all --force
+              if ! sudo timeout --signal=TERM --kill-after=10s 2m docker builder prune --all --force; then
+                echo "Docker builder cache cleanup timed out; continuing to the disk-space safety check."
+              fi
               sudo docker image prune --force
             fi
 
@@ -159,7 +161,9 @@ jobs:
 
             # Build stages for the large frontend are not needed at runtime.
             # Reclaim them before PostgreSQL performs startup migrations.
-            sudo docker builder prune --all --force
+            if ! sudo timeout --signal=TERM --kill-after=10s 2m docker builder prune --all --force; then
+              echo "Docker builder cache cleanup timed out; continuing to the disk-space safety check."
+            fi
             sudo docker image prune --force
             docker_root=$(sudo docker info --format '{{.DockerRootDir}}')
             available_kb=$(df -Pk "$docker_root" | awk 'NR == 2 {print $4}')
