@@ -56,6 +56,34 @@ jobs:
             set -euo pipefail
             cd /fossbot-platform
 
+            backup_dir=/fossbot-backups
+            sudo mkdir -p "$backup_dir"
+
+            # A prior guarded deployment may have filled the Docker filesystem
+            # and left PostgreSQL in crash recovery. Recovery mode verifies the
+            # latest backup before freeing unused cache, then waits for the
+            # database to accept connections again.
+            if [[ "${{ inputs.recover_disk_pressure }}" == "true" ]]; then
+              latest_checksum=$(sudo sh -c 'ls -1t /fossbot-backups/*.dump.sha256 2>/dev/null | head -n 1')
+              sudo test -n "$latest_checksum"
+              sudo sha256sum --check "$latest_checksum"
+              sudo docker builder prune --all --force
+              sudo docker image prune --force
+            fi
+
+            database_ready=false
+            for attempt in {1..30}; do
+              if sudo docker exec fsbt-db sh -c 'pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"' >/dev/null; then
+                database_ready=true
+                break
+              fi
+              sleep 2
+            done
+            if [[ "$database_ready" != true ]]; then
+              echo "PostgreSQL did not recover after unused Docker cache was reclaimed." >&2
+              exit 1
+            fi
+
             postgres_version=$(sudo docker exec fsbt-db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "SHOW server_version_num"')
             if [[ "$postgres_version" != 16* ]]; then
               echo "Refusing deployment: production PostgreSQL is ${postgres_version}, expected major version 16." >&2
@@ -65,24 +93,10 @@ jobs:
             # This is the deployment's hard safety gate. Everything above this
             # point is read-only; no code, image, container, or schema change is
             # allowed until a complete local PostgreSQL backup is verified.
-            backup_dir=/fossbot-backups
             backup_timestamp=$(date -u +%Y%m%d-%H%M%SZ)
             backup_file="$backup_dir/fossbot-db-$backup_timestamp.dump"
             backup_partial="$backup_file.partial"
             backup_checksum="$backup_file.sha256"
-            sudo mkdir -p "$backup_dir"
-
-            # Recovery mode is only for a host that ran out of disk during a
-            # previous guarded deployment. It refuses to reclaim cache unless
-            # the latest pre-deploy backup still passes its checksum first.
-            if [[ "${{ inputs.recover_disk_pressure }}" == "true" ]]; then
-              latest_checksum=$(sudo sh -c 'ls -1t /fossbot-backups/*.dump.sha256 2>/dev/null | head -n 1')
-              sudo test -n "$latest_checksum"
-              sudo sha256sum --check "$latest_checksum"
-              sudo docker builder prune --all --force
-              sudo docker image prune --force
-            fi
-
             # Pre-create the partial dump privately. Rename it only after both
             # pg_dump and pg_restore's archive validation succeed, so a failed
             # deployment cannot leave a partial file looking like a valid dump.
