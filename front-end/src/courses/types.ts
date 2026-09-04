@@ -1,0 +1,613 @@
+import type { JSONContent } from '@tiptap/core';
+
+export type CourseStatus = 'draft' | 'published' | 'archived';
+export type CourseVisibility = 'public' | 'unlisted';
+export type LessonEditorType = 'none' | 'python' | 'blockly';
+export type LessonStartMode = 'fresh' | 'inherit_previous_code';
+export type CompletionPolicy = 'self' | 'activity' | 'teacher_review' | 'hybrid';
+export type StageSourceType = 'default' | 'github' | 'marketplace';
+
+export type TiptapNode = JSONContent;
+
+export interface ActivityBase {
+  key: string;
+  version: 1;
+  required: boolean;
+  definitionHash?: string;
+}
+
+export interface RichTextActivity extends ActivityBase {
+  type: 'rich_text';
+  content: TiptapNode | string;
+}
+
+export interface ChoiceOption { key: string; label: string }
+
+export interface MultipleChoiceActivity extends ActivityBase {
+  type: 'multiple_choice';
+  prompt: string;
+  options: ChoiceOption[];
+  correctOptionKey?: string;
+  feedbackCorrect?: string;
+  feedbackIncorrect?: string;
+}
+
+export interface MultipleSelectActivity extends ActivityBase {
+  type: 'multiple_select';
+  prompt: string;
+  options: ChoiceOption[];
+  correctOptionKeys?: string[];
+  feedbackCorrect?: string;
+  feedbackIncorrect?: string;
+}
+
+export interface NumericAnswerActivity extends ActivityBase {
+  type: 'numeric_answer';
+  prompt: string;
+  expectedValue?: number;
+  unit: string;
+  tolerance: { mode: 'absolute' | 'percentage'; value: number };
+  validRange?: { minimum?: number | null; maximum?: number | null } | null;
+  feedbackCorrect?: string;
+  feedbackIncorrect?: string;
+}
+
+export interface ShortReflectionActivity extends ActivityBase {
+  type: 'short_reflection';
+  prompt: string;
+  collectResponse: boolean;
+}
+
+export type SensorHelperMode = 'hidden' | 'student_toggle' | 'always_visible';
+export type SensorPresentation = 'live' | 'chart' | 'summary';
+export type SensorStatistic = 'minimum' | 'maximum' | 'average' | 'finalValue';
+
+export interface SimulatorObservationActivity extends ActivityBase {
+  type: 'simulator_observation';
+  prompt: string;
+  allowedSensors: string[];
+  sensorHelperMode: SensorHelperMode;
+  presentations: SensorPresentation[];
+  capturedStatistics: SensorStatistic[];
+  visibleStatistics: SensorStatistic[];
+}
+
+export interface HintActivity extends ActivityBase {
+  type: 'hint';
+  content: TiptapNode | string;
+  forActivityKey?: string | null;
+}
+
+export type MissionObjectiveRole = 'completion' | 'failure' | 'optional';
+export type MissionCondition =
+  | { type: 'reach_target'; markerId: string }
+  | { type: 'checkpoints'; markerIds: string[]; ordered: boolean }
+  | { type: 'collect'; markerIds: string[]; requiredCount: number }
+  | { type: 'avoid_zones'; markerIds: string[] }
+  | { type: 'stop_in_target'; markerId: string }
+  | { type: 'object_in_zone'; objectId: string; zoneId: string }
+  | { type: 'no_incident'; incidents: Array<'collision' | 'fall' | 'runtime_error'> }
+  | { type: 'sensor_threshold'; sensorId: string; statistic: SensorStatistic; operator: 'lt' | 'lte' | 'eq' | 'gte' | 'gt'; threshold: number }
+  | { type: 'actuator_state'; actuator: 'led' | 'buzzer'; state: string }
+  | { type: 'limits'; maxDurationMs?: number; maxMovementActions?: number };
+
+export interface MissionObjective {
+  key: string;
+  role: MissionObjectiveRole;
+  summary: string;
+  condition: MissionCondition;
+}
+
+export type ScoreComponentType =
+  | 'objective'
+  | 'collectibles'
+  | 'checkpoints'
+  | 'time_bonus'
+  | 'movement_efficiency'
+  | 'path_efficiency'
+  | 'numeric_accuracy'
+  | 'collision_penalty'
+  | 'fall_penalty'
+  | 'reset_penalty'
+  | 'hint_adjustment';
+
+export interface ScoreComponent {
+  key: string;
+  label: string;
+  type: ScoreComponentType;
+  weight: number;
+  objectiveKey?: string;
+  points?: number;
+  pointsPerUnit?: number;
+  maximumUnits?: number;
+  target?: number;
+  tolerance?: number;
+  pointsPerIncident?: number;
+  maximumPenalty?: number;
+}
+
+export interface ScoreConfig {
+  version: 1;
+  enabled: boolean;
+  rankFailedAttempts: boolean;
+  components: ScoreComponent[];
+  starThresholds: [number, number, number];
+}
+
+export interface MissionActivity extends ActivityBase {
+  type: 'mission';
+  title: string;
+  completionMode: 'all' | 'any';
+  objectives: MissionObjective[];
+  retryLimit?: number | null;
+  feedbackMode: 'immediate' | 'after_attempt';
+  scoreConfig?: ScoreConfig;
+}
+
+export type Activity = RichTextActivity | MultipleChoiceActivity | MultipleSelectActivity | NumericAnswerActivity | ShortReflectionActivity | SimulatorObservationActivity | MissionActivity | HintActivity;
+
+export interface StageReference {
+  sourceType: StageSourceType;
+  localStageId?: number | null;
+  repoOwner?: string | null;
+  repoName?: string | null;
+  visibility?: string | null;
+  marketplaceEntryPath?: string | null;
+  title?: string | null;
+  url?: string | null;
+  commitSha?: string | null;
+}
+
+export interface CourseSummary {
+  id: number;
+  title: string;
+  description: string;
+  author_id: number;
+  learning_objectives: string[];
+  status: CourseStatus;
+  visibility: CourseVisibility;
+  cover_image_url?: string | null;
+  age_range?: string | null;
+  difficulty?: string | null;
+  estimated_duration_minutes?: number | null;
+  prerequisites?: string | null;
+  tags?: string[] | null;
+  latest_published_release_id?: number | null;
+  latest_published_release_version?: number | null;
+  has_unpublished_changes?: boolean;
+  unpublished_change_summary?: {
+    course: boolean;
+    outline: boolean;
+    lesson_keys: string[];
+    remote_stage_changes?: Array<{
+      lesson_key: string;
+      lesson_title: string;
+      source_type: 'github' | 'marketplace';
+      previous_commit?: string | null;
+      current_commit?: string | null;
+      changed: boolean;
+    }>;
+  };
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ReleaseLesson {
+  lessonKey: string;
+  title: string;
+  position: number;
+  activities: Activity[];
+  completionPolicy: CompletionPolicy;
+  startMode: LessonStartMode;
+  editorType: LessonEditorType;
+  starterContent?: string | Record<string, unknown> | null;
+  simulatorSettings?: Record<string, unknown> | null;
+  stageReference?: StageReference | null;
+  definitionHash: string;
+}
+
+export interface StudentCourse extends CourseSummary {
+  author_name: string;
+  latest_release: {
+    id: number;
+    version: number;
+    published_at: string;
+    lessons: ReleaseLesson[];
+  };
+}
+
+export interface LessonProgress {
+  lesson_key: string;
+  state: 'not_started' | 'in_progress' | 'completed';
+  started_at?: string | null;
+  completed_at?: string | null;
+  completion_method?: 'self' | 'activity' | 'hybrid' | null;
+}
+
+export interface Enrollment {
+  id: number;
+  course_id: number;
+  course: {
+    title: string;
+    description: string;
+    author_name: string;
+    learning_objectives: string[];
+    cover_image_url?: string | null;
+    age_range?: string | null;
+    difficulty?: string | null;
+    estimated_duration_minutes?: number | null;
+    prerequisites?: string | null;
+    tags?: string[] | null;
+    visibility: CourseVisibility;
+  };
+  active_release: { id: number; version: number; published_at: string; lessons: ReleaseLesson[] };
+  progress: LessonProgress[];
+  completed_count: number;
+  lesson_count: number;
+  progress_percent: number;
+  resume_lesson_key?: string | null;
+  enrolled_at: string;
+  completed_at?: string | null;
+  release_updated_at?: string | null;
+  update_available: boolean;
+}
+
+export interface ReleaseUpdate {
+  available: boolean;
+  current: { id: number; version: number; published_at: string };
+  latest: { id: number; version: number; published_at: string };
+  added_lessons: number;
+  removed_lessons: number;
+  changed_lessons: number;
+  unchanged_lessons: number;
+  stage_revisions_changed: boolean;
+  lesson_changes: Array<{
+    lesson_key: string;
+    title: string;
+    change: 'added' | 'removed' | 'changed' | 'unchanged';
+    stage_changed: boolean;
+    progress_preserved: boolean;
+    workspace_preserved: boolean;
+  }>;
+}
+
+export interface LessonWorkspace {
+  id: number;
+  enrollment_id: number;
+  release_id: number;
+  lesson_key: string;
+  editor_type: LessonEditorType;
+  content?: string | Record<string, unknown> | null;
+  origin: { type: 'fresh' | 'inherited'; sourceLessonKey?: string; sourceWorkspaceRevision?: number };
+  revision: number;
+  initialized_at: string;
+  updated_at: string;
+}
+
+export interface LessonWorkspaceHistory {
+  workspace_id: number;
+  release_id: number;
+  release_version: number;
+  editor_type: LessonEditorType;
+  content?: string | Record<string, unknown> | null;
+  revision: number;
+  updated_at: string;
+  read_only: true;
+}
+
+export interface Lesson {
+  id: number;
+  lesson_key: string;
+  course_id: number;
+  title: string;
+  position: number;
+  activities: Activity[];
+  completion_policy: CompletionPolicy;
+  start_mode: LessonStartMode;
+  editor_type: LessonEditorType;
+  starter_content?: string | Record<string, unknown> | null;
+  simulator_settings?: Record<string, unknown> | null;
+  stageReference?: StageReference | null;
+  archived: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CourseDraft extends CourseSummary {
+  lessons: Lesson[];
+}
+
+export interface CourseCreateRequest {
+  title: string;
+  description: string;
+  learning_objectives: string[];
+  visibility?: CourseVisibility;
+  cover_image_url?: string | null;
+  age_range?: string | null;
+  difficulty?: string | null;
+  estimated_duration_minutes?: number | null;
+  prerequisites?: string | null;
+  tags?: string[] | null;
+}
+
+export interface CourseUpdateRequest extends Partial<CourseCreateRequest> {
+  expected_updated_at?: string;
+}
+
+export interface LessonSaveRequest {
+  title: string;
+  activities?: Activity[];
+  completion_policy?: CompletionPolicy;
+  start_mode?: LessonStartMode;
+  editor_type?: LessonEditorType;
+  starter_content?: string | Record<string, unknown> | null;
+  simulator_settings?: Record<string, unknown> | null;
+  stageReference?: StageReference | null;
+  expected_updated_at?: string;
+}
+
+export interface PublicationIssue {
+  group: 'Course' | 'Lesson' | 'Stage' | 'Starter content';
+  code: string;
+  message: string;
+  lesson_id?: number | null;
+  field?: string | null;
+}
+
+export interface PublicationValidation {
+  valid: boolean;
+  errors: PublicationIssue[];
+}
+
+export interface CourseRelease {
+  id: number;
+  course_id: number;
+  version: number;
+  schema_version: number;
+  created_by_id: number;
+  published_at: string;
+  snapshot: Record<string, unknown>;
+}
+
+export interface SensorSummaryValue {
+  unit: string;
+  minimum?: number;
+  maximum?: number;
+  average?: number;
+  finalValue?: number;
+  sampleCount: number;
+}
+
+export interface CompactSensorSummary {
+  runId: string;
+  durationMs: number;
+  sensors: Record<string, SensorSummaryValue>;
+}
+
+export interface ActivityState {
+  activity_key: string;
+  type: Activity['type'];
+  required: boolean;
+  submitted_value?: unknown;
+  correctness?: boolean | null;
+  satisfied: boolean;
+  attempt_count: number;
+  sensor_summary?: CompactSensorSummary | null;
+  first_submitted_at?: string | null;
+  last_submitted_at?: string | null;
+  satisfied_at?: string | null;
+}
+
+export interface ActivitySubmissionResponse {
+  state: ActivityState;
+  feedback?: string | null;
+  duplicate: boolean;
+  lesson_completed: boolean;
+}
+
+export interface MissionAttemptMetrics {
+  elapsed_ms: number;
+  movement_actions: number;
+  path_distance: number;
+  collisions: number;
+  falls: number;
+  resets: number;
+  collectibles: number;
+  checkpoints_completed?: number;
+  hints_used?: number;
+  numeric_answer_accuracy?: number;
+  sensor_summaries: Record<string, Record<string, number | string>>;
+}
+
+export interface MissionAttemptSubmission {
+  schema_version: 1;
+  client_attempt_id: string;
+  started_at: string;
+  ended_at: string;
+  outcome: 'succeeded' | 'failed' | 'stopped' | 'runtime_error';
+  completion_reason: 'objectives_met' | 'failure_objective' | 'program_completed' | 'stop' | 'reset' | 'runtime_error' | 'fall' | 'timeout' | 'navigation';
+  objective_results: Array<{ key: string; role: MissionObjectiveRole; status: 'pending' | 'succeeded' | 'failed' }>;
+  metrics: MissionAttemptMetrics;
+  simulator_revision: string;
+  stage_revision: string;
+  mission_definition_hash: string;
+  client_total?: number;
+}
+
+export interface ScoreBreakdownItem {
+  key: string;
+  label: string;
+  type: ScoreComponentType;
+  earned: number;
+  maximum: number;
+  measured?: number | null;
+}
+
+export interface ScoreResult {
+  config_version: number;
+  config_hash: string;
+  total: number;
+  maximum: number;
+  ratio: number;
+  stars: number;
+  mastery: boolean;
+  rank_eligible: boolean;
+  breakdown: ScoreBreakdownItem[];
+}
+
+export interface MissionAttemptRecord extends MissionAttemptSubmission {
+  id: number;
+  enrollment_id: number;
+  release_id: number;
+  lesson_key: string;
+  activity_key: string;
+  attempt_number: number;
+  score?: ScoreResult | null;
+  created_at: string;
+}
+
+export interface MissionPersonalFeedback {
+  latest_completed?: MissionAttemptRecord | null;
+  best_score?: MissionAttemptRecord | null;
+  best_time_ms?: number | null;
+  best_movement_actions?: number | null;
+  best_path_distance?: number | null;
+  improvement?: {
+    score_delta: number;
+    time_delta_ms: number;
+    movement_delta: number;
+    path_delta: number;
+  } | null;
+}
+
+export interface MissionAttemptResponse extends MissionAttemptRecord {
+  activity_state: ActivityState;
+  lesson_completed: boolean;
+  personal_feedback: MissionPersonalFeedback;
+}
+
+export type LeaderboardType = 'highest_score' | 'fastest' | 'fewest_movements' | 'shortest_path' | 'most_optional';
+
+export interface ClassChallenge {
+  id: number;
+  assignment_id: number;
+  release_id: number;
+  release_version: number;
+  lesson_key: string;
+  lesson_title: string;
+  activity_key: string;
+  activity_title: string;
+  score_enabled: boolean;
+  enabled: boolean;
+  board_type: LeaderboardType;
+  tie_tolerance: number;
+  season: number;
+}
+
+export interface CourseAssignment {
+  id: number;
+  group_id: number;
+  course_id: number;
+  course_title: string;
+  release_id: number;
+  release_version: number;
+  latest_release_id?: number | null;
+  update_available: boolean;
+  update_policy: 'pinned' | 'student_choice' | 'latest';
+  due_at?: string | null;
+  missions: Array<{
+    lesson_key: string;
+    lesson_title: string;
+    activity_key: string;
+    activity_title: string;
+    score_enabled: boolean;
+  }>;
+  challenges: ClassChallenge[];
+}
+
+export interface TeacherClassGroup {
+  id: number;
+  name: string;
+  status: 'active' | 'archived';
+  join_code: string;
+  leaderboards_enabled: boolean;
+  challenge_season: number;
+  created_at: string;
+  members: Array<{
+    id: number;
+    student_username: string;
+    display_alias: string;
+    leaderboard_opt_in: boolean;
+    joined_at: string;
+  }>;
+  assignments: CourseAssignment[];
+}
+
+export interface StudentClassGroup {
+  id: number;
+  name: string;
+  status: 'active' | 'archived';
+  leaderboards_enabled: boolean;
+  challenge_season: number;
+  membership: {
+    display_alias: string;
+    leaderboard_opt_in: boolean;
+    joined_at: string;
+  };
+  assignments: CourseAssignment[];
+}
+
+export interface ClassLeaderboard {
+  challenge_id: number;
+  group_name: string;
+  activity_title: string;
+  board_type: LeaderboardType;
+  tie_tolerance: number;
+  release_id: number;
+  release_version: number;
+  season: number;
+  friendly_competition: true;
+  entries: Array<{ rank: number; alias: string; value: number }>;
+}
+
+export interface ClassChallengeStatistics {
+  challenge_id: number;
+  activity_title: string;
+  board_type: LeaderboardType;
+  release_version: number;
+  season: number;
+  member_count: number;
+  opted_in_count: number;
+  participant_count: number;
+  successful_participant_count: number;
+  attempt_count: number;
+  successful_attempt_count: number;
+  success_rate: number;
+  average_value?: number | null;
+  best_value?: number | null;
+  outcomes: Record<string, number>;
+}
+
+export interface CourseProgressAnalytics {
+  course: { id: number; title: string };
+  enrollment_count: number;
+  completed_count: number;
+  awaiting_review_count: number;
+  common_outcome_reasons: Record<string, number>;
+  students: Array<{
+    enrollment_id: number;
+    student: { username: string; display_name: string };
+    active_release: { id: number; version: number };
+    update_available: boolean;
+    enrolled_at: string;
+    last_activity_at: string;
+    completion: { completed_lessons: number; total_lessons: number; percent: number; course_completed_at?: string | null };
+    attempt_count: number;
+    latest_mission_result?: { outcome: string; reason: string; score?: ScoreResult | null } | null;
+    best_mission_result?: { score: ScoreResult; lesson_key: string; activity_key: string } | null;
+    question_accuracy: { correct: number; answered: number };
+    awaiting_review: boolean;
+    outcome_reasons: Record<string, number>;
+  }>;
+  retention: { includes: string[]; excludes: string[] };
+}

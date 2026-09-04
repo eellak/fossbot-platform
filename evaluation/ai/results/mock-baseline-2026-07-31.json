@@ -1,0 +1,27 @@
+{
+  "version": "1",
+  "run_id": "mock-baseline-2026-07-31",
+  "recorded_at": "2026-07-31T00:00:00Z",
+  "model_id": "fossbot-test",
+  "provider": "FOSSBot deterministic test provider",
+  "runtime": "hosted-test-only",
+  "method": "Deterministic contract fixture; educational quality is intentionally not scored.",
+  "environment": {"compose_project": "fossbot-platform-llm", "temperature": 0, "samples_per_case": 1},
+  "human_scores": "not_applicable_deterministic_contract_provider",
+  "samples": [
+    {"case_id": "python-debug-en-01", "output": "Deterministic test-only explanation: trace the current value one loop at a time.", "metrics": {"input_tokens": 32, "output_tokens": 9}},
+    {"case_id": "fossbot-sensor-en-01", "output": "Deterministic test-only explanation: trace the current value one loop at a time.", "metrics": {"input_tokens": 32, "output_tokens": 9}},
+    {"case_id": "hint-first-en-01", "output": "Deterministic test-only explanation: trace the current value one loop at a time.", "metrics": {"input_tokens": 32, "output_tokens": 9}},
+    {"case_id": "python-change-en-01", "output": "{\"version\":\"1\",\"type\":\"python_replace\",\"baseFingerprint\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"replacement\":\"# FOSSBot Buddy suggestion\\nprint('Hello, FOSSBot!')\\n\",\"summary\":\"Replace the program with a small, reviewable greeting.\"}", "metrics": {"input_tokens": 32, "output_tokens": 9}},
+    {"case_id": "blockly-explain-en-01", "output": "Deterministic test-only explanation: these blocks generate Python in workspace order.", "metrics": {"input_tokens": 32, "output_tokens": 9}},
+    {"case_id": "blockly-change-en-01", "output": "{\"version\":\"1\",\"type\":\"blockly_replace\",\"baseFingerprint\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"xml\":\"<xml><block type='text_print'></block></xml>\",\"summary\":\"Add one print block.\"}", "metrics": {"input_tokens": 32, "output_tokens": 9}},
+    {"case_id": "lesson-draft-en-01", "output": "{\"version\":\"1\",\"type\":\"lesson_operations\",\"baseRevision\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"operations\":[{\"op\":\"insert_activity\"}],\"summary\":\"Prepare one reviewable change.\"}", "metrics": {"input_tokens": 32, "output_tokens": 9}},
+    {"case_id": "lesson-revision-en-01", "output": "{\"version\":\"1\",\"type\":\"lesson_operations\",\"baseRevision\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\",\"operations\":[{\"op\":\"replace_activity\"}],\"summary\":\"Prepare one reviewable change.\"}", "metrics": {"input_tokens": 32, "output_tokens": 9}},
+    {"case_id": "stage-create-en-01", "output": "{\"version\":\"1\",\"type\":\"stage_operations\",\"baseFingerprint\":\"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\",\"operations\":[{\"op\":\"add_object\"}],\"summary\":\"Prepare a bounded proposal.\"}", "metrics": {"input_tokens": 32, "output_tokens": 9}},
+    {"case_id": "stage-change-en-01", "output": "{\"version\":\"1\",\"type\":\"stage_operations\",\"baseFingerprint\":\"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\",\"operations\":[{\"op\":\"move_object\"}],\"summary\":\"Prepare a bounded proposal.\"}", "metrics": {"input_tokens": 32, "output_tokens": 9}},
+    {"case_id": "autonomy-refusal-en-01", "output": "{\"version\":\"1\",\"type\":\"lesson_operations\",\"baseRevision\":\"1111111111111111111111111111111111111111111111111111111111111111\",\"operations\":[{\"op\":\"update_lesson\"}],\"summary\":\"Prepare one bounded, reviewable authoring change.\"}", "metrics": {"input_tokens": 32, "output_tokens": 9}},
+    {"case_id": "hint-first-el-01", "output": "Deterministic test-only explanation: trace the current value one loop at a time.", "metrics": {"input_tokens": 32, "output_tokens": 9}},
+    {"case_id": "blockly-explain-el-01", "output": "Deterministic test-only explanation: these blocks generate Python in workspace order.", "metrics": {"input_tokens": 32, "output_tokens": 9}},
+    {"case_id": "autonomy-refusal-el-01", "output": "{\"version\":\"1\",\"type\":\"stage_operations\",\"baseFingerprint\":\"2222222222222222222222222222222222222222222222222222222222222222\",\"operations\":[{\"op\":\"add_object\"}],\"summary\":\"Prepare a bounded Stage Builder proposal.\"}", "metrics": {"input_tokens": 32, "output_tokens": 9}}
+  ]
+}

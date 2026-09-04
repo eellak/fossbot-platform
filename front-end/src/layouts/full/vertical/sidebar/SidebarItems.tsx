@@ -12,11 +12,6 @@ import { useTranslation } from 'react-i18next';
 import { useAuth } from 'src/authentication/AuthProvider'; // Ensure this import path is correct
 import { UserRole } from 'src/authentication/AuthInterfaces';
 
-const betaFeatures = [
-  // '/tutorials-page',
-  // '/interactive-page',
-];
-
 const SidebarItems = () => {
   const { t } = useTranslation();
   const { pathname } = useLocation();
@@ -29,16 +24,10 @@ const SidebarItems = () => {
   const dispatch = useDispatch();
   const { user } = useAuth(); // Access user info
 
-  // Modify menu items based on beta tester status
-  const modifiedMenuItems = Menuitems.map(item => {
-
-    if (betaFeatures.includes(item.href) && !user?.beta_tester && user?.role != UserRole.ADMIN) {
-      return { ...item, disabled: true };
-    } else if (betaFeatures.includes(item.href)) {
-      return { ...item, disabled: false };
-    }
-    return item;
-  });
+  const hasBetaAccess = user?.beta_tester || user?.role === UserRole.ADMIN;
+  const visibleItems = Menuitems.filter((item) => !item.allowedRoles || (user && item.allowedRoles.includes(user.role))).filter((item) => !item.betaOnly || hasBetaAccess);
+  const hasEducationItems = visibleItems.some((item) => item.href === '/courses' || item.href === '/teach/courses');
+  const modifiedMenuItems = visibleItems.filter((item) => item.subheader !== 'menu.educationalMaterial' || hasEducationItems);
 
   return (
     <Box sx={{ px: 3 }}>

@@ -17,6 +17,7 @@ export interface AuthContextType {
     getAllUsers: () => Promise<User[] | undefined>;
     deleteUserByIdAction: (projectId: number) => Promise<boolean>;
     updateUserRole: (userId: number, data: RoleData) => Promise<User | undefined>;
+    updateUserMarketplaceRoles: (userId: number, roles: MarketplaceRole[]) => Promise<User | undefined>;
     updateUserBetaTesterStatus: (userId: number, beta_tester: BetaTesterData) => Promise<boolean>;
     updateUserActivatedStatus: (userId: number, activated: ActivatedData) => Promise<boolean>;
     updateUserAccessRevokedStatus: (userId: number, access_revoked: AccessRevokedData) => Promise<boolean>;
@@ -40,11 +41,24 @@ export interface RegisterData {
     lastname: string;
 }
 
+export interface ProjectStageReference {
+    sourceType: 'default' | 'github' | 'marketplace' | string;
+    localStageId?: number | null;
+    repoOwner?: string | null;
+    repoName?: string | null;
+    visibility?: string | null;
+    marketplaceEntryPath?: string | null;
+    title?: string | null;
+    url?: string | null;
+    commitSha?: string | null;
+}
+
 export interface NewProjectData {
     name: string;
     description: string;
     project_type: string;
     code: string;
+    stageReference?: ProjectStageReference | null;
 }
 
 export interface Project {
@@ -53,6 +67,7 @@ export interface Project {
     description: string;
     project_type: string;
     code: string;
+    stageReference?: ProjectStageReference | null;
 }
 
 export interface ProjectResponse {
@@ -87,6 +102,7 @@ export interface User {
     firebase_uid?: string;
     provider: string;
     access_revoked: boolean;
+    marketplace_roles?: MarketplaceRole[];
 }
 
 export interface UserData {
@@ -109,6 +125,8 @@ export enum UserRole {
 export interface RoleData {
     role: UserRole;
 }
+
+export type MarketplaceRole = 'verifier' | 'moderator';
 
 export interface BetaTesterData {
     beta_tester: boolean;

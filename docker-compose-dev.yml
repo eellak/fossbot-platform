@@ -2,13 +2,13 @@
 services:
   frontend:
     build:
-      context: ./front-end
-      dockerfile: Dockerfile.dev
-    container_name: fsbt-front-local
+      context: .
+      dockerfile: front-end/Dockerfile.dev
     ports:
       - "3000:3000"
     volumes:
       - ./front-end:/usr/src/app/front-end
+      - ./sim:/usr/src/app/sim
       - /usr/src/app/front-end/node_modules
     stdin_open: true
     tty: true
@@ -17,7 +17,6 @@ services:
 
   backend:
     image: fsbt-back
-    container_name: fsbt-back-local
     restart: unless-stopped
     build: ./back-end
     env_file:
@@ -27,21 +26,40 @@ services:
         required: false
     environment:
       - BACKEND_RELOAD=${BACKEND_RELOAD:-true}
+      - GITHUB_APP_ID=${GITHUB_APP_ID:-}
+      - GITHUB_APP_SLUG=${GITHUB_APP_SLUG:-}
+      - GITHUB_APP_CLIENT_ID=${GITHUB_APP_CLIENT_ID:-}
+      - GITHUB_APP_CLIENT_SECRET=${GITHUB_APP_CLIENT_SECRET:-}
+      - GITHUB_APP_PRIVATE_KEY_PATH=${GITHUB_APP_PRIVATE_KEY_PATH:-}
+      - GITHUB_TOKEN_ENCRYPTION_KEY=${GITHUB_TOKEN_ENCRYPTION_KEY:-}
+      - GITHUB_APP_CALLBACK_URL=${GITHUB_APP_CALLBACK_URL:-http://localhost:8000/auth/github/callback}
+      - GITHUB_APP_SETUP_URL=${GITHUB_APP_SETUP_URL:-http://localhost:8000/auth/github/setup}
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:3000}
+      - FOSSBOT_MARKETPLACE_OWNER=${FOSSBOT_MARKETPLACE_OWNER:-fossbot}
+      - FOSSBOT_MARKETPLACE_REPO=${FOSSBOT_MARKETPLACE_REPO:-marketplace}
+      - FOSSBOT_MARKETPLACE_BRANCH=${FOSSBOT_MARKETPLACE_BRANCH:-main}
+      - FOSSBOT_MARKETPLACE_INDEX_PATH=${FOSSBOT_MARKETPLACE_INDEX_PATH:-index.json}
+      - FOSSBOT_MARKETPLACE_RAW_INDEX_URL=${FOSSBOT_MARKETPLACE_RAW_INDEX_URL:-}
+      - FOSSBOT_MARKETPLACE_INSTALLATION_ID=${FOSSBOT_MARKETPLACE_INSTALLATION_ID:-}
+      - SEED_DEV_SAMPLE_COURSE=${SEED_DEV_SAMPLE_COURSE:-true}
+      - DEV_TEST_USER_PASSWORD=${DEV_TEST_USER_PASSWORD:-dev}
+      - AI_ENABLE_TEST_PROVIDER=${AI_ENABLE_TEST_PROVIDER:-true}
     ports:
       - "8000:8000"
     volumes:
       - ./back-end/test.db:/usr/src/app/back-end/test.db
       - ./back-end/main.py:/usr/src/app/back-end/main.py
+      - ./back-end/routers:/usr/src/app/back-end/routers
       - ./back-end/utils:/usr/src/app/back-end/utils
       - ./back-end/database:/usr/src/app/back-end/database
       - ./back-end/models:/usr/src/app/back-end/models
+      - ./secrets:/usr/src/app/secrets:ro
     depends_on:
       db:
         condition: service_healthy
 
   db:
     image: postgres:16
-    container_name: fsbt-db-local
     restart: unless-stopped
     env_file:
       - .env

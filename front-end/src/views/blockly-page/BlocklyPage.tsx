@@ -21,10 +21,10 @@ import {
   just_rotate,
   get_light_sensor,
   drawLine,
-} from 'src/components/js-simulator/Simulator';
+} from 'src/simulator-adapter/Simulator';
 import Buttons from 'src/components/editors/RightColButtons';
 import PageContainer from '../../components/container/PageContainer';
-import BlocklyEditorComponent from '../../components/editors/BlocklyEditor';
+import BlocklyEditorComponent, { type BlocklyEditorHandle } from '../../components/editors/BlocklyEditor';
 import Spinner from '../spinner/Spinner';
 import VideoPlayer from 'src/components/videoplayer/VideoPlayer';
 import NewProjectDialog from 'src/components/dashboard/NewProjectDialog';
@@ -33,11 +33,24 @@ import { faPuzzlePiece } from '@fortawesome/free-solid-svg-icons';
 import ReactPlayer from 'react-player';
 import SuccessAlert from 'src/components/alerts/SuccessAlert';
 import ErrorAlert from 'src/components/alerts/ErrorAlert';
-import { Project } from 'src/authentication/AuthInterfaces';
+import { Project, type ProjectStageReference } from 'src/authentication/AuthInterfaces';
+import { loadStageFromProvider } from 'src/stages/StagesApi';
+import { loadLocalStage } from 'src/stages/LocalStagesApi';
+import type { RawStageConfig } from 'src/simulator/stages';
+import StageLoadScreen from 'src/components/stage-select-popup/StageLoadScreen';
 import { useMediaQuery } from '@mui/material';
 import ExecutionTargetPanel from 'src/components/robot/ExecutionTargetPanel';
 import PhysicalRobotTerminal from 'src/components/robot/PhysicalRobotTerminal';
 import { useRobotConnection } from 'src/robot/RobotConnectionContext';
+import ProjectStageIndicator from 'src/components/editors/ProjectStageIndicator';
+import AssistantPanel, { type AssistantSurfaceAdapter } from 'src/components/ai/AssistantPanel';
+import { fingerprintText } from 'src/ai/fingerprint';
+import { allowedBlocklyBlockTypes, validateBlocklySuggestion } from 'src/ai/suggestions/codeSuggestions';
+
+function stageNeedsAuthenticatedLoad(stage: ProjectStageReference | null): boolean {
+  return (stage?.sourceType === 'local' && !!stage.localStageId)
+    || (stage?.sourceType === 'github' && !!stage.repoOwner && !!stage.repoName);
+}
 
 const BlocklyPage = () => {
   const { t } = useTranslation();
@@ -50,13 +63,18 @@ const BlocklyPage = () => {
 
   const [projectTitle, setProjectTitle] = useState(t('newProject'));
   const [projectDescription, setProjectDescription] = useState(t('newProjectDescription'));
+  const [selectedStage, setSelectedStage] = useState<ProjectStageReference | null>(null);
+  const [initialStageConfig, setInitialStageConfig] = useState<RawStageConfig | null | undefined>(undefined);
+  const [initialStageAssetBaseUrl, setInitialStageAssetBaseUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true); // Loading state of Blockly project
-  const [isSimulatorLoading, setIsSimulatorLoading] = useState(true); // Loading state of Simulator
   const [showVideoPlayer, setShowVideoPlayer] = useState(false);
   const [showDrawer, setShowDrawer] = useState(false);
 
   const runScriptRef = useRef<() => Promise<void>>();
+  const editorRef = useRef<BlocklyEditorHandle | null>(null);
+  const [runtimeContext, setRuntimeContext] = useState({ output: [] as string[], error: '' });
   const auth = useAuth();
+  const { token } = auth;
   const authRef = useRef(auth);
   const translationRef = useRef(t);
   authRef.current = auth;
@@ -123,6 +141,12 @@ const BlocklyPage = () => {
     stopScriptRef.current = stopScript;
   }, []);
 
+  const handleExecutionEvent = useCallback((event: { type: 'start' | 'stdout' | 'stderr' | 'complete' | 'stopped'; text?: string }) => {
+    if (event.type === 'start') { setRuntimeContext({ output: [], error: '' }); return; }
+    if (event.type === 'stdout') setRuntimeContext((current) => ({ ...current, output: [...current.output, event.text || ''].slice(-24) }));
+    if (event.type === 'stderr') setRuntimeContext((current) => ({ output: [...current.output, event.text || ''].slice(-24), error: event.text || 'Runtime error' }));
+  }, []);
+
   useEffect(() => {
     // Generate a new session ID when the component mounts
     const newSessionId = uuidv4();
@@ -140,10 +164,16 @@ const BlocklyPage = () => {
               setEditorValue(fetchedProject.code);
             }
             setProjectTitle(fetchedProject.name);
+            const stageRef = fetchedProject.stageReference || null;
+            setInitialStageConfig(stageNeedsAuthenticatedLoad(stageRef) ? undefined : null);
+            setInitialStageAssetBaseUrl(null);
+            setSelectedStage(stageRef);
           }
         } else {
           //setEditorValue( '<xml xmlns="https://developers.google.com/blockly/xml"></xml>');
           setProjectTitle(translationRef.current('newProject'));
+          setInitialStageConfig(null);
+          setInitialStageAssetBaseUrl(null);
         }
       } catch (error) {
         console.error('Error fetching project:', error);
@@ -155,6 +185,48 @@ const BlocklyPage = () => {
 
     fetchProject();
   }, [projectId, navigate]);
+
+  // Local and private GitHub stages are loaded through authenticated backend APIs.
+  useEffect(() => {
+    if (!stageNeedsAuthenticatedLoad(selectedStage)) {
+      setInitialStageConfig(null);
+      setInitialStageAssetBaseUrl(null);
+      return;
+    }
+    if (!token) return;
+
+    setInitialStageConfig(undefined);
+    setInitialStageAssetBaseUrl(null);
+    let cancelled = false;
+    const load = selectedStage?.sourceType === 'local' && selectedStage.localStageId
+      ? loadLocalStage(token, selectedStage.localStageId).then((stage) => ({ record: stage.record, rawBaseUrl: null }))
+      : loadStageFromProvider(token, selectedStage?.repoOwner || '', selectedStage?.repoName || '');
+    load
+      .then((loaded) => {
+        if (!cancelled) {
+          setInitialStageAssetBaseUrl(loaded.rawBaseUrl || null);
+          setInitialStageConfig(loaded.record.config);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setInitialStageAssetBaseUrl(null);
+          setInitialStageConfig(null);
+        }
+      });
+    return () => { cancelled = true; };
+  }, [token, selectedStage?.localStageId, selectedStage?.repoOwner, selectedStage?.repoName, selectedStage?.sourceType]);
+
+  useEffect(() => {
+    const handleStageSelected = (event: Event) => {
+      const stageRef = (event as CustomEvent<ProjectStageReference>).detail || null;
+      setInitialStageConfig(stageNeedsAuthenticatedLoad(stageRef) ? undefined : null);
+      setInitialStageAssetBaseUrl(null);
+      setSelectedStage(stageRef);
+    };
+    window.addEventListener('fossbot:stage-selected', handleStageSelected);
+    return () => window.removeEventListener('fossbot:stage-selected', handleStageSelected);
+  }, []);
 
   useEffect(() => {
     if (location.pathname.endsWith('/blockly-tutorial-page')) {
@@ -192,7 +264,7 @@ const BlocklyPage = () => {
 
   const handleGetPythonCodeValue = useCallback((getValueFunc) => {
     // Save Python code
-    const value = getValueFunc;
+    const value = typeof getValueFunc === 'function' ? getValueFunc() : getValueFunc;
     setEditorPythonValue(value);
   }, []);
 
@@ -210,6 +282,7 @@ const BlocklyPage = () => {
           description: projectDescription,
           project_type: 'blockly',
           code: editorValue,
+          stageReference: selectedStage,
         });
         if (project) {
           handleShowSuccessAlert(t('alertMessages.projectUpdated'));
@@ -223,10 +296,7 @@ const BlocklyPage = () => {
     }
   };
 
-  const handleMountChange = (isMounted: boolean) => {
-    // Updated value of isMounted is set to show if simulator is loading
-    setIsSimulatorLoading(false);
-  };
+  const handleMountChange = () => {};
 
   const handleDrawerClose = () => {
     setShowDrawer(false);
@@ -241,6 +311,38 @@ const BlocklyPage = () => {
   };
 
   const isResponsive = useMediaQuery('(max-width:1024px)');
+  const isStageConfigLoading =
+    stageNeedsAuthenticatedLoad(selectedStage) && initialStageConfig === undefined;
+  const selectedStageLabel = selectedStage?.title || [selectedStage?.repoOwner, selectedStage?.repoName].filter(Boolean).join('/');
+  const assistantAdapter: AssistantSurfaceAdapter = {
+    surface: 'blockly',
+    getFingerprint: async () => fingerprintText(editorRef.current?.getXml() ?? editorValue),
+    getContext: async () => {
+      const xml = editorRef.current?.getXml() ?? editorValue;
+      const selection = editorRef.current?.getSelection() || { ids: [], types: [] };
+      return {
+        xml,
+        workspaceFingerprint: await fingerprintText(xml),
+        generatedPython: (editorRef.current?.getGeneratedPython() ?? editorPythonValue).slice(0, 8000),
+        selectedBlockIds: selection.ids,
+        selectedBlockTypes: selection.types,
+        allowedBlockTypes: allowedBlocklyBlockTypes(),
+        runtimeOutput: runtimeContext.output.join('\n').slice(-2000),
+        runtimeError: runtimeContext.error.slice(-2000),
+        editorType: 'blockly',
+        ...(projectId ? { projectId: Number(projectId) } : {}),
+        stageSummary: selectedStage ? { title: selectedStageLabel, sourceType: selectedStage.sourceType } : {},
+      };
+    },
+    previewSuggestion: async (suggestion) => {
+      if (suggestion.type !== 'blockly_replace') throw new Error('invalid_suggestion');
+      return validateBlocklySuggestion(suggestion, editorRef.current?.getXml() ?? editorValue);
+    },
+    applySuggestion: async (suggestion) => {
+      if (suggestion.type !== 'blockly_replace') throw new Error('invalid_suggestion');
+      editorRef.current?.replaceWorkspace(suggestion.xml);
+    },
+  };
 
   const terminalPanel = (
     <Box
@@ -274,6 +376,7 @@ const BlocklyPage = () => {
           stopMotion={stopMotion}
           getLightSensor={get_light_sensor}
           drawLine={drawLine}
+          onExecutionEvent={handleExecutionEvent}
         />
       ) : (
         <PhysicalRobotTerminal />
@@ -289,6 +392,7 @@ const BlocklyPage = () => {
         isDescriptionDisabled={true}
         editorInitialValue="blockly"
         code={editorValue}
+        stageReference={selectedStage}
       />
       <Box flexGrow={1}>
         <Grid
@@ -308,6 +412,7 @@ const BlocklyPage = () => {
               <Typography mt={1} ml={0} color={'grey'}>
                 {projectDescription}
               </Typography>
+              <ProjectStageIndicator stage={selectedStage} />
             </Box>
           </Grid>
           <Grid item xs={4} lg={4}>
@@ -331,8 +436,10 @@ const BlocklyPage = () => {
           </Grid>
         </Grid>
 
-        {loading && isSimulatorLoading ? (
+        {loading ? (
           <Spinner />
+        ) : isStageConfigLoading ? (
+          <StageLoadScreen stageLabel={selectedStageLabel} />
         ) : (
           <Grid
             container
@@ -357,6 +464,7 @@ const BlocklyPage = () => {
             >
               {/* column */}
               <BlocklyEditorComponent
+                ref={editorRef}
                 code={editorValue}
                 handleGetValue={handleGetValue}
                 handleGetPythonCodeValue={handleGetPythonCodeValue}
@@ -416,7 +524,13 @@ const BlocklyPage = () => {
               {target === 'robot' && terminalPanel}
 
               <ExecutionTargetPanel height="50vh">
-                <WebGLApp appsessionId={sessionId} onMountChange={handleMountChange} />
+                <WebGLApp
+                  appsessionId={sessionId}
+                  onMountChange={handleMountChange}
+                  initialStageUrl={selectedStage?.url || null}
+                  initialStageConfig={initialStageConfig}
+                  initialStageAssetBaseUrl={initialStageAssetBaseUrl}
+                />
               </ExecutionTargetPanel>
 
               {target === 'simulation' && terminalPanel}
@@ -424,6 +538,8 @@ const BlocklyPage = () => {
           </Grid>
         )}
       </Box>
+
+      {!loading && <Box sx={{ mt: 2 }}><AssistantPanel adapter={assistantAdapter} explainCapability="blockly.explain" suggestCapability="blockly.suggest_changes" /></Box>}
 
       {showSuccessAlert && <SuccessAlert title={showSuccessAlertText} description={''} />}
 

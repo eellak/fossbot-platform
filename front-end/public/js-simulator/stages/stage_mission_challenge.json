@@ -1,0 +1,120 @@
+[
+  {
+    "type": "floor",
+    "dimensions": [10, 10],
+    "material": { "color": "#f7f7f2" },
+    "name": "Mission lab floor",
+    "texture": "",
+    "repeat": [20, 20],
+    "offset": [0, 0]
+  },
+  {
+    "type": "fossbot",
+    "position": [0, 0, 4],
+    "orientation": [0, 0, 0],
+    "challenge": { "markerId": "mission-spawn", "kind": "spawn" }
+  },
+  {
+    "type": "base",
+    "dimensions": [0.8, 0.8],
+    "material": { "color": "#1e88e5" },
+    "position": [0, 3],
+    "name": "Checkpoint one",
+    "challenge": { "markerId": "checkpoint-one", "kind": "checkpoint", "order": 1 }
+  },
+  {
+    "type": "base",
+    "dimensions": [0.8, 0.8],
+    "material": { "color": "#1565c0" },
+    "position": [0, 2],
+    "name": "Checkpoint two",
+    "challenge": { "markerId": "checkpoint-two", "kind": "checkpoint", "order": 2 }
+  },
+  {
+    "type": "base",
+    "dimensions": [0.9, 0.9],
+    "material": { "color": "#43a047" },
+    "position": [0, 1],
+    "name": "Route finish",
+    "challenge": { "markerId": "route-finish", "kind": "target" }
+  },
+  {
+    "type": "base",
+    "dimensions": [1, 1],
+    "material": { "color": "#8e24aa" },
+    "position": [3, -2.5],
+    "name": "Precision stop target",
+    "challenge": { "markerId": "precision-stop", "kind": "target" }
+  },
+  {
+    "type": "base",
+    "dimensions": [1.2, 1.2],
+    "material": { "color": "#e53935" },
+    "position": [-2.3, 2],
+    "name": "Danger zone",
+    "challenge": { "markerId": "danger-zone", "kind": "danger_zone" }
+  },
+  {
+    "type": "base",
+    "dimensions": [1.2, 1.2],
+    "material": { "color": "#00acc1" },
+    "position": [2.3, 2],
+    "name": "Sensor region",
+    "challenge": { "markerId": "sensor-region", "kind": "sensor_region" }
+  },
+  {
+    "type": "sphere",
+    "dimensions": [0.28],
+    "material": { "color": "#fdd835" },
+    "position": [-1.1, 0.14, 2.8],
+    "name": "Collectible alpha",
+    "castShadow": true,
+    "collision": "none",
+    "challenge": { "markerId": "collectible-alpha", "kind": "collectible", "pickupRadius": 0.4 }
+  },
+  {
+    "type": "sphere",
+    "dimensions": [0.28],
+    "material": { "color": "#fb8c00" },
+    "position": [1.1, 0.14, 2.8],
+    "name": "Collectible beta",
+    "castShadow": true,
+    "collision": "none",
+    "challenge": { "markerId": "collectible-beta", "kind": "collectible", "pickupRadius": 0.4 }
+  },
+  {
+    "type": "cube",
+    "dimensions": [0.5, 0.5, 0.5],
+    "material": { "color": "#ffb300" },
+    "position": [-2.5, 0.25, -0.2],
+    "name": "Push object",
+    "castShadow": true,
+    "mass": 0.35,
+    "immovable": false,
+    "challenge": { "markerId": "push-crate", "kind": "push_object" }
+  },
+  {
+    "type": "base",
+    "dimensions": [1.25, 1.25],
+    "material": { "color": "#7cb342" },
+    "position": [-2.5, -2.3],
+    "name": "Object target zone",
+    "challenge": { "markerId": "crate-zone", "kind": "target_zone" }
+  },
+  {
+    "type": "cube",
+    "dimensions": [1.2, 0.7, 0.35],
+    "material": { "color": "#616161" },
+    "position": [0, 0.35, -2.8],
+    "name": "Ultrasonic wall",
+    "castShadow": true,
+    "immovable": true
+  },
+  {
+    "type": "line",
+    "points": [[0, 4], [0, 1]],
+    "width": 0.025,
+    "color": "#212121",
+    "name": "Checkpoint guide"
+  }
+]

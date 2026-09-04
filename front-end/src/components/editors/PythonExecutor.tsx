@@ -11,6 +11,7 @@ type PythonExecutorProps = {
   rotateStep: (angle: number) => Promise<void>;
   getdistance: () => number;
   rgbsetcolor: (color: string) => void;
+  buzzerBeep?: (frequencyHz: number, durationMs: number) => Promise<void>;
   getacceleration: (axis: string) => number[];
   getgyroscope: (axis: string) => number[];
   getfloorsensor: (sensor_id: number) => boolean;
@@ -19,6 +20,9 @@ type PythonExecutorProps = {
   stopMotion: () => void;
   getLightSensor: () => number;
   drawLine: (status: boolean) => void;
+  onExecutionComplete?: () => void;
+  onExecutionError?: (message: string) => void;
+  onExecutionEvent?: (event: { type: 'start' | 'stdout' | 'stderr' | 'complete' | 'stopped'; text?: string }) => void;
 };
 
 const PythonExecutor = ({
@@ -30,6 +34,7 @@ const PythonExecutor = ({
   rotateStep,
   getdistance,
   rgbsetcolor,
+  buzzerBeep,
   getacceleration,
   getgyroscope,
   getfloorsensor,
@@ -37,7 +42,10 @@ const PythonExecutor = ({
   justMove,
   stopMotion,
   getLightSensor,
-  drawLine
+  drawLine,
+  onExecutionComplete,
+  onExecutionError,
+  onExecutionEvent,
 }: PythonExecutorProps) => {
   const [results, setResults] = useState<string[]>([]);
   const { t } = useTranslation();
@@ -53,6 +61,8 @@ const PythonExecutor = ({
 
       if (data.command === 'stdout' || data.command === 'stderr') {
         setResults((prevResults) => [...prevResults, data.data]);
+        onExecutionEvent?.({ type: data.command, text: String(data.data || '') });
+        if (data.command === 'stderr') onExecutionError?.(String(data.data || 'Runtime error'));
 
         worker.postMessage(JSON.stringify({ command: 'exit' }));
       }
@@ -68,6 +78,9 @@ const PythonExecutor = ({
       } else if (data.command === 'rgbsetcolor') {
         await rgbsetcolor(data.color);
         worker.postMessage(JSON.stringify({ command: 'rgbsetcolor_done' }));
+      } else if (data.command === 'buzzerBeep') {
+        await buzzerBeep?.(data.frequencyHz, data.durationMs);
+        worker.postMessage(JSON.stringify({ command: 'buzzer_beep_done' }));
       } else if (data.command === 'getacceleration') {
         const acceleration = await getacceleration(data.axis);
         worker.postMessage(JSON.stringify({ command: 'getacceleration_done', acceleration }));
@@ -97,6 +110,7 @@ const PythonExecutor = ({
       if (data.command === 'clear_results') {
         setResults([]);
       }
+      if (data.command === 'execution_complete') { onExecutionEvent?.({ type: 'complete' }); onExecutionComplete?.(); }
     };
 
     return worker;
@@ -128,15 +142,18 @@ const PythonExecutor = ({
       sessionId: sessionId,
     };
 
+    onExecutionEvent?.({ type: 'start' });
     pyodideWorker?.postMessage(JSON.stringify(scriptWithSession));
     setError('');
-  }, [pythonScript, sessionId, t, pyodideWorker]);
+  }, [onExecutionEvent, pythonScript, sessionId, t, pyodideWorker]);
 
   const stopPythonScript = useCallback(() => {
+    stopMotion();
     pyodideWorker?.terminate();
     const newWorker = createWorker();
     setPyodideWorker(newWorker);
-  }, [pyodideWorker]);
+    onExecutionEvent?.({ type: 'stopped' });
+  }, [onExecutionEvent, pyodideWorker, stopMotion]);
 
   useEffect(() => {
     onRunScript(runPythonScript);

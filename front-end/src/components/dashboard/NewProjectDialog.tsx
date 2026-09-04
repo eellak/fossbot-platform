@@ -4,6 +4,7 @@ import {
   Dialog
 } from '@mui/material';
 import { useTranslation } from 'react-i18next';
+import type { ProjectStageReference } from 'src/authentication/AuthInterfaces';
 import NewProjectForm from './NewProjectForm';
 
 interface NewProjectDialogProps {
@@ -11,10 +12,11 @@ interface NewProjectDialogProps {
   handleDrawerClose: () => void,
   isDescriptionDisabled: boolean,
   editorInitialValue: string,
-  code: string
+  code: string,
+  stageReference?: ProjectStageReference | null,
 }
 
-const NewProjectDialog = ({ showDrawer, handleDrawerClose, isDescriptionDisabled, editorInitialValue, code }: NewProjectDialogProps) => {
+const NewProjectDialog = ({ showDrawer, handleDrawerClose, isDescriptionDisabled, editorInitialValue, code, stageReference }: NewProjectDialogProps) => {
   const { t } = useTranslation();
 
   return (
@@ -31,7 +33,8 @@ const NewProjectDialog = ({ showDrawer, handleDrawerClose, isDescriptionDisabled
         <NewProjectForm
           isDescriptionDisabled={isDescriptionDisabled}
           editorInitialValue={editorInitialValue}
-          code={code} />
+          code={code}
+          stageReference={stageReference} />
       </Dialog>
     </div>
   );

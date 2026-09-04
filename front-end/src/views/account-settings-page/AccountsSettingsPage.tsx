@@ -19,6 +19,7 @@ import AccountSettingsInfo from '../../components/account-settings-page/AccountS
 import { Project } from 'src/authentication/AuthInterfaces';
 import SuccessAlert from 'src/components/alerts/SuccessAlert';
 import ErrorAlert from 'src/components/alerts/ErrorAlert';
+import LocalRuntimeSettingsCard from 'src/components/ai/LocalRuntimeSettingsCard';
 
 const AccountsSettingsPage = () => {
     const { t } = useTranslation();
@@ -186,6 +187,7 @@ const AccountsSettingsPage = () => {
                             </Grid>
                         )}
                     </BlankCard>
+                    <LocalRuntimeSettingsCard />
                 </Grid>
             </Grid>
 

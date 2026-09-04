@@ -40,11 +40,11 @@ function loadBaseObject(scene) {
     }
 
     const mtlLoader = new MTLLoader();
-    mtlLoader.load('/js-simulator/models/base1.mtl', (materials) => {
+    mtlLoader.load('/js-simulator/models/robots/v1/base1.mtl', (materials) => {
         materials.preload();
         const objLoader = new OBJLoader();
         objLoader.setMaterials(materials);
-        objLoader.load('/js-simulator/models/base1.obj', (object) => {
+        objLoader.load('/js-simulator/models/robots/v1/base1.obj', (object) => {
             object.position.set(0, 0, 0);
             object.traverse((child) => {
                 if (child.isMesh) {
@@ -100,11 +100,11 @@ function loadBaseObject(scene) {
 
 function loadTop(object) {
     const mtlLoader = new MTLLoader();
-    mtlLoader.load('/js-simulator/models/top.mtl', (materials) => {
+    mtlLoader.load('/js-simulator/models/robots/v1/top.mtl', (materials) => {
         materials.preload();
         const objLoader = new OBJLoader();
         objLoader.setMaterials(materials);
-        objLoader.load('/js-simulator/models/top.obj', (top) => {
+        objLoader.load('/js-simulator/models/robots/v1/top.obj', (top) => {
             top.traverse((child) => {
                 if (child.isMesh) {
                     child.castShadow = true;
@@ -125,11 +125,11 @@ function loadTop(object) {
 
 function loadLegoTop(object) {
     const mtlLoader = new MTLLoader();
-    mtlLoader.load('/js-simulator/models/lego_top.mtl', (materials) => {
+    mtlLoader.load('/js-simulator/models/robots/v1/lego_top.mtl', (materials) => {
         materials.preload();
         const objLoader = new OBJLoader();
         objLoader.setMaterials(materials);
-        objLoader.load('/js-simulator/models/lego_top.obj', (top) => {
+        objLoader.load('/js-simulator/models/robots/v1/lego_top.obj', (top) => {
             top.traverse((child) => {
                 if (child.isMesh) {
                     child.castShadow = true;
@@ -149,11 +149,11 @@ function loadLegoTop(object) {
 
 function loadSpoilers(object) {
     const mtlLoader = new MTLLoader();
-    mtlLoader.load('/js-simulator/models/spoilers.mtl', (materials) => {
+    mtlLoader.load('/js-simulator/models/robots/v1/spoilers.mtl', (materials) => {
         materials.preload();
         const objLoader = new OBJLoader();
         objLoader.setMaterials(materials);
-        objLoader.load('/js-simulator/models/spoilers.obj', (top) => {
+        objLoader.load('/js-simulator/models/robots/v1/spoilers.obj', (top) => {
             top.traverse((child) => {
                 if (child.isMesh) {
                     child.castShadow = true;
@@ -173,11 +173,11 @@ function loadSpoilers(object) {
 
 function loadHanger(object) {
     const mtlLoader = new MTLLoader();
-    mtlLoader.load('/js-simulator/models/hanger.mtl', (materials) => {
+    mtlLoader.load('/js-simulator/models/robots/v1/hanger.mtl', (materials) => {
         materials.preload();
         const objLoader = new OBJLoader();
         objLoader.setMaterials(materials);
-        objLoader.load('/js-simulator/models/hanger.obj', (top) => {
+        objLoader.load('/js-simulator/models/robots/v1/hanger.obj', (top) => {
             top.traverse((child) => {
                 if (child.isMesh) {
                     child.castShadow = true;
@@ -197,11 +197,11 @@ function loadHanger(object) {
 
 function loadButton(object) {
     const mtlLoader = new MTLLoader();
-    mtlLoader.load('/js-simulator/models/power.mtl', (materials) => {
+    mtlLoader.load('/js-simulator/models/robots/v1/power.mtl', (materials) => {
         materials.preload();
         const objLoader = new OBJLoader();
         objLoader.setMaterials(materials);
-        objLoader.load('/js-simulator/models/power.obj', (top) => {
+        objLoader.load('/js-simulator/models/robots/v1/power.obj', (top) => {
             top.traverse((child) => {
                 if (child.isMesh) {
                     child.castShadow = true;
@@ -246,11 +246,11 @@ function loadUltrasonic(object) {
 
 function loadPncil(object) {
     const mtlLoader = new MTLLoader();
-    mtlLoader.load('/js-simulator/models/pencil.mtl', (materials) => {
+    mtlLoader.load('/js-simulator/models/robots/v1/pencil.mtl', (materials) => {
         materials.preload();
         const objLoader = new OBJLoader();
         objLoader.setMaterials(materials);
-        objLoader.load('/js-simulator/models/pencil.obj', (top) => {
+        objLoader.load('/js-simulator/models/robots/v1/pencil.obj', (top) => {
             top.traverse((child) => {
                 if (child.isMesh) {
                     child.castShadow = true;
@@ -270,11 +270,11 @@ function loadPncil(object) {
 
 function loadCaster(object) {
     const mtlLoader = new MTLLoader();
-    mtlLoader.load('/js-simulator/models/caster.mtl', (materials) => {
+    mtlLoader.load('/js-simulator/models/robots/v1/caster.mtl', (materials) => {
         materials.preload();
         const objLoader = new OBJLoader();
         objLoader.setMaterials(materials);
-        objLoader.load('/js-simulator/models/caster.obj', (top) => {
+        objLoader.load('/js-simulator/models/robots/v1/caster.obj', (top) => {
             top.traverse((child) => {
                 if (child.isMesh) {
                     child.castShadow = true;
@@ -296,11 +296,11 @@ function loadCaster(object) {
 
 function loadWheels(object) {
     const wheelMtlLoader = new MTLLoader();
-    wheelMtlLoader.load('/js-simulator/models/wheel.mtl', (wheelMaterials) => {
+    wheelMtlLoader.load('/js-simulator/models/robots/v1/wheel.mtl', (wheelMaterials) => {
         wheelMaterials.preload();
         const wheelObjLoader = new OBJLoader();
         wheelObjLoader.setMaterials(wheelMaterials);
-        wheelObjLoader.load('/js-simulator/models/wheel.obj', (wheel) => {
+        wheelObjLoader.load('/js-simulator/models/robots/v1/wheel.obj', (wheel) => {
             wheel.traverse((child) => {
                 if (child.isMesh) {
                     child.castShadow = true;

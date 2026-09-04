@@ -22,7 +22,9 @@ services:
     image: fsbt-front
     container_name: fsbt-front
     restart: always
-    build: ./front-end
+    build:
+      context: .
+      dockerfile: front-end/Dockerfile
     env_file:
       - .env
     ports:
@@ -67,4 +69,3 @@ volumes:
   db-data:
   matomo_data:
   mariadb_data:
-

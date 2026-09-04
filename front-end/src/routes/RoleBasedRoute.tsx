@@ -9,7 +9,7 @@ interface RoleBasedRouteProps {
   betaTesterOnly?: boolean;
 }
 
-const RoleBasedRoute: React.FC<RoleBasedRouteProps> = ({ children, betaTesterOnly }) => {
+const RoleBasedRoute: React.FC<RoleBasedRouteProps> = ({ children, roles, betaTesterOnly }) => {
   const { user, authStatus } = useAuth();
 
   if (authStatus === 'loading') {
@@ -18,6 +18,10 @@ const RoleBasedRoute: React.FC<RoleBasedRouteProps> = ({ children, betaTesterOnl
 
   if (!user || authStatus !== 'authenticated') {
     return <Navigate to="/auth/login" />;
+  }
+
+  if (roles?.length && !roles.includes(user.role)) {
+    return <Navigate to="/dashboard" replace />;
   }
 
   if (betaTesterOnly && !user.beta_tester && user.role != UserRole.ADMIN) {

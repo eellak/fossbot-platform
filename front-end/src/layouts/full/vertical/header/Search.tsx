@@ -17,6 +17,7 @@ import {
 import { IconSearch, IconX } from '@tabler/icons-react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { useAuth } from 'src/authentication/AuthProvider';
 
 interface menuType {
   title: string;
@@ -28,6 +29,7 @@ interface menuType {
 
 const Search = () => {
   const { t } = useTranslation();
+  const { user } = useAuth();
 
   // drawer top
   const [showDrawer2, setShowDrawer2] = useState(false);
@@ -45,7 +47,7 @@ const Search = () => {
 
     return rotr;
   };
-  const searchData = filterRoutes(Menuitems, search);
+  const searchData = filterRoutes(Menuitems.filter((item: any) => !item.allowedRoles || (user && item.allowedRoles.includes(user.role))), search);
 
   return (
     <>

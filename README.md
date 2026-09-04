@@ -149,6 +149,15 @@ FIREBASE_PROJECT_ID=
 
 Both files are ignored by Git. Configure Google and GitHub as sign-in providers in Firebase Authentication, add `localhost` to the authorized domains, and restart the frontend and backend containers.
 
+## Education authoring
+
+- [Mission Challenge Authoring Guide](docs/education-mission-challenges.md)
+
+## Stage Builder GitHub storage and marketplace
+
+- [GitHub Stage Storage and Marketplace Setup](docs/github-stage-marketplace-setup.md)
+- [GitHub Marketplace Security Review](docs/github-marketplace-security-review.md)
+
 ## Project structure
 
 ```text

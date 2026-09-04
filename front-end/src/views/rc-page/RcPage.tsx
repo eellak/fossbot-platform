@@ -27,7 +27,7 @@ import {
   rc_drive,
   rgb_set_color,
   stopMotion,
-} from 'src/components/js-simulator/Simulator';
+} from 'src/simulator-adapter/Simulator';
 import { useRobotConnection } from 'src/robot/RobotConnectionContext';
 
 type DriveInput = {

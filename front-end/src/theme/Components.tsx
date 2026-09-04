@@ -55,7 +55,7 @@ const components: any = (theme: Theme) => {
           height: '100%',
         },
         '.MuiBox-root': {
-          borderRadius: theme.shape.borderRadius,
+          borderRadius: `var(--fossbot-box-border-radius, ${theme.shape.borderRadius}px)`,
         },
         '.MuiCardHeader-action': {
           alignSelf: 'center !important',

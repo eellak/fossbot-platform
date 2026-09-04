@@ -7,14 +7,15 @@ import {
   List,
   styled,
   ListItemText,
-  Chip,
   useTheme,
   Typography,
   ListItemButton,
+  Stack,
 } from '@mui/material';
 import { useSelector } from 'src/store/Store';
 import { useTranslation } from 'react-i18next';
 import { AppState } from 'src/store/Store';
+import BetaBadge, { StatusBadge, type StatusBadgeLabel } from 'src/components/shared/BetaBadge';
 
 type NavGroup = {
   [x: string]: any;
@@ -78,6 +79,7 @@ const NavItem = ({ item, level, pathDirect, hideMenu, onClick }: ItemType) => {
   );
 
   const itemSubtitle = item?.subtitle ? t(item?.subtitle) : '';
+  const itemPath = item?.href?.split('?')[0];
 
   const listItemProps: {
     component: any;
@@ -100,7 +102,7 @@ const NavItem = ({ item, level, pathDirect, hideMenu, onClick }: ItemType) => {
       <ListItemStyled
         {...listItemProps}
         disabled={item?.disabled}
-        selected={pathDirect === item?.href}
+        selected={pathDirect === itemPath}
         onClick={onClick}
       >
         <ListItemIcon
@@ -115,23 +117,20 @@ const NavItem = ({ item, level, pathDirect, hideMenu, onClick }: ItemType) => {
         >
           {itemIcon}
         </ListItemIcon>
-        <ListItemText>
-          {hideMenu ? '' : <>{t(`${item?.title}`)}</>}
-          <br />
-          {item?.subtitle ? (
-            <Typography variant="caption">{hideMenu ? '' : itemSubtitle}</Typography>
-          ) : (
-            ''
+        <ListItemText
+          sx={{ minWidth: 0, my: 0 }}
+          primary={hideMenu ? '' : (
+            <Stack direction="row" spacing={0.75} alignItems="center" sx={{ width: '100%', minWidth: 0 }}>
+              <Typography component="span" noWrap sx={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{t(`${item?.title}`)}</Typography>
+              {item?.betaFeature && <BetaBadge feature={item.betaFeature} />}
+            </Stack>
           )}
+          secondary={item?.subtitle && !hideMenu ? <Typography variant="caption" component="span">{itemSubtitle}</Typography> : null}
+        >
         </ListItemText>
 
         {!item?.chip || hideMenu ? null : (
-          <Chip
-            color={item?.chipColor}
-            variant={item?.variant ? item?.variant : 'filled'}
-            size="small"
-            label={t(item?.chip)}
-          />
+          <StatusBadge label={item.chip as StatusBadgeLabel} />
         )}
       </ListItemStyled>
     </List>

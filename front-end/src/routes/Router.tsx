@@ -14,6 +14,20 @@ const SamplePage = Loadable(lazy(() => import('../views/sample-page/SamplePage')
 const Dashboard = Loadable(lazy(() => import('../views/dashboard/Dashboard')));
 const LandingPage = Loadable(lazy(() => import('../views/landing-page/LandingPage')));
 const AccountsSettingsPage = Loadable(lazy(() => import('../views/account-settings-page/AccountsSettingsPage')));
+const StageBuilderPage = Loadable(lazy(() => import('../views/stage-builder-page/StageBuilderPage')));
+const StageBuilderTestPage = Loadable(lazy(() => import('../views/stage-builder-test-page/StageBuilderTestPage')));
+const StageGitHubTestPage = Loadable(
+  lazy(() => import('../views/stage-github-test-page/StageGitHubTestPage')),
+);
+const StagesPage = Loadable(lazy(() => import('../views/stages-page/StagesPage')));
+const TeacherCoursesPage = Loadable(lazy(() => import('../views/courses-teacher-page/TeacherCoursesPage')));
+const CourseEditorPage = Loadable(lazy(() => import('../views/course-editor-page/CourseEditorPage')));
+const CoursesPage = Loadable(lazy(() => import('../views/courses-page/CoursesPage')));
+const CoursePage = Loadable(lazy(() => import('../views/course-page/CoursePage')));
+const LessonWorkspacePage = Loadable(lazy(() => import('../views/lesson-workspace-page/LessonWorkspacePage')));
+const CourseProgressPage = Loadable(lazy(() => import('../views/course-progress-page/CourseProgressPage')));
+const ClassGroupsTeacherPage = Loadable(lazy(() => import('../views/class-groups-teacher-page/ClassGroupsTeacherPage')));
+const ClassGroupsStudentPage = Loadable(lazy(() => import('../views/class-groups-student-page/ClassGroupsStudentPage')));
 
 //const BlocklyPage = Loadable(lazy(() => import('../views/blockly-page/BlocklyPage')));
 //const BlocklyPage =  '../views/blockly-page/BlocklyPage';
@@ -33,6 +47,7 @@ const Error = Loadable(lazy(() => import('../views/authentication/Error')));
 import AuthProvider from '../authentication/AuthProvider'; // Update with actual path
 import PrivateRoute from './PrivateRoute'; // Update with actual path
 import AdminPanelPage from 'src/views/admin-panel-page/AdminPanelPage';
+const AIAdminPage = Loadable(lazy(() => import('../views/ai-admin-page/AIAdminPage')));
 
 const RoleBasedRoute = Loadable(lazy(() => import('./RoleBasedRoute')));
 const AdminRoute = Loadable(lazy(() => import('./AdminRoute')));
@@ -117,6 +132,101 @@ const Router = [
   },
 
   {
+    path: '/stages',
+    title: 'Stages',
+    element: (
+      <PrivateRoute>
+        <RoleBasedRoute betaTesterOnly><FullLayout /></RoleBasedRoute>
+      </PrivateRoute>
+    ),
+    children: [{ path: '', exact: true, element: <StagesPage /> }],
+  },
+  {
+    path: '/courses',
+    title: 'Courses',
+    element: <PrivateRoute><RoleBasedRoute betaTesterOnly><FullLayout /></RoleBasedRoute></PrivateRoute>,
+    children: [{ path: '', exact: true, element: <CoursesPage /> }],
+  },
+  {
+    path: '/courses/:courseId',
+    title: 'Course',
+    element: <PrivateRoute><RoleBasedRoute betaTesterOnly><FullLayout /></RoleBasedRoute></PrivateRoute>,
+    children: [{ path: '', exact: true, element: <CoursePage /> }],
+  },
+  {
+    path: '/courses/:courseId/learn/:lessonKey',
+    title: 'Lesson',
+    element: <PrivateRoute><RoleBasedRoute betaTesterOnly><FullLayout /></RoleBasedRoute></PrivateRoute>,
+    children: [{ path: '', exact: true, element: <LessonWorkspacePage /> }],
+  },
+  {
+    path: '/teach/courses',
+    title: 'Teacher courses',
+    element: (
+      <PrivateRoute>
+        <RoleBasedRoute roles={['tutor', 'admin']} betaTesterOnly><FullLayout /></RoleBasedRoute>
+      </PrivateRoute>
+    ),
+    children: [{ path: '', exact: true, element: <TeacherCoursesPage /> }],
+  },
+  {
+    path: '/teach/classrooms',
+    title: 'Class groups',
+    element: (
+      <PrivateRoute>
+        <RoleBasedRoute roles={['tutor', 'admin']} betaTesterOnly><FullLayout /></RoleBasedRoute>
+      </PrivateRoute>
+    ),
+    children: [{ path: '', exact: true, element: <ClassGroupsTeacherPage /> }],
+  },
+  {
+    path: '/classrooms',
+    title: 'Class groups',
+    element: <PrivateRoute><RoleBasedRoute roles={['user']} betaTesterOnly><FullLayout /></RoleBasedRoute></PrivateRoute>,
+    children: [{ path: '', exact: true, element: <ClassGroupsStudentPage /> }],
+  },
+  {
+    path: '/teach/courses/:courseId',
+    title: 'Course editor',
+    element: (
+      <PrivateRoute>
+        <RoleBasedRoute roles={['tutor', 'admin']} betaTesterOnly><FullFillLayout /></RoleBasedRoute>
+      </PrivateRoute>
+    ),
+    children: [{ path: '', exact: true, element: <CourseEditorPage /> }],
+  },
+  {
+    path: '/teach/courses/:courseId/progress',
+    title: 'Course progress',
+    element: (
+      <PrivateRoute>
+        <RoleBasedRoute roles={['tutor', 'admin']} betaTesterOnly><FullLayout /></RoleBasedRoute>
+      </PrivateRoute>
+    ),
+    children: [{ path: '', exact: true, element: <CourseProgressPage /> }],
+  },
+  {
+    path: '/stage-builder',
+    title: 'Stage Builder',
+    element: (
+      <PrivateRoute>
+        <RoleBasedRoute betaTesterOnly><BlankLayout /></RoleBasedRoute>
+      </PrivateRoute>
+    ),
+    children: [
+      { path: '', exact: true, element: <StageBuilderPage /> },
+      { path: 'test', exact: true, element: <StageBuilderTestPage /> },
+    ],
+  },
+  {
+    path: '/stage-test',
+    title: 'GitHub Stage Test',
+    element: <PrivateRoute><RoleBasedRoute betaTesterOnly><BlankLayout /></RoleBasedRoute></PrivateRoute>,
+    children: [
+      { path: '', exact: true, element: <StageGitHubTestPage /> },
+    ],
+  },
+  {
     path: '/interactive-page',
     element: (
       <PrivateRoute>
@@ -179,7 +289,7 @@ const Router = [
   {
     path: '/accountSettings',
     title: 'Account Settings',
-    element: <AdminRoute />,
+    element: <PrivateRoute />,
     children: [
       {
         path: '',
@@ -191,12 +301,24 @@ const Router = [
   {
     path: '/admin-panel',
     title: 'Admin Panel',
-    element: <PrivateRoute />,
+    element: <AdminRoute />,
     children: [
       {
         path: '',
         element: <FullLayout />,
         children: [{ path: '', exact: true, element: <AdminPanelPage /> }],
+      },
+    ],
+  },
+  {
+    path: '/admin/ai',
+    title: 'AI settings',
+    element: <AdminRoute />,
+    children: [
+      {
+        path: '',
+        element: <FullLayout />,
+        children: [{ path: '', exact: true, element: <AIAdminPage /> }],
       },
     ],
   },

@@ -1,0 +1,48 @@
+{
+  "version": "1",
+  "as_of": "2026-07-31",
+  "status": "manual_execution_required",
+  "candidates": [
+    {
+      "id": "Llama-3.2-1B-Instruct-q4f16_1-MLC",
+      "provider": "WebLLM prebuiltAppConfig",
+      "runtime": "browser",
+      "quantization": "q4f16_1",
+      "declared_vram_mb": 879.04,
+      "source": "https://github.com/mlc-ai/web-llm/blob/main/src/config.ts",
+      "run_status": "not_run_manual_handoff"
+    },
+    {
+      "id": "Llama-3.2-3B-Instruct-q4f16_1-MLC",
+      "provider": "WebLLM prebuiltAppConfig",
+      "runtime": "browser",
+      "quantization": "q4f16_1",
+      "declared_vram_mb": 2263.69,
+      "source": "https://github.com/mlc-ai/web-llm/blob/main/src/config.ts",
+      "run_status": "not_run_manual_handoff"
+    },
+    {
+      "id": "Qwen2.5-3B-Instruct-q4f16_1-MLC",
+      "provider": "WebLLM prebuiltAppConfig",
+      "runtime": "browser",
+      "quantization": "q4f16_1",
+      "declared_vram_mb": 2504.76,
+      "source": "https://github.com/mlc-ai/web-llm/blob/main/src/config.ts",
+      "run_status": "not_run_manual_handoff"
+    },
+    {
+      "id": "gpt-5-mini-2025-08-07",
+      "provider": "OpenAI",
+      "runtime": "hosted",
+      "source": "https://platform.openai.com/docs/models",
+      "run_status": "not_run_manual_handoff"
+    },
+    {
+      "id": "gemini-2.5-flash",
+      "provider": "Google Gemini",
+      "runtime": "hosted",
+      "source": "https://ai.google.dev/gemini-api/docs/models/gemini-2.5-flash",
+      "run_status": "optional_not_run_manual_handoff"
+    }
+  ]
+}

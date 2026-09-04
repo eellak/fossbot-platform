@@ -8,6 +8,8 @@ type WorkerResponse = {
   floorsensor?: boolean[];
   script: string;
   lightsensor?: number;
+  frequencyHz?: number;
+  durationMs?: number;
 };
 
 let pyodide: any;
@@ -20,6 +22,7 @@ onmessage = async function (event: MessageEvent) {
   if (data.command === 'run') {
     isStopped = false;  // Reset the stop flag
     await runPythonCode(data);
+    postMessage(JSON.stringify({ command: 'execution_complete' }));
   } else if (data.command === 'stop') {
     isStopped = true;  // Set the stop flag
     console.log('stop command received');
@@ -35,7 +38,8 @@ onmessage = async function (event: MessageEvent) {
              data.command === 'getacceleration_done' || data.command === 'getgyroscope_done' ||
              data.command === 'getfloorsensor_done'|| data.command === 'just_rotate_done' || 
              data.command === 'just_move_done' || data.command === 'stop_motion_done' || 
-             data.command === 'getlightsensor_done'|| data.command === 'drawLine_done') {
+             data.command === 'getlightsensor_done'|| data.command === 'drawLine_done' ||
+             data.command === 'buzzer_beep_done') {
     if (pendingActionResolve) {
       pendingActionResolve(data);
       pendingActionResolve = null;
@@ -144,6 +148,12 @@ const setUpPyodide = async () => {
   loadedPyodide.globals.set('rgb_set_color', async (color: string) => {
     if (isStopped) return;
     postMessage(JSON.stringify({ command: 'rgbsetcolor', color }));
+    await waitForAction();
+  });
+
+  loadedPyodide.globals.set('buzzer_beep', async (frequencyHz: number, durationMs: number) => {
+    if (isStopped) return;
+    postMessage(JSON.stringify({ command: 'buzzerBeep', frequencyHz, durationMs }));
     await waitForAction();
   });
 
@@ -292,8 +302,8 @@ const runPythonCode = async (data: WorkerResponse) => {
     const functionsToAwait = [
       'move_forward_distance', 'move_reverse_distance', 'rotate_90', 
       'rotate_45', 'rotate_degrees', 'rotate_clockwise', 'rotate_counterclockwise', 
-      'get_obstacle_distance', 'rgb_set_color', 'draw', 'just_move', 
-      'just_rotate', 'stop', 'get_acceleration', 'get_light_sensor', 
+      'get_obstacle_distance', 'rgb_set_color', 'buzzer_beep', 'draw', 'just_move',
+      'just_rotate', 'stop', 'get_acceleration', 'get_light_sensor',
       'get_gyroscope', 'get_floor_sensor', 'move_step'
     ];
 

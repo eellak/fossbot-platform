@@ -9,8 +9,12 @@ import {
   IconLayoutDashboard,
   IconAlbum,
   IconHandGrab,
-  IconDeviceGamepad2
+  IconDeviceGamepad2,
+  IconMap,
+  IconWorld,
+  IconBooks,
 } from '@tabler/icons-react';
+import type { BetaFeature } from 'src/config/betaFeatures';
 
 interface MenuitemsType {
   [x: string]: any;
@@ -25,6 +29,9 @@ interface MenuitemsType {
   chipColor?: string;
   variant?: string;
   external?: boolean;
+  allowedRoles?: string[];
+  betaOnly?: boolean;
+  betaFeature?: BetaFeature;
 }
 
 const Menuitems: MenuitemsType[] = [
@@ -46,6 +53,14 @@ const Menuitems: MenuitemsType[] = [
     icon: IconLayoutDashboard,
     href: '/dashboard',
     chipColor: 'secondary',
+  },
+  {
+    id: uniqueId(),
+    title: 'Stages',
+    icon: IconWorld,
+    href: '/stages?create=1',
+    betaOnly: true,
+    betaFeature: 'stages',
   },
   {
     navlabel: true,
@@ -70,11 +85,22 @@ const Menuitems: MenuitemsType[] = [
 
   {
     id: uniqueId(),
+    title: 'menu.stageBuilder',
+    subtitle: 'menu.stageBuilderBased',
+    icon: IconMap,
+    href: '/stage-builder',
+    betaOnly: true,
+    betaFeature: 'stages',
+  },
+
+  {
+    id: uniqueId(),
     title: 'menu.interactive',
     subtitle: 'menu.interactiveBased',
     icon: IconHandGrab,
     href: '/interactive-page',
     disabled: false,
+    betaFeature: 'interactive',
   },
   {
     id: uniqueId(),
@@ -91,10 +117,27 @@ const Menuitems: MenuitemsType[] = [
   },
   {
     id: uniqueId(),
+    title: 'menu.studentCourses',
+    icon: IconBooks,
+    href: '/courses',
+    allowedRoles: ['user'],
+    betaOnly: true,
+    betaFeature: 'education',
+  },
+  {
+    id: uniqueId(),
+    title: 'menu.teacherCourses',
+    icon: IconBooks,
+    href: '/teach/courses',
+    allowedRoles: ['tutor', 'admin'],
+    betaOnly: true,
+    betaFeature: 'education',
+  },
+  {
+    id: uniqueId(),
     title: 'menu.tutorials',
     icon: IconAlbum,
-    chip: 'preview',
-    // chipColor: 'primary',
+    chip: 'Preview',
     href: '/tutorials-page',
     disabled: false,
   },
@@ -102,8 +145,7 @@ const Menuitems: MenuitemsType[] = [
     id: uniqueId(),
     title: 'menu.kindergarten',
     icon: IconMoodKid,
-    chip: 'soon',
-    // chipColor: 'primary',
+    chip: 'Soon',
     href: '/material-page',
     disabled: true,
   },
@@ -111,7 +153,7 @@ const Menuitems: MenuitemsType[] = [
     id: uniqueId(),
     title: 'menu.elementary',
     icon: IconMoodHappy,
-    chip: 'soon',
+    chip: 'Soon',
     href: '/material-page',
     disabled: true,
   },

@@ -4,18 +4,21 @@ import os
 import re
 import time
 import urllib.request
-from typing import List
+from typing import Any, List, Optional
 
 import uvicorn
 from database.database import (
-    Curriculum,
-    Lesson,
+    LocalStage,
+    MarketplaceModerationOverride,
+    MarketplaceRoleAssignment,
     Projects,
     User,
     create_db_tables,
     getSessionLocal,
     migrate_schema,
+    run_tracked_migrations,
 )
+from database.dev_seed import seed_dev_data
 from fastapi import Body, Depends, FastAPI, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer
@@ -33,18 +36,36 @@ from models.models import (
     UpdateUserPasswordRequest,
     UpdateUserRequest,
     UpdateUserRoleRequest,
+    UpdateMarketplaceRolesRequest,
     UserResponse,
     UserRole,
 )
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, OperationalError
+from routers.stage_sources import (
+    FOSSBOT_REPO_PREFIX,
+    github_raw_base_url,
+    github_stage_error,
+    require_connection,
+    router as stage_sources_router,
+    stage_error,
+    stage_repo_list_item,
+)
+from routers.marketplace import cached_public_marketplace_index, router as marketplace_router
+from routers.local_stages import router as local_stages_router
+from routers.courses import router as courses_router
+from routers.classrooms import router as classrooms_router
+from routers.ai import router as ai_router
+from routers.ai_admin import router as ai_admin_router
+from utils.github_app_auth import create_github_app_jwt
+from utils.beta_access import require_beta_access
+from utils.marketplace_schema import marketplace_entry_path
+from utils.source_providers import get_provider
+from utils.source_providers.github_app import GitHubApiError
 from utils.utils_hash import get_hashed, verify_hashed
 from utils.utils_jwt import create_access_token, verify_access_token
 
 logger = logging.getLogger("uvicorn")
 SessionLocal = getSessionLocal()
-
-# Database creation
-create_db_tables()
 
 # FastAPI app
 app = FastAPI()
@@ -61,12 +82,39 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.include_router(stage_sources_router)
+app.include_router(marketplace_router)
+app.include_router(local_stages_router)
+app.include_router(courses_router)
+app.include_router(classrooms_router)
+app.include_router(ai_router)
+app.include_router(ai_admin_router)
 
 # Security
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 
 REVOKED_ACCESS_MESSAGE = "Your access to the platform has been revoked."
+MARKETPLACE_ROLES = {"verifier", "moderator"}
+
+
+def user_payload(db: SessionLocal, user: User) -> dict[str, Any]:
+    roles = [assignment.role for assignment in db.query(MarketplaceRoleAssignment).filter(MarketplaceRoleAssignment.user_id == user.id).all()]
+    return {
+        "id": user.id,
+        "username": user.username,
+        "firstname": user.firstname,
+        "lastname": user.lastname,
+        "email": user.email,
+        "role": user.role,
+        "image_url": user.image_url,
+        "beta_tester": user.beta_tester,
+        "activated": user.activated,
+        "firebase_uid": user.firebase_uid,
+        "provider": user.provider,
+        "access_revoked": user.access_revoked,
+        "marketplace_roles": sorted(roles),
+    }
 FIREBASE_CERTS_URL = 'https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com'
 _firebase_certs_cache = {'certs': {}, 'expires_at': 0}
 
@@ -146,10 +194,34 @@ def create_admin_user():
         logger.info("Admin user already exists")
     db.close()
 
+def initialize_database(max_attempts: int = 30, delay_seconds: float = 1.0):
+    for attempt in range(1, max_attempts + 1):
+        try:
+            create_db_tables()
+            run_tracked_migrations()
+            migrate_schema()
+            create_admin_user()
+            if os.getenv("SEED_DEV_SAMPLE_COURSE", "false").lower() in {"1", "true", "yes"}:
+                db = SessionLocal()
+                try:
+                    seed_dev_data(
+                        db,
+                        os.getenv("ADMIN_USERNAME", "admin"),
+                        os.getenv("DEV_TEST_USER_PASSWORD", "dev"),
+                    )
+                finally:
+                    db.close()
+            return
+        except OperationalError as error:
+            if attempt == max_attempts:
+                raise
+            logger.warning("Database is not ready yet (%s/%s): %s", attempt, max_attempts, error)
+            time.sleep(delay_seconds)
+
+
 @app.on_event("startup")
 def on_startup():
-    migrate_schema()
-    create_admin_user()
+    initialize_database()
 
 
 def get_user(db, username: str):
@@ -259,7 +331,7 @@ def link_local_user_to_firebase_provider(db, user: User, firebase_uid: str, prov
         user.image_url = photo_url
     db.commit()
     db.refresh(user)
-    return user
+    return user_payload(db, user)
 
 
 def update_firebase_user_metadata(db, user: User, display_name: str, email: str, firebase_uid: str, provider: str, photo_url):
@@ -361,8 +433,6 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: SessionLocal
 
 @app.post("/token")
 async def login_for_access_token( login_request: LoginRequest,  db: SessionLocal = Depends(get_db)):
-    
-    logger.info(f"Request body: {login_request}")
     user = authenticate_user(db, login_request.username, login_request.password)
     
     if not user:
@@ -417,7 +487,7 @@ async def read_users_me(token: str = Depends(oauth2_scheme), db: SessionLocal = 
         raise credentials_exception
     if user.access_revoked:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=REVOKED_ACCESS_MESSAGE)
-    return user
+    return user_payload(db, user)
 
 @app.put("/users/me")
 async def update_user_info(user_update: UpdateUserRequest, current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):
@@ -510,6 +580,27 @@ async def update_user_role(user_id: int, user_role_update: UpdateUserRoleRequest
 
     return db_user
 
+
+@app.put("/users/{user_id}/marketplace-roles")
+async def update_marketplace_roles(
+    user_id: int,
+    role_update: UpdateMarketplaceRolesRequest,
+    current_user: User = Depends(get_current_user),
+    db: SessionLocal = Depends(get_db),
+):
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Not authorized to manage marketplace roles")
+    requested = set(role_update.roles)
+    if not requested.issubset(MARKETPLACE_ROLES):
+        raise HTTPException(status_code=400, detail="Marketplace roles must be verifier and/or moderator")
+    db_user = db.query(User).filter(User.id == user_id).first()
+    if db_user is None:
+        raise HTTPException(status_code=404, detail="User not found in database")
+    db.query(MarketplaceRoleAssignment).filter(MarketplaceRoleAssignment.user_id == user_id).delete()
+    db.add_all([MarketplaceRoleAssignment(user_id=user_id, role=role) for role in requested])
+    db.commit()
+    return user_payload(db, db_user)
+
 @app.put("/users/{user_id}/access_revoked")
 async def update_access_revoked_status(user_id: int, access_revoked_update: UpdateAccessRevokedRequest, current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):
     if current_user.role != UserRole.ADMIN:
@@ -569,8 +660,7 @@ async def read_users(current_user: User = Depends(get_current_user), db: Session
     if current_user.role != UserRole.ADMIN:
         raise HTTPException(status_code=403, detail="Not authorized to access this resource: GET USERS")
     
-    users = db.query(User).all()
-    return users
+    return [user_payload(db, user) for user in db.query(User).all()]
 
 def is_local_user(db_user: User) -> bool:
     return not db_user.firebase_uid and provider_is_local_only(db_user.provider)
@@ -607,22 +697,24 @@ async def delete_user(
 
 @app.get("/projects/")
 async def read_own_projects(current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):
-    return db.query(Projects).filter(Projects.user_id == current_user.id).all()
+    projects = db.query(Projects).filter(Projects.user_id == current_user.id).all()
+    return [project_payload(project) for project in projects]
 
 @app.post("/projects/")
 async def create_project(project: ProjectsCreate, current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):
     db_project = Projects(name=project.name, description=project.description,project_type=project.project_type,code=project.code, user_id=current_user.id)
+    set_project_stage_reference(db_project, normalize_stage_reference(project.stageReference, current_user, db))
     db.add(db_project)
     db.commit()
     db.refresh(db_project)
-    return db_project
+    return project_payload(db_project)
 
 @app.get("/projects/{project_id}")
 async def read_project(project_id: int, current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):
     project = db.query(Projects).filter(Projects.id == project_id, Projects.user_id == current_user.id).first()
     if project is None:
         raise HTTPException(status_code=404, detail="Project not found")
-    return project
+    return project_payload(project)
 
 @app.delete("/projects/{project_id}")
 async def delete_project(project_id: int, current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):
@@ -642,10 +734,206 @@ async def update_project(project_id: int, project_update: ProjectsCreate, curren
     db_project.name = project_update.name
     db_project.description = project_update.description    
     db_project.code = project_update.code
+    if stage_reference_was_provided(project_update):
+        set_project_stage_reference(db_project, normalize_stage_reference(project_update.stageReference, current_user, db))
 
     db.commit()
     db.refresh(db_project)
-    return db_project
+    return project_payload(db_project)
+
+
+def clear_project_stage_reference(project: Projects) -> None:
+    project.stage_source_type = None
+    project.stage_local_id = None
+    project.stage_repo_owner = None
+    project.stage_repo_name = None
+    project.stage_repo_visibility = None
+    project.stage_marketplace_entry_path = None
+    project.stage_title = None
+    project.stage_url = None
+    project.stage_commit_sha = None
+
+
+def set_project_stage_reference(project: Projects, reference: Optional[dict[str, Any]]) -> None:
+    clear_project_stage_reference(project)
+    if not reference:
+        return
+    project.stage_source_type = reference.get("sourceType")
+    project.stage_local_id = reference.get("localStageId")
+    project.stage_repo_owner = reference.get("repoOwner")
+    project.stage_repo_name = reference.get("repoName")
+    project.stage_repo_visibility = reference.get("visibility")
+    project.stage_marketplace_entry_path = reference.get("marketplaceEntryPath")
+    project.stage_title = reference.get("title")
+    project.stage_url = reference.get("url")
+    project.stage_commit_sha = reference.get("commitSha")
+
+
+def stage_reference_payload(source: Any) -> Optional[dict[str, Any]]:
+    if not source.stage_source_type:
+        return None
+    return {
+        "sourceType": source.stage_source_type,
+        "localStageId": source.stage_local_id,
+        "repoOwner": source.stage_repo_owner,
+        "repoName": source.stage_repo_name,
+        "visibility": source.stage_repo_visibility,
+        "marketplaceEntryPath": source.stage_marketplace_entry_path,
+        "title": source.stage_title,
+        "url": source.stage_url,
+        "commitSha": source.stage_commit_sha,
+    }
+
+
+def project_payload(project: Projects) -> dict[str, Any]:
+    return {
+        "id": project.id,
+        "name": project.name,
+        "description": project.description,
+        "project_type": project.project_type,
+        "date_created": project.date_created,
+        "code": project.code,
+        "stage_source_type": project.stage_source_type,
+        "stage_local_id": project.stage_local_id,
+        "stage_repo_owner": project.stage_repo_owner,
+        "stage_repo_name": project.stage_repo_name,
+        "stage_repo_visibility": project.stage_repo_visibility,
+        "stage_marketplace_entry_path": project.stage_marketplace_entry_path,
+        "stage_title": project.stage_title,
+        "stage_url": project.stage_url,
+        "stage_commit_sha": project.stage_commit_sha,
+        "stageReference": stage_reference_payload(project),
+    }
+
+
+def stage_reference_was_provided(payload: Any) -> bool:
+    fields = getattr(payload, "model_fields_set", getattr(payload, "__fields_set__", set()))
+    return "stageReference" in fields
+
+
+def published_marketplace_entry(owner: Optional[str], repo: Optional[str], entry_path: Optional[str], db: SessionLocal) -> dict[str, Any]:
+    if entry_path and entry_path.startswith("local:"):
+        from routers.local_stages import local_marketplace_entries
+        try:
+            publication_id = int(entry_path.split(":", 1)[1])
+        except ValueError as error:
+            raise stage_error(400, "validation_failed", "Local marketplace reference is invalid.") from error
+        local_entry = next((entry for entry in local_marketplace_entries(db) if entry.get("localPublicationId") == publication_id), None)
+        suppressed = db.query(MarketplaceModerationOverride.id).filter(
+            MarketplaceModerationOverride.source_type == "local",
+            MarketplaceModerationOverride.local_publication_id == publication_id,
+            MarketplaceModerationOverride.active.is_(True),
+        ).first()
+        if local_entry and not suppressed:
+            return local_entry
+        raise stage_error(404, "marketplace_stage_not_found", "Choose a local stage that is currently published.")
+    payload = cached_public_marketplace_index()
+    stages = payload.get("stages") or []
+    normalized_entry_path = entry_path
+    if not normalized_entry_path and owner and repo:
+        normalized_entry_path = marketplace_entry_path(owner, repo)
+    for entry in stages:
+        candidate_path = marketplace_entry_path(entry.get("repoOwner") or "", entry.get("repoName") or "")
+        if normalized_entry_path and candidate_path == normalized_entry_path:
+            return entry
+        if owner and repo and entry.get("repoOwner") == owner and entry.get("repoName") == repo:
+            return entry
+    raise stage_error(404, "marketplace_stage_not_found", "Choose a stage that is already published in the marketplace.")
+
+
+def installed_user_stage_reference(current_user: User, db: SessionLocal, owner: str, repo_name: str) -> dict[str, Any]:
+    if not repo_name.startswith(FOSSBOT_REPO_PREFIX):
+        raise stage_error(403, "repo_not_allowed", "Lecture stages must use fossbot-* repositories.")
+    provider = get_provider("github_app")
+    try:
+        connection, user_token = require_connection(db, current_user)
+        repos = provider.list_installation_repositories(user_token, connection.installation_id)
+        repo = next(
+            (
+                item for item in repos
+                if item.get("name") == repo_name and (item.get("owner") or {}).get("login", "").lower() == owner.lower()
+            ),
+            None,
+        )
+        if not repo:
+            raise stage_error(404, "repo_not_allowed", "Choose one of your installed FOSSBot GitHub stage repositories.")
+        installation_token = provider.create_installation_token(create_github_app_jwt(), connection.installation_id, repo.get("id"))
+        stage_item = stage_repo_list_item(provider, installation_token, repo)
+    except GitHubApiError as error:
+        raise github_stage_error(error) from error
+    if not stage_item:
+        raise stage_error(400, "validation_failed", "That repository is not a valid FOSSBot stage repository.")
+    return stage_item
+
+
+def normalize_stage_reference(reference: Any, current_user: User, db: SessionLocal) -> Optional[dict[str, Any]]:
+    if reference is None:
+        return None
+    source_type = reference.sourceType
+    if source_type == "default":
+        return {
+            "sourceType": "default",
+            "localStageId": None,
+            "repoOwner": None,
+            "repoName": None,
+            "visibility": None,
+            "marketplaceEntryPath": None,
+            "title": reference.title,
+            "url": reference.url,
+            "commitSha": None,
+        }
+    if source_type == "local":
+        if not reference.localStageId:
+            raise stage_error(400, "validation_failed", "Local stage references need localStageId.")
+        stage = db.query(LocalStage).filter(
+            LocalStage.id == reference.localStageId,
+            LocalStage.user_id == current_user.id,
+        ).first()
+        if not stage:
+            raise stage_error(404, "local_stage_not_found", "Choose one of your local stages.")
+        return {
+            "sourceType": "local",
+            "localStageId": stage.id,
+            "repoOwner": None,
+            "repoName": None,
+            "visibility": stage.visibility,
+            "marketplaceEntryPath": None,
+            "title": stage.title,
+            "url": None,
+            "commitSha": stage.checksum,
+        }
+    if source_type == "github":
+        require_beta_access(current_user)
+        if not reference.repoOwner or not reference.repoName:
+            raise stage_error(400, "validation_failed", "GitHub stage references need repoOwner and repoName.")
+        stage = installed_user_stage_reference(current_user, db, reference.repoOwner, reference.repoName)
+        return {
+            "sourceType": "github",
+            "localStageId": None,
+            "repoOwner": stage["repoOwner"],
+            "repoName": stage["repoName"],
+            "visibility": stage.get("visibility") or ("private" if stage.get("private") else "public"),
+            "marketplaceEntryPath": None,
+            "title": stage.get("title") or stage["repoName"],
+            "url": reference.url or stage.get("repoUrl"),
+            "commitSha": None,
+        }
+    if source_type == "marketplace":
+        entry = published_marketplace_entry(reference.repoOwner, reference.repoName, reference.marketplaceEntryPath, db)
+        is_local = entry.get("sourceType") == "local"
+        require_beta_access(current_user)
+        return {
+            "sourceType": "marketplace",
+            "localStageId": None,
+            "repoOwner": entry["repoOwner"],
+            "repoName": entry["repoName"],
+            "visibility": "public",
+            "marketplaceEntryPath": f"local:{entry['localPublicationId']}" if is_local else marketplace_entry_path(entry["repoOwner"], entry["repoName"]),
+            "title": entry.get("title") or entry["repoName"],
+            "url": entry.get("recordUrl") if is_local else f"{github_raw_base_url(entry['repoOwner'], entry['repoName'], entry['commitSha'])}/stage.json",
+            "commitSha": entry.get("commitSha"),
+        }
+    raise stage_error(400, "validation_failed", "stageReference.sourceType must be default, local, github, or marketplace.")
 
 
 # Run the application

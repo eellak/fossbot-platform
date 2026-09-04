@@ -14,6 +14,7 @@ import {
   IconFileTypography,
 } from '@tabler/icons-react';
 import { useAuth } from 'src/authentication/AuthProvider';
+import type { ProjectStageReference } from 'src/authentication/AuthInterfaces';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
@@ -21,9 +22,10 @@ interface NewProjectFormProps {
   isDescriptionDisabled: boolean,
   editorInitialValue: string,
   code: string,
+  stageReference?: ProjectStageReference | null,
 }
 
-const NewProjectForm = ({ isDescriptionDisabled, editorInitialValue, code }: NewProjectFormProps) => {
+const NewProjectForm = ({ isDescriptionDisabled, editorInitialValue, code, stageReference }: NewProjectFormProps) => {
   const { t } = useTranslation();
 
   const [selectedOption, setSelectedOption] = useState(editorInitialValue);
@@ -73,6 +75,7 @@ const NewProjectForm = ({ isDescriptionDisabled, editorInitialValue, code }: New
           description: description,
           project_type: selectedOption,
           code: code,
+          stageReference: stageReference || null,
         });
 
         const monacoPageUrl = `/monaco-page/${projectID}`;
