@@ -56,15 +56,32 @@ jobs:
               exit 1
             fi
 
+            # This is the deployment's hard safety gate. Everything above this
+            # point is read-only; no code, image, container, or schema change is
+            # allowed until a complete local PostgreSQL backup is verified.
             backup_dir=/fossbot-backups
-            backup_file="$backup_dir/fossbot-db-$(date -u +%Y%m%d-%H%M%SZ).dump"
+            backup_timestamp=$(date -u +%Y%m%d-%H%M%SZ)
+            backup_file="$backup_dir/fossbot-db-$backup_timestamp.dump"
+            backup_partial="$backup_file.partial"
+            backup_checksum="$backup_file.sha256"
             sudo mkdir -p "$backup_dir"
+
+            # Pre-create the partial dump privately. Rename it only after both
+            # pg_dump and pg_restore's archive validation succeed, so a failed
+            # deployment cannot leave a partial file looking like a valid dump.
+            sudo install -m 600 /dev/null "$backup_partial"
             sudo docker exec fsbt-db sh -c 'exec pg_dump -Fc -U "$POSTGRES_USER" -d "$POSTGRES_DB"' \
-              | sudo tee "$backup_file" >/dev/null
-            sudo test -s "$backup_file"
-            sudo sh -c "cat '$backup_file' | docker exec -i fsbt-db pg_restore --list >/dev/null"
+              | sudo tee "$backup_partial" >/dev/null
+            sudo test -s "$backup_partial"
+            sudo sh -c "cat '$backup_partial' | docker exec -i fsbt-db pg_restore --list >/dev/null"
+            sudo mv "$backup_partial" "$backup_file"
             sudo chmod 600 "$backup_file"
+            sudo sha256sum "$backup_file" | sudo tee "$backup_checksum" >/dev/null
+            sudo chmod 600 "$backup_checksum"
+            sudo sha256sum --check "$backup_checksum"
             echo "Verified database backup: $backup_file"
+            echo "Backup checksum: $backup_checksum"
+            echo "Restore review: create an empty database, then stream this dump into pg_restore inside fsbt-db."
 
             sudo git -c safe.directory=/fossbot-platform fetch origin
             sudo git -c safe.directory=/fossbot-platform reset --hard origin/master
