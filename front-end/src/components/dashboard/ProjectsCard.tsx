@@ -6,6 +6,7 @@ import NewProjectDialog from './NewProjectDialog';
 
 import { useState, useEffect } from 'react';
 import {
+  Button,
   Typography,
   Table,
   TableBody,
@@ -25,7 +26,7 @@ import { useTranslation } from 'react-i18next';
 import SuccessAlert from '../alerts/SuccessAlert';
 import ErrorAlert from '../alerts/ErrorAlert';
 
-const ProjectsCard = () => {
+const ProjectsCard = ({ previewAppearance = false }: { previewAppearance?: boolean }) => {
   const { t } = useTranslation();
 
   const auth = useAuth();
@@ -105,7 +106,7 @@ const ProjectsCard = () => {
         title={t('projects-card.card-title')}
         subtitle={t('projects-card.subtitle')}
         action={
-          <Fab color="success" aria-label="add" onClick={() => setShowDrawer(true)}>
+          previewAppearance ? <Button variant="contained" startIcon={<FontAwesomeIcon icon={faAdd} />} onClick={() => setShowDrawer(true)}>{t('newProject')}</Button> : <Fab color="success" aria-label="add" onClick={() => setShowDrawer(true)}>
             <FontAwesomeIcon icon={faAdd} size="2x" />
           </Fab>
         }

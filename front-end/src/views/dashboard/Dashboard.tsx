@@ -8,7 +8,7 @@ import { useTranslation } from 'react-i18next';
 import CourseResumeCard from 'src/components/dashboard/CourseResumeCard';
 import { useFeatureFlags } from 'src/config/FeatureFlags';
 
-const Modern = () => {
+const Modern = ({ previewAppearance = false }: { previewAppearance?: boolean }) => {
   const { t } = useTranslation();
   const { marketplace } = useFeatureFlags();
 
@@ -18,7 +18,7 @@ const Modern = () => {
         <Grid container spacing={3}>
           {marketplace && <Grid item xs={12}><CourseResumeCard /></Grid>}
           <Grid item xs={12} lg={12}>
-            <ProjectsCard />
+            <ProjectsCard previewAppearance={previewAppearance} />
           </Grid>
           {marketplace && <Grid item xs={12} xl={5}><UserStagesDashboardPanel /></Grid>}
           {marketplace && <Grid item xs={12} xl={7}><StageMarketplacePanel embedded preview /></Grid>}

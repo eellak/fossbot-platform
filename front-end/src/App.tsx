@@ -32,7 +32,8 @@ function App() {
   const { t } = useTranslation();
 
 
-  if (isMobile && !isEducationRoute) {
+  const isComparisonRoute = process.env.NODE_ENV === 'development' && pathname === '/ui-comparison';
+  if (isMobile && !isEducationRoute && !isComparisonRoute) {
     return (
       <>
         <div className="devices-page">

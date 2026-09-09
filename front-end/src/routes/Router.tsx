@@ -12,6 +12,9 @@ const BlankLayout = Loadable(lazy(() => import('../layouts/blank/BlankLayout')))
 /* ****Pages***** */
 const SamplePage = Loadable(lazy(() => import('../views/sample-page/SamplePage')));
 const Dashboard = Loadable(lazy(() => import('../views/dashboard/Dashboard')));
+const DashboardComparison = Loadable(lazy(() => import('../views/ui-comparison/DashboardComparison')));
+const DashboardPreview = Loadable(lazy(() => import('../views/ui-comparison/DashboardPreview')));
+const VisualLanguageSpecimen = Loadable(lazy(() => import('../views/ui-comparison/VisualLanguageSpecimen')));
 const LandingPage = Loadable(lazy(() => import('../views/landing-page/LandingPage')));
 const AccountsSettingsPage = Loadable(lazy(() => import('../views/account-settings-page/AccountsSettingsPage')));
 const StageBuilderPage = Loadable(lazy(() => import('../views/stage-builder-page/StageBuilderPage')));
@@ -53,6 +56,11 @@ const RoleBasedRoute = Loadable(lazy(() => import('./RoleBasedRoute')));
 const AdminRoute = Loadable(lazy(() => import('./AdminRoute')));
 
 const Router = [
+  ...(process.env.NODE_ENV === 'development' ? [
+    { path: '/ui-comparison', element: <PrivateRoute><DashboardComparison /></PrivateRoute> },
+    { path: '/ui-comparison/current', element: <PrivateRoute><DashboardPreview /></PrivateRoute>, children: [{ path: '', element: <Dashboard /> }, { path: 'components', element: <VisualLanguageSpecimen /> }] },
+    { path: '/ui-comparison/proposed', element: <PrivateRoute><DashboardPreview proposed /></PrivateRoute>, children: [{ path: '', element: <Dashboard previewAppearance /> }, { path: 'components', element: <VisualLanguageSpecimen /> }] },
+  ] : []),
   {
     path: '/sample-page',
     element: <BoxedLayout />,
