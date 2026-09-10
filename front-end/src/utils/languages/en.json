@@ -242,6 +242,7 @@
     "save": "Save",
     "run": "Run",
     "stop": "Stop",
+    "workspace": "Blockly workspace",
     "resizeColumns": "Resize Blockly and simulator panes. Use arrow keys; press Home or Enter to reset all panes."
   },
   "dashboard-page": {
@@ -264,6 +265,7 @@
     "save": "Save",
     "run": "Run",
     "stop": "Stop",
+    "workspace": "Python workspace",
     "resizeColumns": "Resize editor and simulator panes. Use arrow keys; press Home or Enter to reset all panes."
   },
   "landing-title": {

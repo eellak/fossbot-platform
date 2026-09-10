@@ -10,7 +10,6 @@ import {
   TextField,
   useMediaQuery,
   useTheme,
-  Paper,
   Tab,
   Tabs,
 } from '@mui/material';
@@ -39,9 +38,9 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useLocation } from 'react-router-dom';
 import { v4 as uuidv4 } from 'uuid';
 import { useTranslation } from 'react-i18next';
-import SearchBar from 'src/components/monaco-functions/MonacoSearchBar';
 import VideoPlayer from 'src/components/videoplayer/VideoPlayer';
 import NewProjectDialog from 'src/components/dashboard/NewProjectDialog';
+import SearchBar from 'src/components/monaco-functions/MonacoSearchBar';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faPython } from '@fortawesome/free-brands-svg-icons';
 import { IconDeviceFloppy, IconPlayerPlay, IconPlayerStop } from '@tabler/icons-react';
@@ -64,6 +63,8 @@ import AssistantPanel, { type AssistantSurfaceAdapter } from 'src/components/ai/
 import { fingerprintText } from 'src/ai/fingerprint';
 import { previewPythonSuggestion } from 'src/ai/suggestions/codeSuggestions';
 import WorkspaceResizeHandle from 'src/components/workspace/WorkspaceResizeHandle';
+import { WorkspaceFrame, WorkspacePane } from 'src/components/workspace/WorkspaceFrame';
+import PythonWorkspaceEditor from 'src/components/workspace/PythonWorkspaceEditor';
 import { workspaceLayout, workspacePaneDefaults } from 'src/components/workspace/workspaceLayout';
 import { isExistingProject, isRobotProgramActive } from './monacoWorkspaceState';
 
@@ -137,7 +138,6 @@ const MonacoPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppearan
   const [workspaceColumnSplit, setWorkspaceColumnSplit] = useState<number>(workspacePaneDefaults.columns);
   const [workspaceRowSplit, setWorkspaceRowSplit] = useState<number>(workspacePaneDefaults.rows);
   const [workspaceResizing, setWorkspaceResizing] = useState<MonacoResizeState | null>(null);
-  const [workspaceHoveredResize, setWorkspaceHoveredResize] = useState<MonacoResizeTarget | null>(null);
   const [workspaceActivePane, setWorkspaceActivePane] = useState<MonacoWorkspacePane>('code');
   const workspaceGridRef = useRef<HTMLDivElement | null>(null);
 
@@ -497,10 +497,6 @@ const MonacoPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppearan
     </Box>
   );
 
-  const highlightedWorkspaceResize = workspaceResizing?.target ?? workspaceHoveredResize;
-  const workspaceHighlightColumns = highlightedWorkspaceResize === 'columns' || highlightedWorkspaceResize === 'corner';
-  const workspaceHighlightRows = highlightedWorkspaceResize === 'rows' || highlightedWorkspaceResize === 'corner';
-  const workspacePaneBorderTransition = { transition: 'border-color 150ms ease-out', '@media (prefers-reduced-motion: reduce)': { transition: 'none' } } as const;
   const beginWorkspaceResize = (target: MonacoResizeTarget) => (event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return;
     event.preventDefault();
@@ -516,6 +512,7 @@ const MonacoPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppearan
     if (axis === 'x') setWorkspaceColumnSplit((value) => clampWorkspaceValue(value + delta * 2, 28, 65));
     if (axis === 'y') setWorkspaceRowSplit((value) => clampWorkspaceValue(value + delta * 2, 40, 72));
   };
+  const proposedEditor = <PythonWorkspaceEditor code={editorValue} onChange={setEditorValue} editorRef={editorRef} />;
 
   if (previewAppearance) {
     return (
@@ -552,10 +549,10 @@ const MonacoPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppearan
                 </Box>
               </Box>
               <Stack direction="row" spacing={1} alignItems="center">
-                <SearchBar variant="button" />
-                <Button variant="outlined" startIcon={<IconDeviceFloppy size={20} />} onClick={handleSaveClick}>{t('monaco-page.save')}</Button>
                 <Button variant="contained" startIcon={<IconPlayerPlay size={20} />} onClick={handlePlayClick} disabled={isRunning}>{t('monaco-page.run')}</Button>
                 <Button variant="outlined" startIcon={<IconPlayerStop size={20} />} disabled={!isRunning} onClick={handleStopClick}>{t('monaco-page.stop')}</Button>
+                <SearchBar variant="button" />
+                <Button variant="outlined" startIcon={<IconDeviceFloppy size={20} />} onClick={handleSaveClick}>{t('monaco-page.save')}</Button>
               </Stack>
             </Box>
             <Box sx={{ flex: 1, minHeight: 0, p: workspaceLayout.contentPadding, display: 'flex', flexDirection: 'column' }}>
@@ -568,7 +565,7 @@ const MonacoPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppearan
                 </Tabs>
                 <Box sx={{ pt: 2, minHeight: 480 }}>
                   <Box hidden={workspaceActivePane !== 'code'} sx={{ height: 480 }}>
-                    <MonacoEditorComponent ref={editorRef} code={editorValue} handleGetValue={handleGetValue} />
+                    {proposedEditor}
                   </Box>
                   <Box hidden={workspaceActivePane !== 'simulator'} sx={{ height: 480, width: '100%' }}>
                     <ExecutionTargetPanel height="100%">
@@ -585,14 +582,12 @@ const MonacoPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppearan
                 </Box>
                 </>
               ) : (
-                <Box ref={workspaceGridRef} sx={{ position: 'relative', display: 'grid', alignItems: 'stretch', gridTemplateAreas: '"editor simulator" "editor results"', gridTemplateColumns: `minmax(280px, ${workspaceColumnSplit}fr) minmax(360px, ${100 - workspaceColumnSplit}fr)`, gridTemplateRows: `minmax(${workspacePaneDefaults.upperMinHeight}px, ${workspaceRowSplit}fr) minmax(${workspacePaneDefaults.lowerMinHeight}px, ${100 - workspaceRowSplit}fr)`, gap: workspaceLayout.paneGap, flex: 1, minHeight: 0 }}>
-                <Paper variant="outlined" sx={{ gridArea: 'editor', overflow: 'hidden', minHeight: 0, minWidth: 0, borderRightColor: workspaceHighlightColumns ? theme.palette.primary.main : undefined, ...workspacePaneBorderTransition }}>
-                  <Box sx={{ height: '100%', minHeight: 0 }}>
-                    <MonacoEditorComponent ref={editorRef} code={editorValue} handleGetValue={handleGetValue} />
-                  </Box>
-                </Paper>
-                <Paper variant="outlined" sx={{ gridArea: 'simulator', position: 'relative', height: '100%', minHeight: 0, overflow: 'hidden', minWidth: 0, borderLeftColor: workspaceHighlightColumns ? theme.palette.primary.main : undefined, borderBottomColor: workspaceHighlightRows ? theme.palette.primary.main : undefined, ...workspacePaneBorderTransition }}>
-                  <ExecutionTargetPanel height="100%">
+                <WorkspaceFrame ref={workspaceGridRef} label={t('monaco-page.workspace')} sx={{ alignItems: 'stretch', gridTemplateAreas: '"editor simulator" "editor results"', gridTemplateColumns: `minmax(280px, ${workspaceColumnSplit}fr) minmax(360px, ${100 - workspaceColumnSplit}fr)`, gridTemplateRows: `minmax(${workspacePaneDefaults.upperMinHeight}px, ${workspaceRowSplit}fr) minmax(${workspacePaneDefaults.lowerMinHeight}px, ${100 - workspaceRowSplit}fr)`, flex: 1 }}>
+                <WorkspacePane gridArea="editor" label={t('education.workspace.code')}>
+                    {proposedEditor}
+                </WorkspacePane>
+                <WorkspacePane gridArea="simulator" label={t('education.workspace.simulator')}>
+                  <ExecutionTargetPanel height="100%" embedded>
                     <WebGLApp
                       appsessionId={sessionId}
                       onMountChange={handleMountChange}
@@ -601,14 +596,14 @@ const MonacoPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppearan
                       initialStageAssetBaseUrl={initialStageAssetBaseUrl}
                     />
                   </ExecutionTargetPanel>
-                </Paper>
-                <Paper variant="outlined" sx={{ gridArea: 'results', minHeight: 0, overflow: 'hidden', borderLeftColor: workspaceHighlightColumns ? theme.palette.primary.main : undefined, borderTopColor: workspaceHighlightRows ? theme.palette.primary.main : undefined, ...workspacePaneBorderTransition }}>
+                </WorkspacePane>
+                <WorkspacePane gridArea="results" label={t('education.workspace.results')}>
                   {proposedTerminal}
-                </Paper>
-                <WorkspaceResizeHandle overlay direction="vertical" position={workspaceColumnSplit} valueNow={workspaceColumnSplit} valueMin={28} valueMax={65} label={t('monaco-page.resizeColumns')} onPointerDown={beginWorkspaceResize('columns')} onReset={resetWorkspacePaneSizes} onKeyboardResize={resizeWorkspaceWithKeyboard} onHoverChange={(hovered) => setWorkspaceHoveredResize(hovered ? 'columns' : null)} />
-                <WorkspaceResizeHandle overlay direction="horizontal" position={workspaceRowSplit} crossStart={workspaceColumnSplit} valueNow={workspaceRowSplit} valueMin={40} valueMax={72} label={t('education.workspace.resizeRows')} onPointerDown={beginWorkspaceResize('rows')} onReset={resetWorkspacePaneSizes} onKeyboardResize={resizeWorkspaceWithKeyboard} onHoverChange={(hovered) => setWorkspaceHoveredResize(hovered ? 'rows' : null)} />
-                <WorkspaceResizeHandle overlay direction="corner" position={workspaceColumnSplit} secondaryPosition={workspaceRowSplit} label={`${t('monaco-page.resizeColumns')}; ${t('education.workspace.resizeRows')}`} onPointerDown={beginWorkspaceResize('corner')} onReset={resetWorkspacePaneSizes} onKeyboardResize={resizeWorkspaceWithKeyboard} onHoverChange={(hovered) => setWorkspaceHoveredResize(hovered ? 'corner' : null)} />
-                </Box>
+                </WorkspacePane>
+                <WorkspaceResizeHandle overlay direction="vertical" position={workspaceColumnSplit} valueNow={workspaceColumnSplit} valueMin={28} valueMax={65} label={t('monaco-page.resizeColumns')} onPointerDown={beginWorkspaceResize('columns')} onReset={resetWorkspacePaneSizes} onKeyboardResize={resizeWorkspaceWithKeyboard} />
+                <WorkspaceResizeHandle overlay direction="horizontal" position={workspaceRowSplit} crossStart={workspaceColumnSplit} valueNow={workspaceRowSplit} valueMin={40} valueMax={72} label={t('education.workspace.resizeRows')} onPointerDown={beginWorkspaceResize('rows')} onReset={resetWorkspacePaneSizes} onKeyboardResize={resizeWorkspaceWithKeyboard} />
+                <WorkspaceResizeHandle overlay direction="corner" position={workspaceColumnSplit} secondaryPosition={workspaceRowSplit} label={`${t('monaco-page.resizeColumns')}; ${t('education.workspace.resizeRows')}`} onPointerDown={beginWorkspaceResize('corner')} onReset={resetWorkspacePaneSizes} onKeyboardResize={resizeWorkspaceWithKeyboard} />
+                </WorkspaceFrame>
               )}
             </Box>
           </Box>

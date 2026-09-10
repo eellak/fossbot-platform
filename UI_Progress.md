@@ -1,6 +1,6 @@
 # UI progress
 
-Status as of 2026-09-09 on branch `ui-improvements`. `UI.md` is the source of truth for approved UI rules; this file tracks the experiment, completed work, and implementation plan.
+Status as of 2026-09-10 on branch `ui-improvements`. `UI.md` is the source of truth for approved UI rules; this file tracks the experiment, completed work, and implementation plan.
 
 ## Scope and approach
 
@@ -79,8 +79,9 @@ The comparison routes, preview props, specimen, and shell exceptions are tempora
 ## Implementation status
 
 - Commit `ed176d8` (`feat(ui): add visual language comparison`) contains the initial comparison, visual specimen, UI proposal, and preview wiring.
-- Work completed after that commit is currently uncommitted.
-- Production defaults remain unchanged unless a component receives the optional `previewAppearance` flag.
+- Commit `4bcf97e` (`feat(ui): improve layout and clarity`) contains the workspace, navigation, Dashboard, Courses, and comparison improvements completed through the previous review section.
+- The shared workspace standardization described below is currently uncommitted.
+- Comparison-only presentation changes remain behind `previewAppearance` where available; shared workspace and editor primitives intentionally affect every consumer that opts into them.
 - The working tree is intentionally dirty; preserve unrelated changes and do not commit again unless requested.
 - The latest development compilation reports no type-check issues.
 - Production builds passed earlier with the existing Blockly source-map and bundle-size warnings.
@@ -89,15 +90,31 @@ The comparison routes, preview props, specimen, and shell exceptions are tempora
 
 ## In progress
 
+### Blocks and separators (steps 1–2)
+
+- The borderless, gap-only Proposed desktop Python treatment was rejected after review. Python now returns to the Course Lesson visual language while keeping the shared pane abstraction.
+- `WorkspaceFrame` is an unboxed layout grid. Its three `WorkspacePane` regions are individually outlined and use the shared surface radius.
+- The shared workspace gap is 12px. Standalone Python, standalone Blockly, Course Lesson, and the course lesson preview all read it from `workspaceLayout.paneGap` rather than maintaining separate spacing values.
+- Proposed Python, Proposed Blockly, Course Lesson, and Course Editor's lesson preview now use the same `WorkspaceFrame` and `WorkspacePane` components. They share pane boundaries, spacing, default splits, clamp ranges, and the same invisible overlay resize handles.
+- Course Editor's lesson preview no longer carries a local resize-handle implementation; it now gets keyboard arrows, Home/Enter reset, focus treatment, and ARIA ranges from `WorkspaceResizeHandle`.
+- Code uses the editor directly, Simulator keeps its execution-target header inside a single pane boundary, and Terminal uses the existing course terminal treatment. Extra Code and Terminal pane headers were removed.
+- Hosted `ExecutionTargetPanel` remains boundaryless inside its `WorkspacePane`, avoiding a nested simulator outline without changing its default presentation elsewhere.
+- Proposed standalone Python and Course Lesson render the exact same `PythonWorkspaceEditor` component, with no helper overlay or footer inside the editor pane.
+- The API helper is restored to the action toolbars. Proposed Python and Blockly use the order Run, Stop, API helper, Save; Proposed Course Lesson places it immediately before Reset simulation. This keeps the editor surface uninterrupted and makes the helper placement consistent with the established page controls.
+- Shared Monaco editors no longer restore an unrelated saved viewport and no longer scroll beyond the final line. Each editor opens at the top-left, preventing short Python programs from appearing with line 6 at the top and a misleading full-height scrollbar.
+- Proposed Python resize handles retain their 16/24px hit regions, pointer and keyboard operation, ARIA ranges, focus treatment, and reset behavior without adding resting marks.
+- A development-only Course authoring comparison surface now uses the real `ActivityComposer` and saved-stage row component with synthetic, non-persistent data. It exposes activity boundaries, linked hints, nested mission objective cards, saved-stage rows, and routine info/warning/error callouts together without loading or modifying a real course or stage.
+- Pending: manual review of Course authoring at 1680×950, 1440×900, and 1024×600 in Light and Dark mode before refining authoring blocks, rows, and callouts.
+
 ### Python workspace (step 1)
 
 The standalone Python editor (`MonacoPage`) is the representative workspace for step 1. Comparison wiring is done; the Proposed layout is pending visual review at `/ui-comparison` (surface: Python).
 
 - The comparison page gained a Python surface: Current renders the untouched `MonacoPage`; Proposed renders `MonacoPage previewAppearance` inside the same `/ui-comparison` preview routes.
 - Proposed replaces the oversized blue title and circular Save/Play/Stop Fabs with a compact title bar: project icon, editable title, description caption, stage indicator, and labeled Save (outlined), Run (primary), Stop (outlined) buttons. Run is disabled and Stop enabled only while running; simulator events and the physical robot's `programState` keep that state synchronized through completion, stopping, and failure.
-- The Proposed workspace fits the viewport below the shell (`calc(100vh - 64px)`). It now uses the same resizable workspace system as the course lesson workspace: a CSS-grid of outlined `Paper` panes — `editor` (left, spanning both rows), `simulator` (top right), `results`/terminal (bottom right) — with the same overlay resize handles (columns, rows, corner), the same default splits (38/58), the same clamps (columns 28–65, rows 40–72), hover border highlighting, double-click reset, and the same tab fallback (Code/Simulator/Results) below the `md` breakpoint. There is no instructions pane in the standalone editor.
+- The Proposed workspace fits the viewport below the shell (`calc(100vh - 64px)`). Desktop uses an unboxed `WorkspaceFrame` grid containing three individually outlined `WorkspacePane` regions — `editor` (left, spanning both rows), `simulator` (top right), and `results`/terminal (bottom right) — with a 12px gap, the same overlay resize handles (columns, rows, corner), the same default splits (38/58), the same clamps (columns 28–65, rows 40–72), double-click reset, and the same tab fallback (Code/Simulator/Results) below the `md` breakpoint. There is no instructions pane in the standalone editor.
 - `WorkspaceResizeHandle` was extracted from `LessonWorkspacePage` into shared `components/workspace/WorkspaceResizeHandle.tsx`. Shared handles now expose their current range to assistive technology, accept arrow-key resizing, show keyboard focus, and reset with Home or Enter as well as double-click.
-- Grid rows use the course minima (`minmax(300px, …fr)` / `minmax(240px, …fr)`): at 1024×600 the page scrolls ~110px to reveal the full panes (same behavior as the course workspace); at 1440×900 and 1680×950 the workspace fits with no scroll.
+- Grid rows retain the existing shared minima (`minmax(180px, …fr)` / `minmax(140px, …fr)`) in this slice; at 1024×600 the page should still scroll to reveal the full panes, while 1440×900 and 1680×950 are intended to fit without scroll.
 - The constant ~16px scroll at every width came from the empty in-flow wrapper `<Box sx={{ mt: 2 }}>` around the portal-rendered `AssistantPanel`; the Proposed branch now renders `AssistantPanel` directly (it renders only `Portal`/`Dialog` elements, nothing in document flow). The production branch keeps its wrapper.
 - The remaining "very small" scroll came from the shell chrome being taller than assumed: the sticky AppBar is `TopbarHeight` (70px, only at `lg` and up; 64px below) and the `Container` adds 16px top/bottom padding. The Proposed workspace height is now computed as `calc(100vh - topbar - 32px)` from the same `customizer.TopbarHeight` store value the AppBar uses, so the page chrome and the workspace fill the viewport exactly.
 - The `Footer` (“All rights reserved by FOSSBot team”) was removed from `FullLayout`’s content column and replaced with a small muted copyright credit (11px, no logo image). It appears at the bottom of expanded desktop and mobile sidebars, with a horizontal-navigation fallback, and uses a keyboard-accessible external link. It remains hidden in collapsed mini-sidebar mode.
@@ -107,7 +124,7 @@ The standalone Python editor (`MonacoPage`) is the representative workspace for 
 - Saving a new Proposed Python project always opens the creation dialog; inline title and description editing is limited to existing projects so Save cannot issue an update with a missing project ID.
 - New dashboard project and stage empty-state copy is translated in English and Greek.
 - Focused tests cover new-project routing, physical-program running states, and keyboard resize direction mapping.
-- Pending: visual review at 1680×950, 1440×900, and 1024×600 (light/dark) before reusing the structure for Blockly and course workspaces.
+- Pending: visual review at 1680×950, 1440×900, and 1024×600 (light/dark) to confirm the standardized Python, Blockly, and Course viewers remain visually aligned.
 
 ## Remaining plan
 
@@ -118,7 +135,7 @@ The standalone Python editor (`MonacoPage`) is the representative workspace for 
 - [done] Explicit Simulator/Robot execution target via the execution target panel.
 - [done] Clear code, simulator, and terminal regions, one scroll owner each, fitted below the shared shell.
 - [done] Port the course workspace resizable grid (same handles, splits, clamps, tab fallback) without an instructions pane.
-- [open] Visual review at 1680×950, 1440×900, and 1024×600 before reusing the structure.
+- [open] Visual review at 1680×950, 1440×900, and 1024×600 to confirm the standardized viewers.
 
 ### 2. Blockly workspace
 
@@ -131,8 +148,9 @@ The standalone Python editor (`MonacoPage`) is the representative workspace for 
 
 ### 3. Course workspaces
 
-- [in progress] Apply the shared workspace hierarchy to course authoring and student lessons. A dedicated, role-independent Course lesson comparison fixture uses the real workspace components without student API calls or persistent writes; Proposed uses shell-aware flex sizing instead of a fixed `100vh - 210px` calculation while Current retains the baseline.
+- [done] Apply the shared workspace hierarchy to course authoring and student lessons. A dedicated, role-independent Course lesson comparison fixture uses the real workspace components without student API calls or persistent writes; Proposed uses shell-aware flex sizing instead of a fixed `100vh - 210px` calculation while Current retains the baseline.
 - [before PR] Remove the safe Course lesson fixture and its comparison-only route (`LessonWorkspacePreview.tsx`) before opening the pull request.
+- [before PR] Remove the safe Course authoring fixture and its comparison-only route (`CourseAuthoringPreview.tsx`) before opening the pull request.
 - [in progress] Reduce repeated headings, nested tabs, repeated information callouts, and exposed technical IDs. The duplicate lesson title was removed from the instructions pane.
 - Replace the permanent healthy release banner with status beside the relevant title or action.
 - Separate Saved, Published, and Completed states.

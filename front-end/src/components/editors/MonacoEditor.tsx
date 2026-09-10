@@ -22,6 +22,8 @@ const MonacoEditorComponent = forwardRef<MonacoEditorHandle, MonacoEditorProps>(
 
   const handleEditorDidMount = (editor: editor.IStandaloneCodeEditor) => {
     editorRef.current = editor;
+    editor.setPosition({ lineNumber: 1, column: 1 });
+    editor.setScrollPosition({ scrollTop: 0, scrollLeft: 0 });
     editor.focus(); // Set focus on the editor when it mounts
   };
 
@@ -80,9 +82,10 @@ const MonacoEditorComponent = forwardRef<MonacoEditorHandle, MonacoEditorProps>(
         language="python"
         theme={theme}
         value={code}
+        saveViewState={false}
         onMount={handleEditorDidMount}
         onChange={handleEditorChange}
-        options={{ automaticLayout: true }}
+        options={{ automaticLayout: true, scrollBeyondLastLine: false }}
         className='monacoEditorComponent'
         
       />

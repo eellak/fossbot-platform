@@ -4,6 +4,22 @@ import StorageIcon from '@mui/icons-material/Storage';
 import type { LocalStage } from './LocalStagesApi';
 import { formatStageRelativeTime } from './StageCard';
 
+export function LocalStageList({ stages, busy, onOpenStage }: {
+  stages: LocalStage[];
+  busy: boolean;
+  onOpenStage: (stage: LocalStage) => void;
+}) {
+  if (busy) {
+    return <Stack spacing={1}>{Array.from({ length: 4 }).map((_, item) => <Skeleton key={item} variant="rounded" height={64} />)}</Stack>;
+  }
+
+  return <List disablePadding sx={{ border: stages.length ? '1px solid' : 0, borderColor: 'divider', borderRadius: 1, overflow: 'hidden' }}>
+    {stages.map((stage) => <ListItemButton key={stage.id} onClick={() => onOpenStage(stage)} divider>
+      <ListItemText primary={<Stack direction="row" spacing={1} alignItems="center"><Typography component="span" fontWeight={800}>{stage.title}</Typography><Chip size="small" label={`r${stage.revision}`} variant="outlined" /></Stack>} secondary={`${stage.recordBytes.toLocaleString()} bytes · ${formatStageRelativeTime(stage.updatedAt)}`} />
+    </ListItemButton>)}
+  </List>;
+}
+
 export function OpenLocalStageDialog({ open, stages, busy, error, onClose, onRefresh, onOpenStage }: {
   open: boolean;
   stages: LocalStage[];
@@ -20,11 +36,7 @@ export function OpenLocalStageDialog({ open, stages, busy, error, onClose, onRef
         <Typography variant="body2" color="text.secondary">Choose a stage saved in this FOSSBot instance.</Typography>
         {error && <Alert severity="error">{error}</Alert>}
         {!busy && !stages.length && !error && <Box sx={{ py: 2, textAlign: 'center' }}><StorageIcon color="action" /><Typography variant="subtitle2" fontWeight={800}>No local stages yet</Typography><Typography variant="body2" color="text.secondary">Save the current stage to keep it in your account.</Typography></Box>}
-        {busy ? <Stack spacing={1}>{Array.from({ length: 4 }).map((_, item) => <Skeleton key={item} variant="rounded" height={64} />)}</Stack> : <List disablePadding sx={{ border: stages.length ? '1px solid' : 0, borderColor: 'divider', borderRadius: 1, overflow: 'hidden' }}>
-          {stages.map((stage) => <ListItemButton key={stage.id} onClick={() => onOpenStage(stage)} divider>
-            <ListItemText primary={<Stack direction="row" spacing={1} alignItems="center"><Typography component="span" fontWeight={800}>{stage.title}</Typography><Chip size="small" label={`r${stage.revision}`} variant="outlined" /></Stack>} secondary={`${stage.recordBytes.toLocaleString()} bytes · ${formatStageRelativeTime(stage.updatedAt)}`} />
-          </ListItemButton>)}
-        </List>}
+        <LocalStageList stages={stages} busy={busy} onOpenStage={onOpenStage} />
       </Stack>
     </DialogContent>
     <DialogActions><Button onClick={onRefresh} disabled={busy}>Refresh</Button><Button onClick={onClose} disabled={busy}>Close</Button></DialogActions>

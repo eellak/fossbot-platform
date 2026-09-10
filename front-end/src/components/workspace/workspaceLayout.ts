@@ -3,7 +3,7 @@ export const workspaceLayout = {
   horizontalPadding: 2,
   verticalPadding: 1,
   contentPadding: { xs: 1.5, md: 2 },
-  paneGap: 2,
+  paneGap: 1.5,
 } as const;
 
 export const workspacePaneDefaults = {

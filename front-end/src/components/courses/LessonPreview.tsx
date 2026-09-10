@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState, type MouseEventHandler, type PointerEvent as ReactPointerEvent, type PointerEventHandler } from 'react';
-import { Alert, Box, Button, Chip, Collapse, Dialog, DialogActions, DialogContent, DialogTitle, LinearProgress, Paper, Skeleton, Stack, Tab, Tabs, Typography, useMediaQuery, useTheme } from '@mui/material';
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import { Alert, Box, Button, Chip, Collapse, Dialog, DialogActions, DialogContent, DialogTitle, LinearProgress, Skeleton, Stack, Tab, Tabs, Typography, useMediaQuery, useTheme } from '@mui/material';
 import { IconArrowLeft, IconArrowRight, IconCircleCheck, IconLayoutSidebarLeftCollapse, IconRestore } from '@tabler/icons-react';
 import { useTranslation } from 'react-i18next';
 import { v4 as uuidv4 } from 'uuid';
@@ -13,11 +13,13 @@ import StudentCourseOutline from './StudentCourseOutline';
 import StudentActivities from './activities/StudentActivities';
 import LessonEditor from './workspace/LessonEditor';
 import LessonExecution from './workspace/LessonExecution';
+import WorkspaceResizeHandle from 'src/components/workspace/WorkspaceResizeHandle';
+import { WorkspaceFrame, WorkspacePane } from 'src/components/workspace/WorkspaceFrame';
+import { lessonWorkspacePaneDefaults } from 'src/components/workspace/workspaceLayout';
 
 type Pane = 'instructions' | 'code' | 'simulator' | 'results';
 type ResizeTarget = 'outline' | 'columns' | 'rows' | 'corner';
 type ResizeState = { target: ResizeTarget; startX: number; startY: number; startValue: number; startSecondary?: number };
-const paneDefaults = { outline: 270, columns: 38, rows: 58 } as const;
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
 interface LessonPreviewProps {
@@ -33,11 +35,10 @@ export default function LessonPreview({ course, initialLessonId, token, onClose 
   const [selectedId, setSelectedId] = useState(initialLessonId);
   const [activePane, setActivePane] = useState<Pane>('instructions');
   const [outlineOpen, setOutlineOpen] = useState(true);
-  const [outlineWidth, setOutlineWidth] = useState<number>(paneDefaults.outline);
-  const [columnSplit, setColumnSplit] = useState<number>(paneDefaults.columns);
-  const [rowSplit, setRowSplit] = useState<number>(paneDefaults.rows);
+  const [outlineWidth, setOutlineWidth] = useState<number>(lessonWorkspacePaneDefaults.outline);
+  const [columnSplit, setColumnSplit] = useState<number>(lessonWorkspacePaneDefaults.columns);
+  const [rowSplit, setRowSplit] = useState<number>(lessonWorkspacePaneDefaults.rows);
   const [resizing, setResizing] = useState<ResizeState | null>(null);
-  const [hoveredResize, setHoveredResize] = useState<ResizeTarget | null>(null);
   const [content, setContent] = useState<LessonWorkspace['content']>(null);
   const [generatedPython, setGeneratedPython] = useState('');
   const [completedKeys, setCompletedKeys] = useState<Set<string>>(new Set());
@@ -151,7 +152,12 @@ export default function LessonPreview({ course, initialLessonId, token, onClose 
     setResizing({ target, startX: event.clientX, startY: event.clientY, startValue, startSecondary: target === 'corner' ? rowSplit : undefined });
   };
   const resetPaneSizes = () => {
-    setResizing(null); setOutlineWidth(paneDefaults.outline); setColumnSplit(paneDefaults.columns); setRowSplit(paneDefaults.rows);
+    setResizing(null); setOutlineWidth(lessonWorkspacePaneDefaults.outline); setColumnSplit(lessonWorkspacePaneDefaults.columns); setRowSplit(lessonWorkspacePaneDefaults.rows);
+  };
+  const resizePaneWithKeyboard = (target: ResizeTarget) => (axis: 'x' | 'y', delta: number) => {
+    if (target === 'outline' && axis === 'x') setOutlineWidth((value) => clamp(value + delta * 20, 220, 420));
+    if ((target === 'columns' || target === 'corner') && axis === 'x') setColumnSplit((value) => clamp(value + delta * 2, 28, 65));
+    if ((target === 'rows' || target === 'corner') && axis === 'y') setRowSplit((value) => clamp(value + delta * 2, 40, 72));
   };
   const completeCurrent = (complete = true) => setCompletedKeys((current) => {
     const nextKeys = new Set(current);
@@ -169,10 +175,6 @@ export default function LessonPreview({ course, initialLessonId, token, onClose 
   const results = <LessonExecution code={code} sessionId={sessionId} hasStage={hasStage} hasMission={hasMission} showCommandHelper={lesson.editor_type === 'python'} onBeforeRun={runAfterReset} onResetSimulation={() => resetSimulation(true)} onChangeCamera={changeCamera} />;
   const hasWorkPane = hasStage || hasEditor;
   const desktopAreas = hasStage && hasEditor ? '"instructions simulator" "editor results"' : hasStage ? '"instructions simulator"' : hasEditor ? '"instructions editor" "instructions results"' : '"instructions"';
-  const highlightedResize = resizing?.target ?? hoveredResize;
-  const highlightColumns = highlightedResize === 'columns' || highlightedResize === 'corner';
-  const highlightRows = highlightedResize === 'rows' || highlightedResize === 'corner';
-  const paneBorderTransition = { transition: 'border-color 150ms ease-out', '@media (prefers-reduced-motion: reduce)': { transition: 'none' } } as const;
   const completed = completedKeys.has(lesson.lesson_key);
 
   return <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', bgcolor: 'background.paper', border: '4px solid', borderColor: 'warning.main', boxSizing: 'border-box' }}>
@@ -191,19 +193,19 @@ export default function LessonPreview({ course, initialLessonId, token, onClose 
     <LinearProgress variant="determinate" value={course.lessons.length ? completedKeys.size / course.lessons.length * 100 : 0} sx={{ height: 3 }} />
     <Box sx={{ display: 'flex', flex: 1, minHeight: 0 }}>
       {!compact && <Collapse in={outlineOpen} orientation="horizontal"><Box component="aside" sx={{ width: outlineWidth, height: '100%', p: 2, bgcolor: 'action.hover', overflow: 'auto' }}><StudentCourseOutline lessons={releaseLessons} progress={progress} selectedKey={lesson.lesson_key} title={t('education.student.outline')} completedLabel={t('education.student.completed')} onSelect={(key) => { const target = course.lessons.find((item) => item.lesson_key === key); if (target) setSelectedId(target.id); }} /></Box></Collapse>}
-      {!compact && outlineOpen && <WorkspaceResizeHandle direction="vertical" label={t('education.workspace.resizeOutline')} onPointerDown={beginResize('outline')} onDoubleClick={resetPaneSizes} />}
+      {!compact && outlineOpen && <WorkspaceResizeHandle direction="vertical" valueNow={outlineWidth} valueMin={220} valueMax={420} label={t('education.workspace.resizeOutline')} onPointerDown={beginResize('outline')} onReset={resetPaneSizes} onKeyboardResize={resizePaneWithKeyboard('outline')} />}
       <Box component="main" sx={{ flex: 1, minWidth: 0, p: { xs: 1.5, md: 2 }, overflow: 'auto' }}>
         {!compact && <Button size="small" startIcon={<IconLayoutSidebarLeftCollapse size={17} />} onClick={() => setOutlineOpen((value) => !value)} sx={{ mb: 1 }}>{t('education.workspace.outline')}</Button>}
         {compact ? <><Tabs value={activePaneValue} onChange={(_, value) => setActivePane(value)} variant="scrollable" scrollButtons="auto" allowScrollButtonsMobile aria-label={t('education.workspace.tabs')}>{panes.filter((pane) => pane.show).map((pane) => <Tab key={pane.key} value={pane.key} label={pane.label} />)}</Tabs><Box sx={{ pt: 2, minHeight: 480 }}><Box hidden={activePaneValue !== 'instructions'}>{instructions}</Box>{hasEditor && <Box hidden={activePaneValue !== 'code'} sx={{ height: 480 }}>{editor}</Box>}{hasStage && <Box hidden={activePaneValue !== 'simulator'} sx={{ height: 480 }}>{simulator}</Box>}{hasEditor && <Box hidden={activePaneValue !== 'results'}>{results}</Box>}</Box></> :
-          <Box ref={gridRef} sx={{ position: 'relative', display: 'grid', alignItems: hasEditor ? 'stretch' : 'start', gridTemplateAreas: desktopAreas, gridTemplateColumns: hasWorkPane ? `minmax(280px, ${columnSplit}fr) minmax(360px, ${100 - columnSplit}fr)` : 'minmax(0, 1fr)', gridTemplateRows: hasEditor ? `minmax(300px, ${rowSplit}fr) minmax(240px, ${100 - rowSplit}fr)` : 'auto', gap: 2, height: hasEditor ? 'calc(100vh - 210px)' : 'auto', minHeight: 'calc(100vh - 210px)' }}>
-            <Paper variant="outlined" sx={{ gridArea: 'instructions', p: { xs: 2, lg: 3 }, overflow: 'auto', borderRightColor: highlightColumns ? 'primary.main' : undefined, borderBottomColor: hasStage && highlightRows ? 'primary.main' : undefined, ...paneBorderTransition }}>{instructions}</Paper>
-            {hasStage && <Paper variant="outlined" sx={{ gridArea: 'simulator', position: hasEditor ? 'relative' : 'sticky', top: hasEditor ? undefined : 0, alignSelf: 'start', height: hasEditor ? '100%' : 'clamp(380px, 56vh, 560px)', minHeight: 0, overflow: 'hidden', minWidth: 0, borderLeftColor: highlightColumns ? 'primary.main' : undefined, borderBottomColor: hasEditor && highlightRows ? 'primary.main' : undefined, ...paneBorderTransition }}>{simulator}</Paper>}
-            {hasEditor && <Paper variant="outlined" sx={{ gridArea: 'editor', overflow: 'hidden', minHeight: 0, minWidth: 0, borderLeftColor: !hasStage && highlightColumns ? 'primary.main' : undefined, borderRightColor: hasStage && highlightColumns ? 'primary.main' : undefined, borderTopColor: hasStage && highlightRows ? 'primary.main' : undefined, borderBottomColor: !hasStage && highlightRows ? 'primary.main' : undefined, ...paneBorderTransition }}>{editor}</Paper>}
-            {hasEditor && <Paper variant="outlined" sx={{ gridArea: 'results', p: 2, minHeight: 0, overflow: 'hidden', borderLeftColor: highlightColumns ? 'primary.main' : undefined, borderTopColor: highlightRows ? 'primary.main' : undefined, ...paneBorderTransition }}>{results}</Paper>}
-            {hasWorkPane && <WorkspaceResizeHandle overlay direction="vertical" position={columnSplit} label={t('education.workspace.resizeColumns')} onPointerDown={beginResize('columns')} onDoubleClick={resetPaneSizes} onHoverChange={(hovered) => setHoveredResize(hovered ? 'columns' : null)} />}
-            {hasEditor && <WorkspaceResizeHandle overlay direction="horizontal" position={rowSplit} crossStart={hasStage ? 0 : columnSplit} label={t('education.workspace.resizeRows')} onPointerDown={beginResize('rows')} onDoubleClick={resetPaneSizes} onHoverChange={(hovered) => setHoveredResize(hovered ? 'rows' : null)} />}
-            {hasWorkPane && hasEditor && <WorkspaceResizeHandle overlay direction="corner" position={columnSplit} secondaryPosition={rowSplit} label={`${t('education.workspace.resizeColumns')}; ${t('education.workspace.resizeRows')}`} onPointerDown={beginResize('corner')} onDoubleClick={resetPaneSizes} onHoverChange={(hovered) => setHoveredResize(hovered ? 'corner' : null)} />}
-          </Box>}
+          <WorkspaceFrame ref={gridRef} label={t('education.workspace.tabs')} sx={{ alignItems: hasEditor ? 'stretch' : 'start', gridTemplateAreas: desktopAreas, gridTemplateColumns: hasWorkPane ? `minmax(280px, ${columnSplit}fr) minmax(360px, ${100 - columnSplit}fr)` : 'minmax(0, 1fr)', gridTemplateRows: hasEditor ? `minmax(${lessonWorkspacePaneDefaults.upperMinHeight}px, ${rowSplit}fr) minmax(${lessonWorkspacePaneDefaults.lowerMinHeight}px, ${100 - rowSplit}fr)` : 'auto', height: hasEditor ? 'calc(100vh - 210px)' : 'auto', minHeight: 'calc(100vh - 210px)' }}>
+            <WorkspacePane gridArea="instructions" label={t('education.workspace.instructions')} contentSx={{ p: { xs: 2, lg: 3 }, overflow: 'auto' }}>{instructions}</WorkspacePane>
+            {hasStage && <WorkspacePane gridArea="simulator" label={t('education.workspace.simulator')} sx={{ position: hasEditor ? 'relative' : 'sticky', top: hasEditor ? undefined : 0, alignSelf: 'start', height: hasEditor ? '100%' : 'clamp(380px, 56vh, 560px)' }}>{simulator}</WorkspacePane>}
+            {hasEditor && <WorkspacePane gridArea="editor" label={t('education.workspace.code')}>{editor}</WorkspacePane>}
+            {hasEditor && <WorkspacePane gridArea="results" label={t('education.workspace.results')} contentSx={{ p: 2 }}>{results}</WorkspacePane>}
+            {hasWorkPane && <WorkspaceResizeHandle overlay direction="vertical" position={columnSplit} valueNow={columnSplit} valueMin={28} valueMax={65} label={t('education.workspace.resizeColumns')} onPointerDown={beginResize('columns')} onReset={resetPaneSizes} onKeyboardResize={resizePaneWithKeyboard('columns')} />}
+            {hasEditor && <WorkspaceResizeHandle overlay direction="horizontal" position={rowSplit} crossStart={hasStage ? 0 : columnSplit} valueNow={rowSplit} valueMin={40} valueMax={72} label={t('education.workspace.resizeRows')} onPointerDown={beginResize('rows')} onReset={resetPaneSizes} onKeyboardResize={resizePaneWithKeyboard('rows')} />}
+            {hasWorkPane && hasEditor && <WorkspaceResizeHandle overlay direction="corner" position={columnSplit} secondaryPosition={rowSplit} label={`${t('education.workspace.resizeColumns')}; ${t('education.workspace.resizeRows')}`} onPointerDown={beginResize('corner')} onReset={resetPaneSizes} onKeyboardResize={resizePaneWithKeyboard('corner')} />}
+          </WorkspaceFrame>}
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} justifyContent="space-between" alignItems={{ sm: 'center' }} sx={{ mt: 2, pt: 2, borderTop: '1px solid', borderColor: 'divider' }}>
           <Button startIcon={<IconArrowLeft size={18} />} disabled={!previous} onClick={() => previous && setSelectedId(previous.id)}>{t('education.student.previous')}</Button>
           <Stack direction="row" spacing={1}>{hasEditor && <Button startIcon={<IconRestore size={18} />} onClick={() => setResetOpen(true)}>{t('education.workspace.resetWorkspace')}</Button>}{(lesson.completion_policy === 'self' || lesson.completion_policy === 'hybrid') && (completed ? <Button onClick={() => completeCurrent(false)}>{t('education.student.undoCompletion')}</Button> : <Button variant="contained" startIcon={<IconCircleCheck size={18} />} onClick={() => completeCurrent()}>{t('education.student.finished')}</Button>)}</Stack>
@@ -213,12 +215,6 @@ export default function LessonPreview({ course, initialLessonId, token, onClose 
     </Box>
     <Dialog open={resetOpen} onClose={() => setResetOpen(false)}><DialogTitle>{t('education.workspace.resetWorkspace')}</DialogTitle><DialogContent><Typography>{t('education.workspace.resetConfirm')}</Typography></DialogContent><DialogActions><Button onClick={() => setResetOpen(false)}>{t('education.workspace.cancel')}</Button><Button color="error" onClick={resetWorkspace}>{t('education.workspace.resetWorkspace')}</Button></DialogActions></Dialog>
   </Box>;
-}
-
-function WorkspaceResizeHandle({ direction, label, onPointerDown, onDoubleClick, onHoverChange, overlay = false, position, secondaryPosition, crossStart = 0 }: { direction: 'vertical' | 'horizontal' | 'corner'; label: string; onPointerDown: PointerEventHandler<HTMLDivElement>; onDoubleClick: MouseEventHandler<HTMLDivElement>; onHoverChange?: (hovered: boolean) => void; overlay?: boolean; position?: number; secondaryPosition?: number; crossStart?: number }) {
-  const vertical = direction === 'vertical';
-  const corner = direction === 'corner';
-  return <Box role="separator" aria-orientation={corner ? undefined : vertical ? 'vertical' : 'horizontal'} aria-label={label} title={label} onPointerDown={onPointerDown} onDoubleClick={onDoubleClick} onPointerEnter={() => onHoverChange?.(true)} onPointerLeave={() => onHoverChange?.(false)} sx={{ flex: overlay ? undefined : '0 0 10px', width: corner ? 24 : vertical ? 16 : overlay ? `calc(${100 - crossStart}% + 8px)` : 10, height: corner ? 24 : vertical ? overlay ? '100%' : 'auto' : 16, mx: !overlay && vertical ? '-8px' : 0, cursor: corner ? 'nwse-resize' : vertical ? 'col-resize' : 'row-resize', touchAction: 'none', position: overlay ? 'absolute' : 'relative', zIndex: corner ? 4 : 3, left: overlay && (vertical || corner) ? `calc(${position ?? 0}% - ${corner ? 12 : 8}px)` : overlay && !vertical ? `calc(${crossStart}% - 8px)` : undefined, top: overlay && (corner || !vertical) ? `calc(${corner ? secondaryPosition ?? 0 : position ?? 0}% - ${corner ? 12 : 8}px)` : 0 }} />;
 }
 
 function toReleaseLesson(lesson: Lesson): ReleaseLesson {

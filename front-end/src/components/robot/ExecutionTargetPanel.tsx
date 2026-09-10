@@ -28,6 +28,7 @@ import {
 type ExecutionTargetPanelProps = {
   children: React.ReactNode;
   height?: string;
+  embedded?: boolean;
 };
 
 const statusColor = {
@@ -40,6 +41,7 @@ const statusColor = {
 const ExecutionTargetPanel: React.FC<ExecutionTargetPanelProps> = ({
   children,
   height = '50vh',
+  embedded = false,
 }) => {
   const {
     target,
@@ -96,13 +98,17 @@ const ExecutionTargetPanel: React.FC<ExecutionTargetPanelProps> = ({
 
   return (
     <Paper
-      variant="outlined"
+      variant={embedded ? undefined : 'outlined'}
+      elevation={embedded ? 0 : undefined}
+      square={embedded}
       sx={{
-        height: compactConnectedView ? 'auto' : height,
-        minHeight: compactConnectedView ? 0 : 360,
+        height: embedded ? height : compactConnectedView ? 'auto' : height,
+        minHeight: embedded || compactConnectedView ? 0 : 360,
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
+        border: embedded ? 0 : undefined,
+        borderRadius: embedded ? 0 : undefined,
       }}
     >
       <Stack

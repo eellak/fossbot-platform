@@ -5,7 +5,6 @@ import {
   Button,
   DialogContent,
   Grid,
-  Paper,
   Stack,
   Tab,
   Tabs,
@@ -57,10 +56,12 @@ import ExecutionTargetPanel from 'src/components/robot/ExecutionTargetPanel';
 import PhysicalRobotTerminal from 'src/components/robot/PhysicalRobotTerminal';
 import { useRobotConnection } from 'src/robot/RobotConnectionContext';
 import ProjectStageIndicator from 'src/components/editors/ProjectStageIndicator';
+import SearchBar from 'src/components/monaco-functions/MonacoSearchBar';
 import AssistantPanel, { type AssistantSurfaceAdapter } from 'src/components/ai/AssistantPanel';
 import { fingerprintText } from 'src/ai/fingerprint';
 import { allowedBlocklyBlockTypes, validateBlocklySuggestion } from 'src/ai/suggestions/codeSuggestions';
 import WorkspaceResizeHandle from 'src/components/workspace/WorkspaceResizeHandle';
+import { WorkspaceFrame, WorkspacePane } from 'src/components/workspace/WorkspaceFrame';
 import { workspaceLayout, workspacePaneDefaults } from 'src/components/workspace/workspaceLayout';
 import { useSelector } from 'react-redux';
 import type { AppState } from 'src/store/Store';
@@ -132,7 +133,6 @@ const BlocklyPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppeara
   const [workspaceColumnSplit, setWorkspaceColumnSplit] = useState<number>(workspacePaneDefaults.columns);
   const [workspaceRowSplit, setWorkspaceRowSplit] = useState<number>(workspacePaneDefaults.rows);
   const [workspaceResizing, setWorkspaceResizing] = useState<BlocklyResizeState | null>(null);
-  const [workspaceHoveredResize, setWorkspaceHoveredResize] = useState<BlocklyResizeTarget | null>(null);
   const [workspaceActivePane, setWorkspaceActivePane] = useState<BlocklyWorkspacePane>('code');
   const workspaceGridRef = useRef<HTMLDivElement | null>(null);
 
@@ -506,10 +506,6 @@ const BlocklyPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppeara
     </Box>
   );
 
-  const highlightedWorkspaceResize = workspaceResizing?.target ?? workspaceHoveredResize;
-  const workspaceHighlightColumns = highlightedWorkspaceResize === 'columns' || highlightedWorkspaceResize === 'corner';
-  const workspaceHighlightRows = highlightedWorkspaceResize === 'rows' || highlightedWorkspaceResize === 'corner';
-  const workspacePaneBorderTransition = { transition: 'border-color 150ms ease-out', '@media (prefers-reduced-motion: reduce)': { transition: 'none' } } as const;
   const beginWorkspaceResize = (resizeTarget: BlocklyResizeTarget) => (event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return;
     event.preventDefault();
@@ -561,9 +557,10 @@ const BlocklyPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppeara
                 </Box>
               </Box>
               <Stack direction="row" spacing={1} alignItems="center">
-                <Button variant="outlined" startIcon={<IconDeviceFloppy size={20} />} onClick={handleSaveClick}>{t('blockly-page.save')}</Button>
                 <Button variant="contained" startIcon={<IconPlayerPlay size={20} />} onClick={handlePlayClick} disabled={isRunning}>{t('blockly-page.run')}</Button>
                 <Button variant="outlined" startIcon={<IconPlayerStop size={20} />} disabled={!isRunning} onClick={handleStopClick}>{t('blockly-page.stop')}</Button>
+                <SearchBar variant="button" />
+                <Button variant="outlined" startIcon={<IconDeviceFloppy size={20} />} onClick={handleSaveClick}>{t('blockly-page.save')}</Button>
               </Stack>
             </Box>
             <Box sx={{ flex: 1, minHeight: 0, p: workspaceLayout.contentPadding, display: 'flex', flexDirection: 'column' }}>
@@ -593,14 +590,14 @@ const BlocklyPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppeara
                 </Box>
                 </>
               ) : (
-                <Box ref={workspaceGridRef} sx={{ position: 'relative', display: 'grid', alignItems: 'stretch', gridTemplateAreas: '"editor simulator" "editor results"', gridTemplateColumns: `minmax(280px, ${workspaceColumnSplit}fr) minmax(360px, ${100 - workspaceColumnSplit}fr)`, gridTemplateRows: `minmax(${workspacePaneDefaults.upperMinHeight}px, ${workspaceRowSplit}fr) minmax(${workspacePaneDefaults.lowerMinHeight}px, ${100 - workspaceRowSplit}fr)`, gap: workspaceLayout.paneGap, flex: 1, minHeight: 0 }}>
-                <Paper variant="outlined" sx={{ gridArea: 'editor', overflow: 'hidden', minHeight: 0, minWidth: 0, borderRightColor: workspaceHighlightColumns ? theme.palette.primary.main : undefined, ...workspacePaneBorderTransition }}>
+                <WorkspaceFrame ref={workspaceGridRef} label={t('blockly-page.workspace')} sx={{ alignItems: 'stretch', gridTemplateAreas: '"editor simulator" "editor results"', gridTemplateColumns: `minmax(280px, ${workspaceColumnSplit}fr) minmax(360px, ${100 - workspaceColumnSplit}fr)`, gridTemplateRows: `minmax(${workspacePaneDefaults.upperMinHeight}px, ${workspaceRowSplit}fr) minmax(${workspacePaneDefaults.lowerMinHeight}px, ${100 - workspaceRowSplit}fr)`, flex: 1 }}>
+                <WorkspacePane gridArea="editor" label={t('education.workspace.code')}>
                   <Box sx={{ height: '100%', minHeight: 0 }}>
                     <BlocklyEditorComponent ref={editorRef} code={editorValue} handleGetValue={handleGetValue} handleGetPythonCodeValue={handleGetPythonCodeValue} />
                   </Box>
-                </Paper>
-                <Paper variant="outlined" sx={{ gridArea: 'simulator', position: 'relative', height: '100%', minHeight: 0, overflow: 'hidden', minWidth: 0, borderLeftColor: workspaceHighlightColumns ? theme.palette.primary.main : undefined, borderBottomColor: workspaceHighlightRows ? theme.palette.primary.main : undefined, ...workspacePaneBorderTransition }}>
-                  <ExecutionTargetPanel height="100%">
+                </WorkspacePane>
+                <WorkspacePane gridArea="simulator" label={t('education.workspace.simulator')}>
+                  <ExecutionTargetPanel height="100%" embedded>
                     <WebGLApp
                       appsessionId={sessionId}
                       onMountChange={handleMountChange}
@@ -609,14 +606,14 @@ const BlocklyPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppeara
                       initialStageAssetBaseUrl={initialStageAssetBaseUrl}
                     />
                   </ExecutionTargetPanel>
-                </Paper>
-                <Paper variant="outlined" sx={{ gridArea: 'results', minHeight: 0, overflow: 'hidden', borderLeftColor: workspaceHighlightColumns ? theme.palette.primary.main : undefined, borderTopColor: workspaceHighlightRows ? theme.palette.primary.main : undefined, ...workspacePaneBorderTransition }}>
+                </WorkspacePane>
+                <WorkspacePane gridArea="results" label={t('education.workspace.results')}>
                   {proposedTerminal}
-                </Paper>
-                <WorkspaceResizeHandle overlay direction="vertical" position={workspaceColumnSplit} valueNow={workspaceColumnSplit} valueMin={28} valueMax={65} label={t('blockly-page.resizeColumns')} onPointerDown={beginWorkspaceResize('columns')} onReset={resetWorkspacePaneSizes} onKeyboardResize={resizeWorkspaceWithKeyboard} onHoverChange={(hovered) => setWorkspaceHoveredResize(hovered ? 'columns' : null)} />
-                <WorkspaceResizeHandle overlay direction="horizontal" position={workspaceRowSplit} crossStart={workspaceColumnSplit} valueNow={workspaceRowSplit} valueMin={40} valueMax={72} label={t('education.workspace.resizeRows')} onPointerDown={beginWorkspaceResize('rows')} onReset={resetWorkspacePaneSizes} onKeyboardResize={resizeWorkspaceWithKeyboard} onHoverChange={(hovered) => setWorkspaceHoveredResize(hovered ? 'rows' : null)} />
-                <WorkspaceResizeHandle overlay direction="corner" position={workspaceColumnSplit} secondaryPosition={workspaceRowSplit} label={`${t('blockly-page.resizeColumns')}; ${t('education.workspace.resizeRows')}`} onPointerDown={beginWorkspaceResize('corner')} onReset={resetWorkspacePaneSizes} onKeyboardResize={resizeWorkspaceWithKeyboard} onHoverChange={(hovered) => setWorkspaceHoveredResize(hovered ? 'corner' : null)} />
-                </Box>
+                </WorkspacePane>
+                <WorkspaceResizeHandle overlay direction="vertical" position={workspaceColumnSplit} valueNow={workspaceColumnSplit} valueMin={28} valueMax={65} label={t('blockly-page.resizeColumns')} onPointerDown={beginWorkspaceResize('columns')} onReset={resetWorkspacePaneSizes} onKeyboardResize={resizeWorkspaceWithKeyboard} />
+                <WorkspaceResizeHandle overlay direction="horizontal" position={workspaceRowSplit} crossStart={workspaceColumnSplit} valueNow={workspaceRowSplit} valueMin={40} valueMax={72} label={t('education.workspace.resizeRows')} onPointerDown={beginWorkspaceResize('rows')} onReset={resetWorkspacePaneSizes} onKeyboardResize={resizeWorkspaceWithKeyboard} />
+                <WorkspaceResizeHandle overlay direction="corner" position={workspaceColumnSplit} secondaryPosition={workspaceRowSplit} label={`${t('blockly-page.resizeColumns')}; ${t('education.workspace.resizeRows')}`} onPointerDown={beginWorkspaceResize('corner')} onReset={resetWorkspacePaneSizes} onKeyboardResize={resizeWorkspaceWithKeyboard} />
+                </WorkspaceFrame>
               )}
             </Box>
           </Box>

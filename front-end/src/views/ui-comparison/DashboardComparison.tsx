@@ -8,8 +8,8 @@ import { setDarkMode } from 'src/store/customizer/CustomizerSlice';
 
 type Variant = 'current' | 'proposed';
 type View = 'both' | 'current' | 'proposed';
-type Surface = 'dashboard' | 'courses' | 'course-workspace' | 'python' | 'blockly' | 'components';
-const surfaceLabels: Record<Surface, string> = { dashboard: 'dashboard', courses: 'courses', 'course-workspace': 'course lesson workspace', python: 'Python editor', blockly: 'Blockly editor', components: 'component' };
+type Surface = 'dashboard' | 'courses' | 'course-workspace' | 'course-authoring' | 'python' | 'blockly' | 'components';
+const surfaceLabels: Record<Surface, string> = { dashboard: 'dashboard', courses: 'courses', 'course-workspace': 'course lesson workspace', 'course-authoring': 'course authoring', python: 'Python editor', blockly: 'Blockly editor', components: 'component' };
 
 function Preview({ variant, surface, width, mode, revision }: {
   variant: Variant; surface: Surface; width: number; mode: string; revision: number;
@@ -60,6 +60,7 @@ export default function DashboardComparison() {
         <ToggleButton value="dashboard">Dashboard</ToggleButton>
         <ToggleButton value="courses">Courses</ToggleButton>
         <ToggleButton value="course-workspace">Course lesson</ToggleButton>
+        <ToggleButton value="course-authoring">Course authoring</ToggleButton>
         <ToggleButton value="python">Python</ToggleButton>
         <ToggleButton value="blockly">Blockly</ToggleButton>
         <ToggleButton value="components">Components</ToggleButton>
@@ -80,7 +81,7 @@ export default function DashboardComparison() {
       <Button variant="outlined" startIcon={<IconRefresh size={18} />} onClick={() => setRevision((value) => value + 1)}>Reload both</Button>
     </Stack>
     <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-      {surface === 'components'
+      {surface === 'components' || surface === 'course-authoring'
         ? 'The specimen uses the same real components in both themes. Controls are interactive, but specimen changes are temporary.'
         : `Proposed uses flatter surfaces, a stronger blue accent, and clearer ${surfaceLabels[surface]} hierarchy. Previews are interactive; changes affect your account.`}
     </Typography>
