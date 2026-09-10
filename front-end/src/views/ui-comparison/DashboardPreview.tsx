@@ -85,7 +85,6 @@ export default function DashboardPreview({ proposed = false }: { proposed?: bool
       '& .visual-language-supporting-panel': { borderRadius: '8px' },
       '& .MuiCard-root': { border: '1px solid', borderColor: 'divider', borderRadius: '8px', boxShadow: 'none' },
       '& .MuiCardContent-root': { p: '20px', '&:last-child': { pb: '20px' } },
-      '& .MuiAppBar-root': { borderBottom: '1px solid', borderColor: 'divider' },
       '& .MuiDrawer-paper': { borderRight: '1px solid', borderColor: 'divider' },
       '& .MuiButton-root': { minHeight: 40, borderRadius: '8px', px: 2, fontWeight: 600, boxShadow: 'none' },
       '& .MuiButton-text': { bgcolor: 'transparent', '&:hover': { bgcolor: 'action.hover', color: 'primary.main' } },
@@ -96,7 +95,7 @@ export default function DashboardPreview({ proposed = false }: { proposed?: bool
       '& .MuiChip-root': { fontWeight: 600 },
       '& .MuiButtonBase-root:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 3 },
     } : undefined}>
-      <FullLayout />
+      <FullLayout previewAppearance={proposed} />
     </Box>
   </ThemeProvider>;
 }

@@ -11,7 +11,7 @@ import {
 } from 'src/courses/CoursesApi';
 import type { ClassLeaderboard, StudentClassGroup } from 'src/courses/types';
 
-export default function ClassGroupsStudentPage({ embedded = false }: { embedded?: boolean }) {
+export default function ClassGroupsStudentPage({ embedded = false, previewAppearance = false }: { embedded?: boolean; previewAppearance?: boolean }) {
   const { t } = useTranslation();
   const { token } = useAuth();
   const navigate = useNavigate();
@@ -20,6 +20,7 @@ export default function ClassGroupsStudentPage({ embedded = false }: { embedded?
   const [leaderboard, setLeaderboard] = useState<ClassLeaderboard | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+  const previewMaxWidth = previewAppearance ? 640 : undefined;
 
   const load = useCallback(async () => {
     setLoading(true); setError('');
@@ -42,16 +43,33 @@ export default function ClassGroupsStudentPage({ embedded = false }: { embedded?
   return <Box sx={{ maxWidth: embedded ? 'none' : 1000, mx: 'auto', p: embedded ? 0 : { xs: 2, md: 3 } }}>
     {!embedded && <><Typography variant="h3" component="h1">{t('education.classrooms.studentTitle')}</Typography>
       <Typography color="text.secondary" sx={{ mb: 3 }}>{t('education.classrooms.studentSubtitle')}</Typography></>}
-    <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
-      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
-        <TextField fullWidth label={t('education.classrooms.enterCode')} value={joinCode} onChange={(event) => setJoinCode(event.target.value.toUpperCase())} />
-        <Button variant="contained" startIcon={<IconLogin size={17} />} disabled={!joinCode.trim()} onClick={() => void run(async () => { await joinClassGroup(token, joinCode); setJoinCode(''); })}>{t('education.classrooms.join')}</Button>
+    <Paper variant="outlined" sx={{ p: 2, mb: 2, maxWidth: previewMaxWidth }}>
+      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} alignItems={{ sm: 'center' }}>
+        <TextField
+          fullWidth
+          size={previewAppearance ? 'small' : 'medium'}
+          label={t('education.classrooms.enterCode')}
+          value={joinCode}
+          onChange={(event) => setJoinCode(event.target.value.toUpperCase())}
+          sx={previewAppearance ? { flex: 1, minWidth: 0 } : undefined}
+        />
+        <Button
+          variant="contained"
+          startIcon={<IconLogin size={17} />}
+          disabled={!joinCode.trim()}
+          onClick={() => void run(async () => { await joinClassGroup(token, joinCode); setJoinCode(''); })}
+          sx={previewAppearance ? { flexShrink: 0, alignSelf: { xs: 'stretch', sm: 'center' } } : undefined}
+        >
+          {t('education.classrooms.join')}
+        </Button>
       </Stack>
     </Paper>
-    {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-    {loading ? <Skeleton variant="rounded" height={240} /> : <Stack spacing={2}>
+    {error && <Alert severity="error" sx={{ mb: 2, maxWidth: previewMaxWidth }}>{error}</Alert>}
+    {loading ? <Skeleton variant="rounded" height={240} sx={{ maxWidth: previewMaxWidth }} /> : <Stack spacing={2}>
       {groups.map((group) => <StudentGroupCard key={group.id} group={group} token={token} navigate={navigate} run={run} showBoard={showBoard} t={t} />)}
-      {!groups.length && <Alert severity="info">{t('education.classrooms.notJoined')}</Alert>}
+      {!groups.length && (previewAppearance
+        ? <Typography color="text.secondary" variant="body2" sx={{ py: 1, maxWidth: previewMaxWidth }}>{t('education.classrooms.notJoined')}</Typography>
+        : <Alert severity="info">{t('education.classrooms.notJoined')}</Alert>)}
     </Stack>}
     <Dialog open={Boolean(leaderboard)} onClose={() => setLeaderboard(null)} fullWidth maxWidth="sm">
       <DialogTitle>{leaderboard?.activity_title}</DialogTitle>

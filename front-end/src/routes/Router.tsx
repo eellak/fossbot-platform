@@ -15,6 +15,7 @@ const Dashboard = Loadable(lazy(() => import('../views/dashboard/Dashboard')));
 const DashboardComparison = Loadable(lazy(() => import('../views/ui-comparison/DashboardComparison')));
 const DashboardPreview = Loadable(lazy(() => import('../views/ui-comparison/DashboardPreview')));
 const VisualLanguageSpecimen = Loadable(lazy(() => import('../views/ui-comparison/VisualLanguageSpecimen')));
+const LessonWorkspacePreview = Loadable(lazy(() => import('../views/ui-comparison/LessonWorkspacePreview')));
 const LandingPage = Loadable(lazy(() => import('../views/landing-page/LandingPage')));
 const AccountsSettingsPage = Loadable(lazy(() => import('../views/account-settings-page/AccountsSettingsPage')));
 const StageBuilderPage = Loadable(lazy(() => import('../views/stage-builder-page/StageBuilderPage')));
@@ -58,8 +59,8 @@ const AdminRoute = Loadable(lazy(() => import('./AdminRoute')));
 const Router = [
   ...(process.env.NODE_ENV === 'development' ? [
     { path: '/ui-comparison', element: <PrivateRoute><DashboardComparison /></PrivateRoute> },
-    { path: '/ui-comparison/current', element: <PrivateRoute><DashboardPreview /></PrivateRoute>, children: [{ path: '', element: <Dashboard /> }, { path: 'components', element: <VisualLanguageSpecimen /> }] },
-    { path: '/ui-comparison/proposed', element: <PrivateRoute><DashboardPreview proposed /></PrivateRoute>, children: [{ path: '', element: <Dashboard previewAppearance /> }, { path: 'components', element: <VisualLanguageSpecimen /> }] },
+    { path: '/ui-comparison/current', element: <PrivateRoute><DashboardPreview /></PrivateRoute>, children: [{ path: '', element: <Dashboard /> }, { path: 'courses', element: <CoursesPage /> }, { path: 'course-workspace', element: <LessonWorkspacePreview /> }, { path: 'python', element: <MonacoPage /> }, { path: 'blockly', element: <BlocklyPage /> }, { path: 'components', element: <VisualLanguageSpecimen /> }] },
+    { path: '/ui-comparison/proposed', element: <PrivateRoute><DashboardPreview proposed /></PrivateRoute>, children: [{ path: '', element: <Dashboard previewAppearance /> }, { path: 'courses', element: <CoursesPage previewAppearance /> }, { path: 'course-workspace', element: <LessonWorkspacePreview proposed /> }, { path: 'python', element: <MonacoPage previewAppearance /> }, { path: 'blockly', element: <BlocklyPage previewAppearance /> }, { path: 'components', element: <VisualLanguageSpecimen /> }] },
   ] : []),
   {
     path: '/sample-page',

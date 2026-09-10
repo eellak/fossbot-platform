@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Alert,
   Box,
@@ -380,7 +381,8 @@ function MarketplaceDetailDrawer({
   );
 }
 
-export default function StageMarketplacePanel({ embedded = false, preview = false }: { embedded?: boolean; preview?: boolean }) {
+export default function StageMarketplacePanel({ embedded = false, preview = false, previewAppearance = false }: { embedded?: boolean; preview?: boolean; previewAppearance?: boolean }) {
+  const { t } = useTranslation();
   const { token, user } = useAuth();
   const userKey = stageListUserKey(user);
   const navigate = useNavigate();
@@ -749,10 +751,12 @@ export default function StageMarketplacePanel({ embedded = false, preview = fals
                 </Stack>
               )}
             </>
-          ) : (
-            <Box sx={{ py: 6, px: 2, textAlign: 'center' }}>
-              <Typography variant="subtitle1" fontWeight={800}>No stages found</Typography>
-              <Typography variant="body2" color="text.secondary">Try another search, clear the tag filter, or publish the first stage from Stage Builder.</Typography>
+          ) : previewAppearance && index?.warning ? null : (
+            <Box sx={{ py: previewAppearance ? 2 : 6, px: 2, textAlign: 'center' }}>
+              <Typography variant="subtitle1" fontWeight={800}>{previewAppearance ? t('stage-marketplace.emptyTitle') : 'No stages found'}</Typography>
+              <Typography variant="body2" color="text.secondary">
+                {previewAppearance ? t('stage-marketplace.emptyDescription') : 'Try another search, clear the tag filter, or publish the first stage from Stage Builder.'}
+              </Typography>
             </Box>
           )
         )}

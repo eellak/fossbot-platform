@@ -1,13 +1,13 @@
 import { FC } from 'react';
 import { styled, Container, Box, useTheme } from '@mui/material';
 import { useSelector } from 'src/store/Store';
-import { Outlet } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
 import { AppState } from 'src/store/Store';
 import Sidebar from './vertical/sidebar/Sidebar';
 import Navigation from '../full/horizontal/navbar/Navigation';
 import Header from './vertical/header/Header';
 import HorizontalHeader from './horizontal/header/Header';
-import Footer from 'src/components/landingpage/footer/Footer';
+import CopyrightCredit from 'src/components/shared/CopyrightCredit';
 const MainWrapper = styled('div')(() => ({
   display: 'flex',
   minHeight: '100vh',
@@ -24,8 +24,10 @@ const PageWrapper = styled('div')(({theme}) => ({
   backgroundColor: 'transparent'
 }));
 
-const FullLayout: FC = () => {
+const FullLayout: FC<{ previewAppearance?: boolean }> = ({ previewAppearance = false }) => {
   const customizer = useSelector((state: AppState) => state.customizer);
+  const { pathname } = useLocation();
+  const fullBleedWorkspace = previewAppearance && /\/(course-workspace|python|blockly)\/?$/.test(pathname);
 
   const theme = useTheme();
 
@@ -36,7 +38,7 @@ const FullLayout: FC = () => {
       {/* ------------------------------------------- */}
       {/* Sidebar */}
       {/* ------------------------------------------- */}
-      {customizer.isHorizontal ? '' : <Sidebar />}
+      {customizer.isHorizontal ? '' : <Sidebar previewAppearance={previewAppearance} />}
       {/* ------------------------------------------- */}
       {/* Main Wrapper */}
       {/* ------------------------------------------- */}
@@ -56,6 +58,7 @@ const FullLayout: FC = () => {
         {/* PageContent */}
         {customizer.isHorizontal ? <Navigation /> : ''}
         <Container
+          disableGutters={fullBleedWorkspace}
           sx={{
             maxWidth:'100%!important'
           }}
@@ -64,7 +67,7 @@ const FullLayout: FC = () => {
           {/* PageContent */}
           {/* ------------------------------------------- */}
          
-          <Box sx={{ minHeight: 'calc(100vh - 178px)' }}>
+          <Box sx={{ minHeight: `calc(100vh - ${previewAppearance ? 181 : 178}px)` }}>
             <Outlet />
           </Box>
           {/* ------------------------------------------- */}
@@ -72,7 +75,7 @@ const FullLayout: FC = () => {
           {/* ------------------------------------------- */}
           
         </Container>
-        <Footer />
+        {customizer.isHorizontal && <CopyrightCredit />}
         {/* <Customizer /> */}
       </PageWrapper>
       

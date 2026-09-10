@@ -33,19 +33,22 @@ Initial proposal, informed by live inspection on 2026-09-08. Ready for review; t
 
 - Use one shared navigation shell, with stable destinations, current-location indication, and predictable back navigation. An immersive editor may reduce the shell while keeping an obvious way back.
 - Give useful destinations priority over Beta/Soon badges and unavailable features. Navigation labels should remain readable; each route needs an accurate browser title and accessible control names.
-- Browsing pages: title and optional short explanation, page actions, filters/tabs, then content. Align all of these to the same content edges.
+- Browsing pages: title and optional short explanation, page actions, filters/tabs, then content. Align these to the same content edges; use 16px from the introduction to the first control or section and 24px between sections.
 - Dashboard: prioritize continuing a course and opening/creating projects; keep stage discovery secondary. Present useful previews with View all rather than entire collections.
 - Dashboard sections should have natural content heights. Align the tops of neighboring sections; equalize heights only for comparable cards in the same collection. Do not stretch an empty section to match a long list.
 - Choose dashboard columns from usable content width. When a section’s title, actions, and rows no longer fit comfortably, stack sections instead of compressing them.
 - Workspace pages: compact title/save-status bar, task controls, then the working area. Use the same placement and labels for code, simulator, output, and supporting instructions across standalone and course editors.
 - Fit desktop workspaces to the available viewport below the shell. Allocate remaining space with flexible/resizable panes; remove independent `120vh`, `150vh`, and repeated header-height calculations.
 - Give each desktop workspace pane one clear scroll owner. Browsing pages scroll normally. Avoid a page scrollbar surrounding several unnecessarily scrolling cards.
+- Standalone and course workspaces share the same resizable pane system: outlined `Paper` panes, overlay resize handles with hover border highlight, double-click reset, and shared default splits and clamp ranges. A workspace without an instructions pane (standalone editors) gives the editor the full left column.
+- Workspaces fill the viewport below the shell but keep the course minimum pane sizes (300/240px rows): on short screens the page scrolls so full panes remain visible, rather than clipping them.
+- The copyright credit lives at the bottom of the sidebar as small muted text, not as a footer below page content.
 - On narrow screens, switch working panes through named tabs or drawers. Preserve code, simulator state, and scroll position when switching. Keep Run/Stop reachable without navigating to another pane.
 - Treat short landscape screens as a separate constraint: reduce surrounding chrome and collapse optional panels before taking space from the task.
 - Make device support consistent across login, navigation, and the destination. Education pages currently allow narrow screens while the dashboard and login do not. Decide phone support explicitly; portrait tablets must not be rejected as phones merely because they are 768px wide.
 - Keep lesson prose to roughly 65–75 characters per line. Code, tables, and canvases may use the available width.
 - Left-align names and descriptions; right-align numerical data where appropriate. Keep row actions in a predictable position. Do not give Delete equal visual weight to Open.
-- Use tabs to switch views in the same context, buttons to perform actions, and links to navigate. Avoid stacked tab bars without clear ownership.
+- Use tabs to switch views in the same context, buttons to perform actions, and links to navigate. Each tab owns its loading, error, empty, and content states; align them to one content edge and keep short notices bounded. Avoid stacked tab bars without clear ownership.
 - Label editable titles and descriptions as editable; clicking ordinary-looking text must not be the only discovery path.
 - Show the execution target explicitly: Simulator or Robot, including connection/running state. Do not make users infer where their program will run.
 - Keep save state separate from publishing and lesson completion. Saved, Published, and Completed describe different outcomes.
@@ -54,6 +57,7 @@ Initial proposal, informed by live inspection on 2026-09-08. Ready for review; t
 - Empty states explain what belongs there and offer a next action. A normal empty list is not a warning. No search results should offer a way to clear filters.
 - Loading should preserve the expected layout. Errors should explain what failed and offer a relevant recovery action without discarding work.
 - Hide advanced options until needed. Put help beside the relevant control; keep optional assistance from pushing the main workspace out of view.
+- Keep short inline forms bounded to their task; let the field use remaining width without pushing its action off-screen, then stack both controls on narrow screens.
 - Show technical IDs only when the user needs them. Assistant launchers must not overlap lesson navigation, terminal controls, or other actions.
 
 ## Blocks and separators
@@ -73,7 +77,9 @@ Initial proposal, informed by live inspection on 2026-09-08. Ready for review; t
 ## Comparison experiment
 
 - Proposed is the approved visual direction: flatter surfaces, a stronger blue accent, slightly tighter cards, and 8px corners. Dark mode remains available in both views.
-- Compare Current and Proposed Dashboard and component specimens at `/ui-comparison` in development mode. The current theme remains available as a baseline; this experiment does not change production styling.
+- Proposed navigation is one label-only list with Courses below Dashboard and no category headings, explanatory subtitles, or lifecycle badges. Show Beta status on the relevant feature page instead. Stages is the single place to create and manage stages; Stage Builder remains the editor reached from that flow, not a separate navigation destination. Remove the Tutorials, Kindergarten, and Elementary pages in the later route cleanup.
+- Proposed browsing pages show an explicit page title; the Dashboard must not rely on navigation highlighting alone for orientation.
+- Compare Current and Proposed Dashboard, Courses, and component specimens at `/ui-comparison` in development mode. The current theme remains available as a baseline; this experiment does not change production styling.
 - Remove the development-only comparison routes and preview code before opening the PR.
 - The comparison mode selector is shared: changing Light/Dark updates the comparison shell, every embedded view, and each embedded view’s own mode control.
 - Component details remain under review before applying the language across the app.

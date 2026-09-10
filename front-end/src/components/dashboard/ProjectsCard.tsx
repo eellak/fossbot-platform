@@ -6,6 +6,7 @@ import NewProjectDialog from './NewProjectDialog';
 
 import { useState, useEffect } from 'react';
 import {
+  Box,
   Button,
   Typography,
   Table,
@@ -106,12 +107,27 @@ const ProjectsCard = ({ previewAppearance = false }: { previewAppearance?: boole
         title={t('projects-card.card-title')}
         subtitle={t('projects-card.subtitle')}
         action={
-          previewAppearance ? <Button variant="contained" startIcon={<FontAwesomeIcon icon={faAdd} />} onClick={() => setShowDrawer(true)}>{t('newProject')}</Button> : <Fab color="success" aria-label="add" onClick={() => setShowDrawer(true)}>
+          previewAppearance && projects.length === 0 ? undefined : previewAppearance ? <Button variant="contained" startIcon={<FontAwesomeIcon icon={faAdd} />} onClick={() => setShowDrawer(true)}>{t('newProject')}</Button> : <Fab color="success" aria-label="add" onClick={() => setShowDrawer(true)}>
             <FontAwesomeIcon icon={faAdd} size="2x" />
           </Fab>
         }
       >
-        <TableContainer>
+        {previewAppearance && projects.length === 0 ? (
+          <Box sx={{ py: 1 }}>
+            <Typography variant="subtitle2" fontWeight={600}>{t('projects-card.emptyTitle')}</Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+              {t('projects-card.emptyDescription')}
+            </Typography>
+            <Button
+              variant="contained"
+              startIcon={<FontAwesomeIcon icon={faAdd} />}
+              onClick={() => setShowDrawer(true)}
+              sx={{ mt: 2 }}
+            >
+              {t('newProject')}
+            </Button>
+          </Box>
+        ) : <TableContainer>
           <Table
             aria-label="simple table"
             sx={{
@@ -199,7 +215,7 @@ const ProjectsCard = ({ previewAppearance = false }: { previewAppearance?: boole
               )}
             </TableBody>
           </Table>
-        </TableContainer>
+        </TableContainer>}
       </DashboardCard>
       {showSuccessAlert && (
         <SuccessAlert title={showSuccessAlertText} description={""} />

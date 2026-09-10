@@ -7,8 +7,9 @@ import { AppState } from 'src/store/Store';
 import { useSelector, useDispatch } from 'src/store/Store';
 import { hoverSidebar, toggleMobileSidebar } from 'src/store/customizer/CustomizerSlice';
 import { useMediaQuery, Box, Drawer, useTheme } from '@mui/material';
+import CopyrightCredit from 'src/components/shared/CopyrightCredit';
 
-const Sidebar = () => {
+const Sidebar = ({ previewAppearance = false }: { previewAppearance?: boolean }) => {
   const lgUp = useMediaQuery((theme: any) => theme.breakpoints.up('lg'));
   const customizer = useSelector((state: AppState) => state.customizer);
   const dispatch = useDispatch();
@@ -64,6 +65,8 @@ const Sidebar = () => {
           <Box
             sx={{
               height: '100%',
+              display: 'flex',
+              flexDirection: 'column',
             }}
           >
             {/* ------------------------------------------- */}
@@ -73,13 +76,16 @@ const Sidebar = () => {
               <Logo />
             </Box>
             {/* <Scrollbar sx={{ height: 'calc(100% - 190px)' }}> */}
-            <Scrollbar sx={{ height: 'calc(100% - 90px)' }}>
+            <Scrollbar sx={{ flex: 1, minHeight: 0 }}>
               {/* ------------------------------------------- */}
               {/* Sidebar Items */}
               {/* ------------------------------------------- */}
-              <SidebarItems />
+              <SidebarItems previewAppearance={previewAppearance} />
             </Scrollbar>
             {/* <Profile /> */}
+            {!customizer.isCollapse && (
+              <CopyrightCredit />
+            )}
           </Box>
         </Drawer>
       </Box>
@@ -95,6 +101,8 @@ const Sidebar = () => {
       PaperProps={{
         sx: {
           width: customizer.SidebarWidth,
+          display: 'flex',
+          flexDirection: 'column',
 
           // backgroundColor:
           //   customizer.activeMode === 'dark'
@@ -109,13 +117,18 @@ const Sidebar = () => {
       {/* ------------------------------------------- */}
       {/* Logo */}
       {/* ------------------------------------------- */}
-      <Box px={2}>
-        <Logo />
+      <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+        <Box px={2}>
+          <Logo />
+        </Box>
+        {/* ------------------------------------------- */}
+        {/* Sidebar For Mobile */}
+        {/* ------------------------------------------- */}
+        <Scrollbar sx={{ flex: 1, minHeight: 0 }}>
+          <SidebarItems previewAppearance={previewAppearance} />
+        </Scrollbar>
+        <CopyrightCredit />
       </Box>
-      {/* ------------------------------------------- */}
-      {/* Sidebar For Mobile */}
-      {/* ------------------------------------------- */}
-      <SidebarItems />
     </Drawer>
   );
 };

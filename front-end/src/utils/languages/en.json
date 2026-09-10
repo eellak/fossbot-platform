@@ -126,7 +126,13 @@
     "description": "Description",
     "edit": "Edit",
     "delete": "Delete",
-    "noProjectsFound": "No projects found"
+    "noProjectsFound": "No projects found",
+    "emptyTitle": "No projects yet",
+    "emptyDescription": "Create a Python or Blockly project to start building."
+  },
+  "stage-marketplace": {
+    "emptyTitle": "No community stages yet",
+    "emptyDescription": "Published stages will appear here when they are available."
   },
   "banner-content": {
     "openTechnologies": "an open technologies robot for education.",
@@ -232,11 +238,16 @@
   "blockly-page": {
     "title": "Blockly Page",
     "description": "This is the Blockly page",
-    "fossbot-terminal": "FOSSBot terminal"
+    "fossbot-terminal": "FOSSBot terminal",
+    "save": "Save",
+    "run": "Run",
+    "stop": "Stop",
+    "resizeColumns": "Resize Blockly and simulator panes. Use arrow keys; press Home or Enter to reset all panes."
   },
   "dashboard-page": {
     "title": "FOSSBot Platform",
-    "description": "This is the Modern Dashboard page"
+    "description": "This is the Modern Dashboard page",
+    "overviewSubtitle": "Continue learning and manage your projects and stages."
   },
   "project-form": {
     "title": "Horizontal Form",
@@ -249,7 +260,11 @@
   "monaco-page": {
     "title": "Monaco Page",
     "description": "This is the Monaco page",
-    "fossbot-terminal": "FOSSBot terminal"
+    "fossbot-terminal": "FOSSBot terminal",
+    "save": "Save",
+    "run": "Run",
+    "stop": "Stop",
+    "resizeColumns": "Resize editor and simulator panes. Use arrow keys; press Home or Enter to reset all panes."
   },
   "landing-title": {
     "title": "FOSSBot Platform",
@@ -483,6 +498,7 @@
     "inheritance": { "first": "The first lesson cannot continue previous code because there is no previous lesson.", "changed": "Reordering changed which lesson supplies this lesson’s starting code." },
     "richText": { "bold": "Bold", "italic": "Italic", "heading": "Heading", "bullets": "Bulleted list", "numbered": "Numbered list" },
     "activities": {
+      "checkAnswer": "Check answer", "tryAgain": "Not quite. Try another answer.",
       "title": "Activities", "help": "Arrange explanations, questions, reflections, observations, and progressive hints in the order students will use them.", "addType": "Activity type", "add": "Add activity", "moveUp": "Move activity up", "moveDown": "Move activity down", "duplicate": "Duplicate activity", "delete": "Delete activity", "required": "Required", "optional": "Optional", "validation": "Complete the highlighted activity fields before publishing.", "hint": "Hint text", "hintGeneralActivity": "General lesson hint", "hintGeneralHelp": "This hint appears as its own activity for the whole lesson.", "addHint": "Add a hint to this activity", "activityHintHelp": "Students can reveal this help inside the activity when they need it.", "needHint": "Need a hint?", "prompt": "Prompt", "expected": "Expected value", "unit": "Unit", "toleranceMode": "Tolerance type", "absolute": "Absolute", "percentage": "Percentage", "tolerance": "Tolerance", "minimum": "Valid minimum", "maximum": "Valid maximum", "collectReflection": "Collect and save a written response", "privateReflectionHelp": "When collection is off, this is an optional private pause. No response is submitted or saved.", "observationPrompt": "Observation prompt", "observationSteps": "Run the simulator, watch the live readings, select a sensor for detail, then record the run.", "helperMode": "Sensor helper mode", "allowedSensors": "Available sensors", "presentations": "Sensor presentation", "capturedStatistics": "Statistics to capture", "visibleStatistics": "Statistics students can see", "options": "Answer options", "correctOption": "Correct answer option {{number}}", "option": "Option {{number}}", "deleteOption": "Delete option", "addOption": "Add option", "correctFeedback": "Feedback after a correct answer", "incorrectFeedback": "Feedback after an incorrect answer", "loadFailed": "Activity progress could not be loaded.", "submitFailed": "This response could not be saved.", "correct": "Correct. You can continue or try another run.", "incorrect": "Not quite yet. Review the evidence and try again.", "saved": "Response saved.", "complete": "Complete", "reviewed": "Reviewed", "privateReviewed": "Reflection reviewed. No response was saved.", "markRead": "Mark as read", "submit": "Submit answer", "reflectionAnswer": "Your reflection", "reflectPrivately": "Optional personal reflection. Think about your answer privately; nothing is submitted or saved.", "markReviewed": "Mark as reviewed", "recordObservation": "Record this run", "numericAnswer": "Numeric answer", "useReading": "Use {{label}}: {{value}} {{unit}}", "answerIn": "Answer in",
       "types": { "rich_text": "Explanation", "multiple_choice": "Multiple choice", "multiple_select": "Multiple select", "numeric_answer": "Numeric answer", "short_reflection": "Short reflection", "simulator_observation": "Simulator observation", "mission": "Simulator mission", "hint": "Hint" },
       "helper": { "hidden": "Hidden", "student_toggle": "Student can toggle", "always_visible": "Always visible" },
@@ -566,6 +582,7 @@
     },
     "student": {
       "difficulty": "Difficulty", "allDifficulties": "All difficulties",
+      "courseLabel": "Course", "backToCourse": "Back to course",
       "coursesTitle": "Courses", "coursesSubtitle": "Learn at your pace and return whenever you are ready.", "myCourses": "My courses", "explore": "Explore", "search": "Search courses", "noEnrollments": "You have not started a course yet. Explore published courses or open a shared course link.", "noPublicCourses": "No public courses are available yet. Teachers can publish courses when they are ready.", "noResults": "No courses match your search.", "viewCourse": "View course", "startCourse": "Start course", "continueCourse": "Continue course", "reviewCourse": "Review course", "backToCourses": "Back to courses", "byAuthor": "By {{author}}", "minutes": "{{count}} min", "progress": "{{completed}} of {{total}} lessons complete", "version": "Version {{version}}", "objectives": "Learning objectives", "prerequisites": "Prerequisites", "outline": "Course outline", "completed": "Completed", "finished": "I'm finished", "undoCompletion": "Undo completion", "previous": "Previous", "next": "Next", "saving": "Saving…", "retry": "Retry", "updateAvailable": "Update available", "continueCurrent": "Continue current version", "reviewChanges": "Review changes", "updateCourse": "Update course", "updateSummary": "{{added}} added, {{changed}} changed, and {{removed}} removed lessons.", "reviewUpdateTitle": "Review version {{current}} → {{latest}}", "updateChoiceHelp": "Nothing changes until you choose Update course. Unchanged work is carried forward; changed lessons start from their new lesson setup.", "changedLessons": "Changed lessons", "stageChanged": "One or more lesson stage setups changed in this version.", "stageChangedShort": "stage changed", "changedWorkStartsFresh": "This lesson starts from the new version. Older saved code remains available read-only.", "newLessonStartsFresh": "This new lesson starts from its published setup.", "unchangedPreserved_one": "{{count}} unchanged lesson keeps compatible progress and saved code.", "unchangedPreserved_other": "{{count}} unchanged lessons keep compatible progress and saved code.", "change": { "added": "New lesson", "removed": "Removed from the new version", "changed": "Lesson changed", "unchanged": "Unchanged" }, "resumeLearning": "Continue learning", "resumeHelp": "Pick up from your next lesson.", "allCourses": "All courses", "noActiveCourses": "Start a course to see it here.",
       "errors": { "load": "Could not load courses.", "enroll": "Could not start this course.", "progress": "Your progress could not be saved. Retry when you are ready.", "update": "The course was not updated. You can continue the current version.", "lesson": "This lesson is unavailable." }
     },

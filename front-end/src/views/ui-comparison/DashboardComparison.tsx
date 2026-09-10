@@ -8,7 +8,8 @@ import { setDarkMode } from 'src/store/customizer/CustomizerSlice';
 
 type Variant = 'current' | 'proposed';
 type View = 'both' | 'current' | 'proposed';
-type Surface = 'dashboard' | 'components';
+type Surface = 'dashboard' | 'courses' | 'course-workspace' | 'python' | 'blockly' | 'components';
+const surfaceLabels: Record<Surface, string> = { dashboard: 'dashboard', courses: 'courses', 'course-workspace': 'course lesson workspace', python: 'Python editor', blockly: 'Blockly editor', components: 'component' };
 
 function Preview({ variant, surface, width, mode, revision }: {
   variant: Variant; surface: Surface; width: number; mode: string; revision: number;
@@ -24,6 +25,7 @@ function Preview({ variant, surface, width, mode, revision }: {
   }, [width]);
   const title = variant === 'current' ? 'Current' : 'Proposed';
   const detail = variant === 'current' ? 'baseline' : 'flatter + stronger blue';
+  const surfacePath = surface === 'dashboard' ? '' : `/${surface}`;
   return <Box component="section" sx={{ minWidth: 0 }}>
     <Stack direction="row" justifyContent="space-between" alignItems="baseline" sx={{ mb: 1 }}>
       <Typography component="h2" variant="h5">{title}</Typography>
@@ -33,7 +35,7 @@ function Preview({ variant, surface, width, mode, revision }: {
       <iframe
         key={`${mode}-${revision}`}
         title={`${title} ${surface} preview`}
-        src={`/ui-comparison/${variant}${surface === 'components' ? '/components' : ''}?mode=${mode}`}
+        src={`/ui-comparison/${variant}${surfacePath}?mode=${mode}`}
         onLoad={(event) => event.currentTarget.contentWindow?.postMessage({ type: 'ui-comparison-mode', mode }, '*')}
         style={{ display: 'block', border: 0, width, height: 1100, transform: `scale(${scale})`, transformOrigin: 'top left' }}
       />
@@ -56,6 +58,10 @@ export default function DashboardComparison() {
     <Stack direction="row" gap={2} flexWrap="wrap" alignItems="center" sx={{ mb: 2 }}>
       <ToggleButtonGroup size="small" exclusive value={surface} onChange={(_, value) => value && setSurface(value)} aria-label="Comparison surface">
         <ToggleButton value="dashboard">Dashboard</ToggleButton>
+        <ToggleButton value="courses">Courses</ToggleButton>
+        <ToggleButton value="course-workspace">Course lesson</ToggleButton>
+        <ToggleButton value="python">Python</ToggleButton>
+        <ToggleButton value="blockly">Blockly</ToggleButton>
         <ToggleButton value="components">Components</ToggleButton>
       </ToggleButtonGroup>
       <ToggleButtonGroup size="small" exclusive value={view} onChange={(_, value) => value && setView(value)} aria-label="Comparison view">
@@ -74,9 +80,9 @@ export default function DashboardComparison() {
       <Button variant="outlined" startIcon={<IconRefresh size={18} />} onClick={() => setRevision((value) => value + 1)}>Reload both</Button>
     </Stack>
     <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-      {surface === 'dashboard'
-        ? 'Proposed uses flatter surfaces, a stronger blue accent, and slightly tighter cards. Dashboard previews are interactive; changes affect your account.'
-        : 'The specimen uses the same real components in both themes. Controls are interactive, but specimen changes are temporary.'}
+      {surface === 'components'
+        ? 'The specimen uses the same real components in both themes. Controls are interactive, but specimen changes are temporary.'
+        : `Proposed uses flatter surfaces, a stronger blue accent, and clearer ${surfaceLabels[surface]} hierarchy. Previews are interactive; changes affect your account.`}
     </Typography>
     <Box sx={{ display: 'grid', gridTemplateColumns: view === 'both' ? { xs: '1fr', md: '1fr 1fr' } : '1fr', gap: 3 }}>
       {view !== 'proposed' && <Preview variant="current" surface={surface} width={width} mode={mode} revision={revision} />}
