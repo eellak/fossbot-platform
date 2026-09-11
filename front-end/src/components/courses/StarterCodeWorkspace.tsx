@@ -14,15 +14,6 @@ function blocklyXml(content: Lesson['starter_content']): string {
   return typeof content === 'object' && content && typeof content.xml === 'string' ? content.xml : EMPTY_BLOCKLY;
 }
 
-function fingerprint(value: string): string {
-  let hash = 2166136261;
-  for (let index = 0; index < value.length; index += 1) {
-    hash ^= value.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
-  }
-  return (hash >>> 0).toString(16).padStart(8, '0');
-}
-
 export default function StarterCodeWorkspace({ lesson, onChange, t }: { lesson: Lesson; onChange: (patch: Partial<Lesson>) => void; t: any }) {
   const initial = useRef<{ lessonId: number; content: Lesson['starter_content'] }>({ lessonId: lesson.id, content: lesson.starter_content });
   const worker = useRef<Worker | null>(null);
@@ -120,7 +111,7 @@ export default function StarterCodeWorkspace({ lesson, onChange, t }: { lesson: 
       {lesson.editor_type === 'python' ? <MonacoEditor ref={monacoRef} code={serialized} handleGetValue={(getValue) => onChange({ starter_content: getValue().replace(/\r\n/g, '\n') })} /> : <BlocklyEditor ref={blocklyRef} code={serialized} handleGetValue={(getValue) => onChange({ starter_content: { xml: getValue() } })} handleGetPythonCodeValue={setGeneratedPython} />}
     </Paper>
     <AssistantPanel key={`${lesson.id}:${lesson.editor_type}`} adapter={assistantAdapter} explainCapability={lesson.editor_type === 'python' ? 'code.explain' : 'blockly.explain'} suggestCapability={lesson.editor_type === 'python' ? 'code.suggest_changes' : 'blockly.suggest_changes'} />
-    <Stack direction="row" gap={1} flexWrap="wrap"><Chip size="small" variant="outlined" label={t('education.code.fingerprint', { fingerprint: fingerprint(serialized) })} /><Chip size="small" variant="outlined" label={t('education.code.stageVersion', { status: stageVersion })} /></Stack>
+    <Chip size="small" variant="outlined" label={t('education.code.stageVersion', { status: stageVersion })} sx={{ alignSelf: 'flex-start' }} />
     {result && <Alert severity={result.valid ? 'success' : 'error'}>{result.valid ? t('education.code.valid') : result.message || t('education.code.invalid')}</Alert>}
   </Stack>;
 }

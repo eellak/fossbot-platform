@@ -51,7 +51,7 @@ export default function DashboardPreview({ proposed = false }: { proposed?: bool
         secondary: { main: dark ? '#a6b9d2' : '#485b75', light: dark ? '#253247' : '#edf1f6' },
         background: { default: dark ? '#101722' : '#eef2f7', paper: dark ? '#1c2635' : '#ffffff' },
         text: { primary: dark ? '#edf2fa' : '#202d40', secondary: dark ? '#b4c1d4' : '#53627a' },
-        divider: dark ? '#52627a' : '#d9e0ea',
+        divider: dark ? '#52627a' : '#c8d2df',
         success: { main: dark ? '#83d9b0' : '#216b4a', light: dark ? '#203e34' : '#edf7f0', contrastText: dark ? '#13271e' : '#ffffff' },
         info: { main: dark ? '#a2c5ff' : '#315b91', light: dark ? '#23364d' : '#eef4fb' },
         warning: { main: dark ? '#f4c66a' : '#8a4b08', light: dark ? '#4b3918' : '#fff4dc', dark: dark ? '#ffd991' : '#623404', contrastText: dark ? '#2b1d05' : '#ffffff' },

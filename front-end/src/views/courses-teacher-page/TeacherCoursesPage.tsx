@@ -24,7 +24,7 @@ export default function TeacherCoursesPage() {
 
   const load = async () => {
     setLoading(true); setError('');
-    try { setCourses(await listAuthoredCourses(token)); } catch (err) { setError(err instanceof Error ? err.message : t('education.errors.load')); }
+    try { setCourses(await listAuthoredCourses(token)); } catch { setError(t('education.errors.load')); }
     finally { setLoading(false); }
   };
   useEffect(() => { load(); }, [token]);
@@ -39,7 +39,7 @@ export default function TeacherCoursesPage() {
     try {
       const course = await createCourse(token, { title: form.title, description: form.description, learning_objectives: [form.objective] });
       navigate(`/teach/courses/${course.id}`);
-    } catch (err) { setError(err instanceof Error ? err.message : t('education.errors.create')); setCreating(false); }
+    } catch { setError(t('education.errors.create')); setCreating(false); }
   };
 
   const duplicate = async (source: CourseSummary) => {
@@ -58,13 +58,13 @@ export default function TeacherCoursesPage() {
         });
       }
       navigate(`/teach/courses/${copy.id}`);
-    } catch (err) { setError(err instanceof Error ? err.message : t('education.errors.duplicate')); }
+    } catch { setError(t('education.errors.duplicate')); }
   };
 
   const archive = async (course: CourseSummary) => {
     setMenu(null);
     if (!window.confirm(t('education.courseList.archiveConfirm', { title: course.title }))) return;
-    try { await archiveCourse(token, course.id); await load(); } catch (err) { setError(err instanceof Error ? err.message : t('education.errors.archive')); }
+    try { await archiveCourse(token, course.id); await load(); } catch { setError(t('education.errors.archive')); }
   };
 
   return (

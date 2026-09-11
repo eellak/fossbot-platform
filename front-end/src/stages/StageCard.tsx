@@ -71,12 +71,13 @@ interface StageCardProps {
   badges?: React.ReactNode;
   actionLabel?: string;
   actionDisabled?: boolean;
+  actionSelected?: boolean;
   onAction?: () => void | Promise<void>;
   onOpen?: () => void;
   surface?: 'outlined' | 'embedded';
 }
 
-export function StageCard({ title, description, previewUrl, metadata, badges, actionLabel, actionDisabled, onAction, onOpen, surface = 'outlined' }: StageCardProps) {
+export function StageCard({ title, description, previewUrl, metadata, badges, actionLabel, actionDisabled, actionSelected, onAction, onOpen, surface = 'outlined' }: StageCardProps) {
   const interactive = !!onOpen;
   const embedded = surface === 'embedded';
   return (
@@ -125,8 +126,9 @@ export function StageCard({ title, description, previewUrl, metadata, badges, ac
         {actionLabel && onAction && (
           <Button
             size="small"
-            variant="outlined"
+            variant={actionSelected ? 'contained' : 'outlined'}
             disabled={actionDisabled}
+            aria-pressed={actionSelected}
             onClick={(event) => { event.stopPropagation(); void onAction(); }}
             sx={{ mt: 'auto', minHeight: 44, alignSelf: 'flex-start' }}
           >

@@ -105,9 +105,9 @@ export default function CourseAuthoringPreview({ proposed = false }: { proposed?
         <Chip size="small" variant="outlined" label="Synthetic fixture" />
       </Stack>
 
-      <Alert severity="info" sx={{ mt: 2 }}>
-        Changes on this page stay inside the preview and reset when it reloads.
-      </Alert>
+      <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+        Preview only · Changes reset when this page reloads.
+      </Typography>
 
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: 'minmax(0, 1.45fr) minmax(300px, 0.75fr)' }, gap: 3, mt: 3, alignItems: 'start' }}>
         <Box component="section" aria-labelledby="comparison-activities-title">
@@ -126,17 +126,23 @@ export default function CourseAuthoringPreview({ proposed = false }: { proposed?
             <Paper variant="outlined" sx={{ p: 2 }}>
               <Stack spacing={1.5}>
                 <Typography variant="body2" color="text.secondary">Choose a stage saved in this FOSSBot instance.</Typography>
-                {selectedStage && <Alert severity="success">Selected {selectedStage.title}.</Alert>}
-                <LocalStageList stages={previewStages} busy={false} onOpenStage={setSelectedStage} />
+                {selectedStage && <Typography role="status" variant="body2" color="success.main" fontWeight={650}>Selected · {selectedStage.title}</Typography>}
+                <LocalStageList stages={previewStages} busy={false} selectedStageId={selectedStage?.id} onOpenStage={setSelectedStage} />
               </Stack>
             </Paper>
           </Box>
 
           <Box component="section" aria-labelledby="comparison-callouts-title">
-            <Typography id="comparison-callouts-title" component="h2" variant="h5" sx={{ mb: 2 }}>Routine callouts</Typography>
+            <Typography id="comparison-callouts-title" component="h2" variant="h5" sx={{ mb: 2 }}>Status and guidance</Typography>
             <Stack spacing={1.5}>
-              <Alert severity="info">Python is the editor for this lesson.</Alert>
-              <Alert severity="warning">This lesson has unpublished changes.</Alert>
+              <Box>
+                <Typography variant="caption" color="text.secondary">Editor</Typography>
+                <Typography variant="body2">Python</Typography>
+              </Box>
+              <Stack direction="row" spacing={1} alignItems="center">
+                <Chip size="small" variant="outlined" color="warning" label="Unpublished changes" />
+                <Typography variant="body2" color="text.secondary">Students still see the published version.</Typography>
+              </Stack>
               <Alert severity="error">A referenced stage marker is missing.</Alert>
             </Stack>
           </Box>

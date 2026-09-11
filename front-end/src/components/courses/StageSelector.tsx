@@ -94,9 +94,9 @@ export default function StageSelector({ token, value, onChange, labels }: StageS
   return <Stack spacing={1.25}>
     <Typography variant="subtitle2">{labels.label}</Typography>
     <Box sx={{ p: 1.5, border: 1, borderColor: 'divider', borderRadius: 1.5 }}>
-      <Stack direction="row" justifyContent="space-between" alignItems="center" gap={1}>
-        <Box sx={{ minWidth: 0 }}><Typography variant="body2" fontWeight={700} noWrap>{value?.title || labels.none}</Typography><Typography variant="caption" color="text.secondary">{value ? `${labels[value.sourceType === 'default' ? 'builtIn' : value.sourceType]} · ${value.visibility || (value.sourceType === 'default' ? labels.pinned : labels.pinOnSave)}` : labels.optional}</Typography></Box>
-        <Button size="small" variant="outlined" onClick={() => setOpen(true)}>{labels.choose}</Button>
+      <Stack direction="row" justifyContent="space-between" alignItems="center" gap={1} flexWrap="wrap">
+        <Box sx={{ minWidth: 0, flex: '1 1 180px' }}><Typography variant="subtitle2" fontWeight={600} sx={{ overflowWrap: 'anywhere' }}>{value?.title || labels.none}</Typography><Typography variant="body2" color="text.secondary" sx={{ overflowWrap: 'anywhere' }}>{value ? `${labels[value.sourceType === 'default' ? 'builtIn' : value.sourceType]} · ${value.visibility || (value.sourceType === 'default' ? labels.pinned : labels.pinOnSave)}` : labels.optional}</Typography></Box>
+        <Button size="small" variant="outlined" onClick={() => setOpen(true)} sx={{ minHeight: 44 }}>{labels.choose}</Button>
       </Stack>
     </Box>
     {value && <Chip size="small" variant="outlined" sx={{ alignSelf: 'flex-start' }} label={`${value.commitSha || value.sourceType === 'default' ? labels.pinned : labels.pinOnSave}`} />}
@@ -105,8 +105,8 @@ export default function StageSelector({ token, value, onChange, labels }: StageS
       <DialogContent dividers>
         <Stack spacing={2}>
           <Stack direction={{ xs: 'column', sm: 'row' }} gap={1} justifyContent="space-between">
-            <TextField size="small" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={labels.search} InputProps={{ startAdornment: <IconSearch size={17} /> }} />
-            <Button size="small" startIcon={loading ? <CircularProgress size={14} /> : <IconRefresh size={16} />} disabled={loading} onClick={() => { setError(''); if (marketplaceEnabled) void refreshStageLists(userKey, token, { force: true }); else if (userKey && token) void refreshUserStages(userKey, token, { force: true }); }}>{labels.refresh}</Button>
+            <TextField fullWidth size="small" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={labels.search} InputProps={{ startAdornment: <IconSearch size={17} /> }} />
+            <Button size="small" startIcon={loading ? <CircularProgress size={14} /> : <IconRefresh size={16} />} disabled={loading} onClick={() => { setError(''); if (marketplaceEnabled) void refreshStageLists(userKey, token, { force: true }); else if (userKey && token) void refreshUserStages(userKey, token, { force: true }); }} sx={{ minHeight: 44, alignSelf: { xs: 'stretch', sm: 'center' } }}>{labels.refresh}</Button>
           </Stack>
           <Tabs value={tab} onChange={(_, next) => setTab(next)} variant="scrollable"><Tab value="builtIn" label={labels.builtIn} /><Tab value="github" label={labels.github} />{marketplaceEnabled && <Tab value="marketplace" label={labels.marketplace} />}</Tabs>
           {error && <Alert severity="warning">{labels.unavailable}</Alert>}
@@ -118,7 +118,8 @@ export default function StageSelector({ token, value, onChange, labels }: StageS
               : stage.repoOwner
                 ? <GitHubIdentity username={stage.repoOwner} suffix={`/${stage.repoName}`} />
                 : <Typography variant="caption" color="text.secondary">{labels.builtIn}</Typography>;
-            return <Grid item xs={12} sm={6} md={4} key={keyOf(stage)}><Box sx={{ height: '100%', outline: keyOf(value) === keyOf(stage) ? '3px solid' : 'none', outlineColor: 'primary.main', outlineOffset: 2, borderRadius: 2 }}><StageCard title={stage.title || stage.repoName || labels.none} description={marketplaceEntry?.description || (stage.sourceType === 'default' ? labels.builtInHelp : undefined)} previewUrl={marketplaceEntry?.previewUrl} metadata={metadata} badges={<Stack direction="row" gap={0.75}><Chip size="small" label={stage.visibility || (stage.sourceType === 'default' ? labels.pinned : 'public')} /><Chip size="small" variant="outlined" label={stage.commitSha || stage.sourceType === 'default' ? labels.pinned : labels.pinOnSave} /></Stack>} actionLabel={keyOf(value) === keyOf(stage) ? labels.selected : labels.select} onAction={() => choose(stage)} /></Box></Grid>;
+            const selected = keyOf(value) === keyOf(stage);
+            return <Grid item xs={12} sm={6} md={4} key={keyOf(stage)}><Box sx={{ height: '100%', outline: selected ? '3px solid' : 'none', outlineColor: 'primary.main', outlineOffset: 2, borderRadius: 2 }}><StageCard title={stage.title || stage.repoName || labels.none} description={marketplaceEntry?.description || (stage.sourceType === 'default' ? labels.builtInHelp : undefined)} previewUrl={marketplaceEntry?.previewUrl} metadata={metadata} badges={<Stack direction="row" gap={0.75}><Chip size="small" label={stage.visibility || (stage.sourceType === 'default' ? labels.pinned : 'public')} /><Chip size="small" variant="outlined" label={stage.commitSha || stage.sourceType === 'default' ? labels.pinned : labels.pinOnSave} /></Stack>} actionLabel={selected ? labels.selected : labels.select} actionSelected={selected} onAction={() => choose(stage)} /></Box></Grid>;
           })}</Grid> : <Alert severity="info">{labels.noResults}</Alert>}
         </Stack>
       </DialogContent>
