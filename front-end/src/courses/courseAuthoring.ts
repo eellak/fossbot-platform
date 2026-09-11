@@ -5,20 +5,27 @@ export const emptyTiptapDocument = (): TiptapNode => ({
   content: [{ type: 'paragraph' }],
 });
 
+export function normalizeTiptapDocument(content: unknown): TiptapNode {
+  if (content && typeof content === 'object' && typeof (content as TiptapNode).type === 'string') {
+    return content as TiptapNode;
+  }
+  if (typeof content === 'string' && content) {
+    return { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: content }] }] };
+  }
+  return emptyTiptapDocument();
+}
+
 export function richTextActivity(lesson: Pick<Lesson, 'lesson_key' | 'activities'>): RichTextActivity {
   const activity = lesson.activities?.find((item): item is RichTextActivity => item.type === 'rich_text');
-  if (activity && typeof activity.content === 'object') {
-    return { ...activity, version: 1, required: activity.required ?? false };
+  if (activity && activity.content && typeof activity.content === 'object') {
+    return { ...activity, version: 1, required: activity.required ?? false, content: normalizeTiptapDocument(activity.content) };
   }
-  const legacy = activity && typeof activity.content === 'string' ? activity.content : '';
   return {
     key: activity?.key || `content-${lesson.lesson_key}`,
     type: 'rich_text',
     version: 1,
     required: activity?.required ?? false,
-    content: legacy
-      ? { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: legacy }] }] }
-      : emptyTiptapDocument(),
+    content: normalizeTiptapDocument(activity?.content),
   };
 }
 

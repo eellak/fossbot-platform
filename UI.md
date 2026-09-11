@@ -45,7 +45,7 @@ Initial proposal, informed by live inspection on 2026-09-08. Ready for review; t
 - The copyright credit lives at the bottom of the sidebar as small muted text, not as a footer below page content.
 - On narrow screens, switch working panes through named tabs or drawers. Preserve code, simulator state, and scroll position when switching. Keep Run/Stop reachable without navigating to another pane.
 - Treat short landscape screens as a separate constraint: reduce surrounding chrome and collapse optional panels before taking space from the task.
-- Make device support consistent across login, navigation, and the destination. Education pages currently allow narrow screens while the dashboard and login do not. Decide phone support explicitly; portrait tablets must not be rejected as phones merely because they are 768px wide.
+- Support the full web app on phones, portrait tablets, landscape tablets, and desktop browsers. Narrow screens use the responsive shell, single-column browsing layouts, and named workspace panes; they are not rejected by viewport width. Preserve core actions and state across reflow, while advanced spatial editors may collapse optional side panels before reducing their canvas.
 - Keep lesson prose to roughly 65–75 characters per line. Code, tables, and canvases may use the available width.
 - Left-align names and descriptions; right-align numerical data where appropriate. Keep row actions in a predictable position. Do not give Delete equal visual weight to Open.
 - Use tabs to switch views in the same context, buttons to perform actions, and links to navigate. Each tab owns its loading, error, empty, and content states; align them to one content edge and keep short notices bounded. Avoid stacked tab bars without clear ownership.
@@ -77,12 +77,12 @@ Initial proposal, informed by live inspection on 2026-09-08. Ready for review; t
 ## Comparison experiment
 
 - Proposed is the approved visual direction: flatter surfaces, a stronger blue accent, slightly tighter cards, and 8px corners. Dark mode remains available in both views.
-- Proposed navigation is one label-only list with Courses below Dashboard and no category headings, explanatory subtitles, or lifecycle badges. Show Beta status on the relevant feature page instead. Stages is the single place to create and manage stages; Stage Builder remains the editor reached from that flow, not a separate navigation destination. Remove the Tutorials, Kindergarten, and Elementary pages in the later route cleanup.
+- Proposed navigation is one label-only list with Courses below Dashboard and no category headings, explanatory subtitles, or lifecycle badges. Show Beta status on the relevant feature page instead. Stages is the single place to create and manage stages; Stage Builder remains the editor reached from that flow, not a separate navigation destination. Tutorials, Kindergarten, and Elementary have been removed from navigation and routing.
 - Proposed browsing pages show an explicit page title; the Dashboard must not rely on navigation highlighting alone for orientation.
-- Compare Current and Proposed Dashboard, Courses, and component specimens at `/ui-comparison` in development mode. The current theme remains available as a baseline; this experiment does not change production styling.
-- Remove the development-only comparison routes and preview code before opening the PR.
+- Compare Current and Proposed Dashboard, Courses, workspaces, authoring, and component specimens at `/ui-comparison` in development mode. Current remains available as a historical baseline.
+- The approved Proposed tokens, component rules, and layouts are also the production defaults. Retain the development-only comparison so future UI changes can still be evaluated against Current.
 - The comparison mode selector is shared: changing Light/Dark updates the comparison shell, every embedded view, and each embedded view’s own mode control.
-- Component details remain under review before applying the language across the app.
+- Continue using the comparison for incremental review without isolating approved changes from the main application.
 
 ## Findings and next steps
 

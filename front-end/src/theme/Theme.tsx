@@ -10,6 +10,7 @@ import { DarkThemeColors } from './DarkThemeColors';
 import { LightThemeColors } from './LightThemeColors';
 import { baseDarkTheme, baselightTheme } from './DefaultColors';
 import * as locales from '@mui/material/locale';
+import { approvedThemeOptions } from './ApprovedTheme';
 
 export const BuildTheme = (config: any = {}) => {
   const themeOptions = LightThemeColors.find((theme) => theme.name === config.theme);
@@ -28,12 +29,13 @@ export const BuildTheme = (config: any = {}) => {
     shadows: defaultShadow,
     typography: typography,
   };
-  const theme = createTheme(
+  const legacyTheme = createTheme(
     _.merge({}, baseMode, defaultTheme, locales, themeSelect, {
       direction: config.direction,
     }),
   );
-  theme.components = components(theme);
+  const theme = createTheme(legacyTheme, approvedThemeOptions(customizer.activeMode === 'dark'));
+  theme.components = components(theme, true);
 
   return theme;
 };

@@ -381,7 +381,7 @@ function MarketplaceDetailDrawer({
   );
 }
 
-export default function StageMarketplacePanel({ embedded = false, preview = false, previewAppearance = false }: { embedded?: boolean; preview?: boolean; previewAppearance?: boolean }) {
+export default function StageMarketplacePanel({ embedded = false, preview = false, previewAppearance = true }: { embedded?: boolean; preview?: boolean; previewAppearance?: boolean }) {
   const { t } = useTranslation();
   const { token, user } = useAuth();
   const userKey = stageListUserKey(user);

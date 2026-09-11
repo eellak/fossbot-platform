@@ -4,6 +4,7 @@ import { EditorContent, useEditor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { IconBold, IconH2, IconItalic, IconList, IconListNumbers } from '@tabler/icons-react';
 import type { TiptapNode } from 'src/courses/types';
+import { lessonProseMeasure } from './courseContentStyles';
 
 interface RichTextEditorProps {
   value: TiptapNode;
@@ -46,7 +47,7 @@ export default function RichTextEditor({ value, onChange, labels }: RichTextEdit
         ))}
       </Stack>
       <Box sx={{
-        '& .course-rich-text': { minHeight: 280, px: 2.5, py: 2, outline: 0, lineHeight: 1.65, maxWidth: '75ch' },
+        '& .course-rich-text': { minHeight: 280, px: 2.5, py: 2, outline: 0, lineHeight: 1.65, maxWidth: lessonProseMeasure, overflowWrap: 'anywhere' },
         '& .course-rich-text p': { my: 1 },
         '& .course-rich-text h2': { mt: 2.5, mb: 1, fontSize: '1.35rem' },
       }}><EditorContent editor={editor} /></Box>

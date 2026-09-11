@@ -61,6 +61,7 @@ async function parse<T>(response: Response): Promise<T> {
       typeof detail === 'object' ? detail.currentUpdatedAt : undefined,
     );
   }
+  if (payload === null) throw new CourseRequestError('Course response was empty', response.status, 'empty_response');
   return payload as T;
 }
 

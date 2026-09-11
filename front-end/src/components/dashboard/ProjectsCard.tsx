@@ -27,7 +27,7 @@ import { useTranslation } from 'react-i18next';
 import SuccessAlert from '../alerts/SuccessAlert';
 import ErrorAlert from '../alerts/ErrorAlert';
 
-const ProjectsCard = ({ previewAppearance = false }: { previewAppearance?: boolean }) => {
+const ProjectsCard = ({ previewAppearance = true }: { previewAppearance?: boolean }) => {
   const { t } = useTranslation();
 
   const auth = useAuth();

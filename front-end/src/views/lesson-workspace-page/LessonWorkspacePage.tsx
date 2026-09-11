@@ -45,7 +45,7 @@ type LessonWorkspacePageProps = {
   };
 };
 
-export default function LessonWorkspacePage({ previewAppearance = false, courseIdOverride, lessonKeyOverride, previewFixture }: LessonWorkspacePageProps = {}) {
+export default function LessonWorkspacePage({ previewAppearance = true, courseIdOverride, lessonKeyOverride, previewFixture }: LessonWorkspacePageProps = {}) {
   const { t } = useTranslation();
   const { token } = useAuth();
   const navigate = useNavigate();
@@ -154,7 +154,7 @@ export default function LessonWorkspacePage({ previewAppearance = false, courseI
         const lessons = current?.active_release.lessons || [];
         const index = lessons.findIndex((item) => item.lessonKey === lessonKey);
         setEnrollment(current || null); setPreviousRequired(lessons[index - 1]?.lessonKey || null);
-      } else setError(reason instanceof Error ? reason.message : t('education.student.errors.lesson'));
+      } else setError(t('education.student.errors.lesson'));
     } finally { setLoading(false); }
   }, [courseId, lessonKey, navigate, t, token]);
   useEffect(() => { if (!previewFixture) void load(); }, [load, previewFixture]);
@@ -361,7 +361,7 @@ export default function LessonWorkspacePage({ previewAppearance = false, courseI
   ];
   const saveLabel = saveState === 'conflict' ? t('education.workspace.conflict') : t(`education.save.${saveState === 'unsaved' ? 'unsaved' : saveState}`);
   const refreshProgress = async () => { if (!previewFixture) setEnrollment(await readEnrollment(token, enrollment.id)); };
-  const instructions = <Stack spacing={2} sx={{ width: '100%', maxWidth: '76ch', mx: 'auto' }}>{!previewAppearance && <Typography variant="h4">{lesson.title}</Typography>}<StudentActivities token={previewFixture ? undefined : token} enrollmentId={previewFixture ? undefined : enrollment.id} preview={Boolean(previewFixture)} flattenActivities={previewAppearance} lessonKey={lessonKey} activities={lesson.activities} telemetry={telemetry} previousSummary={previousSummary || telemetry?.previousSummary || null} helpersVisible={sensorHelpersVisible} onHelpersVisible={setSensorHelpersVisible} onReadingsRunning={(running) => { if (running) resumeSensorRun(); else pauseSensorRun(); }} stageRevision={stageRevision} allowManualMissionFinish={!hasEditor} onMissionRetry={() => resetSimulation(true)} onProgressChange={() => void refreshProgress()} t={t} /></Stack>;
+  const instructions = <Stack spacing={2} sx={{ width: '100%', maxWidth: '72ch', mx: 'auto' }}>{!previewAppearance && <Typography variant="h4">{lesson.title}</Typography>}<StudentActivities token={previewFixture ? undefined : token} enrollmentId={previewFixture ? undefined : enrollment.id} preview={Boolean(previewFixture)} flattenActivities={previewAppearance} lessonKey={lessonKey} activities={lesson.activities} telemetry={telemetry} previousSummary={previousSummary || telemetry?.previousSummary || null} helpersVisible={sensorHelpersVisible} onHelpersVisible={setSensorHelpersVisible} onReadingsRunning={(running) => { if (running) resumeSensorRun(); else pauseSensorRun(); }} stageRevision={stageRevision} allowManualMissionFinish={!hasEditor} onMissionRetry={() => resetSimulation(true)} onProgressChange={() => void refreshProgress()} t={t} /></Stack>;
   const editorContent = <LessonEditor editorType={lesson.editorType} content={content} onChange={setContent} onPythonChange={setGeneratedPython} monacoRef={monacoRef} blocklyRef={blocklyRef} />;
   const editor = previewAppearance && lesson.editorType === 'python' ? <PythonWorkspaceEditor code={typeof content === 'string' ? content : ''} onChange={(code) => setContent(code)} editorRef={monacoRef} /> : editorContent;
   const simulatorContent = stageConfig === undefined ? <Stack spacing={1} sx={{ p: 2 }}><Skeleton variant="rounded" height={320} /><Typography variant="caption">{t('education.workspace.loadingStage')}</Typography></Stack> : stageError ? <Alert severity="warning" action={<Button onClick={() => setSimulatorKey((value) => value + 1)}>{t('education.student.retry')}</Button>}>{stage?.visibility === 'private' ? t('education.workspace.privateStageFailed') : t('education.workspace.stageFailed')}</Alert> : <Box sx={{ height: '100%', minHeight: 0 }}><WebGLApp key={simulatorKey} appsessionId={sessionId} initialStageUrl={stage?.url} initialStageConfig={stageConfig} initialStageAssetBaseUrl={stageAssetBase} showControls={!hasEditor || lesson.simulatorSettings?.showRemoteControls === true} autoStartMissionAttempt={!hasEditor && hasMission} allowStageSelection={false} sensorHelpersVisible={sensorHelpersVisible} sensorTelemetryAutoStart={false} onTelemetry={setTelemetry} onMountChange={(mounted) => { if (!mounted) return; if (cameraAppliedKey.current !== simulatorKey) { cameraAppliedKey.current = simulatorKey; for (let step = 0; step < cameraStep; step += 1) changeCameraView(); } if (pendingRun.current) { const run = pendingRun.current; pendingRun.current = null; run(); } }} /></Box>;

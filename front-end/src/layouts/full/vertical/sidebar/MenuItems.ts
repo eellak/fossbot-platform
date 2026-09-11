@@ -4,13 +4,9 @@ import { uniqueId } from 'lodash';
 import {
   IconCode,
   IconPuzzle,
-  IconMoodKid,
-  IconMoodHappy,
   IconLayoutDashboard,
-  IconAlbum,
   IconHandGrab,
   IconDeviceGamepad2,
-  IconMap,
   IconWorld,
   IconBooks,
 } from '@tabler/icons-react';
@@ -58,7 +54,7 @@ const Menuitems: MenuitemsType[] = [
     id: uniqueId(),
     title: 'Stages',
     icon: IconWorld,
-    href: '/stages?create=1',
+    href: '/stages',
     betaOnly: true,
     betaFeature: 'stages',
   },
@@ -81,16 +77,6 @@ const Menuitems: MenuitemsType[] = [
     subtitle: 'menu.blocksBased',
     icon: IconPuzzle,
     href: '/blockly-page',
-  },
-
-  {
-    id: uniqueId(),
-    title: 'menu.stageBuilder',
-    subtitle: 'menu.stageBuilderBased',
-    icon: IconMap,
-    href: '/stage-builder',
-    betaOnly: true,
-    betaFeature: 'stages',
   },
 
   {
@@ -132,30 +118,6 @@ const Menuitems: MenuitemsType[] = [
     allowedRoles: ['tutor', 'admin'],
     betaOnly: true,
     betaFeature: 'education',
-  },
-  {
-    id: uniqueId(),
-    title: 'menu.tutorials',
-    icon: IconAlbum,
-    chip: 'Preview',
-    href: '/tutorials-page',
-    disabled: false,
-  },
-  {
-    id: uniqueId(),
-    title: 'menu.kindergarten',
-    icon: IconMoodKid,
-    chip: 'Soon',
-    href: '/material-page',
-    disabled: true,
-  },
-  {
-    id: uniqueId(),
-    title: 'menu.elementary',
-    icon: IconMoodHappy,
-    chip: 'Soon',
-    href: '/material-page',
-    disabled: true,
   },
   // {
   //   navlabel: true,

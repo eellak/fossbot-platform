@@ -90,7 +90,7 @@ function TopStatusText({ label, tone, onClick }: { label: string; tone: string; 
           borderRadius: 0.5,
           color: tone,
           fontSize: '0.75rem',
-          fontWeight: 750,
+          fontWeight: 600,
           lineHeight: 1.2,
           cursor: 'pointer',
           textDecoration: 'underline',
@@ -106,7 +106,7 @@ function TopStatusText({ label, tone, onClick }: { label: string; tone: string; 
   }
 
   return (
-    <Typography variant="caption" noWrap sx={{ px: 0.5, color: tone, fontWeight: 750, lineHeight: 1.2 }}>
+    <Typography variant="caption" noWrap sx={{ px: 0.5, color: tone, fontWeight: 600, lineHeight: 1.2 }}>
       {label}
     </Typography>
   );
@@ -180,11 +180,8 @@ export function EditorTopBar({
   const runButtonSx = {
     height: 34,
     px: 1.75,
-    bgcolor: editorColors.success,
-    color: editorColors.successInk,
-    fontWeight: 800,
+    fontWeight: 600,
     textTransform: 'none',
-    '&:hover': { bgcolor: editorColors.success },
   } as const;
 
   const active = activeValidationResults(validationResults);
@@ -193,8 +190,8 @@ export function EditorTopBar({
 
   return (
     <Toolbar variant="dense" sx={{ minHeight: 48, height: 48, px: 1, gap: 1, bgcolor: editorColors.topbar, color: editorColors.keycapInk, borderBottom: `1px solid ${editorColors.divider}` }}>
-      <Tooltip title="Back to Platform">
-        <IconButton size="small" onClick={onBack} sx={{ color: 'inherit' }} aria-label="Back to dashboard"><ArrowBackIcon fontSize="small" /></IconButton>
+      <Tooltip title="Back to stages">
+        <IconButton size="small" onClick={onBack} sx={{ color: 'inherit' }} aria-label="Back to stages"><ArrowBackIcon fontSize="small" /></IconButton>
       </Tooltip>
       <Tooltip title="Open stage settings">
         <ButtonBase
@@ -212,7 +209,7 @@ export function EditorTopBar({
             '&:focus-visible': { outline: `2px solid ${editorColors.accent}`, outlineOffset: 2 },
           }}
         >
-          <Typography variant="subtitle2" fontWeight={800} lineHeight={1}>Stage Builder</Typography>
+          <Typography variant="subtitle2" fontWeight={600} lineHeight={1}>Stage Builder</Typography>
           <Typography variant="caption" sx={{ color: editorColors.textSubtle }} noWrap>{stageName || 'Untitled Stage'}</Typography>
         </ButtonBase>
       </Tooltip>
@@ -256,7 +253,7 @@ export function EditorTopBar({
       </Stack>
       <Menu anchorEl={github.anchorEl} open={github.open} onClose={github.closeMenu}>
         <Box sx={{ px: 2, py: 1.25, maxWidth: 360 }}>
-          <Typography variant="subtitle2" fontWeight={850}>GitHub</Typography>
+          <Typography variant="subtitle2" fontWeight={600}>GitHub</Typography>
           <Typography variant="caption" color="text.secondary" sx={{ display: 'block', wordBreak: 'break-word' }}>
             {providerConnected ? providerLabel : 'Connect GitHub to save stages'}
           </Typography>

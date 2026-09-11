@@ -85,7 +85,7 @@ type MonacoResizeTarget = 'columns' | 'rows' | 'corner';
 type MonacoResizeState = { target: MonacoResizeTarget; startX: number; startY: number; startValue: number; startSecondary?: number };
 const clampWorkspaceValue = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
-const MonacoPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppearance = false }) => {
+const MonacoPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppearance = true }) => {
   const { t } = useTranslation();
   const location = useLocation();
   const [editorValue, setEditorValue] = useState('');
@@ -320,17 +320,6 @@ const MonacoPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppearan
     return () => window.removeEventListener('fossbot:stage-selected', handleStageSelected);
   }, []);
 
-  useEffect(() => {
-    if (location.pathname.endsWith('/monaco-tutorial-page')) {
-      setProjectTitle('Monaco Editor FOSSBot Tutorial');
-      setProjectDescription(
-        'This is a tutorial on how to use the Monaco Editor with FOSSBot, \
-                              using Python. Also we will learn about the default control Python commands and how to use them.',
-      );
-      setShowVideoPlayer(true);
-    }
-  }, [location.pathname]);
-
   const handleGetValue = useCallback((getValueFunc: () => string) => {
     const value = getValueFunc();
     setEditorValue(value);
@@ -538,7 +527,7 @@ const MonacoPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppearan
                   {isEditingTitle ? (
                     <TextField size="small" fullWidth value={projectTitle} onChange={handleTitleChange} onBlur={() => setIsEditingTitle(false)} autoFocus />
                   ) : (
-                    <Typography component="h1" variant="h3" sx={{ cursor: projectId ? 'text' : 'default' }} onClick={handleTitleClick}>{projectTitle}</Typography>
+                    <Typography component="h1" variant="h3" sx={{ cursor: projectId ? 'text' : 'default', overflowWrap: 'anywhere' }} onClick={handleTitleClick}>{projectTitle}</Typography>
                   )}
                   {isEditingDescription ? (
                     <TextField size="small" fullWidth value={projectDescription} onChange={handleDescriptionChange} onBlur={() => setIsEditingDescription(false)} autoFocus />
@@ -548,7 +537,7 @@ const MonacoPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppearan
                   <ProjectStageIndicator stage={selectedStage} />
                 </Box>
               </Box>
-              <Stack direction="row" spacing={1} alignItems="center">
+              <Stack direction="row" alignItems="center" sx={{ width: { xs: '100%', sm: 'auto' }, flexWrap: 'wrap', gap: 1 }}>
                 <Button variant="contained" startIcon={<IconPlayerPlay size={20} />} onClick={handlePlayClick} disabled={isRunning}>{t('monaco-page.run')}</Button>
                 <Button variant="outlined" startIcon={<IconPlayerStop size={20} />} disabled={!isRunning} onClick={handleStopClick}>{t('monaco-page.stop')}</Button>
                 <SearchBar variant="button" />

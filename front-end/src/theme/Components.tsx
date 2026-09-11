@@ -2,8 +2,8 @@
 import './DefaultColors';
 import { Theme } from '@mui/material/styles';
 
-const components: any = (theme: Theme) => {
-  return {
+const components: any = (theme: Theme, approved = false) => {
+  const result: any = {
     MuiCssBaseline: {
       styleOverrides: {
         '*': {
@@ -398,5 +398,45 @@ const components: any = (theme: Theme) => {
       },
     },
   };
+
+  if (approved) {
+    result.MuiCssBaseline.styleOverrides['.MuiBox-root'] = { borderRadius: 0 };
+    result.MuiCssBaseline.styleOverrides['.visual-language-supporting-panel'] = { borderRadius: '8px' };
+    result.MuiButtonBase = {
+      styleOverrides: {
+        root: {
+          '&:focus-visible': { outline: `2px solid ${theme.palette.primary.main}`, outlineOffset: 3 },
+        },
+      },
+    };
+    result.MuiButton.styleOverrides = {
+      ...result.MuiButton.styleOverrides,
+      root: { minHeight: 40, borderRadius: 8, paddingLeft: 16, paddingRight: 16, fontWeight: 600, textTransform: 'none', boxShadow: 'none' },
+      text: { backgroundColor: 'transparent', '&:hover': { backgroundColor: theme.palette.action.hover, color: theme.palette.primary.main } },
+      textPrimary: { backgroundColor: 'transparent', '&:hover': { backgroundColor: theme.palette.action.hover, color: theme.palette.primary.main } },
+      outlinedPrimary: { borderColor: theme.palette.divider, '&:hover': { backgroundColor: theme.palette.primary.light, color: theme.palette.primary.main, borderColor: theme.palette.primary.main } },
+      outlinedError: { borderColor: theme.palette.divider, '&:hover': { backgroundColor: theme.palette.error.light, color: theme.palette.error.main, borderColor: theme.palette.error.main } },
+    };
+    result.MuiCard.styleOverrides.root = {
+      ...result.MuiCard.styleOverrides.root,
+      border: `1px solid ${theme.palette.divider}`,
+      borderRadius: 8,
+      boxShadow: 'none',
+    };
+    result.MuiCardContent.styleOverrides.root = { padding: 20, '&:last-child': { paddingBottom: 20 } };
+    result.MuiDrawer.styleOverrides.paper = { borderLeft: `1px solid ${theme.palette.divider}`, borderRight: `1px solid ${theme.palette.divider}` };
+    result.MuiAlert.styleOverrides.root = { borderRadius: 8, fontSize: '0.875rem' };
+    result.MuiIconButton = {
+      styleOverrides: {
+        colorError: { '&:hover': { backgroundColor: theme.palette.error.light, color: theme.palette.error.main } },
+      },
+    };
+    result.MuiOutlinedInput.styleOverrides.root = {
+      '&:not(.Mui-focused):not(.Mui-error):not(.Mui-disabled) .MuiOutlinedInput-notchedOutline': { borderColor: theme.palette.divider },
+      '&:hover:not(.Mui-focused):not(.Mui-error):not(.Mui-disabled) .MuiOutlinedInput-notchedOutline': { borderColor: theme.palette.text.secondary },
+    };
+  }
+
+  return result;
 };
 export default components;

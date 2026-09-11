@@ -77,7 +77,7 @@ type BlocklyResizeTarget = 'columns' | 'rows' | 'corner';
 type BlocklyResizeState = { target: BlocklyResizeTarget; startX: number; startY: number; startValue: number; startSecondary?: number };
 const clampWorkspaceValue = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
-const BlocklyPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppearance = false }) => {
+const BlocklyPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppearance = true }) => {
   const { t } = useTranslation();
   const location = useLocation();
   const [editorValue, setEditorValue] = useState(
@@ -305,17 +305,6 @@ const BlocklyPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppeara
     window.addEventListener('fossbot:stage-selected', handleStageSelected);
     return () => window.removeEventListener('fossbot:stage-selected', handleStageSelected);
   }, []);
-
-  useEffect(() => {
-    if (location.pathname.endsWith('/blockly-tutorial-page')) {
-      setShowVideoPlayer(true);
-      setProjectTitle('Blockly Editor FOSSBot Tutorial');
-      setProjectDescription(
-        'This is a tutorial on how to use the Blockly Editor with FOSSBot. \
-                              Also we will learn about the default control Blocks and how to use them.',
-      );
-    }
-  }, [location.pathname]);
 
   // Function to be called when the value in the editor changes
   const handleGetValue = useCallback((getValueFunc) => {
@@ -546,7 +535,7 @@ const BlocklyPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppeara
                   {isEditingTitle ? (
                     <TextField size="small" fullWidth value={projectTitle} onChange={handleTitleChange} onBlur={() => setIsEditingTitle(false)} autoFocus />
                   ) : (
-                    <Typography component="h1" variant="h3" sx={{ cursor: projectId ? 'text' : 'default' }} onClick={handleTitleClick}>{projectTitle}</Typography>
+                    <Typography component="h1" variant="h3" sx={{ cursor: projectId ? 'text' : 'default', overflowWrap: 'anywhere' }} onClick={handleTitleClick}>{projectTitle}</Typography>
                   )}
                   {isEditingDescription ? (
                     <TextField size="small" fullWidth value={projectDescription} onChange={handleDescriptionChange} onBlur={() => setIsEditingDescription(false)} autoFocus />
@@ -556,7 +545,7 @@ const BlocklyPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppeara
                   <ProjectStageIndicator stage={selectedStage} />
                 </Box>
               </Box>
-              <Stack direction="row" spacing={1} alignItems="center">
+              <Stack direction="row" alignItems="center" sx={{ width: { xs: '100%', sm: 'auto' }, flexWrap: 'wrap', gap: 1 }}>
                 <Button variant="contained" startIcon={<IconPlayerPlay size={20} />} onClick={handlePlayClick} disabled={isRunning}>{t('blockly-page.run')}</Button>
                 <Button variant="outlined" startIcon={<IconPlayerStop size={20} />} disabled={!isRunning} onClick={handleStopClick}>{t('blockly-page.stop')}</Button>
                 <SearchBar variant="button" />

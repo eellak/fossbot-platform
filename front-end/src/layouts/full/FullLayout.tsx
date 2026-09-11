@@ -24,10 +24,12 @@ const PageWrapper = styled('div')(({theme}) => ({
   backgroundColor: 'transparent'
 }));
 
-const FullLayout: FC<{ previewAppearance?: boolean }> = ({ previewAppearance = false }) => {
+const FullLayout: FC<{ previewAppearance?: boolean }> = ({ previewAppearance = true }) => {
   const customizer = useSelector((state: AppState) => state.customizer);
   const { pathname } = useLocation();
-  const fullBleedWorkspace = previewAppearance && /\/(course-workspace|python|blockly)\/?$/.test(pathname);
+  const fullBleedWorkspace = previewAppearance && (/\/(course-workspace|python|blockly)\/?$/.test(pathname)
+    || /^\/(monaco-page|blockly-page)(\/|$)/.test(pathname)
+    || /^\/courses\/[^/]+\/learn\/[^/]+\/?$/.test(pathname));
 
   const theme = useTheme();
 

@@ -11,7 +11,7 @@ import {
 } from 'src/courses/CoursesApi';
 import type { ClassLeaderboard, StudentClassGroup } from 'src/courses/types';
 
-export default function ClassGroupsStudentPage({ embedded = false, previewAppearance = false }: { embedded?: boolean; previewAppearance?: boolean }) {
+export default function ClassGroupsStudentPage({ embedded = false, previewAppearance = true }: { embedded?: boolean; previewAppearance?: boolean }) {
   const { t } = useTranslation();
   const { token } = useAuth();
   const navigate = useNavigate();

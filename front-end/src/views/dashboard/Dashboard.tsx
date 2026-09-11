@@ -8,7 +8,7 @@ import { useTranslation } from 'react-i18next';
 import CourseResumeCard from 'src/components/dashboard/CourseResumeCard';
 import { useFeatureFlags } from 'src/config/FeatureFlags';
 
-const Modern = ({ previewAppearance = false }: { previewAppearance?: boolean }) => {
+const Modern = ({ previewAppearance = true }: { previewAppearance?: boolean }) => {
   const { t } = useTranslation();
   const { marketplace } = useFeatureFlags();
 

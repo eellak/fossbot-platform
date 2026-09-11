@@ -40,7 +40,6 @@ import BlocklyPage from '../views/blockly-page/BlocklyPage';
 const InteractivePage = Loadable(lazy(() => import('../views/interactive-page/InteractivePage')));
 const RcPage = Loadable(lazy(() => import('../views/rc-page/RcPage')));
 import MonacoPage from '../views/monaco-page/MonacoPage';
-import TutorialsPage from '../views/tutorials/TutorialsPage';
 
 
 // const MonacoPage = Loadable(lazy(() => import('../views/monaco-page/MonacoPage')));
@@ -60,7 +59,7 @@ const AdminRoute = Loadable(lazy(() => import('./AdminRoute')));
 const Router = [
   ...(process.env.NODE_ENV === 'development' ? [
     { path: '/ui-comparison', element: <PrivateRoute><DashboardComparison /></PrivateRoute> },
-    { path: '/ui-comparison/current', element: <PrivateRoute><DashboardPreview /></PrivateRoute>, children: [{ path: '', element: <Dashboard /> }, { path: 'courses', element: <CoursesPage /> }, { path: 'course-workspace', element: <LessonWorkspacePreview /> }, { path: 'course-authoring', element: <CourseAuthoringPreview /> }, { path: 'python', element: <MonacoPage /> }, { path: 'blockly', element: <BlocklyPage /> }, { path: 'components', element: <VisualLanguageSpecimen /> }] },
+    { path: '/ui-comparison/current', element: <PrivateRoute><DashboardPreview /></PrivateRoute>, children: [{ path: '', element: <Dashboard previewAppearance={false} /> }, { path: 'courses', element: <CoursesPage previewAppearance={false} /> }, { path: 'course-workspace', element: <LessonWorkspacePreview /> }, { path: 'course-authoring', element: <CourseAuthoringPreview /> }, { path: 'python', element: <MonacoPage previewAppearance={false} /> }, { path: 'blockly', element: <BlocklyPage previewAppearance={false} /> }, { path: 'components', element: <VisualLanguageSpecimen /> }] },
     { path: '/ui-comparison/proposed', element: <PrivateRoute><DashboardPreview proposed /></PrivateRoute>, children: [{ path: '', element: <Dashboard previewAppearance /> }, { path: 'courses', element: <CoursesPage previewAppearance /> }, { path: 'course-workspace', element: <LessonWorkspacePreview proposed /> }, { path: 'course-authoring', element: <CourseAuthoringPreview proposed /> }, { path: 'python', element: <MonacoPage previewAppearance /> }, { path: 'blockly', element: <BlocklyPage previewAppearance /> }, { path: 'components', element: <VisualLanguageSpecimen /> }] },
   ] : []),
   {
@@ -116,15 +115,6 @@ const Router = [
     children: [
       { path: '/blockly-page', exact: true, element: <BlocklyPage /> },
       { path: '/blockly-page/:projectId', exact: true, element: <BlocklyPage /> },
-    ],
-  },
-  {
-    path: '/blockly-tutorial-page',
-    title: 'Blockly Tutorial Editor',
-    element: <FullLayout />,
-    children: [
-      { path: '/blockly-tutorial-page', exact: true, element: <BlocklyPage /> },
-      { path: '/blockly-tutorial-page/', exact: true, element: <BlocklyPage /> },
     ],
   },
   {
@@ -263,31 +253,6 @@ const Router = [
       {
         path: '',
         element: <RcPage />,
-      },
-    ],
-  },
-  {
-    path: '/monaco-tutorial-page',
-    title: 'Monaco Tutorial Editor',
-    element: <FullLayout />,
-    children: [
-      { path: '/monaco-tutorial-page/', exact: true, element: <MonacoPage /> },
-      { path: '/monaco-tutorial-page', exact: true, element: <MonacoPage /> },
-    ],
-  },
-  {
-    path: '/tutorials-page',
-    element: (
-      <PrivateRoute>
-        {/* <RoleBasedRoute betaTesterOnly={true}> */}
-          <FullLayout />
-        {/* </RoleBasedRoute> */}
-      </PrivateRoute>
-    ),
-    children: [
-      {
-        path: '',
-        element: <TutorialsPage />,
       },
     ],
   },

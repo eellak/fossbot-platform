@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { Alert, Box, Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Paper, Snackbar, Stack, Typography } from '@mui/material';
+import { Alert, Box, Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Drawer, Paper, Snackbar, Stack, Typography, useMediaQuery } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from 'src/authentication/AuthProvider';
@@ -79,6 +79,9 @@ function isTypingTarget(target: EventTarget | null): boolean {
 
 const leaveMessage = 'You have unsaved changes. A local recovery draft will be kept, but you should save JSON when you are ready to keep a copy.';
 const DRAFT_SAVE_DELAY_MS = 2_000;
+const desktopPanelsInitiallyVisible = () => typeof window === 'undefined'
+  || typeof window.matchMedia !== 'function'
+  || window.matchMedia('(min-width:1200px)').matches;
 
 type GitHubDeepLinkTarget = {
   repoOwner: string;
@@ -368,7 +371,7 @@ function GitHubStageLoadScreen({ state, onRetry, onBack, onOpenPicker }: { state
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
             <Button variant="contained" onClick={onRetry}>Try again</Button>
             <Button variant="outlined" onClick={onOpenPicker}>Open from GitHub…</Button>
-            <Button variant="text" onClick={onBack}>Back to dashboard</Button>
+            <Button variant="text" onClick={onBack}>Back to stages</Button>
           </Stack>
         )}
       </Stack>
@@ -381,6 +384,7 @@ const StageBuilderPage = () => {
   const { user, token } = useAuth();
   const { marketplace: marketplaceEnabled, ready: featureFlagsReady } = useFeatureFlags();
   const navigate = useNavigate();
+  const desktopPanels = useMediaQuery((theme: any) => theme.breakpoints.up('lg'));
   const scope = useMemo(() => userScope(user), [user]);
   const [prefs, setPrefs] = useState<StageBuilderPreferences>(() => readStageBuilderPreferences(scope));
   const editorColors = useMemo(() => getEditorColors(prefs.styleVariant), [prefs.styleVariant]);
@@ -403,8 +407,9 @@ const StageBuilderPage = () => {
   const [lookThroughCameraId, setLookThroughCameraId] = useState<string | null>(null);
   const [sensorHelpersVisible, setSensorHelpersVisible] = useState(false);
   const [collisionWireVisible, setCollisionWireVisible] = useState(false);
-  const [leftPanelVisible, setLeftPanelVisible] = useState(true);
-  const [rightPanelVisible, setRightPanelVisible] = useState(true);
+  const [leftPanelVisible, setLeftPanelVisible] = useState(desktopPanelsInitiallyVisible);
+  const [rightPanelVisible, setRightPanelVisible] = useState(desktopPanelsInitiallyVisible);
+  const previousDesktopPanels = useRef(desktopPanels);
   const [leftPanelWidth, setLeftPanelWidth] = useState<number>(stageBuilderPanelSizing.leftDefaultWidth);
   const [rightPanelWidth, setRightPanelWidth] = useState<number>(stageBuilderPanelSizing.rightDefaultWidth);
   const [panelResize, setPanelResize] = useState<PanelResizeState | null>(null);
@@ -488,6 +493,14 @@ const StageBuilderPage = () => {
   } : null) || marketplaceStatus?.pullRequest || null;
   const marketplacePublishLabel = marketplaceStatus?.lifecycle.state === 'changes_ready_to_publish' ? 'Publish changes' : 'Publish stage';
   const marketplacePublishReady = marketplaceStatus?.lifecycle.state === 'changes_ready_to_publish';
+
+  useEffect(() => {
+    if (previousDesktopPanels.current && !desktopPanels) {
+      setLeftPanelVisible(false);
+      setRightPanelVisible(false);
+    }
+    previousDesktopPanels.current = desktopPanels;
+  }, [desktopPanels]);
 
   const refreshProviderStatus = async ({ force = false }: RefreshCacheOptions = {}) => {
     if (!token) {
@@ -1400,8 +1413,7 @@ const StageBuilderPage = () => {
 
   const handleBack = () => {
     if (!confirmIfDirty()) return;
-    if (window.history.length > 1) navigate(-1);
-    else navigate('/dashboard');
+    navigate('/stages?tab=mine');
   };
 
   const handleOpenSettings = () => {
@@ -1629,6 +1641,47 @@ const StageBuilderPage = () => {
     return () => window.removeEventListener('keydown', onKey);
   }, [prefs.keyboardShortcutsEnabled, stage, selectedId, selectedIds, selectedGroupId, snapSettings, historyVersion, lookThroughCameraId]);
 
+  const leftPanel = (
+    <EditorLeftPanel
+      stage={stage}
+      selectedId={selectedId}
+      selectedIds={selectedIds}
+      selectedGroupId={selectedGroupId}
+      prefabs={prefabs}
+      onAddKind={addObject}
+      onAddPrefab={addPrefab}
+      onImportObject={() => customObjectInputRef.current?.click()}
+      onSelectObject={handleSelect}
+      onSelectGroup={handleSelectGroup}
+      onSelectionChange={handleSelectionChange}
+      onObjectChange={updateObject}
+      onDuplicateObjects={duplicateObjects}
+      onDeleteObjects={deleteObjects}
+      onHierarchyDrop={handleHierarchyDrop}
+      onGroupRename={renameGroup}
+      onPatchObjects={patchObjects}
+      onTogglePanel={toggleLeftPanel}
+    />
+  );
+  const rightPanel = (
+    <EditorRightInspector
+      tab={inspectorTab}
+      onTabChange={setInspectorTab}
+      stage={stage}
+      selectedObject={selectedObject}
+      selectedCount={selectedCount}
+      validationResults={validationResults}
+      prefs={prefs}
+      onStageChange={handleStageChange}
+      onObjectChange={updateObject}
+      onLookThroughCamera={requestLookThroughCamera}
+      onToggleValidationOverride={toggleValidationOverride}
+      onPrefsChange={setPref}
+      onResetPrefs={() => setPrefs(defaultStageBuilderPreferences)}
+      onTogglePanel={toggleRightPanel}
+    />
+  );
+
   return (
     <EditorThemeProvider value={useMemo(() => {
       const variant = prefs.styleVariant;
@@ -1650,7 +1703,7 @@ const StageBuilderPage = () => {
             setGithubDeepLinkLoad({ status: 'loading', repoLabel: githubDeepLinkTarget.label, step: 'Checking GitHub connection…' });
             setGithubDeepLinkRetry((value) => value + 1);
           }}
-          onBack={() => navigate('/dashboard')}
+          onBack={() => navigate('/stages?tab=mine')}
           onOpenPicker={() => {
             window.history.replaceState(null, '', window.location.pathname);
             setGithubDeepLinkLoad({ status: 'idle' });
@@ -1708,31 +1761,9 @@ const StageBuilderPage = () => {
       <input ref={customObjectInputRef} type="file" accept=".obj,.stl,.glb,model/obj,model/stl,model/gltf-binary,text/plain,application/sla" hidden onChange={(event) => handleImportCustomObject(event.target.files?.[0])} />
 
       <Box sx={{ flex: 1, minHeight: 0, display: 'flex', overflow: 'hidden' }}>
-        {leftPanelVisible && (
-          <Box sx={{ width: leftPanelWidth, flex: '0 0 auto', minHeight: 0, display: { xs: 'none', lg: 'block' }, overflow: 'hidden' }}>
-            <EditorLeftPanel
-              stage={stage}
-              selectedId={selectedId}
-              selectedIds={selectedIds}
-              selectedGroupId={selectedGroupId}
-              prefabs={prefabs}
-              onAddKind={addObject}
-              onAddPrefab={addPrefab}
-              onImportObject={() => customObjectInputRef.current?.click()}
-              onSelectObject={handleSelect}
-              onSelectGroup={handleSelectGroup}
-              onSelectionChange={handleSelectionChange}
-              onObjectChange={updateObject}
-              onDuplicateObjects={duplicateObjects}
-              onDeleteObjects={deleteObjects}
-              onHierarchyDrop={handleHierarchyDrop}
-              onGroupRename={renameGroup}
-              onPatchObjects={patchObjects}
-              onTogglePanel={toggleLeftPanel}
-            />
-          </Box>
-        )}
-        {leftPanelVisible && <PanelResizeHandle side="left" onPointerDown={beginPanelResize('left')} onDoubleClick={resetPanelWidth('left')} />}
+        {leftPanelVisible && desktopPanels && <Box sx={{ width: leftPanelWidth, flex: '0 0 auto', minHeight: 0, overflow: 'hidden' }}>{leftPanel}</Box>}
+        {leftPanelVisible && desktopPanels && <PanelResizeHandle side="left" onPointerDown={beginPanelResize('left')} onDoubleClick={resetPanelWidth('left')} />}
+        {leftPanelVisible && !desktopPanels && <Drawer anchor="left" open onClose={() => setLeftPanelVisible(false)} PaperProps={{ sx: { width: 'min(360px, calc(100vw - 40px))', overflow: 'hidden' } }}>{leftPanel}</Drawer>}
         {!leftPanelVisible && <EditorPanelTab side="left" label="Library" onClick={toggleLeftPanel} />}
 
         <Box sx={{ flex: '1 1 0%', minWidth: 0, minHeight: 0, position: 'relative', bgcolor: editorColors.viewport }}>
@@ -1856,28 +1887,10 @@ const StageBuilderPage = () => {
           )}
         </Box>
 
-        {rightPanelVisible && <PanelResizeHandle side="right" onPointerDown={beginPanelResize('right')} onDoubleClick={resetPanelWidth('right')} />}
+        {rightPanelVisible && desktopPanels && <PanelResizeHandle side="right" onPointerDown={beginPanelResize('right')} onDoubleClick={resetPanelWidth('right')} />}
         {!rightPanelVisible && <EditorPanelTab side="right" label="Inspector" onClick={toggleRightPanel} />}
-        {rightPanelVisible && (
-          <Box sx={{ width: rightPanelWidth, flex: '0 0 auto', minHeight: 0, display: { xs: 'none', lg: 'block' }, overflow: 'hidden' }}>
-            <EditorRightInspector
-              tab={inspectorTab}
-              onTabChange={setInspectorTab}
-              stage={stage}
-              selectedObject={selectedObject}
-              selectedCount={selectedCount}
-              validationResults={validationResults}
-              prefs={prefs}
-              onStageChange={handleStageChange}
-              onObjectChange={updateObject}
-              onLookThroughCamera={requestLookThroughCamera}
-              onToggleValidationOverride={toggleValidationOverride}
-              onPrefsChange={setPref}
-              onResetPrefs={() => setPrefs(defaultStageBuilderPreferences)}
-              onTogglePanel={toggleRightPanel}
-            />
-          </Box>
-        )}
+        {rightPanelVisible && desktopPanels && <Box sx={{ width: rightPanelWidth, flex: '0 0 auto', minHeight: 0, overflow: 'hidden' }}>{rightPanel}</Box>}
+        {rightPanelVisible && !desktopPanels && <Drawer anchor="right" open onClose={() => setRightPanelVisible(false)} PaperProps={{ sx: { width: 'min(400px, calc(100vw - 40px))', overflow: 'hidden' } }}>{rightPanel}</Drawer>}
       </Box>
 
       <Box sx={{ height: 28, pl: 1, pr: 1.25, display: 'flex', alignItems: 'center', gap: 2, bgcolor: editorColors.topbar, color: editorColors.keycapInk, borderTop: `1px solid ${editorColors.divider}` }}>

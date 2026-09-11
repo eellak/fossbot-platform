@@ -1,8 +1,10 @@
 import React from 'react';
 import { Box, Typography } from '@mui/material';
 import type { TiptapNode } from 'src/courses/types';
+import { lessonProseSx } from './courseContentStyles';
 
-function renderNode(node: TiptapNode, key: number | string): React.ReactNode {
+function renderNode(node: TiptapNode | null | undefined, key: number | string): React.ReactNode {
+  if (!node) return null;
   const children = node.content?.map((child, index) => renderNode(child, index));
   if (node.type === 'text') {
     let content: React.ReactNode = node.text || '';
@@ -20,7 +22,8 @@ function renderNode(node: TiptapNode, key: number | string): React.ReactNode {
   return <React.Fragment key={key}>{children}</React.Fragment>;
 }
 
-export default function RichTextContent({ content }: { content: TiptapNode | string }) {
-  if (typeof content === 'string') return <Typography sx={{ whiteSpace: 'pre-wrap', lineHeight: 1.75 }}>{content}</Typography>;
-  return <Box>{renderNode(content, 'root')}</Box>;
+export default function RichTextContent({ content }: { content: TiptapNode | string | null | undefined }) {
+  if (typeof content === 'string') return <Typography sx={{ ...lessonProseSx, whiteSpace: 'pre-wrap', lineHeight: 1.75 }}>{content}</Typography>;
+  if (!content) return null;
+  return <Box sx={lessonProseSx}>{renderNode(content, 'root')}</Box>;
 }

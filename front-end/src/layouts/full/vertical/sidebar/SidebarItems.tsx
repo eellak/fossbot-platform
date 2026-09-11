@@ -32,16 +32,14 @@ const SidebarItems = ({ previewAppearance = false }: { previewAppearance?: boole
     const courses = visibleItems
       .filter((item) => item.href === '/courses' || item.href === '/teach/courses')
       .map((item) => ({ ...item, title: 'menu.studentCourses' }));
-    const stages = visibleItems.filter((item) => item.href === '/stages?create=1');
+    const stages = visibleItems.filter((item) => item.href === '/stages');
     modifiedMenuItems = visibleItems.filter((item) =>
       item.subheader !== 'menu.educationalMaterial'
       && item.subheader !== 'menu.editors'
       && item.href !== '/courses'
       && item.href !== '/teach/courses'
-      && item.href !== '/stages?create=1'
+      && item.href !== '/stages'
       && item.href !== '/stage-builder'
-      && item.href !== '/tutorials-page'
-      && item.href !== '/material-page'
     );
     const dashboardIndex = modifiedMenuItems.findIndex((item) => item.href === '/dashboard');
     modifiedMenuItems.splice(dashboardIndex + 1, 0, ...courses);

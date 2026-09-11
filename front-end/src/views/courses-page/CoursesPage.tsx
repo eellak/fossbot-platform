@@ -9,7 +9,7 @@ import type { Enrollment, StudentCourse } from 'src/courses/types';
 import ClassGroupsStudentPage from '../class-groups-student-page/ClassGroupsStudentPage';
 import BetaBadge from 'src/components/shared/BetaBadge';
 
-export default function CoursesPage({ previewAppearance = false }: { previewAppearance?: boolean }) {
+export default function CoursesPage({ previewAppearance = true }: { previewAppearance?: boolean }) {
   const { t } = useTranslation();
   const { token } = useAuth();
   const navigate = useNavigate();

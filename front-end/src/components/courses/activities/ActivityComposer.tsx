@@ -5,7 +5,8 @@ import {
 import { IconArrowDown, IconArrowUp, IconChevronDown, IconCopy, IconPlus, IconTrash } from '@tabler/icons-react';
 import { v4 as uuidv4 } from 'uuid';
 import { activityTypes, activityValidation, createActivity, duplicateActivity, sensorCatalog, sensorGroups, sensorPresentations, sensorStatistics } from 'src/courses/activitySchema';
-import type { Activity, ChoiceOption, HintActivity, SensorPresentation, SensorStatistic, StageReference, TiptapNode } from 'src/courses/types';
+import type { Activity, ChoiceOption, HintActivity, SensorPresentation, SensorStatistic, StageReference } from 'src/courses/types';
+import { normalizeTiptapDocument } from 'src/courses/courseAuthoring';
 import RichTextEditor from '../RichTextEditor';
 import MissionActivityEditor from './MissionActivityEditor';
 import { authoringAccordionSx, authoringControlButtonSx, authoringControlFieldSx, authoringIconButtonSx, authoringSummarySx, authoringTitleSx } from './authoringStyles';
@@ -115,7 +116,7 @@ function activitySummary(activity: Activity): string {
 }
 
 function ActivityFields({ activity, onChange, stageReference, token, t }: { activity: Activity; onChange: (activity: Activity) => void; stageReference?: StageReference | null; token?: string; t: any }) {
-  if (activity.type === 'rich_text') return <RichTextEditor value={activity.content as TiptapNode} onChange={(content) => onChange({ ...activity, content })} labels={richTextLabels(t)} />;
+  if (activity.type === 'rich_text') return <RichTextEditor value={normalizeTiptapDocument(activity.content)} onChange={(content) => onChange({ ...activity, content })} labels={richTextLabels(t)} />;
   if (activity.type === 'hint') {
     return <Stack spacing={1.5}>
       <Typography variant="body2" color="text.secondary">{t('education.activities.hintGeneralHelp')}</Typography>

@@ -244,7 +244,7 @@ export default function UserStagesDashboardPanel({ showViewAll = true }: { showV
   const showConnect = !loading && (!providerStatus?.connected || providerStatus.needsReconnect);
   const actions = (
     <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" justifyContent="flex-end">
-      <Button size="small" variant="contained" startIcon={<AddIcon />} onClick={() => setStagePickerOpen(true)}>Create new stage</Button>
+      <Button size="small" variant="contained" startIcon={<AddIcon />} onClick={() => showViewAll ? navigate('/stages?create=1') : setStagePickerOpen(true)}>Create new stage</Button>
       {showConnect && <Button size="small" variant="outlined" startIcon={connecting ? <CircularProgress size={16} color="inherit" /> : <GitHubIcon />} disabled={connecting} onClick={connectGitHub}>{connecting ? 'Connecting…' : MARKETPLACE_COPY.connectGitHub}</Button>}
       {showViewAll && <Button component="a" href="/stages?tab=mine" size="small" variant="outlined">View all</Button>}
     </Stack>
@@ -254,7 +254,7 @@ export default function UserStagesDashboardPanel({ showViewAll = true }: { showV
     {error && <Alert severity={stages.length ? 'warning' : 'error'} sx={{ mb: stages.length ? 1.5 : 0 }}>{error}</Alert>}
     {actionMessage && <Alert severity="success" sx={{ mb: 1.5 }} onClose={() => setActionMessage('')}>{actionMessage}</Alert>}
     {loading && !stages.length ? <Stack spacing={1}>{Array.from({ length: 4 }).map((_, index) => <Skeleton key={index} variant="rounded" height={64} />)}</Stack>
-      : !stages.length ? <Box sx={{ py: 2 }}><Typography variant="subtitle2" fontWeight={700}>No saved stages yet</Typography><Typography variant="body2" color="text.secondary">Create a stage in Stage Builder, or connect GitHub to access existing repositories.</Typography></Box>
+      : !stages.length ? <Box sx={{ py: 2 }}><Typography variant="subtitle2" fontWeight={600}>No saved stages yet</Typography><Typography variant="body2" color="text.secondary">Create your first stage here, or connect GitHub to access existing repositories.</Typography></Box>
         : <Stack spacing={1}>{stages.map((stage) => <Box key={stage.key} sx={{ p: 1.5, border: '1px solid', borderColor: 'divider', borderRadius: 1.5, display: 'flex', alignItems: { xs: 'flex-start', sm: 'center' }, justifyContent: 'space-between', gap: 1.5, flexDirection: { xs: 'column', sm: 'row' } }}>
           <Box minWidth={0}>
             <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
