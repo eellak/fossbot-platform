@@ -3,10 +3,11 @@ import PageContainer from 'src/components/container/PageContainer';
 import ProjectsCard from 'src/components/dashboard/ProjectsCard';
 import StageMarketplacePanel from 'src/components/dashboard/StageMarketplacePanel';
 import UserStagesDashboardPanel from 'src/components/dashboard/UserStagesDashboardPanel';
-import { Box, Grid, Typography } from '@mui/material';
+import { Box, Grid } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import CourseResumeCard from 'src/components/dashboard/CourseResumeCard';
 import { useFeatureFlags } from 'src/config/FeatureFlags';
+import PageHeader from 'src/components/shared/PageHeader';
 
 const Modern = ({ previewAppearance = true }: { previewAppearance?: boolean }) => {
   const { t } = useTranslation();
@@ -17,8 +18,7 @@ const Modern = ({ previewAppearance = true }: { previewAppearance?: boolean }) =
       <Box>
         {previewAppearance && (
           <Box sx={{ mb: 2 }}>
-            <Typography variant="h3">{t('menu.dashboard')}</Typography>
-            <Typography color="text.secondary">{t('dashboard-page.overviewSubtitle')}</Typography>
+            <PageHeader title={t('menu.dashboard')} description={t('dashboard-page.overviewSubtitle')} />
           </Box>
         )}
         <Grid container spacing={3}>

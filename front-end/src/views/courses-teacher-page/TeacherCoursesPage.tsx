@@ -7,6 +7,7 @@ import { useAuth } from 'src/authentication/AuthProvider';
 import { addLesson, archiveCourse, createCourse, listAuthoredCourses, readCourseDraft } from 'src/courses/CoursesApi';
 import type { CourseSummary } from 'src/courses/types';
 import ClassGroupsTeacherPage from '../class-groups-teacher-page/ClassGroupsTeacherPage';
+import { pageTabsSx, TabbedPageHeader } from 'src/components/shared/PageHeader';
 
 export default function TeacherCoursesPage() {
   const { t } = useTranslation();
@@ -68,16 +69,17 @@ export default function TeacherCoursesPage() {
   };
 
   return (
-    <Box sx={{ maxWidth: 1160, mx: 'auto', p: { xs: 2, md: 3 } }}>
-      <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ sm: 'center' }} gap={2} mb={3}>
-        <Box><Typography variant="h3" component="h1">{pageTitle}</Typography><Typography color="text.secondary">{pageSubtitle}</Typography></Box>
-        {tab === 0 && <Button variant="contained" startIcon={<IconPlus size={18} />} onClick={() => setCreateOpen(true)}>{t('education.courseList.create')}</Button>}
-      </Stack>
-      <Tabs value={tab} onChange={(_, value) => setTab(value)} aria-label={t('education.courseList.title')} variant="scrollable" scrollButtons="auto" allowScrollButtonsMobile sx={{ mb: 2 }}>
-        <Tab label={t('education.courseList.title')} />
-        <Tab label={t('education.classrooms.teacherTitle')} />
-      </Tabs>
-      {tab === 0 && <><TextField fullWidth value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t('education.courseList.search')} inputProps={{ 'aria-label': t('education.courseList.search') }} InputProps={{ startAdornment: <InputAdornment position="start"><IconSearch size={18} /></InputAdornment> }} sx={{ mb: 2 }} />
+    <Stack spacing={3}>
+      <TabbedPageHeader
+        title={pageTitle}
+        description={pageSubtitle}
+        action={tab === 0 ? <Button variant="contained" startIcon={<IconPlus size={18} />} onClick={() => setCreateOpen(true)}>{t('education.courseList.create')}</Button> : undefined}
+        tabs={<Tabs value={tab} onChange={(_, value) => setTab(value)} aria-label={t('education.courseList.title')} variant="scrollable" scrollButtons="auto" allowScrollButtonsMobile sx={pageTabsSx}>
+          <Tab label={t('education.courseList.title')} />
+          <Tab label={t('education.classrooms.teacherTitle')} />
+        </Tabs>}
+      />
+      {tab === 0 && <Box><TextField fullWidth value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t('education.courseList.search')} inputProps={{ 'aria-label': t('education.courseList.search') }} InputProps={{ startAdornment: <InputAdornment position="start"><IconSearch size={18} /></InputAdornment> }} sx={{ mb: 2 }} />
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
       {loading ? <Stack spacing={1}>{[1, 2, 3].map((item) => <Skeleton key={item} variant="rounded" height={92} />)}</Stack> : filtered.length === 0 ? (
         <Paper variant="outlined" sx={{ py: 7, px: 3, textAlign: 'center' }}><Typography variant="h5">{search ? t('education.courseList.noResults') : t('education.courseList.empty')}</Typography><Typography color="text.secondary" sx={{ mt: 1 }}>{t('education.courseList.emptyHelp')}</Typography></Paper>
@@ -92,7 +94,7 @@ export default function TeacherCoursesPage() {
             <IconButton aria-label={t('education.courseList.actions')} onClick={(event) => setMenu({ anchor: event.currentTarget, course })}><IconDotsVertical size={20} /></IconButton>
           </Stack>
         </Paper>)}
-      </Stack>}</>}
+      </Stack>}</Box>}
       {tab === 1 && <ClassGroupsTeacherPage embedded />}
       <Menu anchorEl={menu?.anchor} open={!!menu} onClose={() => setMenu(null)}>
         <MenuItem onClick={() => menu && navigate(`/teach/courses/${menu.course.id}`)}>{t('education.courseList.edit')}</MenuItem>
@@ -109,6 +111,6 @@ export default function TeacherCoursesPage() {
         </Stack></DialogContent>
         <DialogActions><Button onClick={() => setCreateOpen(false)} disabled={creating}>{t('cancel')}</Button><Button variant="contained" onClick={submitCreate} disabled={creating || !form.title.trim() || !form.description.trim() || !form.objective.trim()}>{t('education.courseList.create')}</Button></DialogActions>
       </Dialog>
-    </Box>
+    </Stack>
   );
 }

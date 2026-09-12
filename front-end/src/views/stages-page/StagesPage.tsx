@@ -8,6 +8,7 @@ import UserStagesDashboardPanel from 'src/components/dashboard/UserStagesDashboa
 import { useAuth } from 'src/authentication/AuthProvider';
 import { getModerationOverrides, getModerationReports, getMarketplacePermissions, getVerificationQueue, restoreMarketplaceStage, setModerationOverride, submitMarketplaceVerification, type MarketplaceModerationOverride, type MarketplaceReport, type MarketplaceVerificationQueueItem, type MarketplaceVerificationChecklist } from 'src/stages/MarketplaceApi';
 import { getLocalPublicationReviewQueue, reviewLocalPublication, type LocalPublicationReviewItem } from 'src/stages/LocalStagesApi';
+import { pageTabsSx, TabbedPageHeader } from 'src/components/shared/PageHeader';
 import { useSearchParams } from 'react-router-dom';
 import { MARKETPLACE_COPY, marketplaceReportCategoryLabel } from 'src/stages/marketplaceCopy';
 import { invalidateMarketplaceFirstPage, refreshMarketplaceFirstPage } from 'src/stages/stageListCache';
@@ -243,9 +244,13 @@ export default function StagesPage() {
     void getMarketplacePermissions(token).then((permissions) => { setCanModerate(permissions.roles.includes('moderator')); setCanVerify(permissions.roles.includes('verifier')); }).catch(() => { setCanModerate(false); setCanVerify(false); });
   }, [marketplace, token]);
   return <PageContainer title="Stages" description="Discover, publish, and manage FOSSBot stages.">
-    <Stack spacing={2}><Box><Typography variant="h4">Stages</Typography><Typography variant="body2" color="text.secondary">Discover public stages or manage stages stored here. GitHub is optional.</Typography></Box>
-      <Tabs value={tab} onChange={(_, value) => { const next = new URLSearchParams(searchParams); next.set('tab', value); next.delete('stage'); setSearchParams(next); }} aria-label="Stages sections"><Tab value="mine" label={MARKETPLACE_COPY.myStages} />{marketplace && <Tab value="explore" label="Explore" />}{marketplace && (canModerate || canVerify) && <Tab value="moderation" label="Moderation" />}</Tabs>
-      <Box sx={{ pt: 1 }}>
+    <Stack spacing={3}>
+      <TabbedPageHeader
+        title="Stages"
+        description="Discover public stages or manage stages stored here. GitHub is optional."
+        tabs={<Tabs value={tab} onChange={(_, value) => { const next = new URLSearchParams(searchParams); next.set('tab', value); next.delete('stage'); setSearchParams(next); }} aria-label="Stages sections" sx={pageTabsSx}><Tab value="mine" label={MARKETPLACE_COPY.myStages} />{marketplace && <Tab value="explore" label="Explore" />}{marketplace && (canModerate || canVerify) && <Tab value="moderation" label="Moderation" />}</Tabs>}
+      />
+      <Box>
       {marketplace && tab === 'explore' && <StageMarketplacePanel embedded />}
       {tab === 'mine' && <UserStagesDashboardPanel showViewAll={false} />}
       {marketplace && tab === 'moderation' && (canModerate || canVerify) && <ModerationWorkspace canModerate={canModerate} canVerify={canVerify} />}

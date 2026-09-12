@@ -8,6 +8,7 @@ import { listMyEnrollments, listPublishedCourses } from 'src/courses/CoursesApi'
 import type { Enrollment, StudentCourse } from 'src/courses/types';
 import ClassGroupsStudentPage from '../class-groups-student-page/ClassGroupsStudentPage';
 import BetaBadge from 'src/components/shared/BetaBadge';
+import { pageTabsSx, TabbedPageHeader } from 'src/components/shared/PageHeader';
 
 export default function CoursesPage({ previewAppearance = true }: { previewAppearance?: boolean }) {
   const { t } = useTranslation();
@@ -51,20 +52,18 @@ export default function CoursesPage({ previewAppearance = true }: { previewAppea
   return (
     <PageContainer title={pageTitle} description={pageSubtitle}>
       <Stack spacing={3}>
-        <Stack spacing={previewAppearance ? 2 : 3}>
-          <Box>
-            <Stack direction="row" spacing={1} alignItems="center">
-              <Typography variant="h3">{pageTitle}</Typography>
-              {previewAppearance && <BetaBadge feature="education" />}
-            </Stack>
-            <Typography color="text.secondary">{pageSubtitle}</Typography>
-          </Box>
-          <Tabs value={tab} onChange={(_, value) => setTab(value)} aria-label={t('education.student.coursesTitle')} variant="scrollable" scrollButtons="auto" allowScrollButtonsMobile>
+        <TabbedPageHeader
+          title={pageTitle}
+          description={pageSubtitle}
+          titleAdornment={previewAppearance ? <BetaBadge feature="education" /> : undefined}
+          tabs={
+          <Tabs value={tab} onChange={(_, value) => setTab(value)} aria-label={t('education.student.coursesTitle')} variant="scrollable" scrollButtons="auto" allowScrollButtonsMobile sx={pageTabsSx}>
             <Tab label={t('education.student.myCourses')} />
             <Tab label={t('education.student.explore')} />
             <Tab label={t('education.classrooms.studentTitle')} />
           </Tabs>
-        </Stack>
+          }
+        />
         {tab !== 2 && error ? <Alert severity="error" sx={previewStateSx} action={<Button color="inherit" onClick={() => window.location.reload()}>{t('education.student.retry')}</Button>}>{error}</Alert> : null}
         {tab !== 2 && loading ? <Box sx={{ py: 8, textAlign: 'center', ...previewStateSx }}><CircularProgress /></Box> : null}
         {!loading && tab === 0 && (enrollments.length ? (

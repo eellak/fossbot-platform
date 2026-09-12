@@ -30,7 +30,7 @@ const AdminPanelPage = () => {
 
             <Grid container>
                 <Grid item xs={12} sm={12} mt={2}>
-                    <Typography variant="h5">{t('admin-panel.title')}</Typography>
+                    <Typography variant="h3" component="h1">{t('admin-panel.title')}</Typography>
                     <Typography variant="subtitle2" color="textSecondary">
                         {t('admin-panel.usageDescription')}
                     </Typography>
