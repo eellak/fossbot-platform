@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { Alert, Box, Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Drawer, Paper, Snackbar, Stack, Typography, useMediaQuery } from '@mui/material';
+import { Alert, Box, Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Drawer, Paper, Stack, Typography, useMediaQuery } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from 'src/authentication/AuthProvider';
@@ -46,6 +46,7 @@ import { createLocalStage, listLocalStages, loadLocalStage, LocalStageRequestErr
 import { OpenLocalStageDialog } from 'src/stages/OpenLocalStageDialog';
 import { useFeatureFlags } from 'src/config/FeatureFlags';
 import StageAuthoringAssistant from 'src/components/ai/StageAuthoringAssistant';
+import { useNotifications } from 'src/components/notifications/NotificationProvider';
 import type { StageAuthoringTarget } from 'src/ai/suggestions/stageSuggestions';
 
 function userScope(user: ReturnType<typeof useAuth>['user']): string {
@@ -380,6 +381,7 @@ function GitHubStageLoadScreen({ state, onRetry, onBack, onOpenPicker }: { state
 }
 
 const StageBuilderPage = () => {
+  const { notify } = useNotifications();
   const { t } = useTranslation();
   const { user, token } = useAuth();
   const { marketplace: marketplaceEnabled, ready: featureFlagsReady } = useFeatureFlags();
@@ -414,7 +416,9 @@ const StageBuilderPage = () => {
   const [rightPanelWidth, setRightPanelWidth] = useState<number>(stageBuilderPanelSizing.rightDefaultWidth);
   const [panelResize, setPanelResize] = useState<PanelResizeState | null>(null);
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>('empty');
-  const [message, setMessage] = useState<string>('');
+  const setMessage = useCallback((message: string) => {
+    if (message) notify(message, { severity: 'info', duration: 3600 });
+  }, [notify]);
   const [lastExportFingerprint, setLastExportFingerprint] = useState(() => stageFingerprint(emptyEditorStage()));
   const [exportedAt, setExportedAt] = useState<string | null>(null);
   const [pendingDraft, setPendingDraft] = useState<StageBuilderDraft | null>(null);
@@ -1978,7 +1982,6 @@ const StageBuilderPage = () => {
         onPublish={handlePublishMarketplace}
       />}
 
-      <Snackbar open={!!message} autoHideDuration={3600} onClose={() => setMessage('')} message={message} />
     </Box>
       )}
     </EditorThemeProvider>

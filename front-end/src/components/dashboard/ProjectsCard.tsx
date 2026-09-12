@@ -24,8 +24,7 @@ import { IconCode, IconPuzzle } from '@tabler/icons-react';
 import { useAuth } from 'src/authentication/AuthProvider';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import SuccessAlert from '../alerts/SuccessAlert';
-import ErrorAlert from '../alerts/ErrorAlert';
+import { useNotifications } from '../notifications/NotificationProvider';
 
 const ProjectsCard = ({ previewAppearance = true }: { previewAppearance?: boolean }) => {
   const { t } = useTranslation();
@@ -34,11 +33,7 @@ const ProjectsCard = ({ previewAppearance = true }: { previewAppearance?: boolea
   const navigate = useNavigate();
   const [showDrawer, setShowDrawer] = useState(false);
 
-  const [showSuccessAlert, setShowSuccessAlert] = useState(false);
-  const [showErrorAlert, setShowErrorAlert] = useState(false);
-
-  const [showSuccessAlertText, setShowSuccessAlertText] = useState("");
-  const [showErrorAlertText, setShowErrorAlertText] = useState("");
+  const { notify } = useNotifications();
 
   const handleDrawerClose = () => {
     setShowDrawer(false);
@@ -59,8 +54,7 @@ const ProjectsCard = ({ previewAppearance = true }: { previewAppearance?: boolea
           setProjects(fetchedProjects);
         }
       } catch (error) {
-        setShowErrorAlert(true);
-        setShowErrorAlertText(t('alertMessages.projectsFetchError'));
+        notify(t('alertMessages.projectsFetchError'), { severity: 'error' });
         console.error('Error fetching projects:', error);
       }
     };
@@ -72,16 +66,15 @@ const ProjectsCard = ({ previewAppearance = true }: { previewAppearance?: boolea
     try {
       const success = await auth.deleteProjectByIdAction(projectId);
       if (success) {
-        setShowSuccessAlert(true);
-        setShowSuccessAlertText(t('alertMessages.projectDeleted'));
+        notify(t('alertMessages.projectDeleted'), { severity: 'success' });
         // Update the projects state to reflect the deletion
         setProjects((prevProjects) => prevProjects.filter((project) => project.id !== projectId));
       } else {
-        setShowErrorAlert(true);
-        setShowErrorAlertText(t('alertMessages.projectDeleteError'));
+        notify(t('alertMessages.projectDeleteError'), { severity: 'error' });
         console.error('Error deleting project');
       }
     } catch (error) {
+      notify(t('alertMessages.projectDeleteError'), { severity: 'error' });
       console.error('Error deleting project:', error);
     }
   };
@@ -217,13 +210,6 @@ const ProjectsCard = ({ previewAppearance = true }: { previewAppearance?: boolea
           </Table>
         </TableContainer>}
       </DashboardCard>
-      {showSuccessAlert && (
-        <SuccessAlert title={showSuccessAlertText} description={""} />
-      )}
-
-      {showErrorAlert && (
-        <ErrorAlert title={showErrorAlertText} description={""} />
-      )}
     </PageContainer>
   );
 };

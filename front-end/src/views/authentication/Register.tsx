@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import PageContainer from 'src/components/container/PageContainer';
 import img1 from 'src/assets/images/fossbot/back_top_up.png';
 import img2 from 'src/assets/images/fossbot/gfoss_en.png';
@@ -8,26 +8,18 @@ import AuthRegister from './AuthRegister';
 import { Link } from 'react-router-dom';
 import { Grid, Box, Typography, Stack } from '@mui/material';
 import { useTranslation } from 'react-i18next';
-import SuccessAlert from 'src/components/alerts/SuccessAlert';
-import ErrorAlert from 'src/components/alerts/ErrorAlert';
+import { useNotifications } from 'src/components/notifications/NotificationProvider';
 
 const Register = () => {
   const { t } = useTranslation();
-
-  const [showSuccessAlert, setShowSuccessAlert] = useState(false);
-  const [showErrorAlert, setShowErrorAlert] = useState(false);
-
-  const [showSuccessAlertText, setShowSuccessAlertText] = useState("");
-  const [showErrorAlertText, setShowErrorAlertText] = useState("");
+  const { notify } = useNotifications();
 
   const handleShowSuccessAlert = (message) => {
-    setShowSuccessAlertText(message);
-    setShowSuccessAlert(true);
+    notify(message, { severity: 'success' });
   };
 
   const handleShowErrorAlert = (message) => {
-    setShowErrorAlertText(message);
-    setShowErrorAlert(true);
+    notify(message, { severity: 'error' });
   };
 
   return (
@@ -130,13 +122,6 @@ const Register = () => {
           </Box>
         </Grid>
       </Grid>
-      {showSuccessAlert && (
-        <SuccessAlert title={showSuccessAlertText} description={""} />
-      )}
-
-      {showErrorAlert && (
-        <ErrorAlert title={showErrorAlertText} description={""} />
-      )}
     </PageContainer>
   );
 };

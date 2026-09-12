@@ -45,8 +45,6 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faPuzzlePiece } from '@fortawesome/free-solid-svg-icons';
 import { IconDeviceFloppy, IconPlayerPlay, IconPlayerStop } from '@tabler/icons-react';
 import ReactPlayer from 'react-player';
-import SuccessAlert from 'src/components/alerts/SuccessAlert';
-import ErrorAlert from 'src/components/alerts/ErrorAlert';
 import { Project, type ProjectStageReference } from 'src/authentication/AuthInterfaces';
 import { loadStageFromProvider } from 'src/stages/StagesApi';
 import { loadLocalStage } from 'src/stages/LocalStagesApi';
@@ -66,6 +64,7 @@ import { workspaceLayout, workspacePaneDefaults } from 'src/components/workspace
 import { useSelector } from 'react-redux';
 import type { AppState } from 'src/store/Store';
 import { isExistingProject, isRobotProgramActive } from '../monaco-page/monacoWorkspaceState';
+import { useNotifications } from 'src/components/notifications/NotificationProvider';
 
 function stageNeedsAuthenticatedLoad(stage: ProjectStageReference | null): boolean {
   return (stage?.sourceType === 'local' && !!stage.localStageId)
@@ -117,13 +116,8 @@ const BlocklyPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppeara
     runCode: runCodeOnRobot,
     stop: stopPhysicalRobot,
   } = useRobotConnection();
-  // ALERTS HANDLING
-  const [showSuccessAlert, setShowSuccessAlert] = useState(false);
-  const [showErrorAlert, setShowErrorAlert] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
-
-  const [showSuccessAlertText, setShowSuccessAlertText] = useState('');
-  const [showErrorAlertText, setShowErrorAlertText] = useState('');
+  const { notify } = useNotifications();
 
   const theme = useTheme();
   const customizer = useSelector((state: AppState) => state.customizer);
@@ -171,13 +165,15 @@ const BlocklyPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppeara
   }, [workspaceResizing, workspaceRowSplit]);
 
   const handleShowSuccessAlert = (message) => {
-    setShowSuccessAlertText(message);
-    setShowSuccessAlert(true);
+    notify(String(message), { severity: 'success' });
   };
 
   const handleShowErrorAlert = (message) => {
-    setShowErrorAlertText(message);
-    setShowErrorAlert(true);
+    notify(String(message), { severity: 'error' });
+  };
+
+  const handleShowInfoAlert = (message) => {
+    notify(String(message), { severity: 'info' });
   };
 
   const handlePlayClick = async () => {
@@ -221,8 +217,11 @@ const BlocklyPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppeara
     if (event.type === 'start') { setRuntimeContext({ output: [], error: '' }); return; }
     if (event.type === 'stdout') setRuntimeContext((current) => ({ ...current, output: [...current.output, event.text || ''].slice(-24) }));
     if (event.type === 'stderr') setRuntimeContext((current) => ({ output: [...current.output, event.text || ''].slice(-24), error: event.text || 'Runtime error' }));
-    if (event.type === 'complete' || event.type === 'stopped') setIsRunning(false);
-  }, []);
+    if (event.type === 'complete' || event.type === 'stopped') {
+      setIsRunning(false);
+      notify(t(event.type === 'complete' ? 'alertMessages.runCompleted' : 'alertMessages.codeStopped'), { severity: 'info' });
+    }
+  }, [notify, t]);
 
   useEffect(() => {
     // Generate a new session ID when the component mounts
@@ -317,7 +316,7 @@ const BlocklyPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppeara
       try {
         await stopPhysicalRobot();
         setIsRunning(false);
-        handleShowErrorAlert(t('alertMessages.codeStopped'));
+        handleShowInfoAlert(t('alertMessages.codeStopped'));
       } catch (error) {
         handleShowErrorAlert(error instanceof Error ? error.message : String(error));
       }
@@ -327,7 +326,6 @@ const BlocklyPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppeara
       stopScriptRef.current();
       stopMotion();
       setIsRunning(false);
-      handleShowErrorAlert(t('alertMessages.codeStopped'));
     }
   };
 
@@ -608,8 +606,6 @@ const BlocklyPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppeara
           </Box>
         )}
         {!loading && <AssistantPanel adapter={assistantAdapter} explainCapability="blockly.explain" suggestCapability="blockly.suggest_changes" />}
-        {showSuccessAlert && <SuccessAlert title={showSuccessAlertText} description={''} />}
-        {showErrorAlert && <ErrorAlert title={showErrorAlertText} description={''} />}
       </PageContainer>
     );
   }
@@ -771,9 +767,6 @@ const BlocklyPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppeara
 
       {!loading && <Box sx={{ mt: 2 }}><AssistantPanel adapter={assistantAdapter} explainCapability="blockly.explain" suggestCapability="blockly.suggest_changes" /></Box>}
 
-      {showSuccessAlert && <SuccessAlert title={showSuccessAlertText} description={''} />}
-
-      {showErrorAlert && <ErrorAlert title={showErrorAlertText} description={''} />}
     </PageContainer>
   );
 };

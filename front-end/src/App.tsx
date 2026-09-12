@@ -11,6 +11,7 @@ import MatomoTracker from './components/matomo-tracker/MatomoTracker';
 import { RobotConnectionProvider } from './robot/RobotConnectionContext';
 import { FeatureFlagsProvider } from './config/FeatureFlags';
 import AssistantProvider from './ai/AssistantProvider';
+import { NotificationProvider } from './components/notifications/NotificationProvider';
 
 function App() {
   const routing = useRoutes(Router);
@@ -28,13 +29,15 @@ function App() {
         <FeatureFlagsProvider>
           <AssistantProvider>
             <ThemeProvider theme={theme}>
-              <RTL direction={customizer.activeDir}>
-                <CssBaseline />
-                <MatomoTracker />
-                <RobotConnectionProvider>
-                  <ScrollToTop>{isEducationRoute ? <div style={{ overflowX: 'clip' }}>{routing}</div> : routing}</ScrollToTop>
-                </RobotConnectionProvider>
-              </RTL>
+              <NotificationProvider>
+                <RTL direction={customizer.activeDir}>
+                  <CssBaseline />
+                  <MatomoTracker />
+                  <RobotConnectionProvider>
+                    <ScrollToTop>{isEducationRoute ? <div style={{ overflowX: 'clip' }}>{routing}</div> : routing}</ScrollToTop>
+                  </RobotConnectionProvider>
+                </RTL>
+              </NotificationProvider>
             </ThemeProvider>
           </AssistantProvider>
         </FeatureFlagsProvider>

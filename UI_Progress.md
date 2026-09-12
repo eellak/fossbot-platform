@@ -90,6 +90,12 @@ Retain the development-only comparison routes, preview props, specimen, and shel
 
 ## In progress
 
+### Status and notifications
+
+- Python and Blockly run, stop, completion, validation, and save feedback now uses the same queued notification host as Stage Builder; the short-lived inline workspace status treatment was removed after visual review showed it was too easy to miss.
+- Transient application notifications use one queued, portal-mounted host. The host escapes the layout stacking context, displays repeated messages reliably, and uses a bottom-center position with extra phone clearance for Buddy and safe-area insets.
+- Stage Builder, Python, Blockly, Dashboard projects, authentication, account settings, and administration now publish through the shared notification host. Normal execution stops use informational status rather than error styling, and simulator Stop relies on its execution event so it is not queued twice.
+
 ### Blocks and separators (steps 1–2)
 
 - The borderless, gap-only Proposed desktop Python treatment was rejected after review. Python now returns to the Course Lesson visual language while keeping the shared pane abstraction.
@@ -194,7 +200,7 @@ The standalone Python editor (`MonacoPage`) is the representative workspace for 
 - [done] Manual review accepted across the representative responsive production UI with no visible issues reported.
 - [done] Light and Dark presentation, production hierarchy, controls, borders, and responsive behavior received user sign-off.
 - [done] Confirm that the next action is obvious, controls remain reachable, content does not clip or overlap, and identical components retain identical meaning.
-- [done] Run all frontend tests: 10 suites and 24 tests pass. Existing React `act(...)` warnings remain in `StageSuggestionPreview.test.tsx`.
+- [done] Run all frontend tests: 11 suites and 25 tests pass, including the shared notification portal and queue. Existing React `act(...)` warnings remain in component tests.
 - [done] Verify the live Docker development compilation: no type-check issues; only the existing 15 Blockly source-map warnings remain.
 - [done] Inspect frontend and backend container logs: frontend has no new application errors, and sampled backend requests return 200 responses.
 - [previously done] Production builds passed earlier with the existing Blockly source-map and bundle-size warnings; no new npm production build was started because this workflow relies on the running Docker compiler.

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import PageContainer from 'src/components/container/PageContainer';
 import Footer from 'src/components/landingpage/footer/Footer';
 import {
@@ -8,29 +8,21 @@ import {
     Button,
 } from '@mui/material';
 import { useTranslation } from 'react-i18next';
-import SuccessAlert from 'src/components/alerts/SuccessAlert';
-import ErrorAlert from 'src/components/alerts/ErrorAlert';
+import { useNotifications } from 'src/components/notifications/NotificationProvider';
 import UsersCard from 'src/components/admin-panel/UsersCard';
 import { Link } from 'react-router-dom';
 import { IconRobot } from '@tabler/icons-react';
 
 const AdminPanelPage = () => {
     const { t } = useTranslation();
-
-    const [showSuccessAlert, setShowSuccessAlert] = useState(false);
-    const [showErrorAlert, setShowErrorAlert] = useState(false);
-
-    const [showSuccessAlertText, setShowSuccessAlertText] = useState("");
-    const [showErrorAlertText, setShowErrorAlertText] = useState("");
+    const { notify } = useNotifications();
 
     const handleShowSuccessAlert = (message) => {
-        setShowSuccessAlertText(message);
-        setShowSuccessAlert(true);
+        notify(message, { severity: 'success' });
     };
 
     const handleShowErrorAlert = (message) => {
-        setShowErrorAlertText(message);
-        setShowErrorAlert(true);
+        notify(message, { severity: 'error' });
     };
 
     return (
@@ -56,13 +48,6 @@ const AdminPanelPage = () => {
                 </Grid>
             </Grid>
 
-            {showSuccessAlert && (
-                <SuccessAlert title={showSuccessAlertText} description={""} />
-            )}
-
-            {showErrorAlert && (
-                <ErrorAlert title={showErrorAlertText} description={""} />
-            )}
         </PageContainer>
     );
 };
