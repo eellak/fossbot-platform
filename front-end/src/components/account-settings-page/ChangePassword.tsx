@@ -1,8 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import CustomFormLabel from '../forms/theme-elements/CustomFormLabel';
 import CustomOutlinedInput from '../forms/theme-elements/CustomOutlinedInput';
-import { Snackbar, Alert, Typography } from '@mui/material';
-import { Grid, Button } from '@mui/material';
+import { Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, Stack, Typography } from '@mui/material';
 import { useAuth } from "src/authentication/AuthProvider";
 import { useTranslation } from 'react-i18next';
 
@@ -16,24 +15,24 @@ const ChangePassword = ({ isOpen, onClose, onPasswordUpdate }: ChangePasswordPro
   const { t } = useTranslation();
   const auth = useAuth();
 
-  const [open, setOpen] = useState(isOpen);
   const [formData, setFormData] = useState({
     password: "",
     passwordConfirmation: ""
   });
-
   const [passwordsMatch, setPasswordsMatch] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
 
-  useEffect(() => {
-    setOpen(isOpen);
-  }, [isOpen]);
-
-  const handleFormSubmit = async () => {
-    const user = await auth.updateUserPassword({ password: formData.password });
-    if (user) {
-      onPasswordUpdate(true);
-    } else {
+  const handleFormSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!formData.password || !passwordsMatch || submitting) return;
+    setSubmitting(true);
+    try {
+      const user = await auth.updateUserPassword({ password: formData.password });
+      onPasswordUpdate(Boolean(user));
+    } catch {
       onPasswordUpdate(false);
+    } finally {
+      setSubmitting(false);
     }
   }
 
@@ -41,7 +40,7 @@ const ChangePassword = ({ isOpen, onClose, onPasswordUpdate }: ChangePasswordPro
     onClose();
   }
 
-  const handleInputChange = (e) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
 
     const newFormData = { ...formData, [name]: value };
@@ -50,76 +49,63 @@ const ChangePassword = ({ isOpen, onClose, onPasswordUpdate }: ChangePasswordPro
     setPasswordsMatch(newFormData.password === newFormData.passwordConfirmation);
   };
 
-  return (
-    <React.Fragment>
-      <Snackbar
-        open={open}
-        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
-        onClose={onClose}
-      >
-        <Alert
-          severity="info"
-          variant="outlined"
-          icon={false}
-          sx={{ width: '100%', color: 'black', backgroundColor: 'white', }}
-        >
-          <Grid container spacing={3} xs={12} sm={12} md={12} lg={12} xl={12} alignItems="center" paddingLeft={2} paddingRight={2} paddingTop={1}>
-            {/* 1 */}
-            <Grid item xs={12} sm={6} lg={5} xl={6} display="flex" alignItems="center">
-              <CustomFormLabel sx={{ mt: 0, mb: { xs: '-10px', sm: 0 } }}>
-                {t('password')}
-              </CustomFormLabel>
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <CustomOutlinedInput
-                id="bi-password"
-                name="password"
-                placeholder=""
-                type="password"
-                fullWidth
-                value={formData.password}
-                onChange={handleInputChange}
-              />
-            </Grid>
-            {/* 2 */}
-            <Grid item xs={12} sm={6} lg={5} xl={6} display="flex" alignItems="center">
-              <CustomFormLabel sx={{ mt: 0, mb: { xs: '-10px', sm: 0 } }}>
-                {t('passwordConfirmation')}
-              </CustomFormLabel>
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <CustomOutlinedInput
-                id="bi-password-confirmation"
-                name="passwordConfirmation"
-                type="password"
-                placeholder=""
-                fullWidth
-                error={!passwordsMatch}
-                value={formData.passwordConfirmation}
-                onChange={handleInputChange}
-              />
-              {!passwordsMatch && <Typography color="red" variant="body2">{t('alertMessages.passwordConfirmationError')}</Typography>}
-            </Grid>
-            {/* 3 */}
-            <Grid item xs={12} sm={12} lg={12} mt={3}>
-              <Grid container spacing={1} justifyContent="center">
-                <Grid item>
-                  <Button variant="contained" color="error" onClick={cancel}>
-                    {t('cancel')}
-                  </Button>
-                </Grid>
-                <Grid item>
-                  <Button variant="contained" color="primary" onClick={handleFormSubmit}>
-                    {t('update')}
-                  </Button>
-                </Grid>
-              </Grid>
-            </Grid>
-          </Grid>
-        </Alert>
-      </Snackbar>
-    </React.Fragment>
-  );
+  return <Dialog
+    open={isOpen}
+    onClose={submitting ? undefined : onClose}
+    fullWidth
+    maxWidth="sm"
+    aria-labelledby="change-password-title"
+  >
+    <Box component="form" onSubmit={handleFormSubmit}>
+      <DialogTitle id="change-password-title">{t('changeYourPassword')}</DialogTitle>
+      <DialogContent>
+        <Stack spacing={2.5} sx={{ pt: 1 }}>
+          <Box>
+            <CustomFormLabel htmlFor="bi-password" sx={{ mt: 0, mb: 1 }}>
+              {t('password')}
+            </CustomFormLabel>
+            <CustomOutlinedInput
+              autoFocus
+              autoComplete="new-password"
+              id="bi-password"
+              name="password"
+              type="password"
+              fullWidth
+              value={formData.password}
+              onChange={handleInputChange}
+            />
+          </Box>
+          <Box>
+            <CustomFormLabel htmlFor="bi-password-confirmation" sx={{ mt: 0, mb: 1 }}>
+              {t('passwordConfirmation')}
+            </CustomFormLabel>
+            <CustomOutlinedInput
+              autoComplete="new-password"
+              id="bi-password-confirmation"
+              name="passwordConfirmation"
+              type="password"
+              fullWidth
+              error={!passwordsMatch}
+              aria-describedby={!passwordsMatch ? 'password-confirmation-error' : undefined}
+              value={formData.passwordConfirmation}
+              onChange={handleInputChange}
+            />
+            {!passwordsMatch && <Typography id="password-confirmation-error" role="alert" color="error.main" variant="body2" sx={{ mt: 0.75 }}>
+              {t('alertMessages.passwordConfirmationError')}
+            </Typography>}
+          </Box>
+        </Stack>
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 3 }}>
+        <Button variant="outlined" color="inherit" onClick={cancel} disabled={submitting}>
+          {t('cancel')}
+        </Button>
+        <Button type="submit" variant="contained" disabled={!formData.password || !passwordsMatch || submitting}>
+          {submitting ? t('saving') : t('update')}
+        </Button>
+      </DialogActions>
+    </Box>
+  </Dialog>;
 };
 
 export default ChangePassword;

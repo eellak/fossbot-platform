@@ -12,7 +12,7 @@ import { useTranslation } from 'react-i18next';
 import { useAuth } from 'src/authentication/AuthProvider'; // Ensure this import path is correct
 import { UserRole } from 'src/authentication/AuthInterfaces';
 
-const SidebarItems = ({ previewAppearance = false }: { previewAppearance?: boolean }) => {
+const SidebarItems = ({ previewAppearance = true }: { previewAppearance?: boolean }) => {
   const { t } = useTranslation();
   const { pathname } = useLocation();
 
@@ -29,11 +29,12 @@ const SidebarItems = ({ previewAppearance = false }: { previewAppearance?: boole
   const hasEducationItems = visibleItems.some((item) => item.href === '/courses' || item.href === '/teach/courses');
   let modifiedMenuItems = visibleItems.filter((item) => item.subheader !== 'menu.educationalMaterial' || hasEducationItems);
   if (previewAppearance) {
-    const courses = visibleItems
+    const approvedItems = visibleItems.map((item) => item.href === '/monaco-page' ? { ...item, title: 'menu.pythonEditor' } : item);
+    const courses = approvedItems
       .filter((item) => item.href === '/courses' || item.href === '/teach/courses')
       .map((item) => ({ ...item, title: 'menu.studentCourses' }));
-    const stages = visibleItems.filter((item) => item.href === '/stages');
-    modifiedMenuItems = visibleItems.filter((item) =>
+    const stages = approvedItems.filter((item) => item.href === '/stages');
+    modifiedMenuItems = approvedItems.filter((item) =>
       item.subheader !== 'menu.educationalMaterial'
       && item.subheader !== 'menu.editors'
       && item.href !== '/courses'

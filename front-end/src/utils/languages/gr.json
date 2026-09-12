@@ -64,6 +64,7 @@
     "fossbotHome": "FOSSBot Αρχική",
     "dashboard": "Διαχειριστικό",
     "monacoEditor": "Monaco Editor",
+    "pythonEditor": "Επεξεργαστής Python",
     "editors": "Επεξεργασία",
     "pythonBased": "Βασισμένο σε Python",
     "blocklyEditor": "Blockly Editor",

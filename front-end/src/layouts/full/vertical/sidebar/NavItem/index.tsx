@@ -43,7 +43,7 @@ interface ItemType {
   previewAppearance?: boolean;
 }
 
-const NavItem = ({ item, level, pathDirect, hideMenu, onClick, previewAppearance = false }: ItemType) => {
+const NavItem = ({ item, level, pathDirect, hideMenu, onClick, previewAppearance = true }: ItemType) => {
   const customizer = useSelector((state: AppState) => state.customizer);
   const Icon = item?.icon;
   const theme = useTheme();

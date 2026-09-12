@@ -36,7 +36,7 @@ const FullFillLayout: FC = () => {
       {/* ------------------------------------------- */}
       {/* Sidebar */}
       {/* ------------------------------------------- */}
-      {customizer.isHorizontal ? '' : <Sidebar />}
+      {customizer.isHorizontal ? '' : <Sidebar previewAppearance />}
       {/* ------------------------------------------- */}
       {/* Main Wrapper */}
       {/* ------------------------------------------- */}
@@ -53,7 +53,7 @@ const FullFillLayout: FC = () => {
         {/* ------------------------------------------- */}
         {customizer.isHorizontal ? <HorizontalHeader/> : <Header />}
         {/* PageContent */}
-        {customizer.isHorizontal ? <Navigation /> : ''}
+        {customizer.isHorizontal ? <Navigation previewAppearance /> : ''}
         <Container
           sx={{
             maxWidth:'100%!important'

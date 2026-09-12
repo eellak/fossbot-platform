@@ -1,6 +1,6 @@
 # UI progress
 
-Status as of 2026-09-11 on branch `ui-improvements`. `UI.md` is the source of truth for approved UI rules; this file tracks the experiment, completed work, and implementation plan.
+Status as of 2026-09-12 on branch `ui-improvements`. `UI.md` is the source of truth for approved UI rules; this file tracks the experiment, completed work, and implementation plan.
 
 ## Scope and approach
 
@@ -14,7 +14,7 @@ Status as of 2026-09-11 on branch `ui-improvements`. `UI.md` is the source of tr
 
 The development-only comparison is available at `/ui-comparison` while the Docker development stack is running.
 
-- Surfaces: Dashboard, Courses, and Components.
+- Surfaces: Dashboard, Courses, Python, Blockly, Course Lesson, Course Authoring, and Components.
 - Views: Side by Side, Current, and Proposed.
 - Preview widths: 1024px, 1440px, and 1680px, presented as buttons.
 - Color modes: Light and Dark, synchronized between the shell and both iframes.
@@ -78,23 +78,23 @@ Retain the development-only comparison routes, preview props, specimen, and shel
 
 ## Implementation status
 
-- Commit `ed176d8` (`feat(ui): add visual language comparison`) contains the initial comparison, visual specimen, UI proposal, and preview wiring.
-- Commit `4bcf97e` (`feat(ui): improve layout and clarity`) contains the workspace, navigation, Dashboard, Courses, and comparison improvements completed through the previous review section.
-- The shared workspace standardization described below is currently uncommitted.
+- Commits through `bca513e` (`feat(ui): apply approved interface`) contain the approved visual system, shared workspace structure, responsive application shell, Course Authoring refinements, and production rollout.
+- Commit `ba9b27b` (`fix(ui): unify queued notifications`) contains the shared portal-mounted notification queue and application migrations.
 - Production routes opt into the approved appearance by default; only Current comparison routes pass `previewAppearance={false}` explicitly to preserve the historical baseline.
-- The working tree is intentionally dirty; preserve unrelated changes and do not commit again unless requested.
 - The latest development compilation reports no type-check issues.
-- Production builds passed earlier with the existing Blockly source-map and bundle-size warnings.
+- The latest production build passed with the existing Blockly source-map and bundle-size warnings.
 - Current/Proposed Dashboard and Courses have been visually checked with live student data. Recent checks covered card alignment, all three Courses tabs, Join class disabled/enabled states, and horizontal overflow.
 - Automated and manual acceptance are complete; the approved production UI and retained comparison are ready for continued development.
 
-## In progress
+## Recent completions
 
 ### Status and notifications
 
 - Python and Blockly run, stop, completion, validation, and save feedback now uses the same queued notification host as Stage Builder; the short-lived inline workspace status treatment was removed after visual review showed it was too easy to miss.
 - Transient application notifications use one queued, portal-mounted host. The host escapes the layout stacking context, displays repeated messages reliably, and uses a bottom-center position with extra phone clearance for Buddy and safe-area insets.
 - Stage Builder, Python, Blockly, Dashboard projects, authentication, account settings, and administration now publish through the shared notification host. Normal execution stops use informational status rather than error styling, and simulator Stop relies on its execution event so it is not queued twice.
+- Account password entry now uses a focus-managed, responsive dialog; its success or error result continues through the shared notification queue.
+- Production sidebars default to the approved navigation model, including the full-fill Course Authoring shell. Current comparison routes remain explicitly historical.
 
 ### Blocks and separators (steps 1–2)
 
@@ -111,11 +111,11 @@ Retain the development-only comparison routes, preview props, specimen, and shel
 - Proposed Python resize handles retain their 16/24px hit regions, pointer and keyboard operation, ARIA ranges, focus treatment, and reset behavior without adding resting marks.
 - A development-only Course authoring comparison surface now uses the real `ActivityComposer` and saved-stage row component with synthetic, non-persistent data. It exposes activity boundaries, linked hints, nested mission objective cards, saved-stage rows, and routine info/warning/error callouts together without loading or modifying a real course or stage.
 - A source-level Course authoring critique is complete. It found that the robotics-specific domain model is strong, but nested outlined blocks, routine alerts, exposed technical metadata, and immediate destructive actions make the interface read like a configuration schema rather than a teacher workflow. The deterministic design scan returned no mechanical findings.
-- Pending: visual review of Course authoring at 1680×950, 1440×900, and 1024×600 in Light and Dark mode before refining authoring blocks, rows, and callouts. This pass was intentionally not performed because browser/computer automation was out of scope.
+- Course Authoring was reviewed with the production acceptance pass after its blocks, rows, callouts, recovery states, and responsive controls were refined.
 
 ### Python workspace (step 1)
 
-The standalone Python editor (`MonacoPage`) is the representative workspace for step 1. Comparison wiring is done; the Proposed layout is pending visual review at `/ui-comparison` (surface: Python).
+The standalone Python editor (`MonacoPage`) is the representative workspace for step 1. Comparison wiring and production visual review are complete; `/ui-comparison` retains the Current and Proposed surfaces for future changes.
 
 - The comparison page gained a Python surface: Current renders the untouched `MonacoPage`; Proposed renders `MonacoPage previewAppearance` inside the same `/ui-comparison` preview routes.
 - Proposed replaces the oversized blue title and circular Save/Play/Stop Fabs with a compact title bar: project icon, editable title, description caption, stage indicator, and labeled Save (outlined), Run (primary), Stop (outlined) buttons. Run is disabled and Stop enabled only while running; simulator events and the physical robot's `programState` keep that state synchronized through completion, stopping, and failure.
@@ -131,7 +131,7 @@ The standalone Python editor (`MonacoPage`) is the representative workspace for 
 - Saving a new Proposed Python project always opens the creation dialog; inline title and description editing is limited to existing projects so Save cannot issue an update with a missing project ID.
 - New dashboard project and stage empty-state copy is translated in English and Greek.
 - Focused tests cover new-project routing, physical-program running states, and keyboard resize direction mapping.
-- Pending: visual review at 1680×950, 1440×900, and 1024×600 (light/dark) to confirm the standardized Python, Blockly, and Course viewers remain visually aligned.
+- Production review confirmed that the standardized Python, Blockly, and Course viewers remain visually aligned across the acceptance viewports and color modes.
 
 ## Remaining plan
 
@@ -142,7 +142,7 @@ The standalone Python editor (`MonacoPage`) is the representative workspace for 
 - [done] Explicit Simulator/Robot execution target via the execution target panel.
 - [done] Clear code, simulator, and terminal regions, one scroll owner each, fitted below the shared shell.
 - [done] Port the course workspace resizable grid (same handles, splits, clamps, tab fallback) without an instructions pane.
-- [open] Visual review at 1680×950, 1440×900, and 1024×600 to confirm the standardized viewers.
+- [done] Visual review at 1680×950, 1440×900, and 1024×600 confirmed the standardized viewers.
 
 ### 2. Blockly workspace
 
@@ -151,14 +151,14 @@ The standalone Python editor (`MonacoPage`) is the representative workspace for 
 - [done] Preserve workspace state when panels change through the same mounted tab-panel behavior.
 - [done] Align controls, execution state, panel boundaries, resizing, and viewport sizing with Python. The Blockly host fills its pane and observes container-size changes so its SVG follows the shared resize handles.
 - [done] Keep editor-specific tools only where Blockly requires them.
-- [open] Visual review at 1680×950, 1440×900, and 1024×600 before applying the layout to production.
+- [done] Visual review at 1680×950, 1440×900, and 1024×600 completed before production acceptance.
 
 ### 3. Course workspaces
 
 - [done] Apply the shared workspace hierarchy to course authoring and student lessons. A dedicated, role-independent Course lesson comparison fixture uses the real workspace components without student API calls or persistent writes; Proposed uses shell-aware flex sizing instead of a fixed `100vh - 210px` calculation while Current retains the baseline.
 - [retained] Keep the safe Course lesson fixture and comparison-only route (`LessonWorkspacePreview.tsx`) for non-persistent UI review.
 - [retained] Keep the safe Course authoring fixture and comparison-only route (`CourseAuthoringPreview.tsx`) for non-persistent UI review.
-- [in progress] Reduce repeated headings, nested tabs, repeated information callouts, and exposed technical IDs. The duplicate lesson title was removed from the instructions pane.
+- [done] Reduce repeated headings, nested tabs, repeated information callouts, and exposed technical IDs. The duplicate lesson title was removed from the instructions pane.
 - [reviewed] Course authoring source review prioritized progressive disclosure for activities and mission details, reserving alerts for actionable states, hiding raw keys/revisions/bytes from the main path, adding undo or confirmation for destructive/replacing actions, and making saved-stage selection persistent in the row.
 - [done] Activity authoring now presents a compact ordered sequence with one activity editor expanded at a time. Each collapsed row keeps its type, required/optional state, student-facing prompt or mission title, and validation state visible; raw activity keys are removed from the default reading path. Reorder, duplicate, and delete remain available inside the expanded editor, and newly added activities open immediately.
 - [done] Mission authoring now progressively discloses attempt-wide settings and allows one objective editor to be expanded at a time. Collapsed objectives show their role and generated student-facing summary; the duplicated semantic summary alerts were removed. Newly added objectives and template-generated objectives open into the active editing position.
@@ -203,7 +203,7 @@ The standalone Python editor (`MonacoPage`) is the representative workspace for 
 - [done] Run all frontend tests: 11 suites and 25 tests pass, including the shared notification portal and queue. Existing React `act(...)` warnings remain in component tests.
 - [done] Verify the live Docker development compilation: no type-check issues; only the existing 15 Blockly source-map warnings remain.
 - [done] Inspect frontend and backend container logs: frontend has no new application errors, and sampled backend requests return 200 responses.
-- [previously done] Production builds passed earlier with the existing Blockly source-map and bundle-size warnings; no new npm production build was started because this workflow relies on the running Docker compiler.
+- [done] The production build passes with only the existing Blockly source-map and bundle-size warnings.
 
 ### 8. Ongoing comparison and final review
 

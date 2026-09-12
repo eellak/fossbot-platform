@@ -64,6 +64,7 @@
     "fossbotHome": "FOSSBot Home",
     "dashboard": "Dashboard",
     "monacoEditor": "Monaco Editor",
+    "pythonEditor": "Python editor",
     "editors": "Editors",
     "pythonBased": "Python based",
     "blocklyEditor": "Blockly Editor",

@@ -58,7 +58,7 @@ const FullLayout: FC<{ previewAppearance?: boolean }> = ({ previewAppearance = t
         {/* ------------------------------------------- */}
         {customizer.isHorizontal ? <HorizontalHeader /> : <Header />}
         {/* PageContent */}
-        {customizer.isHorizontal ? <Navigation /> : ''}
+        {customizer.isHorizontal ? <Navigation previewAppearance={previewAppearance} /> : ''}
         <Container
           disableGutters={fullBleedWorkspace}
           sx={{

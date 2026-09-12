@@ -9,7 +9,7 @@ import { hoverSidebar, toggleMobileSidebar } from 'src/store/customizer/Customiz
 import { useMediaQuery, Box, Drawer, useTheme } from '@mui/material';
 import CopyrightCredit from 'src/components/shared/CopyrightCredit';
 
-const Sidebar = ({ previewAppearance = false }: { previewAppearance?: boolean }) => {
+const Sidebar = ({ previewAppearance = true }: { previewAppearance?: boolean }) => {
   const lgUp = useMediaQuery((theme: any) => theme.breakpoints.up('lg'));
   const customizer = useSelector((state: AppState) => state.customizer);
   const dispatch = useDispatch();
