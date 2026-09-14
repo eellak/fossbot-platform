@@ -31,6 +31,14 @@ const controlButtonSx = {
   '&:active': { bgcolor: 'action.selected' },
 } as const;
 
+const hideButtonSx = {
+  ...controlButtonSx,
+  color: 'text.secondary',
+  borderColor: 'transparent',
+  bgcolor: 'action.selected',
+  '&:hover': { color: 'text.primary', borderColor: 'divider', bgcolor: 'action.hover' },
+} as const;
+
 const overlaySurfaceSx = {
   position: 'absolute',
   right: 12,
@@ -112,7 +120,7 @@ const SimulatorControlsOverlay: React.FC<SimulatorControlsOverlayProps> = ({
           </IconButton>
         </Tooltip>
         <Tooltip title={t('simulatorControls.hide')} placement="left" {...tooltipDelay}>
-          <IconButton aria-label={t('simulatorControls.hide')} sx={controlButtonSx} onClick={() => setExpanded(false)}>
+          <IconButton aria-label={t('simulatorControls.hide')} sx={hideButtonSx} onClick={() => setExpanded(false)}>
             <IconChevronDown size={22} />
           </IconButton>
         </Tooltip>
