@@ -1,6 +1,6 @@
 import React, { useLayoutEffect, useRef, useState } from 'react';
 import { Box, Button, Stack, ToggleButton, ToggleButtonGroup, Typography } from '@mui/material';
-import { IconArrowLeft, IconRefresh, IconRobot } from '@tabler/icons-react';
+import { IconArrowLeft, IconRefresh, IconRobot, IconUsers } from '@tabler/icons-react';
 import { Link } from 'react-router-dom';
 import { Helmet } from 'react-helmet';
 import { useDispatch, useSelector } from 'src/store/Store';
@@ -55,6 +55,7 @@ export default function DashboardComparison() {
     <Stack direction="row" gap={1} flexWrap="wrap" sx={{ mb: 2 }}>
       <Button component={Link} to="/dashboard" startIcon={<IconArrowLeft size={18} />}>Back to Dashboard</Button>
       <Button component={Link} to="/ui-comparison/buddy" variant="contained" startIcon={<IconRobot size={18} />}>Open Buddy board</Button>
+      <Button component={Link} to="/ui-comparison/admin" variant="outlined" startIcon={<IconUsers size={18} />}>Admin comparison</Button>
     </Stack>
     <Typography component="h1" variant="h3">FOSSBot visual language</Typography>
     <Typography color="text.secondary" sx={{ mt: 1, mb: 2 }}>Compare the same interface and component states before changing production styling.</Typography>
