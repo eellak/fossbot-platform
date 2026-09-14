@@ -1,6 +1,6 @@
 import React, { useLayoutEffect, useRef, useState } from 'react';
 import { Box, Button, Stack, ToggleButton, ToggleButtonGroup, Typography } from '@mui/material';
-import { IconArrowLeft, IconRefresh } from '@tabler/icons-react';
+import { IconArrowLeft, IconRefresh, IconRobot } from '@tabler/icons-react';
 import { Link } from 'react-router-dom';
 import { Helmet } from 'react-helmet';
 import { useDispatch, useSelector } from 'src/store/Store';
@@ -52,7 +52,10 @@ export default function DashboardComparison() {
   const mode = useSelector((state) => state.customizer.activeMode === 'dark' ? 'dark' : 'light');
   return <Box sx={{ minHeight: '100vh', bgcolor: 'background.default', p: { xs: 2, md: 3 } }}>
     <Helmet><title>Dashboard visual comparison</title></Helmet>
-    <Button component={Link} to="/dashboard" startIcon={<IconArrowLeft size={18} />} sx={{ mb: 2 }}>Back to Dashboard</Button>
+    <Stack direction="row" gap={1} flexWrap="wrap" sx={{ mb: 2 }}>
+      <Button component={Link} to="/dashboard" startIcon={<IconArrowLeft size={18} />}>Back to Dashboard</Button>
+      <Button component={Link} to="/ui-comparison/buddy" variant="contained" startIcon={<IconRobot size={18} />}>Open Buddy board</Button>
+    </Stack>
     <Typography component="h1" variant="h3">FOSSBot visual language</Typography>
     <Typography color="text.secondary" sx={{ mt: 1, mb: 2 }}>Compare the same interface and component states before changing production styling.</Typography>
     <Stack direction="row" gap={2} flexWrap="wrap" alignItems="center" sx={{ mb: 2 }}>

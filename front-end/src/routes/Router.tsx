@@ -17,6 +17,7 @@ const DashboardPreview = Loadable(lazy(() => import('../views/ui-comparison/Dash
 const VisualLanguageSpecimen = Loadable(lazy(() => import('../views/ui-comparison/VisualLanguageSpecimen')));
 const LessonWorkspacePreview = Loadable(lazy(() => import('../views/ui-comparison/LessonWorkspacePreview')));
 const CourseAuthoringPreview = Loadable(lazy(() => import('../views/ui-comparison/CourseAuthoringPreview')));
+const BuddyComparison = Loadable(lazy(() => import('../views/ui-comparison/BuddyComparison')));
 const LandingPage = Loadable(lazy(() => import('../views/landing-page/LandingPage')));
 const AccountsSettingsPage = Loadable(lazy(() => import('../views/account-settings-page/AccountsSettingsPage')));
 const StageBuilderPage = Loadable(lazy(() => import('../views/stage-builder-page/StageBuilderPage')));
@@ -59,6 +60,7 @@ const AdminRoute = Loadable(lazy(() => import('./AdminRoute')));
 const Router = [
   ...(process.env.NODE_ENV === 'development' ? [
     { path: '/ui-comparison', element: <PrivateRoute><DashboardComparison /></PrivateRoute> },
+    { path: '/ui-comparison/buddy', element: <BuddyComparison /> },
     { path: '/ui-comparison/current', element: <PrivateRoute><DashboardPreview /></PrivateRoute>, children: [{ path: '', element: <Dashboard previewAppearance={false} /> }, { path: 'courses', element: <CoursesPage previewAppearance={false} /> }, { path: 'course-workspace', element: <LessonWorkspacePreview /> }, { path: 'course-authoring', element: <CourseAuthoringPreview /> }, { path: 'python', element: <MonacoPage previewAppearance={false} /> }, { path: 'blockly', element: <BlocklyPage previewAppearance={false} /> }, { path: 'components', element: <VisualLanguageSpecimen /> }] },
     { path: '/ui-comparison/proposed', element: <PrivateRoute><DashboardPreview proposed /></PrivateRoute>, children: [{ path: '', element: <Dashboard previewAppearance /> }, { path: 'courses', element: <CoursesPage previewAppearance /> }, { path: 'course-workspace', element: <LessonWorkspacePreview proposed /> }, { path: 'course-authoring', element: <CourseAuthoringPreview proposed /> }, { path: 'python', element: <MonacoPage previewAppearance /> }, { path: 'blockly', element: <BlocklyPage previewAppearance /> }, { path: 'components', element: <VisualLanguageSpecimen /> }] },
   ] : []),

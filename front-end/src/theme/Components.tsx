@@ -412,10 +412,26 @@ const components: any = (theme: Theme, approved = false) => {
     result.MuiButton.styleOverrides = {
       ...result.MuiButton.styleOverrides,
       root: { minHeight: 40, borderRadius: 8, paddingLeft: 16, paddingRight: 16, fontWeight: 600, textTransform: 'none', boxShadow: 'none' },
+      // MUI re-adds elevation for contained buttons in these states; the approved button spec is no shadow.
+      contained: {
+        '&:hover, &:active, &.Mui-focusVisible': { boxShadow: 'none' },
+        '@media (hover: none)': { '&:hover': { boxShadow: 'none' } },
+      },
       text: { backgroundColor: 'transparent', '&:hover': { backgroundColor: theme.palette.action.hover, color: theme.palette.primary.main } },
       textPrimary: { backgroundColor: 'transparent', '&:hover': { backgroundColor: theme.palette.action.hover, color: theme.palette.primary.main } },
+      // Destructive text buttons keep the quiet red tint at rest and fill with error.main on hover.
+      // The foreground must be error.contrastText, not a hardcoded white: dark-mode error.main is a light
+      // red, so white-on-red would fall to ~1.7:1 in dark mode.
+      textError: { backgroundColor: theme.palette.error.light, '&:hover': { backgroundColor: theme.palette.error.main, color: theme.palette.error.contrastText } },
       outlinedPrimary: { borderColor: theme.palette.divider, '&:hover': { backgroundColor: theme.palette.primary.light, color: theme.palette.primary.main, borderColor: theme.palette.primary.main } },
       outlinedError: { borderColor: theme.palette.divider, '&:hover': { backgroundColor: theme.palette.error.light, color: theme.palette.error.main, borderColor: theme.palette.error.main } },
+    };
+    // Unselected toggle labels use the approved secondary text role; MUI's default palette.action.active
+    // (rgba(0,0,0,0.54)) falls short of 4.5:1 on the light page background.
+    result.MuiToggleButton = {
+      styleOverrides: {
+        root: { color: theme.palette.text.secondary },
+      },
     };
     result.MuiCard.styleOverrides.root = {
       ...result.MuiCard.styleOverrides.root,
