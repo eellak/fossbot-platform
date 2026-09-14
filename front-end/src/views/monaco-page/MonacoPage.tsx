@@ -21,6 +21,7 @@ import PythonExecutor from 'src/components/editors/PythonExecutor';
 import { useAuth } from 'src/authentication/AuthProvider';
 import {
   WebGLApp,
+  type SimulatorControlHandle,
   moveStep,
   rotateStep,
   stopMotion,
@@ -66,6 +67,7 @@ import PythonWorkspaceEditor from 'src/components/workspace/PythonWorkspaceEdito
 import { workspaceLayout, workspacePaneDefaults } from 'src/components/workspace/workspaceLayout';
 import { isExistingProject, isRobotProgramActive } from './monacoWorkspaceState';
 import { useNotifications } from 'src/components/notifications/NotificationProvider';
+import SimulatorEditorControls from 'src/components/editors/SimulatorEditorControls';
 
 const textart = `
 # __   __   __   __   __   __  ___     __      ___       __
@@ -86,6 +88,7 @@ const clampWorkspaceValue = (value: number, min: number, max: number) => Math.mi
 
 const MonacoPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppearance = true }) => {
   const { t } = useTranslation();
+  const simulatorRef = useRef<SimulatorControlHandle>(null);
   const location = useLocation();
   const [editorValue, setEditorValue] = useState('');
   const [projectTitle, setProjectTitle] = useState(t('newProject'));
@@ -539,6 +542,7 @@ const MonacoPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppearan
                 <Button variant="contained" startIcon={<IconPlayerPlay size={20} />} onClick={handlePlayClick} disabled={isRunning}>{t('monaco-page.run')}</Button>
                 <Button variant="outlined" startIcon={<IconPlayerStop size={20} />} disabled={!isRunning} onClick={handleStopClick}>{t('monaco-page.stop')}</Button>
                 <SearchBar variant="button" />
+                {target === 'simulation' && <SimulatorEditorControls simulator={simulatorRef} />}
                 <Button variant="outlined" startIcon={<IconDeviceFloppy size={20} />} onClick={handleSaveClick}>{t('monaco-page.save')}</Button>
               </Stack>
             </Box>
@@ -557,6 +561,7 @@ const MonacoPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppearan
                   <Box hidden={workspaceActivePane !== 'simulator'} sx={{ height: 480, width: '100%' }}>
                     <ExecutionTargetPanel height="100%">
                       <WebGLApp
+                        ref={simulatorRef}
                         appsessionId={sessionId}
                         onMountChange={handleMountChange}
                         initialStageUrl={selectedStage?.url || null}
@@ -576,6 +581,7 @@ const MonacoPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppearan
                 <WorkspacePane gridArea="simulator" label={t('education.workspace.simulator')}>
                   <ExecutionTargetPanel height="100%" embedded>
                     <WebGLApp
+                      ref={simulatorRef}
                       appsessionId={sessionId}
                       onMountChange={handleMountChange}
                       initialStageUrl={selectedStage?.url || null}
@@ -753,6 +759,7 @@ const MonacoPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppearan
 
               <ExecutionTargetPanel height="50vh">
                 <WebGLApp
+                  ref={simulatorRef}
                   appsessionId={sessionId}
                   onMountChange={handleMountChange}
                   initialStageUrl={selectedStage?.url || null}

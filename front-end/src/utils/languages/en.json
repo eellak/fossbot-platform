@@ -37,6 +37,8 @@
   "update": "Update",
   "cancel": "Cancel",
   "save": "Save",
+  "changeStage": "Change stage",
+  "simulatorControls": { "label": "Simulator controls", "show": "Show simulator controls", "hide": "Hide simulator controls", "moveForward": "Move forward", "moveBackward": "Move backward", "turnLeft": "Turn left", "turnRight": "Turn right" },
   "saving": "Saving…",
   "retry": "Retry",
   "loading": "Loading…",

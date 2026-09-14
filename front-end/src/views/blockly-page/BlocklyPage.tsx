@@ -22,6 +22,7 @@ import PythonTerminal from 'src/components/editors/PythonTerminal';
 // import WebGLApp from 'src/components/websimulator/Simulator';
 import {
   WebGLApp,
+  type SimulatorControlHandle,
   moveStep,
   rotateStep,
   stopMotion,
@@ -65,6 +66,7 @@ import { useSelector } from 'react-redux';
 import type { AppState } from 'src/store/Store';
 import { isExistingProject, isRobotProgramActive } from '../monaco-page/monacoWorkspaceState';
 import { useNotifications } from 'src/components/notifications/NotificationProvider';
+import SimulatorEditorControls from 'src/components/editors/SimulatorEditorControls';
 
 function stageNeedsAuthenticatedLoad(stage: ProjectStageReference | null): boolean {
   return (stage?.sourceType === 'local' && !!stage.localStageId)
@@ -78,6 +80,7 @@ const clampWorkspaceValue = (value: number, min: number, max: number) => Math.mi
 
 const BlocklyPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppearance = true }) => {
   const { t } = useTranslation();
+  const simulatorRef = useRef<SimulatorControlHandle>(null);
   const location = useLocation();
   const [editorValue, setEditorValue] = useState(
     '<xml xmlns="https://developers.google.com/blockly/xml"></xml>',
@@ -547,6 +550,7 @@ const BlocklyPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppeara
                 <Button variant="contained" startIcon={<IconPlayerPlay size={20} />} onClick={handlePlayClick} disabled={isRunning}>{t('blockly-page.run')}</Button>
                 <Button variant="outlined" startIcon={<IconPlayerStop size={20} />} disabled={!isRunning} onClick={handleStopClick}>{t('blockly-page.stop')}</Button>
                 <SearchBar variant="button" />
+                {target === 'simulation' && <SimulatorEditorControls simulator={simulatorRef} />}
                 <Button variant="outlined" startIcon={<IconDeviceFloppy size={20} />} onClick={handleSaveClick}>{t('blockly-page.save')}</Button>
               </Stack>
             </Box>
@@ -565,6 +569,7 @@ const BlocklyPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppeara
                   <Box hidden={workspaceActivePane !== 'simulator'} sx={{ height: 480, width: '100%' }}>
                     <ExecutionTargetPanel height="100%">
                       <WebGLApp
+                        ref={simulatorRef}
                         appsessionId={sessionId}
                         onMountChange={handleMountChange}
                         initialStageUrl={selectedStage?.url || null}
@@ -586,6 +591,7 @@ const BlocklyPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppeara
                 <WorkspacePane gridArea="simulator" label={t('education.workspace.simulator')}>
                   <ExecutionTargetPanel height="100%" embedded>
                     <WebGLApp
+                      ref={simulatorRef}
                       appsessionId={sessionId}
                       onMountChange={handleMountChange}
                       initialStageUrl={selectedStage?.url || null}
@@ -751,6 +757,7 @@ const BlocklyPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppeara
 
               <ExecutionTargetPanel height="50vh">
                 <WebGLApp
+                  ref={simulatorRef}
                   appsessionId={sessionId}
                   onMountChange={handleMountChange}
                   initialStageUrl={selectedStage?.url || null}
