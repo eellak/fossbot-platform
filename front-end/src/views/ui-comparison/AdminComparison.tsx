@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState } from 'react';
-import { Box, Button, Stack, ToggleButton, ToggleButtonGroup, Typography } from '@mui/material';
-import { IconArrowLeft, IconPalette, IconRefresh } from '@tabler/icons-react';
+import { Box, Button, Collapse, Stack, ToggleButton, ToggleButtonGroup, Typography } from '@mui/material';
+import { IconArrowLeft, IconChevronDown, IconPalette, IconRefresh } from '@tabler/icons-react';
 import { Link, Navigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet';
 import { useAuth } from 'src/authentication/AuthProvider';
@@ -47,17 +47,19 @@ function Preview({ variant, width, mode, revision }: {
 
 const changes = [
   'One PageHeader replaces the loose title, description, and right-aligned action row.',
-  'Search and role/access filters sit between the header and the collection.',
-  'One outlined table surface replaces the padded card wrapped around a second page container.',
-  'Username, full name, email, and sign-in provider merge into one readable identity column.',
-  'Rows are left aligned with quiet dividers, chips for status, and labelled switches for flags.',
-  'Delete is an icon action with a confirmation dialog; every change updates in place instead of reloading the page.',
+  'Search, role, and access filters sit between the header and the collection.',
+  'One outlined table surface with a darker header band replaces the padded card around a second page container.',
+  'The user identity opens one focused, read-only details dialog with account context and copyable identifiers.',
+  'Beta, Status, and Access render as restrained badges, and Role becomes a clickable status dropdown.',
+  'Row actions live in a grouped menu with explicit wording, and pagination defaults to 10 rows per page.',
+  'Delete asks for confirmation, and every change updates in place through notifications.',
 ];
 
 export default function AdminComparison() {
   const [view, setView] = useState<View>('both');
   const [width, setWidth] = useState(1440);
   const [revision, setRevision] = useState(0);
+  const [changesOpen, setChangesOpen] = useState(false);
   const dispatch = useDispatch();
   const auth = useAuth();
   const mode = useSelector((state) => (state.customizer.activeMode === 'dark' ? 'dark' : 'light'));
@@ -91,11 +93,24 @@ export default function AdminComparison() {
       </ToggleButtonGroup>
       <Button variant="outlined" startIcon={<IconRefresh size={18} />} onClick={() => setRevision((value) => value + 1)}>Reload both</Button>
     </Stack>
-    <Box component="section" sx={{ mb: 3, p: 2, border: 1, borderColor: 'divider', borderRadius: 1, maxWidth: 880 }}>
-      <Typography component="h2" variant="h6" fontWeight={600} sx={{ mb: 1 }}>What the proposal changes</Typography>
-      <Box component="ul" sx={{ m: 0, pl: 2.5, display: 'grid', gap: 0.5 }}>
-        {changes.map((change) => <Typography component="li" key={change} variant="body2" color="text.secondary">{change}</Typography>)}
-      </Box>
+    <Box component="section" sx={{ mb: 3, border: 1, borderColor: 'divider', borderRadius: 1, maxWidth: 880, overflow: 'hidden' }}>
+      <Button
+        fullWidth
+        onClick={() => setChangesOpen((open) => !open)}
+        aria-expanded={changesOpen}
+        aria-controls="proposal-changes"
+        sx={{ justifyContent: 'space-between', px: 2, py: 1.5, color: 'text.primary' }}
+        endIcon={<Box component="span" sx={{ display: 'inline-flex', transition: 'transform 150ms ease-out', transform: changesOpen ? 'rotate(180deg)' : 'none', '@media (prefers-reduced-motion: reduce)': { transition: 'none' } }}><IconChevronDown size={18} /></Box>}
+      >
+        <Typography component="span" variant="subtitle2" fontWeight={600}>What the proposal changes</Typography>
+      </Button>
+      <Collapse in={changesOpen}>
+        <Box id="proposal-changes" sx={{ px: 2, pb: 2, pt: 1.5, borderTop: 1, borderColor: 'divider' }}>
+          <Box component="ul" sx={{ m: 0, pl: 2.5, display: 'grid', gap: 0.5 }}>
+            {changes.map((change) => <Typography component="li" key={change} variant="body2" color="text.secondary">{change}</Typography>)}
+          </Box>
+        </Box>
+      </Collapse>
     </Box>
     <Box sx={{ display: 'grid', gridTemplateColumns: view === 'both' ? { xs: '1fr', md: '1fr 1fr' } : '1fr', gap: 3 }}>
       {view !== 'proposed' && <Preview variant="current" width={width} mode={mode} revision={revision} />}
