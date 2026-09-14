@@ -63,7 +63,7 @@ const SimulatorControlsOverlay: React.FC<SimulatorControlsOverlayProps> = ({
   onChangeCamera,
 }) => {
   const { t } = useTranslation();
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useState(false);
   const directions = [
     { label: t('simulatorControls.moveForward'), icon: <IconArrowUp size={22} />, action: onForward, column: 2, row: 1 },
     { label: t('simulatorControls.turnLeft'), icon: <IconArrowLeft size={22} />, action: onTurnLeft, column: 1, row: 2 },
@@ -76,6 +76,7 @@ const SimulatorControlsOverlay: React.FC<SimulatorControlsOverlayProps> = ({
       <Tooltip title={t('simulatorControls.show')} {...tooltipDelay}>
         <IconButton
           aria-label={t('simulatorControls.show')}
+          aria-expanded={false}
           onClick={() => setExpanded(true)}
           className="visual-language-supporting-panel"
           sx={{ ...controlButtonSx, ...overlaySurfaceSx }}
@@ -120,7 +121,12 @@ const SimulatorControlsOverlay: React.FC<SimulatorControlsOverlayProps> = ({
           </IconButton>
         </Tooltip>
         <Tooltip title={t('simulatorControls.hide')} placement="left" {...tooltipDelay}>
-          <IconButton aria-label={t('simulatorControls.hide')} sx={hideButtonSx} onClick={() => setExpanded(false)}>
+          <IconButton
+            aria-label={t('simulatorControls.hide')}
+            aria-expanded={true}
+            sx={hideButtonSx}
+            onClick={() => setExpanded(false)}
+          >
             <IconChevronDown size={22} />
           </IconButton>
         </Tooltip>
