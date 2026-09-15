@@ -1,384 +1,833 @@
-import React from 'react';
-import DashboardCard from '../shared/DashboardCardWithChildren';
-import Fab from '@mui/material/Fab';
-import PageContainer from 'src/components/container/PageContainer';
-import MenuItem from '@mui/material/MenuItem';
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
+  Alert,
+  Avatar,
   Box,
+  Button,
+  ButtonBase,
+  Chip,
+  CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  Divider,
+  IconButton,
+  ListItemText,
+  ListSubheader,
+  Menu,
+  MenuItem,
+  Paper,
+  Skeleton,
   Stack,
-  Typography,
   Table,
   TableBody,
   TableCell,
-  TableHead,
-  TableRow,
   TableContainer,
-  Select,
-  Checkbox,
-  Button,
+  TableHead,
+  TablePagination,
+  TableRow,
+  TextField,
+  Tooltip,
+  Typography,
 } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faTrash } from '@fortawesome/free-solid-svg-icons';
-import { IconUserFilled } from '@tabler/icons-react';
-import { useAuth } from 'src/authentication/AuthProvider';
+import useMediaQuery from '@mui/material/useMediaQuery';
+import { IconCheck, IconChevronDown, IconCopy, IconDotsVertical, IconFlask, IconLock, IconLockOpen, IconPlus, IconRefresh, IconTrash, IconUserCheck, IconUserOff } from '@tabler/icons-react';
 import { useTranslation } from 'react-i18next';
-import { UserRole } from 'src/authentication/AuthInterfaces';
+import { useNotifications } from 'src/components/notifications/NotificationProvider';
+import { useAuth } from 'src/authentication/AuthProvider';
+import { UserRole, type MarketplaceRole, type User } from 'src/authentication/AuthInterfaces';
+import { useFeatureFlags } from 'src/config/FeatureFlags';
 import googleIcon from 'src/assets/images/svgs/google-icon.svg';
 import githubIcon from 'src/assets/images/svgs/github-icon.svg';
-import { useFeatureFlags } from 'src/config/FeatureFlags';
 
-interface UsersCardProps {
-  onShowSuccessAlert: (message: string) => void;
-  onShowErrorAlert: (message: string) => void;
-}
+// Shared user-management surface used by the production admin page and its
+// development-only comparison preview.
 
-const UsersCard = ({ onShowSuccessAlert, onShowErrorAlert }: UsersCardProps) => {
-  const { t } = useTranslation();
-  const theme = useTheme();
-
-  const auth = useAuth();
-  const { marketplace } = useFeatureFlags();
-
-  const [users, setUsers] = useState([]);
-
-  useEffect(() => {
-    const fetchUsers = async () => {
-      try {
-        const users = await auth.getAllUsers();
-        if (users) {
-          setUsers(users);
-        }
-      } catch (error) {
-        onShowErrorAlert(t('alertMessages.usersFetchError'));
-        console.error('Error fetching users:', error);
-      }
-    };
-
-    fetchUsers();
-  }, []);
-
-
-  const handleDeleteUser = async (userId) => {
-    try {
-      const success = await auth.deleteUserByIdAction(userId);
-      if (success) {
-        window.location.reload();
-      } else {
-        onShowErrorAlert(t('alertMessages.userDeleteError'));
-        console.error('Error deleting project');
-      }
-    } catch (error) {
-      console.error('Error deleting project:', error);
-    }
-  };
-
-  const handleUserRoleChange = async (userId, event) => {
-    let newRole = event.target.value;
-
-    // Check if the new role is a valid UserRole
-    if (!Object.values(UserRole).includes(newRole)) {
-      onShowSuccessAlert(t('alertMessages.userRoleInvalid'));
-      return;
-    }
-
-    //Update user's role
-    try {
-      newRole = Object.values(UserRole).find(role => role == newRole)
-      const user = await auth.updateUserRole(userId, { role: newRole });
-      if (user) {
-        window.location.reload();
-      }
-    } catch (error) {
-      onShowErrorAlert(t('alertMessages.userDataUpdateError'));
-      console.error('Error updating user:', error);
-    }
-  };
-
-  const handleMarketplaceRoleChange = async (user, role: 'verifier' | 'moderator', checked: boolean) => {
-    const currentRoles = user.marketplace_roles || [];
-    const roles = checked ? [...new Set([...currentRoles, role])] : currentRoles.filter((currentRole) => currentRole !== role);
-    const updated = await auth.updateUserMarketplaceRoles(user.id, roles);
-    if (updated) {
-      setUsers((currentUsers) => currentUsers.map((currentUser) => currentUser.id === updated.id ? updated : currentUser));
-      onShowSuccessAlert(`Marketplace roles updated for ${updated.username}.`);
-    } else {
-      onShowErrorAlert(t('alertMessages.userDataUpdateError'));
-    }
-  };
-
-  const handleBetaTesterChange = async (userId, event) => {
-    const isBetaTester = event.target.checked;
-
-    try {
-      const user = await auth.updateUserBetaTesterStatus(userId, { beta_tester: isBetaTester });
-      if (user) {
-        window.location.reload();
-      }
-    } catch (error) {
-      onShowErrorAlert(t('alertMessages.userDataUpdateError'));
-      console.error('Error updating user:', error);
-    }
-  };
-
-  const handleActivatedChange = async (userId, event) => {
-    const isActivated = event.target.checked;
-
-    try {
-      const user = await auth.updateUserActivatedStatus(userId, { activated: isActivated });
-      if (user) {
-        window.location.reload();
-      }
-    } catch (error) {
-      onShowErrorAlert(t('alertMessages.userDataUpdateError'));
-      console.error('Error updating user:', error);
-    }
-  };
-
-  const handleAccessRevokedChange = async (userId, accessRevoked) => {
-    try {
-      const user = await auth.updateUserAccessRevokedStatus(userId, { access_revoked: accessRevoked });
-      if (user) {
-        window.location.reload();
-      }
-    } catch (error) {
-      onShowErrorAlert(t('alertMessages.userDataUpdateError'));
-      console.error('Error updating user:', error);
-    }
-  };
-
-  const PROVIDER_LABELS: Record<string, string> = {
-    google: 'Google',
-    'google.com': 'Google',
-    github: 'GitHub',
-    'github.com': 'GitHub',
-    password: 'Email/Password',
-    local: 'Local',
-  };
-
-  const PROVIDER_ICONS: Record<string, string> = {
-    google: googleIcon,
-    'google.com': googleIcon,
-    github: githubIcon,
-    'github.com': githubIcon,
-  };
-
-  const parseProviders = (provider: string) => (provider || 'local')
-    .split(',')
-    .map((p) => p.trim().toLowerCase())
-    .filter(Boolean);
-
-  const isLocalAccount = (user) => {
-    const providers = parseProviders(user.provider);
-    return !user.firebase_uid && providers.every((providerId) => ['local', 'password'].includes(providerId));
-  };
-
-  const renderProvider = (provider: string) => {
-    const providers = parseProviders(provider);
-
-    return (
-      <Stack direction="row" spacing={0.75} alignItems="center" justifyContent="center" flexWrap="wrap">
-        {providers.map((providerId) => {
-          const label = PROVIDER_LABELS[providerId] || providerId;
-          const icon = PROVIDER_ICONS[providerId];
-
-          if (icon) {
-            return (
-              <Box
-                key={providerId}
-                component="img"
-                src={icon}
-                alt={label}
-                title={label}
-                sx={{
-                  width: 18,
-                  height: 18,
-                  display: 'block',
-                  ...(providerId.startsWith('github') && theme.palette.mode === 'dark'
-                    ? { filter: 'brightness(0) invert(1)' }
-                    : {}),
-                }}
-              />
-            );
-          }
-
-          return (
-            <Typography key={providerId} variant="body2">
-              {label}
-            </Typography>
-          );
-        })}
-      </Stack>
-    );
-  };
-
-  return (
-    <PageContainer>
-      <DashboardCard>
-        <TableContainer>
-          <Table
-            aria-label="users table"
-            sx={{
-              whiteSpace: 'nowrap',
-            }}
-          >
-            <TableHead>
-              <TableRow>
-                <TableCell align="center">
-                  <Typography variant="subtitle2" fontWeight={600}>
-                    {t('username')}
-                  </Typography>
-                </TableCell>
-                <TableCell align="center">
-                  <Typography variant="subtitle2" fontWeight={600}>
-                    {t('firstname')}
-                  </Typography>
-                </TableCell>
-                <TableCell align="center">
-                  <Typography variant="subtitle2" fontWeight={600}>
-                    {t('lastname')}
-                  </Typography>
-                </TableCell>
-                <TableCell align="center">
-                  <Typography variant="subtitle2" fontWeight={600}>
-                    {t('emailAddress')}
-                  </Typography>
-                </TableCell>
-                <TableCell align="center">
-                  <Typography variant="subtitle2" fontWeight={600}>
-                    {t('admin-panel.provider')}
-                  </Typography>
-                </TableCell>
-                <TableCell align="center">
-                  <Typography variant="subtitle2" fontWeight={600}>
-                    {t('betaTester')}
-                  </Typography>
-                </TableCell>
-                <TableCell align="center">
-                  <Typography variant="subtitle2" fontWeight={600}>
-                    {t('activated')}
-                  </Typography>
-                </TableCell>
-                <TableCell align="center">
-                  <Typography variant="subtitle2" fontWeight={600}>
-                    {t('admin-panel.access')}
-                  </Typography>
-                </TableCell>
-                <TableCell align="center">
-                  <Typography variant="subtitle2" fontWeight={600}>
-                    {t('edit')}
-                  </Typography>
-                </TableCell>
-                {marketplace && <TableCell align="center">
-                  <Typography variant="subtitle2" fontWeight={600}>Marketplace roles</Typography>
-                </TableCell>}
-                <TableCell align="center">
-                  <Typography variant="subtitle2" fontWeight={600}>
-                    {t('delete')}
-                  </Typography>
-                </TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {users.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={marketplace ? 11 : 10}>
-                    <Typography>{t('admin-panel.noUsersFound')} </Typography>
-                  </TableCell>
-                </TableRow>
-              ) : (
-                users.map((user) => {
-                  return (
-                    <TableRow key={user.id}>
-                    <TableCell align="center">
-                      {user.username}
-                    </TableCell>
-                    <TableCell align="center">
-                      <Typography>{user.firstname}</Typography>
-                    </TableCell>
-                    <TableCell align="center">
-                      <Typography>{user.lastname}</Typography>
-                    </TableCell>
-                    <TableCell align="center">
-                      <Typography>{user.email}</Typography>
-                    </TableCell>
-                    <TableCell align="center">
-                      {renderProvider(user.provider)}
-                    </TableCell>
-                    <TableCell align="center">
-                      <Checkbox
-                        checked={user.beta_tester}
-                        onChange={(event) => handleBetaTesterChange(user.id, event)}
-                      />
-                    </TableCell>
-                    <TableCell align="center">
-                      <Checkbox
-                        checked={user.activated}
-                        onChange={(event) => handleActivatedChange(user.id, event)}
-                      />
-                    </TableCell>
-                    <TableCell align="center">
-                      {user.role !== UserRole.ADMIN && (
-                        <Button
-                          variant="outlined"
-                          color={user.access_revoked ? 'success' : 'error'}
-                          size="small"
-                          onClick={() => handleAccessRevokedChange(user.id, !user.access_revoked)}
-                          sx={{ textTransform: 'none', whiteSpace: 'nowrap' }}
-                        >
-                          {user.access_revoked ? t('admin-panel.restoreAccess') : t('admin-panel.revokeAccess')}
-                        </Button>
-                      )}
-                    </TableCell>
-                    <TableCell align="center">
-                      <Select
-                        fullWidth
-                        value={user.role}
-                        onChange={(event) => handleUserRoleChange(user.id, event)}
-                      >
-                        <MenuItem value={'user'}>{t('roles.user')}</MenuItem>
-                        <MenuItem value={'tutor'}>{t('roles.tutor')}</MenuItem>
-                        <MenuItem value={'admin'}>{t('roles.admin')}</MenuItem>
-                      </Select>
-                    </TableCell>
-                    {marketplace && <TableCell align="center">
-                      <Stack spacing={0} alignItems="flex-start" sx={{ minWidth: 132 }}>
-                        {(['verifier', 'moderator'] as const).map((role) => (
-                          <Box key={role} sx={{ display: 'flex', alignItems: 'center' }}>
-                            <Checkbox
-                              size="small"
-                              checked={(user.marketplace_roles || []).includes(role)}
-                              onChange={(event) => handleMarketplaceRoleChange(user, role, event.target.checked)}
-                              inputProps={{ 'aria-label': `${role} role for ${user.username}` }}
-                            />
-                            <Typography variant="body2" textTransform="capitalize">{role}</Typography>
-                          </Box>
-                        ))}
-                      </Stack>
-                    </TableCell>}
-                    <TableCell align="center">
-                      {isLocalAccount(user) && (
-                        <Fab
-                          color="error"
-                          size="small"
-                          aria-label="trash"
-                          onClick={() => handleDeleteUser(user.id)}
-                        >
-                          <FontAwesomeIcon icon={faTrash} />
-                        </Fab>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                  );
-                })
-              )}
-            </TableBody>
-          </Table>
-        </TableContainer>
-      </DashboardCard>
-    </PageContainer>
-  );
+const PROVIDER_LABELS: Record<string, string> = {
+  google: 'Google',
+  'google.com': 'Google',
+  github: 'GitHub',
+  'github.com': 'GitHub',
 };
 
-export default UsersCard;
+const PROVIDER_ICONS: Record<string, string> = {
+  google: googleIcon,
+  'google.com': googleIcon,
+  github: githubIcon,
+  'github.com': githubIcon,
+};
+
+const MARKETPLACE_ROLES: MarketplaceRole[] = ['verifier', 'moderator'];
+
+type PendingUserChange =
+  | { kind: 'role'; user: User; role: UserRole }
+  | { kind: 'deactivate'; user: User }
+  | { kind: 'revoke'; user: User };
+
+// Negative ids mark comparison fixtures so they render read-only and never reach the API.
+const isFixtureUser = (user: User) => user.id < 0;
+
+const EMPTY_PREVIEW_USERS: User[] = [];
+
+const parseProviders = (provider: string) => (provider || 'local')
+  .split(',')
+  .map((value) => value.trim().toLowerCase())
+  .filter(Boolean);
+
+const isLocalAccount = (user: User) => {
+  const providers = parseProviders(user.provider);
+  return !user.firebase_uid && providers.every((providerId) => ['local', 'password'].includes(providerId));
+};
+
+const initialsFor = (user: User) => {
+  const first = (user.firstname || '').trim();
+  const last = (user.lastname || '').trim();
+  if (first && last) return `${first[0]}${last[0]}`.toUpperCase();
+  return (user.username || first || last || '?').slice(0, 2).toUpperCase();
+};
+
+const fullNameFor = (user: User) => [user.firstname, user.lastname]
+  .map((value) => (value || '').trim())
+  .filter(Boolean)
+  .join(' ');
+
+// Shared cell rhythm and a deliberate column grid: one flexible identity column,
+// content-sized controls.
+const headCellSx = { color: 'text.secondary', fontWeight: 700, fontSize: '1rem', whiteSpace: 'nowrap' as const, px: 2, py: 1.5, verticalAlign: 'middle' as const };
+const bodyCellSx = { px: 2, py: 1.5, verticalAlign: 'middle' as const };
+const columnSx = {
+  user: { width: 320, minWidth: 280 },
+  role: { minWidth: 150 },
+  beta: { minWidth: 110 },
+  status: { minWidth: 120 },
+  access: { minWidth: 120 },
+  marketplace: { minWidth: 170 },
+  actions: { minWidth: 56 },
+};
+
+// Tone → badge styling. Amber is reserved for a Pending account status once the API exposes one.
+const badgeTones = {
+  primary: { bgcolor: 'primary.light', color: 'primary.main' },
+  success: { bgcolor: 'success.light', color: 'success.main' },
+  error: { bgcolor: 'error.light', color: 'error.main' },
+  neutral: { bgcolor: 'action.hover', color: 'text.secondary' },
+} as const;
+type BadgeTone = keyof typeof badgeTones;
+
+const menuGroupSx = { bgcolor: 'transparent', pl: 2, pr: 2, pt: 1, pb: 0.25, lineHeight: '18px', fontSize: '0.75rem', fontWeight: 600, color: 'text.secondary' };
+
+function MenuIcon({ children }: { children: ReactNode }) {
+  return <Box component="span" sx={{ width: 18, mr: 1.25, display: 'inline-flex', justifyContent: 'center', flexShrink: 0 }}>{children}</Box>;
+}
+
+function StatusBadge({ tone, label }: { tone: BadgeTone; label: string }) {
+  return <Chip size="small" label={label} sx={{ ...badgeTones[tone], fontWeight: 600 }} />;
+}
+
+function BetaBadge({ user }: { user: User }) {
+  const { t } = useTranslation();
+  return user.beta_tester
+    ? <StatusBadge tone="primary" label={t('admin-panel.betaBadge')} />
+    : <StatusBadge tone="neutral" label={t('admin-panel.standardBadge')} />;
+}
+
+function AccountStatusBadge({ user }: { user: User }) {
+  const { t } = useTranslation();
+  return user.activated
+    ? <StatusBadge tone="success" label={t('admin-panel.active')} />
+    : <StatusBadge tone="neutral" label={t('admin-panel.deactivated')} />;
+}
+
+function AccessBadge({ user }: { user: User }) {
+  const { t } = useTranslation();
+  return user.access_revoked
+    ? <StatusBadge tone="error" label={t('admin-panel.accessDenied')} />
+    : <StatusBadge tone="success" label={t('admin-panel.accessAllowed')} />;
+}
+
+function ProviderBadges({ provider }: { provider: string }) {
+  const theme = useTheme();
+  const external = parseProviders(provider).filter((providerId) => PROVIDER_ICONS[providerId]);
+  if (!external.length) return null;
+  return <Stack direction="row" spacing={0.75} alignItems="center" flexWrap="wrap">
+    {external.map((providerId) => {
+      const label = PROVIDER_LABELS[providerId] || providerId;
+      return <Tooltip key={providerId} title={label}><Box component="img" src={PROVIDER_ICONS[providerId]} alt={label} sx={{
+        width: 16,
+        height: 16,
+        display: 'block',
+        ...(providerId.startsWith('github') && theme.palette.mode === 'dark' ? { filter: 'brightness(0) invert(1)' } : {}),
+      }} /></Tooltip>;
+    })}
+  </Stack>;
+}
+
+function UserIdentity({ user, isSelf, onOpenDetails }: { user: User; isSelf: boolean; onOpenDetails: (user: User) => void }) {
+  const { t } = useTranslation();
+  const fullName = fullNameFor(user);
+  const detailsLabel = t('admin-panel.viewUserDetails', { username: user.username });
+  return <ButtonBase
+    onClick={() => onOpenDetails(user)}
+    aria-label={detailsLabel}
+    aria-haspopup="dialog"
+    sx={{ maxWidth: '100%', minWidth: 0, justifyContent: 'flex-start', gap: 1.5, borderRadius: 1, cursor: 'pointer', textAlign: 'left', '&:hover .user-name': { color: 'text.secondary' } }}
+  >
+    <Avatar src={user.image_url || undefined} sx={{ width: 36, height: 36, bgcolor: 'primary.light', color: 'primary.main', fontSize: '0.8125rem', fontWeight: 600 }}>
+      {initialsFor(user)}
+    </Avatar>
+    <Box sx={{ minWidth: 0 }}>
+      <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+        <Typography className="user-name" fontWeight={700} sx={{ overflowWrap: 'anywhere' }}>{user.username}</Typography>
+        {isSelf && <Chip size="small" label={t('admin-panel.you')} />}
+        {isFixtureUser(user) && <Chip size="small" variant="outlined" label={t('admin-panel.testUser')} />}
+      </Stack>
+      <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+        {fullName && <Typography variant="body2" color="text.secondary" noWrap>{fullName}</Typography>}
+        <ProviderBadges provider={user.provider} />
+      </Stack>
+      <Typography variant="caption" color="text.secondary" sx={{ overflowWrap: 'anywhere' }}>{user.email}</Typography>
+    </Box>
+  </ButtonBase>;
+}
+
+function DetailRow({ label, children }: { label: string; children: ReactNode }) {
+  return <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '152px minmax(0, 1fr)' }, gap: { xs: 0.25, sm: 2 }, py: 1 }}>
+    <Typography component="dt" variant="body2" color="text.secondary">{label}</Typography>
+    <Box component="dd" sx={{ m: 0, minWidth: 0 }}>{children}</Box>
+  </Box>;
+}
+
+function CopyableValue({ label, text, onCopy }: { label: string; text?: string | null; onCopy: (label: string, text: string) => void }) {
+  const { t } = useTranslation();
+  if (!text) return <Typography variant="body2">—</Typography>;
+  const copyLabel = t('admin-panel.copyValue', { label });
+  return <Stack direction="row" spacing={0.5} alignItems="center" sx={{ minWidth: 0 }}>
+    <Typography variant="body2" sx={{ minWidth: 0, overflowWrap: 'anywhere' }}>{text}</Typography>
+    <Tooltip title={copyLabel}>
+      <IconButton
+        size="small"
+        aria-label={copyLabel}
+        onClick={() => onCopy(label, text)}
+        sx={{ flex: '0 0 auto', width: 44, height: 44 }}
+      >
+        <IconCopy size={16} />
+      </IconButton>
+    </Tooltip>
+  </Stack>;
+}
+
+function UserDetailsDialog({ user, isSelf, onClose }: { user: User | null; isSelf: boolean; onClose: () => void }) {
+  const { t } = useTranslation();
+  const { notify } = useNotifications();
+  if (!user) return null;
+  const fullName = fullNameFor(user);
+  const providers = parseProviders(user.provider);
+  const accountType = isLocalAccount(user)
+    ? t('admin-panel.localAccount')
+    : providers.length > 1
+      ? t('admin-panel.linkedAccount')
+      : t('admin-panel.externalAccount');
+  const providerLabels = isLocalAccount(user)
+    ? [t('admin-panel.localAccount')]
+    : providers.map((providerId) => PROVIDER_LABELS[providerId] || providerId);
+  const value = (text?: string | null) => <Typography variant="body2" sx={{ overflowWrap: 'anywhere' }}>{text || '—'}</Typography>;
+  const copyValue = async (label: string, text: string) => {
+    if (!navigator.clipboard?.writeText) {
+      notify(t('admin-panel.copyUnavailable'), { severity: 'error' });
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      notify(t('admin-panel.copied', { label }), { severity: 'success' });
+    } catch {
+      notify(t('admin-panel.copyFailed', { label }), { severity: 'error' });
+    }
+  };
+
+  return <Dialog open onClose={onClose} maxWidth="sm" fullWidth aria-labelledby="user-details-title">
+    <DialogTitle id="user-details-title">{t('admin-panel.userDetails')}</DialogTitle>
+    <DialogContent>
+      <Stack direction="row" spacing={2} alignItems="center" sx={{ pb: 2 }}>
+        <Avatar src={user.image_url || undefined} sx={{ width: 48, height: 48, bgcolor: 'primary.light', color: 'primary.main', fontSize: '1rem', fontWeight: 600 }}>
+          {initialsFor(user)}
+        </Avatar>
+        <Box sx={{ minWidth: 0 }}>
+          <Typography variant="h5" sx={{ overflowWrap: 'anywhere' }}>{fullName || user.username}</Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ overflowWrap: 'anywhere' }}>@{user.username}</Typography>
+          <Stack direction="row" spacing={0.75} flexWrap="wrap" sx={{ mt: 0.75 }}>
+            {isSelf && <Chip size="small" label={t('admin-panel.you')} />}
+            {isFixtureUser(user) && <Chip size="small" variant="outlined" label={t('admin-panel.testUser')} />}
+          </Stack>
+        </Box>
+      </Stack>
+      {isFixtureUser(user) && <Box className="visual-language-supporting-panel" sx={{ mb: 2, p: 1.5, bgcolor: 'action.hover' }}>
+        <Typography variant="body2">{t('admin-panel.fixtureReadOnly')}</Typography>
+      </Box>}
+
+      <Divider />
+      <Typography component="h3" variant="h6" fontWeight={600} sx={{ mt: 2, mb: 0.5 }}>{t('admin-panel.identityDetails')}</Typography>
+      <Box component="dl" sx={{ m: 0 }}>
+        <DetailRow label={t('admin-panel.userId')}><CopyableValue label={t('admin-panel.userId')} text={String(user.id)} onCopy={(label, text) => void copyValue(label, text)} /></DetailRow>
+        <DetailRow label={t('admin-panel.username')}>{value(user.username)}</DetailRow>
+        <DetailRow label={t('admin-panel.firstName')}>{value(user.firstname)}</DetailRow>
+        <DetailRow label={t('admin-panel.lastName')}>{value(user.lastname)}</DetailRow>
+        <DetailRow label={t('admin-panel.email')}><CopyableValue label={t('admin-panel.email')} text={user.email} onCopy={(label, text) => void copyValue(label, text)} /></DetailRow>
+        {user.image_url && <DetailRow label={t('admin-panel.profileImage')}>
+          <Box component="details" sx={{ '& > summary': { cursor: 'pointer', color: 'text.secondary', fontSize: '0.875rem' }, '& > summary:focus-visible': { outline: 2, outlineColor: 'primary.main', outlineOffset: 2 } }}>
+            <Box component="summary">{t('admin-panel.viewProfileImageUrl')}</Box>
+            <Box sx={{ pt: 1 }}><CopyableValue label={t('admin-panel.profileImage')} text={user.image_url} onCopy={(label, text) => void copyValue(label, text)} /></Box>
+          </Box>
+        </DetailRow>}
+      </Box>
+
+      <Divider />
+      <Typography component="h3" variant="h6" fontWeight={600} sx={{ mt: 2, mb: 0.5 }}>{t('admin-panel.accountDetails')}</Typography>
+      <Box component="dl" sx={{ m: 0 }}>
+        <DetailRow label={t('admin-panel.accountType')}>{value(accountType)}</DetailRow>
+        <DetailRow label={t('admin-panel.signInProviders')}>
+          <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+            <ProviderBadges provider={user.provider} />
+            {value(providerLabels.join(', '))}
+          </Stack>
+        </DetailRow>
+        {user.firebase_uid && <DetailRow label={t('admin-panel.externalAccountId')}><CopyableValue label={t('admin-panel.externalAccountId')} text={user.firebase_uid} onCopy={(label, text) => void copyValue(label, text)} /></DetailRow>}
+      </Box>
+
+      <Divider />
+      <Typography component="h3" variant="h6" fontWeight={600} sx={{ mt: 2, mb: 0.5 }}>{t('admin-panel.permissionsAndStatus')}</Typography>
+      <Box component="dl" sx={{ m: 0 }}>
+        <DetailRow label={t('admin-panel.role')}>{value(t(`roles.${user.role}`))}</DetailRow>
+        <DetailRow label={t('admin-panel.status')}><AccountStatusBadge user={user} /></DetailRow>
+        <DetailRow label={t('admin-panel.access')}><AccessBadge user={user} /></DetailRow>
+        <DetailRow label={t('betaTester')}><BetaBadge user={user} /></DetailRow>
+        <DetailRow label={t('admin-panel.marketplaceRoles')}><MarketplaceRolesStatus user={user} /></DetailRow>
+      </Box>
+    </DialogContent>
+    <DialogActions>
+      <Button onClick={onClose}>{t('admin-panel.closeDetails')}</Button>
+    </DialogActions>
+  </Dialog>;
+}
+
+function RoleControl({ user, busy, disabledReason, onChange }: { user: User; busy: boolean; disabledReason?: string; onChange: (user: User, role: UserRole) => void }) {
+  const { t } = useTranslation();
+  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
+  const close = () => setAnchor(null);
+  const label = t('admin-panel.roleAria', { username: user.username });
+  const disabled = busy || Boolean(disabledReason);
+  return <>
+    <Tooltip title={disabledReason || (busy ? t('admin-panel.updatingUser') : '')} disableHoverListener={!disabled}>
+      <span>
+        <Button
+          size="small"
+          disabled={disabled}
+          aria-label={label}
+          aria-haspopup="menu"
+          aria-expanded={Boolean(anchor)}
+          onClick={(event) => setAnchor(event.currentTarget)}
+          endIcon={busy ? <CircularProgress color="inherit" size={16} /> : <IconChevronDown size={16} />}
+          sx={{ color: 'text.primary', fontWeight: 700, border: 1, borderColor: 'divider', px: 1.5, '@media (pointer: coarse)': { minHeight: 44 }, '&:hover': { bgcolor: 'action.hover', borderColor: 'text.secondary' } }}
+        >
+          {t(`roles.${user.role}`)}
+        </Button>
+      </span>
+    </Tooltip>
+    <Menu anchorEl={anchor} open={Boolean(anchor)} onClose={close}>
+      {Object.values(UserRole).map((role) => <MenuItem key={role} selected={user.role === role} onClick={() => { close(); if (user.role !== role) onChange(user, role); }}>
+        <ListItemText>{t(`roles.${role}`)}</ListItemText>
+        {user.role === role && <IconCheck size={16} />}
+      </MenuItem>)}
+    </Menu>
+  </>;
+}
+
+function MarketplaceRolesStatus({ user }: { user: User }) {
+  const { t } = useTranslation();
+  const assigned = MARKETPLACE_ROLES.filter((role) => (user.marketplace_roles || []).includes(role));
+  if (!assigned.length) return <Typography variant="body2" color="text.secondary" aria-label={t('admin-panel.noRoles')}>—</Typography>;
+  return <Stack direction="row" spacing={0.75} alignItems="center" flexWrap="wrap">
+    {assigned.map((role) => <Chip key={role} size="small" variant="outlined" label={t(`admin-panel.${role}`)} />)}
+  </Stack>;
+}
+
+function UserActionsMenu({ user, isSelf, busy, disabledReason, marketplace, onToggleBeta, onToggleActivated, onToggleAccess, onChangeMarketplaceRole, onRequestDelete }: {
+  user: User;
+  isSelf: boolean;
+  busy: boolean;
+  disabledReason?: string;
+  marketplace: boolean;
+  onToggleBeta: (user: User, checked: boolean) => void;
+  onToggleActivated: (user: User, checked: boolean) => void;
+  onToggleAccess: (user: User, revoked: boolean) => void;
+  onChangeMarketplaceRole: (user: User, role: MarketplaceRole, checked: boolean) => void;
+  onRequestDelete: (user: User) => void;
+}) {
+  const { t } = useTranslation();
+  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
+  const close = () => setAnchor(null);
+  const beta = Boolean(user.beta_tester);
+  const activated = Boolean(user.activated);
+  const revoked = Boolean(user.access_revoked);
+  const isAdmin = user.role === UserRole.ADMIN;
+  const assigned = user.marketplace_roles || [];
+  const canDelete = isLocalAccount(user) && !isSelf;
+  const label = t('admin-panel.manageUser', { username: user.username });
+  const disabled = busy || Boolean(disabledReason);
+  return <>
+    <Tooltip title={disabledReason || (busy ? t('admin-panel.updatingUser') : label)}>
+      <span>
+        <IconButton
+          aria-label={label}
+          aria-haspopup="menu"
+          aria-expanded={Boolean(anchor)}
+          disabled={disabled}
+          onClick={(event) => setAnchor(event.currentTarget)}
+          sx={{ width: 44, height: 44 }}
+        >
+          {busy ? <CircularProgress color="inherit" size={18} /> : <IconDotsVertical size={18} />}
+        </IconButton>
+      </span>
+    </Tooltip>
+    <Menu anchorEl={anchor} open={Boolean(anchor)} onClose={close}>
+      <ListSubheader disableSticky role="presentation" sx={menuGroupSx}>{t('admin-panel.accountGroup')}</ListSubheader>
+      <MenuItem onClick={() => { close(); onToggleBeta(user, !beta); }}>
+        <MenuIcon><IconFlask size={18} /></MenuIcon>
+        <ListItemText>{beta ? t('admin-panel.removeFromBeta') : t('admin-panel.addToBeta')}</ListItemText>
+      </MenuItem>
+      {!isSelf && <MenuItem onClick={() => { close(); onToggleActivated(user, !activated); }}>
+        <MenuIcon>{activated ? <IconUserOff size={18} /> : <IconUserCheck size={18} />}</MenuIcon>
+        <ListItemText>{activated ? t('admin-panel.deactivateAccount') : t('admin-panel.activateAccount')}</ListItemText>
+      </MenuItem>}
+      {!isAdmin && <MenuItem onClick={() => { close(); onToggleAccess(user, !revoked); }}>
+        <MenuIcon>{revoked ? <IconLockOpen size={18} /> : <IconLock size={18} />}</MenuIcon>
+        <ListItemText>{revoked ? t('admin-panel.allowAccess') : t('admin-panel.revokeAccess')}</ListItemText>
+      </MenuItem>}
+      {marketplace && <ListSubheader disableSticky role="presentation" sx={menuGroupSx}>{t('admin-panel.marketplaceRoles')}</ListSubheader>}
+      {marketplace && MARKETPLACE_ROLES.map((role) => {
+        const has = assigned.includes(role);
+        return <MenuItem key={role} onClick={() => { close(); onChangeMarketplaceRole(user, role, !has); }}>
+          <MenuIcon>{has ? <IconCheck size={18} /> : <IconPlus size={18} />}</MenuIcon>
+          <ListItemText>{t(`admin-panel.${role}`)}</ListItemText>
+        </MenuItem>;
+      })}
+      {canDelete && <ListSubheader disableSticky role="presentation" sx={menuGroupSx}>{t('admin-panel.dangerGroup')}</ListSubheader>}
+      {canDelete && <MenuItem onClick={() => { close(); onRequestDelete(user); }} sx={{ color: 'error.main' }}>
+        <MenuIcon><IconTrash size={18} /></MenuIcon>
+        <ListItemText>{t('delete')}</ListItemText>
+      </MenuItem>}
+    </Menu>
+  </>;
+}
+
+function SettingRow({ label, children }: { label: string; children: ReactNode }) {
+  return <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ xs: 'flex-start', sm: 'center' }} spacing={1}>
+    <Typography variant="body2" color="text.secondary">{label}</Typography>
+    <Box sx={{ display: 'flex', justifyContent: { xs: 'flex-start', sm: 'flex-end' }, minWidth: 0 }}>{children}</Box>
+  </Stack>;
+}
+
+export default function UsersCard({ previewUsers = EMPTY_PREVIEW_USERS }: { previewUsers?: User[] }) {
+  const { t } = useTranslation();
+  const { notify } = useNotifications();
+  const auth = useAuth();
+  const { marketplace } = useFeatureFlags();
+  const theme = useTheme();
+  const isCompact = useMediaQuery(theme.breakpoints.down('lg'));
+
+  const [users, setUsers] = useState<User[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [search, setSearch] = useState('');
+  const [roleFilter, setRoleFilter] = useState('');
+  const [accessFilter, setAccessFilter] = useState('');
+  const [busyIds, setBusyIds] = useState<Set<number>>(() => new Set());
+  const [pendingChange, setPendingChange] = useState<PendingUserChange | null>(null);
+  const [changeBusy, setChangeBusy] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<User | null>(null);
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState(10);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const result = await auth.getAllUsers();
+      setUsers([...(result || []), ...previewUsers]);
+      if (!result) setError(t('alertMessages.usersFetchError'));
+    } catch {
+      setUsers(previewUsers);
+      setError(t('alertMessages.usersFetchError'));
+    } finally {
+      setLoading(false);
+    }
+  }, [auth, previewUsers, t]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  const filtered = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    return users.filter((user) => {
+      if (roleFilter && user.role !== roleFilter) return false;
+      if (accessFilter === 'active' && user.access_revoked) return false;
+      if (accessFilter === 'revoked' && !user.access_revoked) return false;
+      if (!query) return true;
+      return [user.username, user.firstname, user.lastname, user.email].some((value) => (value || '').toLowerCase().includes(query));
+    });
+  }, [users, search, roleFilter, accessFilter]);
+
+  useEffect(() => { setPage(0); }, [search, roleFilter, accessFilter, pageSize]);
+  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
+  useEffect(() => { if (page > pageCount - 1) setPage(pageCount - 1); }, [page, pageCount]);
+  const paged = useMemo(() => filtered.slice(page * pageSize, page * pageSize + pageSize), [filtered, page, pageSize]);
+
+  const clearFilters = () => { setSearch(''); setRoleFilter(''); setAccessFilter(''); };
+  const notifyError = (message: string) => notify(message, { severity: 'error' });
+  const setUserBusy = (userId: number, busy: boolean) => setBusyIds((current) => {
+    const next = new Set(current);
+    if (busy) next.add(userId);
+    else next.delete(userId);
+    return next;
+  });
+  const applyResult = async (user: User, action: () => Promise<boolean>, next: User, message: string) => {
+    if (isFixtureUser(user)) return false;
+    setUserBusy(user.id, true);
+    try {
+      const ok = await action();
+      if (ok) {
+        setUsers((current) => current.map((item) => (item.id === user.id ? next : item)));
+        notify(message, { severity: 'success' });
+      } else {
+        notifyError(t('alertMessages.userDataUpdateError'));
+      }
+      return ok;
+    } catch {
+      notifyError(t('alertMessages.userDataUpdateError'));
+      return false;
+    } finally {
+      setUserBusy(user.id, false);
+    }
+  };
+  const applyUser = async (user: User, action: () => Promise<User | undefined>, message: string) => {
+    if (isFixtureUser(user)) return false;
+    setUserBusy(user.id, true);
+    try {
+      const updated = await action();
+      if (updated) {
+        setUsers((current) => current.map((item) => (item.id === user.id ? { ...item, ...updated } : item)));
+        notify(message, { severity: 'success' });
+      } else {
+        notifyError(t('alertMessages.userDataUpdateError'));
+      }
+      return Boolean(updated);
+    } catch {
+      notifyError(t('alertMessages.userDataUpdateError'));
+      return false;
+    } finally {
+      setUserBusy(user.id, false);
+    }
+  };
+
+  const changeRole = (user: User, role: UserRole) => applyUser(
+    user,
+    () => auth.updateUserRole(user.id, { role }),
+    t('admin-panel.roleUpdated', { username: user.username }),
+  );
+  const toggleBeta = (user: User, checked: boolean) => applyResult(
+    user,
+    () => auth.updateUserBetaTesterStatus(user.id, { beta_tester: checked }),
+    { ...user, beta_tester: checked },
+    t('admin-panel.betaUpdated', { username: user.username }),
+  );
+  const toggleActivated = (user: User, checked: boolean) => applyResult(
+    user,
+    () => auth.updateUserActivatedStatus(user.id, { activated: checked }),
+    { ...user, activated: checked },
+    t('admin-panel.activatedUpdated', { username: user.username }),
+  );
+  const toggleAccess = (user: User, revoked: boolean) => applyResult(
+    user,
+    () => auth.updateUserAccessRevokedStatus(user.id, { access_revoked: revoked }),
+    { ...user, access_revoked: revoked },
+    revoked ? t('admin-panel.accessRevoked', { username: user.username }) : t('admin-panel.accessRestored', { username: user.username }),
+  );
+  const changeMarketplaceRole = (user: User, role: MarketplaceRole, checked: boolean) => {
+    const current = user.marketplace_roles || [];
+    const roles = checked ? [...new Set([...current, role])] : current.filter((item) => item !== role);
+    return applyUser(user, () => auth.updateUserMarketplaceRoles(user.id, roles), t('admin-panel.roleUpdated', { username: user.username }));
+  };
+
+  const requestRoleChange = (user: User, role: UserRole) => setPendingChange({ kind: 'role', user, role });
+  const requestActivatedChange = (user: User, checked: boolean) => {
+    if (checked) void toggleActivated(user, true);
+    else setPendingChange({ kind: 'deactivate', user });
+  };
+  const requestAccessChange = (user: User, revoked: boolean) => {
+    if (revoked) setPendingChange({ kind: 'revoke', user });
+    else void toggleAccess(user, false);
+  };
+  const confirmPendingChange = async () => {
+    if (!pendingChange) return;
+    setChangeBusy(true);
+    try {
+      const ok = pendingChange.kind === 'role'
+        ? await changeRole(pendingChange.user, pendingChange.role)
+        : pendingChange.kind === 'deactivate'
+          ? await toggleActivated(pendingChange.user, false)
+          : await toggleAccess(pendingChange.user, true);
+      if (ok) setPendingChange(null);
+    } finally {
+      setChangeBusy(false);
+    }
+  };
+
+  const confirmDelete = async () => {
+    if (!pendingDelete) return;
+    const target = pendingDelete;
+    setDeleteBusy(true);
+    try {
+      const ok = await auth.deleteUserByIdAction(target.id);
+      if (ok) {
+        setUsers((current) => current.filter((user) => user.id !== target.id));
+        notify(t('admin-panel.userDeleted', { username: target.username }), { severity: 'success' });
+        setPendingDelete(null);
+      } else {
+        notifyError(t('alertMessages.userDeleteError'));
+      }
+    } catch {
+      notifyError(t('alertMessages.userDeleteError'));
+    } finally {
+      setDeleteBusy(false);
+    }
+  };
+
+  const renderUserCard = (user: User) => {
+    const busy = busyIds.has(user.id);
+    const disabledReason = isFixtureUser(user) ? t('admin-panel.fixtureControlsDisabled') : undefined;
+    const isSelf = auth.user?.id === user.id;
+    const roleDisabledReason = isSelf ? t('admin-panel.selfRoleProtected') : disabledReason;
+    return <Paper key={user.id} variant="outlined" aria-busy={busy} sx={{ p: 2 }}>
+      <Stack direction="row" spacing={1.5} alignItems="flex-start">
+        <Box sx={{ flex: 1, minWidth: 0 }}><UserIdentity user={user} isSelf={isSelf} onOpenDetails={setSelectedUser} /></Box>
+        <UserActionsMenu
+          user={user}
+          isSelf={isSelf}
+          busy={busy}
+          disabledReason={disabledReason}
+          marketplace={marketplace}
+          onToggleBeta={(target, checked) => void toggleBeta(target, checked)}
+          onToggleActivated={requestActivatedChange}
+          onToggleAccess={requestAccessChange}
+          onChangeMarketplaceRole={changeMarketplaceRole}
+          onRequestDelete={setPendingDelete}
+        />
+      </Stack>
+      <Divider sx={{ my: 1.5 }} />
+      <Stack spacing={1.5}>
+        <SettingRow label={t('admin-panel.role')}><RoleControl user={user} busy={busy} disabledReason={roleDisabledReason} onChange={requestRoleChange} /></SettingRow>
+        <SettingRow label={t('admin-panel.status')}><AccountStatusBadge user={user} /></SettingRow>
+        <SettingRow label={t('admin-panel.access')}><AccessBadge user={user} /></SettingRow>
+        <SettingRow label={t('betaTester')}><BetaBadge user={user} /></SettingRow>
+        {marketplace && <SettingRow label={t('admin-panel.marketplaceRoles')}><MarketplaceRolesStatus user={user} /></SettingRow>}
+      </Stack>
+    </Paper>;
+  };
+
+  const renderUserRow = (user: User) => {
+    const busy = busyIds.has(user.id);
+    const disabledReason = isFixtureUser(user) ? t('admin-panel.fixtureControlsDisabled') : undefined;
+    const isSelf = auth.user?.id === user.id;
+    const roleDisabledReason = isSelf ? t('admin-panel.selfRoleProtected') : disabledReason;
+    return <TableRow key={user.id} hover aria-busy={busy}>
+      <TableCell sx={{ ...bodyCellSx, ...columnSx.user }}><UserIdentity user={user} isSelf={isSelf} onOpenDetails={setSelectedUser} /></TableCell>
+      <TableCell sx={{ ...bodyCellSx, ...columnSx.role }}><RoleControl user={user} busy={busy} disabledReason={roleDisabledReason} onChange={requestRoleChange} /></TableCell>
+      <TableCell sx={{ ...bodyCellSx, ...columnSx.status }}><AccountStatusBadge user={user} /></TableCell>
+      <TableCell sx={{ ...bodyCellSx, ...columnSx.access }}><AccessBadge user={user} /></TableCell>
+      <TableCell sx={{ ...bodyCellSx, ...columnSx.beta }}><BetaBadge user={user} /></TableCell>
+      {marketplace && <TableCell sx={{ ...bodyCellSx, ...columnSx.marketplace }}><MarketplaceRolesStatus user={user} /></TableCell>}
+      <TableCell align="right" sx={{ ...bodyCellSx, ...columnSx.actions }}><UserActionsMenu user={user} isSelf={isSelf} busy={busy} disabledReason={disabledReason} marketplace={marketplace} onToggleBeta={(target, checked) => void toggleBeta(target, checked)} onToggleActivated={requestActivatedChange} onToggleAccess={requestAccessChange} onChangeMarketplaceRole={changeMarketplaceRole} onRequestDelete={setPendingDelete} /></TableCell>
+    </TableRow>;
+  };
+
+  const pagination = <TablePagination
+    component="div"
+    count={filtered.length}
+    page={page}
+    onPageChange={(_, next) => setPage(next)}
+    rowsPerPage={pageSize}
+    onRowsPerPageChange={(event) => setPageSize(Number(event.target.value))}
+    rowsPerPageOptions={[5, 10, 25, 50, 100]}
+    labelRowsPerPage={t('admin-panel.rowsPerPage')}
+    labelDisplayedRows={({ from, to, count }) => t('admin-panel.displayedRows', { from, to, count })}
+    getItemAriaLabel={(type) => (type === 'next' ? t('admin-panel.nextPage') : t('admin-panel.previousPage'))}
+    sx={{
+      overflow: 'hidden',
+      '& .MuiTablePagination-toolbar': { minHeight: 56, px: { xs: 1, sm: 2 }, flexWrap: { xs: 'wrap', sm: 'nowrap' }, rowGap: 0.5 },
+      '& .MuiTablePagination-spacer': { display: { xs: 'none', sm: 'block' } },
+      '& .MuiTablePagination-selectLabel': { ml: 0 },
+      '& .MuiTablePagination-displayedRows': { ml: { xs: 1, sm: 4 } },
+    }}
+  />;
+
+  const pendingChangeContent = pendingChange
+    ? pendingChange.kind === 'role'
+      ? {
+          title: t('admin-panel.confirmRoleTitle'),
+          body: t('admin-panel.confirmRoleBody', {
+            username: pendingChange.user.username,
+            currentRole: t(`roles.${pendingChange.user.role}`),
+            nextRole: t(`roles.${pendingChange.role}`),
+          }),
+          confirm: t('admin-panel.confirmRoleChange'),
+          warn: pendingChange.user.role === UserRole.ADMIN || pendingChange.role === UserRole.ADMIN,
+        }
+      : pendingChange.kind === 'deactivate'
+        ? {
+            title: t('admin-panel.confirmDeactivateTitle'),
+            body: t('admin-panel.confirmDeactivateBody', { username: pendingChange.user.username }),
+            confirm: t('admin-panel.deactivateAccount'),
+            warn: true,
+          }
+        : {
+            title: t('admin-panel.confirmRevokeTitle'),
+            body: t('admin-panel.confirmRevokeBody', { username: pendingChange.user.username }),
+            confirm: t('admin-panel.revokeAccess'),
+            warn: true,
+          }
+    : null;
+
+  return <>
+    <Stack spacing={2}>
+        <Box sx={{
+          display: 'grid',
+          gridTemplateColumns: { xs: 'minmax(0, 1fr)', sm: 'repeat(2, minmax(0, 1fr))', lg: 'minmax(240px, 1fr) 168px 176px auto' },
+          gap: 2,
+          alignItems: 'center',
+        }}>
+          <TextField
+            size="small"
+            fullWidth
+            label={t('admin-panel.searchUsers')}
+            placeholder={t('admin-panel.searchPlaceholder')}
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            sx={{ minWidth: 0, gridColumn: { sm: '1 / -1', lg: 'auto' } }}
+          />
+          <TextField
+            select
+            size="small"
+            label={t('admin-panel.role')}
+            value={roleFilter}
+            onChange={(event) => setRoleFilter(event.target.value)}
+            sx={{ width: '100%' }}
+          >
+            <MenuItem value="">{t('admin-panel.allRoles')}</MenuItem>
+            {Object.values(UserRole).map((role) => <MenuItem key={role} value={role}>{t(`roles.${role}`)}</MenuItem>)}
+          </TextField>
+          <TextField
+            select
+            size="small"
+            label={t('admin-panel.access')}
+            value={accessFilter}
+            onChange={(event) => setAccessFilter(event.target.value)}
+            sx={{ width: '100%' }}
+          >
+            <MenuItem value="">{t('admin-panel.allAccess')}</MenuItem>
+            <MenuItem value="active">{t('admin-panel.accessAllowed')}</MenuItem>
+            <MenuItem value="revoked">{t('admin-panel.accessDenied')}</MenuItem>
+          </TextField>
+          <Stack
+            direction="row"
+            spacing={1}
+            alignItems="center"
+            justifyContent={{ sm: 'flex-end', lg: 'flex-start' }}
+            sx={{ minWidth: 0, gridColumn: { sm: '1 / -1', lg: 'auto' } }}
+          >
+            <Typography variant="body2" color="text.secondary" aria-live="polite" sx={{ flexShrink: 0, whiteSpace: 'nowrap' }}>
+              {t('admin-panel.userCount', { count: filtered.length })}
+            </Typography>
+            {(search || roleFilter || accessFilter) && filtered.length > 0
+              ? <Button size="small" onClick={clearFilters}>{t('admin-panel.clearFilters')}</Button>
+              : null}
+          </Stack>
+        </Box>
+        {error && <Alert severity="error" action={<Button color="inherit" startIcon={<IconRefresh size={16} />} onClick={() => void load()}>{t('retry')}</Button>}>{error}</Alert>}
+        {loading
+          ? <Stack spacing={1.5} aria-busy="true" aria-label={t('loading')}>{[0, 1, 2, 3, 4].map((key) => <Skeleton key={key} variant="rounded" height={84} />)}</Stack>
+          : error && users.length === 0
+            ? null
+            : users.length === 0
+              ? <Alert severity="info">{t('admin-panel.noUsersFound')}</Alert>
+              : filtered.length === 0
+                ? <Alert severity="info" action={<Button color="inherit" onClick={clearFilters}>{t('admin-panel.clearFilters')}</Button>}>{t('admin-panel.noResults')}</Alert>
+                : isCompact
+                  ? <>
+                      <Stack spacing={2}>{paged.map(renderUserCard)}</Stack>
+                      {pagination}
+                    </>
+                  : <Paper variant="outlined" sx={{ overflow: 'hidden' }}>
+                      <TableContainer>
+                        <Table aria-label={t('manageUsers')}>
+                          <TableHead>
+                            <TableRow sx={{ bgcolor: 'background.default' }}>
+                              <TableCell sx={{ ...headCellSx, ...columnSx.user }}>{t('admin-panel.user')}</TableCell>
+                              <TableCell sx={{ ...headCellSx, ...columnSx.role }}>{t('admin-panel.role')}</TableCell>
+                              <TableCell sx={{ ...headCellSx, ...columnSx.status }}>{t('admin-panel.status')}</TableCell>
+                              <TableCell sx={{ ...headCellSx, ...columnSx.access }}>{t('admin-panel.access')}</TableCell>
+                              <TableCell sx={{ ...headCellSx, ...columnSx.beta }}>{t('betaTester')}</TableCell>
+                              {marketplace && <TableCell sx={{ ...headCellSx, ...columnSx.marketplace }}>{t('admin-panel.marketplaceRoles')}</TableCell>}
+                              <TableCell align="right" sx={{ ...headCellSx, ...columnSx.actions }}>{t('admin-panel.actions')}</TableCell>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>{paged.map(renderUserRow)}</TableBody>
+                        </Table>
+                      </TableContainer>
+                      <Divider />
+                      {pagination}
+                    </Paper>}
+    </Stack>
+    <Dialog open={Boolean(pendingChange)} onClose={changeBusy ? undefined : () => setPendingChange(null)} maxWidth="xs" fullWidth>
+      <DialogTitle>{pendingChangeContent?.title}</DialogTitle>
+      <DialogContent>
+        <Stack spacing={2}>
+          <Typography variant="body2">{pendingChangeContent?.body}</Typography>
+          {pendingChangeContent?.warn && <Alert severity="warning">{t('admin-panel.consequentialChangeWarning')}</Alert>}
+        </Stack>
+      </DialogContent>
+      <DialogActions>
+        <Button disabled={changeBusy} onClick={() => setPendingChange(null)}>{t('cancel')}</Button>
+        <Button
+          variant="contained"
+          color={pendingChange?.kind === 'role' ? 'primary' : 'error'}
+          disabled={changeBusy}
+          startIcon={changeBusy ? <CircularProgress color="inherit" size={16} /> : undefined}
+          onClick={() => void confirmPendingChange()}
+        >
+          {changeBusy ? t('admin-panel.updatingUser') : pendingChangeContent?.confirm}
+        </Button>
+      </DialogActions>
+    </Dialog>
+    <Dialog open={Boolean(pendingDelete)} onClose={deleteBusy ? undefined : () => setPendingDelete(null)} maxWidth="xs" fullWidth>
+      <DialogTitle>{t('admin-panel.deleteUserTitle')}</DialogTitle>
+      <DialogContent>
+        <Typography variant="body2">{pendingDelete ? t('admin-panel.deleteUserBody', { username: pendingDelete.username }) : ''}</Typography>
+      </DialogContent>
+      <DialogActions>
+        <Button disabled={deleteBusy} onClick={() => setPendingDelete(null)}>{t('cancel')}</Button>
+        <Button
+          variant="contained"
+          color="error"
+          disabled={deleteBusy}
+          startIcon={deleteBusy ? <CircularProgress color="inherit" size={16} /> : undefined}
+          onClick={() => void confirmDelete()}
+        >
+          {deleteBusy ? t('admin-panel.deletingUser') : t('admin-panel.deleteUserConfirm')}
+        </Button>
+      </DialogActions>
+    </Dialog>
+    <UserDetailsDialog user={selectedUser} isSelf={auth.user?.id === selectedUser?.id} onClose={() => setSelectedUser(null)} />
+  </>;
+}

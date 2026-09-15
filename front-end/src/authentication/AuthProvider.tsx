@@ -50,6 +50,7 @@ import { clearUserStageCaches } from 'src/stages/stageListCache';
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const revokedAccessMessage = 'Your access to the platform has been revoked.';
+const inactiveAccountMessage = 'Your account has not been activated.';
 
 interface AuthProviderProps {
   children: ReactNode;
@@ -104,7 +105,7 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
     const userData = await readApiJson(response);
 
     if (!response.ok) {
-      if (userData.detail === revokedAccessMessage) {
+      if ([revokedAccessMessage, inactiveAccountMessage].includes(userData.detail)) {
         clearSession();
         signOutFromFirebase().catch(console.error);
       }
