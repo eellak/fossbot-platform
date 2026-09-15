@@ -2716,36 +2716,47 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
 
     camera.up.set(0, 1, 0);
     applyStageBuilderCameraView(sceneHandle, 'perspective', stageDimensionsRef.current);
-    // Pull back 15% from the editor's tight perspective fit so the stage has
-    // context around it and the preview strip does not crop into the floor.
+    // Pull back from the editor's tight perspective fit so the stage keeps a
+    // margin; the panel shows the preview with `object-fit: cover`, which
+    // crops that margin instead of the stage.
     const framingTarget = sceneHandle.controls.target.clone();
-    const pullbackOffset = camera.position.clone().sub(framingTarget).multiplyScalar(1.15);
+    const pullbackOffset = camera.position.clone().sub(framingTarget).multiplyScalar(1.4);
     camera.position.copy(framingTarget).add(pullbackOffset);
     camera.lookAt(framingTarget);
     camera.updateProjectionMatrix();
     sceneHandle.controls.enabled = false;
-    renderScene(sceneHandle);
 
-    const output = document.createElement('canvas');
-    output.width = width;
-    output.height = height;
-    const context = output.getContext('2d');
-    let dataUrl: string | null = null;
-    if (context) {
-      context.drawImage(source, 0, 0, source.width, source.height, 0, 0, width, height);
-      dataUrl = output.toDataURL('image/png');
-      // Keep the stored preview clear of the backend's 512 KiB cap for noisy stages.
-      if (dataUrl.length > 480 * 1024) {
-        const smaller = document.createElement('canvas');
-        smaller.width = Math.round(width / 2);
-        smaller.height = Math.round(height / 2);
-        const smallerContext = smaller.getContext('2d');
-        if (smallerContext) {
-          smallerContext.drawImage(source, 0, 0, source.width, source.height, 0, 0, smaller.width, smaller.height);
-          dataUrl = smaller.toDataURL('image/png');
-        }
-      }
+    // Render a true 4:3 frame at the requested resolution. Drawing the
+    // near-square editor viewport straight into a 4:3 canvas stretched the
+    // stage, which then read as "cropped" inside the narrow preview strip.
+    const renderer = sceneHandle.renderer;
+    const previousPixelRatio = renderer.getPixelRatio();
+    const previousSize = renderer.getSize(new THREE.Vector2());
+    const previousAspect = camera.aspect;
+    renderer.setPixelRatio(1);
+    renderer.setSize(width, height, false);
+    renderer.setViewport(0, 0, width, height);
+    camera.aspect = width / height;
+    camera.updateProjectionMatrix();
+    renderer.clear();
+    renderer.render(sceneHandle.scene, camera);
+    let dataUrl: string | null = renderer.domElement.toDataURL('image/png');
+    // Keep the stored preview clear of the backend's 512 KiB cap for noisy stages.
+    if (dataUrl.length > 480 * 1024) {
+      const smallerWidth = Math.round(width / 2);
+      const smallerHeight = Math.round(height / 2);
+      renderer.setSize(smallerWidth, smallerHeight, false);
+      renderer.setViewport(0, 0, smallerWidth, smallerHeight);
+      camera.aspect = smallerWidth / smallerHeight;
+      camera.updateProjectionMatrix();
+      renderer.clear();
+      renderer.render(sceneHandle.scene, camera);
+      dataUrl = renderer.domElement.toDataURL('image/png');
     }
+    renderer.setPixelRatio(previousPixelRatio);
+    renderer.setSize(previousSize.x, previousSize.y, false);
+    camera.aspect = previousAspect;
+    camera.updateProjectionMatrix();
 
     camera.position.copy(previousCamera.position);
     camera.quaternion.copy(previousCamera.quaternion);
