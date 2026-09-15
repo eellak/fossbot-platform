@@ -163,7 +163,7 @@ export function PublishToMarketplaceDialog({
           ) : localStage ? (
             <Box sx={{ p: 1.5, bgcolor: 'action.hover', borderRadius: 1 }}>
               <Typography variant="caption" color="text.secondary" display="block">Local source revision</Typography>
-              <Typography fontWeight={700}>{localStage.title} · r{localStage.revision}</Typography>
+              <Typography fontWeight={700}>{localStage.title} · v{localStage.revision}</Typography>
             </Box>
           ) : (
             <Box sx={{ p: 1.5, bgcolor: 'action.hover', borderRadius: 1 }}>
@@ -180,7 +180,7 @@ export function PublishToMarketplaceDialog({
             </Alert>
           )}
           {sourceDirty && <Alert severity="warning">Save the latest editor changes before publishing this revision.</Alert>}
-          {pendingLocalRequest && <Alert severity="info">Local revision r{localStage?.submission?.stageRevision} is already awaiting review. Cancel it from My Stages before submitting another revision.</Alert>}
+          {pendingLocalRequest && <Alert severity="info">Local revision v{localStage?.submission?.stageRevision} is already awaiting review. Cancel it from My Stages before submitting another revision.</Alert>}
 
           {error && <Alert severity="error">{error}</Alert>}
           {result?.pullRequestUrl && (
@@ -196,7 +196,7 @@ export function PublishToMarketplaceDialog({
               <Typography variant="body2">Open the request to follow its review status.</Typography>
             </Alert>
           )}
-          {localRequest && <Alert severity="success"><Typography variant="body2" fontWeight={800}>Publication request queued.</Typography><Typography variant="body2">Local revision r{localRequest.stageRevision} will appear after a reviewer approves it.</Typography></Alert>}
+          {localRequest && <Alert severity="success"><Typography variant="body2" fontWeight={800}>Publication request queued.</Typography><Typography variant="body2">Local revision v{localRequest.stageRevision} will appear after a reviewer approves it.</Typography></Alert>}
 
           <TextField label="Stage library title" size="small" value={title} onChange={(event) => setTitle(event.target.value)} disabled={busy || !hasSource} error={hasSource && !title.trim()} helperText={hasSource && !title.trim() ? 'Add a title before publishing.' : undefined} required fullWidth />
           <TextField label="Description" size="small" value={description} onChange={(event) => setDescription(event.target.value)} disabled={busy || !hasSource} multiline minRows={3} fullWidth />

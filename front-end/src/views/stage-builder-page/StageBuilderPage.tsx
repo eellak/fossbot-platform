@@ -1157,7 +1157,7 @@ const StageBuilderPage = () => {
       return;
     }
     if (localStage && !localStageHasChanges) {
-      setMessage(`No changes to save. ${localStage.title} is already at r${localStage.revision}.`);
+      setMessage(`No changes to save. ${localStage.title} is already at v${localStage.revision}.`);
       return;
     }
     setLocalStageSaving(true);
@@ -1178,11 +1178,11 @@ const StageBuilderPage = () => {
       // Tell the Stages panel to refetch even if it already mounted while this
       // save was in flight.
       invalidateLocalStages();
-      setMessage(`Saved to your account: ${saved.title} · r${saved.revision}`);
+      setMessage(`Saved to your account: ${saved.title} · v${saved.revision}`);
       if (openLocalStageOpen) setLocalStages(await listLocalStages(token));
     } catch (error) {
       if (error instanceof LocalStageRequestError && error.code === 'revision_conflict') {
-        setMessage(`${error.message} Current revision: r${error.currentRevision || '?'}.`);
+        setMessage(`${error.message} Current revision: v${error.currentRevision || '?'}.`);
       } else {
         setMessage(error instanceof Error ? error.message : 'Local stage save failed.');
       }
@@ -1945,7 +1945,7 @@ const StageBuilderPage = () => {
       <SaveToProviderDialog
         open={saveProviderOpen}
         stageTitle={stage.title}
-        sourceLabel={localStage ? `local revision ${localStage.title} · r${localStage.revision}` : null}
+        sourceLabel={localStage ? `local revision ${localStage.title} · v${localStage.revision}` : null}
         status={providerStatus}
         remoteStage={remoteStage}
         bootstrapRepoName={bootstrapRepoName}
