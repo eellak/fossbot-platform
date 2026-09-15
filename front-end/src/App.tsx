@@ -12,6 +12,7 @@ import { RobotConnectionProvider } from './robot/RobotConnectionContext';
 import { FeatureFlagsProvider } from './config/FeatureFlags';
 import AssistantProvider from './ai/AssistantProvider';
 import { NotificationProvider } from './components/notifications/NotificationProvider';
+import { ConfirmDialogProvider } from './components/shared/ConfirmDialog';
 
 function App() {
   const routing = useRoutes(Router);
@@ -30,13 +31,15 @@ function App() {
           <AssistantProvider>
             <ThemeProvider theme={theme}>
               <NotificationProvider>
-                <RTL direction={customizer.activeDir}>
-                  <CssBaseline />
-                  <MatomoTracker />
-                  <RobotConnectionProvider>
-                    <ScrollToTop>{isEducationRoute ? <div style={{ overflowX: 'clip' }}>{routing}</div> : routing}</ScrollToTop>
-                  </RobotConnectionProvider>
-                </RTL>
+                <ConfirmDialogProvider>
+                  <RTL direction={customizer.activeDir}>
+                    <CssBaseline />
+                    <MatomoTracker />
+                    <RobotConnectionProvider>
+                      <ScrollToTop>{isEducationRoute ? <div style={{ overflowX: 'clip' }}>{routing}</div> : routing}</ScrollToTop>
+                    </RobotConnectionProvider>
+                  </RTL>
+                </ConfirmDialogProvider>
               </NotificationProvider>
             </ThemeProvider>
           </AssistantProvider>

@@ -47,6 +47,7 @@ import { OpenLocalStageDialog } from 'src/stages/OpenLocalStageDialog';
 import { useFeatureFlags } from 'src/config/FeatureFlags';
 import StageAuthoringAssistant from 'src/components/ai/StageAuthoringAssistant';
 import { useNotifications } from 'src/components/notifications/NotificationProvider';
+import { useConfirmDialog } from 'src/components/shared/ConfirmDialog';
 import type { StageAuthoringTarget } from 'src/ai/suggestions/stageSuggestions';
 
 function userScope(user: ReturnType<typeof useAuth>['user']): string {
@@ -382,6 +383,7 @@ function GitHubStageLoadScreen({ state, onRetry, onBack, onOpenPicker }: { state
 
 const StageBuilderPage = () => {
   const { notify } = useNotifications();
+  const confirmDialog = useConfirmDialog();
   const { t } = useTranslation();
   const { user, token } = useAuth();
   const { marketplace: marketplaceEnabled, ready: featureFlagsReady } = useFeatureFlags();
@@ -862,8 +864,8 @@ const StageBuilderPage = () => {
     if (options.message) setMessage(options.message);
   };
 
-  const applyAssistantStage = (next: EditorStage, target: StageAuthoringTarget): boolean => {
-    if (target === 'create' && !confirmIfDirty('Replace the current stage with this generated draft? Unsaved changes will remain in the existing recovery draft.')) return false;
+  const applyAssistantStage = async (next: EditorStage, target: StageAuthoringTarget): Promise<boolean> => {
+    if (target === 'create' && !(await confirmIfDirty('Replace the current stage with this generated draft? Unsaved changes will remain in the existing recovery draft.'))) return false;
     const now = new Date().toISOString();
     replaceStage({ ...next, createdAt: target === 'create' ? now : stage.createdAt, updatedAt: now }, { undoable: true, clean: false, message: 'Reviewed Buddy proposal applied as one undoable draft change. Nothing was saved, exported, published, or run.' });
     if (target === 'create') {
@@ -877,10 +879,17 @@ const StageBuilderPage = () => {
     return true;
   };
 
-  const confirmIfDirty = (messageText = leaveMessage): boolean => {
+  const confirmIfDirty = async (messageText = leaveMessage): Promise<boolean> => {
     if (!dirty) return true;
     writeStageBuilderDraft(stage, scope);
-    return window.confirm(messageText);
+    // Replacing a dirty stage discards unsaved viewport work, so the confirm action reads as destructive.
+    return confirmDialog.confirm({
+      title: 'Unsaved changes',
+      message: messageText,
+      confirmLabel: 'Discard and continue',
+      cancelLabel: 'Keep editing',
+      danger: true,
+    });
   };
 
   const handleSelectionChange = (ids: string[]) => {
@@ -1042,16 +1051,16 @@ const StageBuilderPage = () => {
 
   const handleStageChange = (next: EditorStage) => commitStage(() => next);
 
-  const handleNew = () => {
-    if (!confirmIfDirty('Create a new blank stage? Unsaved changes will remain only as a recovery draft.')) return;
+  const handleNew = async () => {
+    if (!(await confirmIfDirty('Create a new blank stage? Unsaved changes will remain only as a recovery draft.'))) return;
     const next = emptyEditorStage();
     replaceStage(next, { undoable: false, clean: true, message: 'New blank stage created.' });
     setLocalStage(null);
     setRemoteStage(null);
   };
 
-  const handleDemo = () => {
-    if (!confirmIfDirty('Load the demo stage? Unsaved changes will remain only as a recovery draft.')) return;
+  const handleDemo = async () => {
+    if (!(await confirmIfDirty('Load the demo stage? Unsaved changes will remain only as a recovery draft.'))) return;
     replaceStage(createDemoEditorStage(), { undoable: true, clean: false, message: 'Demo stage loaded.' });
     setLocalStage(null);
     setRemoteStage(null);
@@ -1104,7 +1113,7 @@ const StageBuilderPage = () => {
 
   const handleImportFile = async (file?: File) => {
     if (!file) return;
-    if (!confirmIfDirty('Import this JSON file and replace the current stage? Unsaved changes will remain only as a recovery draft.')) {
+    if (!(await confirmIfDirty('Import this JSON file and replace the current stage? Unsaved changes will remain only as a recovery draft.'))) {
       if (importInputRef.current) importInputRef.current.value = '';
       return;
     }
@@ -1190,8 +1199,8 @@ const StageBuilderPage = () => {
     }
   };
 
-  const handleOpenLocalStage = (item: LocalStage) => {
-    if (!confirmIfDirty('Open this saved stage and replace the current editor stage? Unsaved changes will remain only as a recovery draft.')) return;
+  const handleOpenLocalStage = async (item: LocalStage) => {
+    if (!(await confirmIfDirty('Open this saved stage and replace the current editor stage? Unsaved changes will remain only as a recovery draft.'))) return;
     replaceStage(configToEditorStage(item.record), { undoable: true, clean: true, message: 'Opened stage from your account.' });
     setLocalStage(item);
     setRemoteStage(null);
@@ -1359,7 +1368,7 @@ const StageBuilderPage = () => {
 
   const handleOpenProviderStage = async (item: ProviderStageListItem) => {
     if (!token) return;
-    if (!confirmIfDirty('Open this GitHub stage and replace the current editor stage? Unsaved changes will remain only as a recovery draft.')) return;
+    if (!(await confirmIfDirty('Open this GitHub stage and replace the current editor stage? Unsaved changes will remain only as a recovery draft.'))) return;
     setProviderListLoading(true);
     setProviderListError('');
     setProviderListWarning(false);
@@ -1415,8 +1424,8 @@ const StageBuilderPage = () => {
     }
   };
 
-  const handleBack = () => {
-    if (!confirmIfDirty()) return;
+  const handleBack = async () => {
+    if (!(await confirmIfDirty())) return;
     navigate('/stages?tab=mine');
   };
 
@@ -1807,7 +1816,7 @@ const StageBuilderPage = () => {
               <Typography variant="subtitle2" fontWeight={700}>
                 {t('aiAssistant.stage.previewingLive', 'Previewing proposed stage changes in Stage Builder')}
               </Typography>
-              <Button size="small" variant="contained" color="success" onClick={() => { if (applyAssistantStage(livePreviewStage, livePreviewTarget || 'stage')) { setLivePreviewStage(null); setLivePreviewTarget(null); } }}>
+              <Button size="small" variant="contained" color="success" onClick={() => { void applyAssistantStage(livePreviewStage, livePreviewTarget || 'stage').then((applied) => { if (applied) { setLivePreviewStage(null); setLivePreviewTarget(null); } }); }}>
                 {t('aiAssistant.apply', 'Apply')}
               </Button>
               <Button size="small" variant="outlined" onClick={() => { setLivePreviewStage(null); setLivePreviewTarget(null); }}>

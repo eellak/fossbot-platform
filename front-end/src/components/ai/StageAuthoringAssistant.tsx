@@ -14,7 +14,7 @@ type Props = {
   selectedIds: string[];
   validation: StageBuilderValidationResult[];
   localStageId?: number | null;
-  onApply: (stage: EditorStage, target: StageAuthoringTarget) => boolean | void;
+  onApply: (stage: EditorStage, target: StageAuthoringTarget) => boolean | void | Promise<boolean | void>;
   onPreviewStageChange?: (stage: EditorStage | null, target: StageAuthoringTarget) => void;
 };
 
@@ -49,7 +49,7 @@ export default function StageAuthoringAssistant({ stage, selectedIds, validation
     },
     applySuggestion: async (suggestion) => {
       if (suggestion.type !== 'stage_operations') throw new Error('invalid_suggestion');
-      const accepted = onApply(applyStageSuggestion(suggestion, stage, target, bounded.selectedObjectIds), target);
+      const accepted = await onApply(applyStageSuggestion(suggestion, stage, target, bounded.selectedObjectIds), target);
       if (accepted === false) throw new Error('apply_cancelled');
     },
   };
