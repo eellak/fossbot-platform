@@ -7,6 +7,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { activityTypes, activityValidation, createActivity, duplicateActivity, sensorCatalog, sensorGroups, sensorPresentations, sensorStatistics } from 'src/courses/activitySchema';
 import type { Activity, ChoiceOption, HintActivity, SensorPresentation, SensorStatistic, StageReference } from 'src/courses/types';
 import { normalizeTiptapDocument } from 'src/courses/courseAuthoring';
+import { useConfirmDialog } from 'src/components/shared/ConfirmDialog';
 import RichTextEditor from '../RichTextEditor';
 import MissionActivityEditor from './MissionActivityEditor';
 import { authoringAccordionSx, authoringControlButtonSx, authoringControlFieldSx, authoringIconButtonSx, authoringSummarySx, authoringTitleSx } from './authoringStyles';
@@ -14,6 +15,7 @@ import { authoringAccordionSx, authoringControlButtonSx, authoringControlFieldSx
 type Props = { activities: Activity[]; onChange: (activities: Activity[]) => void; stageReference?: StageReference | null; token?: string; t: any };
 
 export default function ActivityComposer({ activities, onChange, stageReference, token, t }: Props) {
+  const confirmDialog = useConfirmDialog();
   const [newType, setNewType] = useState<Activity['type']>('rich_text');
   const groups = activityGroups(activities);
   const [expandedKey, setExpandedKey] = useState<string | false>(groups[0]?.activity.key || false);
@@ -50,12 +52,19 @@ export default function ActivityComposer({ activities, onChange, stageReference,
         next.splice(groupIndex + 1, 0, { activity: copy, linkedHints: copiedHints });
         onChange(next.flatMap((group) => [group.activity, ...group.linkedHints]));
       }}
-      onDelete={() => {
+      onDelete={async () => {
         const type = activity.type === 'hint' ? t('education.activities.hintGeneralActivity') : t(`education.activities.types.${activity.type}`);
         const confirmation = linkedHints.length
           ? t('education.activities.deleteWithHintsConfirm', { type, count: linkedHints.length })
           : t('education.activities.deleteConfirm', { type });
-        if (!window.confirm(confirmation)) return;
+        const confirmed = await confirmDialog.confirm({
+          title: t('education.activities.delete'),
+          message: confirmation,
+          confirmLabel: t('delete'),
+          cancelLabel: t('cancel'),
+          danger: true,
+        });
+        if (!confirmed) return;
         if (expandedKey === activity.key) setExpandedKey(false);
         onChange(activities.filter((item) => item.key !== activity.key && !(item.type === 'hint' && item.forActivityKey === activity.key)));
       }}
@@ -74,7 +83,7 @@ export default function ActivityComposer({ activities, onChange, stageReference,
   </Stack>;
 }
 
-function ActivityCard({ activity, linkedHints, index, count, expanded, onExpandedChange, onChange, onHintsChange, onMove, onDuplicate, onDelete, stageReference, token, t }: { activity: Activity; linkedHints: HintActivity[]; index: number; count: number; expanded: boolean; onExpandedChange: (expanded: boolean) => void; onChange: (activity: Activity) => void; onHintsChange: (hints: HintActivity[]) => void; onMove: (direction: -1 | 1) => void; onDuplicate: () => void; onDelete: () => void; stageReference?: StageReference | null; token?: string; t: any }) {
+function ActivityCard({ activity, linkedHints, index, count, expanded, onExpandedChange, onChange, onHintsChange, onMove, onDuplicate, onDelete, stageReference, token, t }: { activity: Activity; linkedHints: HintActivity[]; index: number; count: number; expanded: boolean; onExpandedChange: (expanded: boolean) => void; onChange: (activity: Activity) => void; onHintsChange: (hints: HintActivity[]) => void; onMove: (direction: -1 | 1) => void; onDuplicate: () => void; onDelete: () => void | Promise<void>; stageReference?: StageReference | null; token?: string; t: any }) {
   const errors = activityValidation(activity);
   const patch = (value: Partial<Activity>) => onChange({ ...activity, ...value } as Activity);
   const cannotRequire = activity.type === 'hint' || (activity.type === 'short_reflection' && !activity.collectResponse);

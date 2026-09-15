@@ -8,9 +8,11 @@ import { addLesson, archiveCourse, createCourse, listAuthoredCourses, readCourse
 import type { CourseSummary } from 'src/courses/types';
 import ClassGroupsTeacherPage from '../class-groups-teacher-page/ClassGroupsTeacherPage';
 import { pageTabsSx, TabbedPageHeader } from 'src/components/shared/PageHeader';
+import { useConfirmDialog } from 'src/components/shared/ConfirmDialog';
 
 export default function TeacherCoursesPage() {
   const { t } = useTranslation();
+  const confirmDialog = useConfirmDialog();
   const { token } = useAuth();
   const navigate = useNavigate();
   const [courses, setCourses] = useState<CourseSummary[]>([]);
@@ -64,7 +66,14 @@ export default function TeacherCoursesPage() {
 
   const archive = async (course: CourseSummary) => {
     setMenu(null);
-    if (!window.confirm(t('education.courseList.archiveConfirm', { title: course.title }))) return;
+    const confirmed = await confirmDialog.confirm({
+      title: t('education.courseList.archive'),
+      message: t('education.courseList.archiveConfirm', { title: course.title }),
+      confirmLabel: t('education.courseList.archive'),
+      cancelLabel: t('cancel'),
+      danger: true,
+    });
+    if (!confirmed) return;
     try { await archiveCourse(token, course.id); await load(); } catch { setError(t('education.errors.archive')); }
   };
 

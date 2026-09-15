@@ -41,6 +41,7 @@ import { invalidateMarketplaceFirstPage, invalidateUserStages, marketplaceFirstP
 import { formatStageDate, formatStageRelativeTime, GitHubIdentity, StageCard, StageCardSkeleton, StagePreview } from 'src/stages/StageCard';
 import { MARKETPLACE_COPY, MARKETPLACE_REPORT_CATEGORIES } from 'src/stages/marketplaceCopy';
 import DashboardCard from 'src/components/shared/DashboardCardWithChildren';
+import { useConfirmDialog } from 'src/components/shared/ConfirmDialog';
 import { copyMarketplaceStageToLocal } from 'src/stages/LocalStagesApi';
 import BetaBadge from 'src/components/shared/BetaBadge';
 
@@ -383,6 +384,7 @@ function MarketplaceDetailDrawer({
 
 export default function StageMarketplacePanel({ embedded = false, preview = false, previewAppearance = true }: { embedded?: boolean; preview?: boolean; previewAppearance?: boolean }) {
   const { t } = useTranslation();
+  const confirmDialog = useConfirmDialog();
   const { token, user } = useAuth();
   const userKey = stageListUserKey(user);
   const navigate = useNavigate();
@@ -634,7 +636,15 @@ export default function StageMarketplacePanel({ embedded = false, preview = fals
   const moderateSelected = async (state: 'hidden' | 'removed') => {
     if (!token || !selected) return;
     const action = state === 'hidden' ? 'hide' : 'remove';
-    if (!window.confirm(`${action[0].toUpperCase()}${action.slice(1)} “${selected.title}” on this FOSSBot instance?`)) return;
+    const actionLabel = `${action[0].toUpperCase()}${action.slice(1)}`;
+    const confirmed = await confirmDialog.confirm({
+      title: `${actionLabel} stage`,
+      message: `${actionLabel} “${selected.title}” on this FOSSBot instance?`,
+      confirmLabel: actionLabel,
+      cancelLabel: 'Keep visible',
+      danger: true,
+    });
+    if (!confirmed) return;
     setModerationBusy(true);
     setModerationError('');
     try {

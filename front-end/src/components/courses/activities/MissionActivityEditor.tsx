@@ -7,6 +7,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { sensorCatalog, sensorStatistics } from 'src/courses/activitySchema';
 import type { MissionActivity, MissionCondition, MissionObjective, MissionObjectiveRole, StageReference } from 'src/courses/types';
 import { loadStageFromProvider } from 'src/stages/StagesApi';
+import { useConfirmDialog } from 'src/components/shared/ConfirmDialog';
 import ScoreConfigEditor from './ScoreConfigEditor';
 import { authoringAccordionSx, authoringControlButtonSx, authoringControlFieldSx, authoringIconButtonSx, authoringSummarySx, authoringTitleSx } from './authoringStyles';
 
@@ -23,6 +24,7 @@ const conditionTypes: MissionCondition['type'][] = [
 const templates = ['reach', 'checkpoints', 'avoid', 'collect', 'stop', 'sensor'] as const;
 
 export default function MissionActivityEditor({ activity, onChange, stageReference, token, t }: Props) {
+  const confirmDialog = useConfirmDialog();
   const [markers, setMarkers] = useState<Marker[]>([]);
   const [stageError, setStageError] = useState(false);
   const [template, setTemplate] = useState<(typeof templates)[number]>('reach');
@@ -64,8 +66,14 @@ export default function MissionActivityEditor({ activity, onChange, stageReferen
     setExpandedObjectiveKey(objective.key);
     patch({ objectives: [...activity.objectives, objective] });
   };
-  const applyTemplate = () => {
-    if (!window.confirm(t('education.mission.templateConfirm'))) return;
+  const applyTemplate = async () => {
+    const confirmed = await confirmDialog.confirm({
+      title: t('education.mission.template'),
+      message: t('education.mission.templateConfirm'),
+      confirmLabel: t('education.mission.useTemplate'),
+      cancelLabel: t('cancel'),
+    });
+    if (!confirmed) return;
     const definitions: Record<(typeof templates)[number], Array<[MissionCondition['type'], MissionObjectiveRole]>> = {
       reach: [['reach_target', 'completion']],
       checkpoints: [['checkpoints', 'completion']],
@@ -90,7 +98,7 @@ export default function MissionActivityEditor({ activity, onChange, stageReferen
         <TextField select fullWidth size="small" label={t('education.mission.template')} value={template} onChange={(event) => setTemplate(event.target.value as typeof template)} sx={authoringControlFieldSx}>
           {templates.map((item) => <MenuItem key={item} value={item}>{t(`education.mission.templates.${item}`)}</MenuItem>)}
         </TextField>
-        <Button variant="outlined" sx={authoringControlButtonSx} onClick={applyTemplate}>{t('education.mission.useTemplate')}</Button>
+        <Button variant="outlined" sx={authoringControlButtonSx} onClick={() => { void applyTemplate(); }}>{t('education.mission.useTemplate')}</Button>
     </Stack>
     {stageError && <Alert severity="warning">{t('education.mission.stageUnavailable')}</Alert>}
     {!stageError && markers.length === 0 && <Alert severity="warning">{t('education.mission.noMarkers')}</Alert>}

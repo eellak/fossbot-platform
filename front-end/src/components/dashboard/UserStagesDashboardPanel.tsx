@@ -9,6 +9,7 @@ import MoreVertIcon from '@mui/icons-material/MoreVert';
 import StorageIcon from '@mui/icons-material/Storage';
 import AddIcon from '@mui/icons-material/Add';
 import DashboardCard from 'src/components/shared/DashboardCardWithChildren';
+import { useConfirmDialog } from 'src/components/shared/ConfirmDialog';
 import CardDialog, { type StageSelection } from 'src/components/stage-select-popup/CardDialog';
 import { useAuth } from 'src/authentication/AuthProvider';
 import { listLocalStages, unpublishLocalStage, type LocalStage } from 'src/stages/LocalStagesApi';
@@ -75,6 +76,7 @@ function localStatus(stage: LocalStage): Pick<DashboardStage, 'status' | 'status
 }
 
 export default function UserStagesDashboardPanel({ showViewAll = true }: { showViewAll?: boolean }) {
+  const confirmDialog = useConfirmDialog();
   const { token, user } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
@@ -186,12 +188,19 @@ export default function UserStagesDashboardPanel({ showViewAll = true }: { showV
     if (!token) return;
     const pending = stage.submission?.status === 'pending';
     const published = !!stage.publication?.active;
-    const prompt = published
+    const confirmation = published
       ? pending
         ? `Unpublish “${stage.title}” and cancel its pending update?`
         : `Unpublish “${stage.title}”?`
       : `Cancel the publication request for “${stage.title}”?`;
-    if (!window.confirm(prompt)) return;
+    const confirmed = await confirmDialog.confirm({
+      title: published ? 'Unpublish stage' : 'Cancel publication request',
+      message: confirmation,
+      confirmLabel: published ? 'Unpublish' : 'Cancel request',
+      cancelLabel: 'Keep it published',
+      danger: true,
+    });
+    if (!confirmed) return;
 
     setLocalStageBusy(stage.id);
     setError('');

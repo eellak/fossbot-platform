@@ -22,6 +22,7 @@ import LessonPreview from 'src/components/courses/LessonPreview';
 import StageSelector from 'src/components/courses/StageSelector';
 import StarterCodeWorkspace from 'src/components/courses/StarterCodeWorkspace';
 import ActivityComposer from 'src/components/courses/activities/ActivityComposer';
+import { useConfirmDialog } from 'src/components/shared/ConfirmDialog';
 import AuthoringAssistant from 'src/components/ai/AuthoringAssistant';
 import { authoringAccordionSx, authoringTitleSx } from 'src/components/courses/activities/authoringStyles';
 
@@ -101,6 +102,7 @@ const publicationIssueMessage = (issue: PublicationIssue, t: any): string => {
 
 export default function CourseEditorPage() {
   const { t } = useTranslation();
+  const confirmDialog = useConfirmDialog();
   const { token, user } = useAuth();
   const { courseId } = useParams();
   const navigate = useNavigate();
@@ -380,7 +382,15 @@ export default function CourseEditorPage() {
   };
 
   const removeLesson = async (lesson: Lesson) => {
-    if (!course || !window.confirm(t('education.lesson.deleteConfirm', { title: lesson.title }))) return;
+    if (!course) return;
+    const confirmed = await confirmDialog.confirm({
+      title: t('education.lesson.deleteTitle'),
+      message: t('education.lesson.deleteConfirm', { title: lesson.title }),
+      confirmLabel: t('delete'),
+      cancelLabel: t('cancel'),
+      danger: true,
+    });
+    if (!confirmed) return;
     if (!(await saveDraft())) return;
     try {
       await deleteLesson(token, course.id, lesson.id);

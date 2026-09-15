@@ -12,9 +12,11 @@ import { pageTabsSx, TabbedPageHeader } from 'src/components/shared/PageHeader';
 import { useSearchParams } from 'react-router-dom';
 import { MARKETPLACE_COPY, marketplaceReportCategoryLabel } from 'src/stages/marketplaceCopy';
 import { invalidateMarketplaceFirstPage, refreshMarketplaceFirstPage } from 'src/stages/stageListCache';
+import { useConfirmDialog } from 'src/components/shared/ConfirmDialog';
 import { useFeatureFlags } from 'src/config/FeatureFlags';
 
 function LocalPublicationQueue() {
+  const confirmDialog = useConfirmDialog();
   const { token } = useAuth();
   const [requests, setRequests] = useState<LocalPublicationReviewItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -35,12 +37,18 @@ function LocalPublicationQueue() {
   useEffect(() => { void load(); }, [token]);
   const review = async (item: LocalPublicationReviewItem, approved: boolean) => {
     if (!token) return;
-    const reason = window.prompt(approved ? 'Approval note (optional)' : 'Reason for rejection') ?? (approved ? '' : null);
+    const reason = await confirmDialog.prompt({
+      title: approved ? 'Approve publication request' : 'Reject publication request',
+      message: approved
+        ? `Approve “${item.title}” for the Stage library? A note is optional.`
+        : `Reject “${item.title}”? A reason is required so the author can fix it.`,
+      inputLabel: approved ? 'Approval note (optional)' : 'Reason for rejection',
+      inputRequired: !approved,
+      inputRequiredMessage: 'Add a reason when rejecting a publication request.',
+      confirmLabel: approved ? 'Approve' : 'Reject',
+      danger: !approved,
+    });
     if (reason === null) return;
-    if (!approved && !reason.trim()) {
-      setError('Add a reason when rejecting a publication request.');
-      return;
-    }
     try {
       setBusy(item.id);
       setError('');
