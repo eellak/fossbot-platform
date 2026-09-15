@@ -372,13 +372,17 @@ const ProjectsCard = ({ previewAppearance = true }: { previewAppearance?: boolea
                       direction="row"
                       alignItems="center"
                       spacing={1}
-                      sx={viewMode === 'cards' ? {
-                        border: 1,
-                        borderColor: 'divider',
+                      sx={{
                         borderRadius: 1,
-                        p: 1.25,
-                        alignItems: 'stretch',
-                      } : { py: 0.25 }}
+                        '&:hover': { bgcolor: 'action.hover' },
+                        '&:hover .project-title': { color: 'primary.main', textDecoration: 'underline' },
+                        ...(viewMode === 'cards' ? {
+                          border: 1,
+                          borderColor: 'divider',
+                          p: 1.25,
+                          alignItems: 'stretch',
+                        } : { py: 0.25 }),
+                      }}
                     >
                       <ButtonBase
                         component={RouterLink}
@@ -393,8 +397,6 @@ const ProjectsCard = ({ previewAppearance = true }: { previewAppearance?: boolea
                           borderRadius: 1,
                           p: 0.5,
                           ml: -0.5,
-                          '&:hover': { bgcolor: 'action.hover' },
-                          '&:hover .project-title': { color: 'primary.main', textDecoration: 'underline' },
                         }}
                       >
                         <Box

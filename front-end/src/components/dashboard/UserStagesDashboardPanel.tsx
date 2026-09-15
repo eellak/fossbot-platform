@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Box, Button, ButtonBase, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, FormControl, IconButton, InputAdornment, InputLabel, Menu, MenuItem, Pagination, Select, Skeleton, Stack, TextField, ToggleButton, ToggleButtonGroup, Tooltip, Typography } from '@mui/material';
+import { Alert, Box, Button, Chip, CircularProgress, FormControl, IconButton, InputAdornment, InputLabel, Menu, MenuItem, Pagination, Select, Skeleton, Stack, TextField, ToggleButton, ToggleButtonGroup, Tooltip, Typography } from '@mui/material';
 import GitHubIcon from '@mui/icons-material/GitHub';
 import UploadIcon from '@mui/icons-material/Upload';
 import CloseIcon from '@mui/icons-material/Close';
@@ -14,7 +14,7 @@ import { useConfirmDialog } from 'src/components/shared/ConfirmDialog';
 import { useNotifications } from 'src/components/notifications/NotificationProvider';
 import CardDialog, { type StageSelection } from 'src/components/stage-select-popup/CardDialog';
 import { useAuth } from 'src/authentication/AuthProvider';
-import { fetchLocalStagePreview, listLocalStages, unpublishLocalStage, type LocalStage } from 'src/stages/LocalStagesApi';
+import { listLocalStages, unpublishLocalStage, type LocalStage } from 'src/stages/LocalStagesApi';
 import { getGitHubLoginUrl, getGitHubProviderStatus, type GitHubProviderStatus } from 'src/stages/ProviderAuthApi';
 import type { MyMarketplaceStage } from 'src/stages/MarketplaceApi';
 import type { ProviderStageListItem } from 'src/stages/StagesApi';
@@ -33,8 +33,11 @@ import {
   userStagesSnapshot,
 } from 'src/stages/stageListCache';
 import { formatStageRelativeTime } from 'src/stages/StageCard';
+import StageListCard from 'src/stages/StageListCard';
+import StageDetailsDialog, { localStageDetailRows } from 'src/stages/StageDetailsDialog';
+import { useStagePreviews } from 'src/stages/useStagePreviews';
 import { MARKETPLACE_COPY } from 'src/stages/marketplaceCopy';
-import { Link as RouterLink, useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 type DashboardStage = {
   key: string;
@@ -55,8 +58,6 @@ type DashboardStage = {
 const STAGES_LIST_PER_PAGE = 5;
 const STAGES_CARDS_PER_PAGE = 6;
 const STAGE_VIEW_MODE_STORAGE_KEY = 'fossbot-stages-view-mode';
-
-const STAGE_PREVIEW_MASK = 'linear-gradient(to right, #000 0%, transparent 85%)';
 
 const readStoredStageViewMode = (): 'list' | 'cards' => {
   try {
@@ -95,57 +96,6 @@ function localStatus(stage: LocalStage): Pick<DashboardStage, 'status' | 'status
   return { statusKey: 'draft' };
 }
 
-type StageDetails = {
-  revision: string;
-  slug: string;
-  objects: string;
-  floor: string;
-  size: string;
-  checksum: string;
-  visibility: string;
-  publication: string;
-  source: string;
-  created: string;
-  updated: string;
-};
-
-/**
- * Everything the details dialog shows is already in the local-stage payload the
- * panel fetched, so this only reshapes it. The panel caches the result by
- * `id:revision` and recomputes after a save bumps the revision.
- */
-function buildStageDetails(stage: LocalStage): StageDetails {
-  const config = (stage.record?.config || []) as Array<{ type?: string; dimensions?: number[] }>;
-  const dimensions = config.find((entry) => entry?.type === 'floor')?.dimensions;
-  const objectCount = config.filter((entry) => entry?.type !== 'floor' && entry?.type !== 'skybox').length;
-  const provenance = stage.provenance as { sourceType?: string; repoOwner?: string; repoName?: string } | null | undefined;
-  const provenanceLabel = provenance?.sourceType
-    ? [provenance.sourceType, provenance.repoOwner && provenance.repoName ? `${provenance.repoOwner}/${provenance.repoName}` : undefined].filter(Boolean).join(' · ')
-    : 'Created in Stage Builder';
-  const publication = stage.submission?.status === 'pending'
-    ? `Awaiting review · v${stage.submission.stageRevision}`
-    : stage.submission?.status === 'rejected'
-      ? `Rejected · v${stage.submission.stageRevision}`
-      : stage.publication?.active
-        ? stage.publication.stageRevision === stage.revision
-          ? `Published · v${stage.revision}`
-          : `Published · v${stage.publication.stageRevision} (current v${stage.revision})`
-        : 'Not published';
-  return {
-    revision: `v${stage.revision}`,
-    slug: stage.slug,
-    objects: String(objectCount),
-    floor: dimensions && dimensions.length >= 2 ? `${dimensions[0]} × ${dimensions[1]}` : '—',
-    size: `${(stage.recordBytes / 1024).toFixed(1)} KiB`,
-    checksum: stage.checksum ? stage.checksum.slice(0, 12) : '—',
-    visibility: stage.visibility,
-    publication,
-    source: provenanceLabel,
-    created: new Date(stage.createdAt).toLocaleString(),
-    updated: new Date(stage.updatedAt).toLocaleString(),
-  };
-}
-
 export default function UserStagesDashboardPanel({ showViewAll = true, appearance = 'card' }: { showViewAll?: boolean; appearance?: 'card' | 'page' }) {
   const confirmDialog = useConfirmDialog();
   const { notify } = useNotifications();
@@ -163,7 +113,6 @@ export default function UserStagesDashboardPanel({ showViewAll = true, appearanc
   const [localStageBusy, setLocalStageBusy] = useState<number | null>(null);
   const [stageMenu, setStageMenu] = useState<{ anchorEl: HTMLElement; stage: DashboardStage } | null>(null);
   const [detailsStage, setDetailsStage] = useState<DashboardStage | null>(null);
-  const stageDetailsCacheRef = useRef<Map<string, StageDetails>>(new Map());
   const [stagePickerOpen, setStagePickerOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [sourceFilter, setSourceFilter] = useState<'all' | 'local' | 'github'>('all');
@@ -172,8 +121,6 @@ export default function UserStagesDashboardPanel({ showViewAll = true, appearanc
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(STAGES_LIST_PER_PAGE);
   const collectionRef = useRef<HTMLDivElement | null>(null);
-  const previewObjectUrlsRef = useRef<Map<string, string>>(new Map());
-  const [previewObjectUrls, setPreviewObjectUrls] = useState<Record<string, string>>({});
 
   useEffect(() => {
     try {
@@ -182,11 +129,6 @@ export default function UserStagesDashboardPanel({ showViewAll = true, appearanc
       // Storage can be unavailable; the in-memory preference still applies.
     }
   }, [viewMode]);
-
-  useEffect(() => () => {
-    previewObjectUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
-    previewObjectUrlsRef.current.clear();
-  }, []);
 
   useEffect(() => {
     if (new URLSearchParams(location.search).get('create') === '1') setStagePickerOpen(true);
@@ -365,23 +307,7 @@ export default function UserStagesDashboardPanel({ showViewAll = true, appearanc
     return rows.sort((left, right) => new Date(right.updatedAt || 0).getTime() - new Date(left.updatedAt || 0).getTime());
   }, [githubStages, localStages, publications]);
 
-  useEffect(() => {
-    if (!token) return undefined;
-    let active = true;
-    stages.forEach((stage) => {
-      const previewUrl = stage.previewUrl;
-      if (!previewUrl || previewObjectUrlsRef.current.has(previewUrl)) return;
-      void fetchLocalStagePreview(token, previewUrl).then((objectUrl) => {
-        if (!active) {
-          URL.revokeObjectURL(objectUrl);
-          return;
-        }
-        previewObjectUrlsRef.current.set(previewUrl, objectUrl);
-        setPreviewObjectUrls((current) => ({ ...current, [previewUrl]: objectUrl }));
-      }).catch(() => undefined);
-    });
-    return () => { active = false; };
-  }, [stages, token]);
+  const previewObjectUrls = useStagePreviews(token, stages.map((stage) => stage.previewUrl));
 
   const query = search.trim().toLowerCase();
   const filteredStages = useMemo(() => stages.filter((stage) => {
@@ -458,118 +384,38 @@ export default function UserStagesDashboardPanel({ showViewAll = true, appearanc
     </Stack>
   );
 
-  const renderStageRow = (stage: DashboardStage, index: number) => {
-    const previewUrl = stage.previewUrl ? previewObjectUrls[stage.previewUrl] : undefined;
-    return (
-      <Box
-        key={stage.key}
-        sx={{
-          position: 'relative',
-          overflow: 'hidden',
-          minWidth: 0,
-          display: 'flex',
-          alignItems: 'center',
-          borderTop: viewMode === 'cards' || !index ? 'none' : '1px solid',
-          borderColor: 'divider',
-        }}
-      >
-        {previewUrl && (
-          <Box
-            component="img"
-            src={previewUrl}
-            alt=""
-            aria-hidden="true"
-            sx={{
-              position: 'absolute',
-              top: 0,
-              bottom: 0,
-              left: 0,
-              width: { xs: 96, sm: 156 },
-              height: '100%',
-              objectFit: 'cover',
-              bgcolor: 'action.hover',
-              // The theme's action.hover is a solid fill, so keep the preview
-              // above the button's hover background (and click-through).
-              zIndex: 1,
-              pointerEvents: 'none',
-              WebkitMaskImage: STAGE_PREVIEW_MASK,
-              maskImage: STAGE_PREVIEW_MASK,
-            }}
-          />
-        )}
-        <ButtonBase
-          component={RouterLink}
-          to={stage.href}
-          aria-label={`Open ${stage.title}`}
-          sx={{
-            position: 'relative',
-            flex: 1,
-            minWidth: 0,
-            display: 'flex',
-            alignItems: { xs: 'flex-start', sm: 'center' },
-            justifyContent: 'flex-start',
-            textAlign: 'left',
-            gap: 1.5,
-            py: 2,
-            pr: 1,
-            pl: previewUrl ? { xs: '92px', sm: '148px' } : 2,
-            '&:hover': { bgcolor: 'action.hover' },
-            '&:hover .stage-title': { color: 'primary.main', textDecoration: 'underline' },
-          }}
-        >
-          {!previewUrl && (
-            <Box
-              className="visual-language-supporting-panel"
-              aria-hidden="true"
-              sx={{ width: 36, height: 36, flexShrink: 0, display: 'grid', placeItems: 'center', bgcolor: 'primary.light', color: 'primary.main' }}
+  const renderStageCard = (stage: DashboardStage, index: number) => (
+    <StageListCard
+      key={stage.key}
+      title={stage.title}
+      description={stage.description}
+      previewUrl={stage.previewUrl ? previewObjectUrls[stage.previewUrl] : undefined}
+      status={stage.status ? <Chip size="small" label={stage.status} color={stage.statusColor} variant="outlined" /> : undefined}
+      notice={stage.notice}
+      fallbackIcon={stage.source === 'local' ? <StorageIcon fontSize="small" /> : <GitHubIcon fontSize="small" />}
+      meta={<>{stage.source === 'local' ? 'Local' : 'GitHub'}{'\u00A0\u00A0'}{stage.detail}{'\u00A0\u00A0'}{formatStageRelativeTime(stage.updatedAt).toLowerCase()}</>}
+      onOpen={() => navigate(stage.href)}
+      surface={viewMode === 'cards' ? 'card' : 'row'}
+      divided={viewMode !== 'cards' && index > 0}
+      action={stage.source === 'local' ? (
+        <Tooltip title="More actions">
+          <span>
+            <IconButton
+              aria-label={`More actions for ${stage.title}`}
+              aria-controls={stageMenu?.stage.key === stage.key ? 'local-stage-actions-menu' : undefined}
+              aria-haspopup="menu"
+              aria-expanded={stageMenu?.stage.key === stage.key ? 'true' : undefined}
+              disabled={localStageBusy !== null}
+              onClick={(event) => setStageMenu({ anchorEl: event.currentTarget, stage })}
+              sx={{ width: 44, height: 44 }}
             >
-              {stage.source === 'local' ? <StorageIcon fontSize="small" /> : <GitHubIcon fontSize="small" />}
-            </Box>
-          )}
-          <Box minWidth={0} sx={{ flex: 1 }}>
-            <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
-              <Typography className="stage-title" variant="body2" color="primary.main" fontWeight={600} noWrap>{stage.title}</Typography>
-              {stage.status && <Chip size="small" label={stage.status} color={stage.statusColor} variant="outlined" />}
-            </Stack>
-            {/* Always render one description line so rows/cards keep the same height
-                (and the preview strip its aspect) whether or not a description exists. */}
-            <Typography
-              variant="body2"
-              noWrap
-              sx={{
-                minHeight: '1.5em',
-                color: stage.description ? 'text.secondary' : 'text.disabled',
-                fontStyle: stage.description ? 'normal' : 'italic',
-              }}
-            >
-              {stage.description || 'No description'}
-            </Typography>
-            <Typography variant="caption" color="text.secondary" noWrap>{stage.source === 'local' ? 'Local' : 'GitHub'}{'\u00A0\u00A0'}{stage.detail}{'\u00A0\u00A0'}{formatStageRelativeTime(stage.updatedAt).toLowerCase()}</Typography>
-            {stage.notice && <Typography variant="caption" color="error" sx={{ display: 'block', overflowWrap: 'anywhere' }}>{stage.notice}</Typography>}
-          </Box>
-        </ButtonBase>
-        {stage.source === 'local' && (
-          <Stack direction="row" alignItems="center" sx={{ position: 'relative', flexShrink: 0, pr: 2 }}>
-            <Tooltip title="More actions">
-              <span>
-                <IconButton
-                  aria-label={`More actions for ${stage.title}`}
-                  aria-controls={stageMenu?.stage.key === stage.key ? 'local-stage-actions-menu' : undefined}
-                  aria-haspopup="menu"
-                  aria-expanded={stageMenu?.stage.key === stage.key ? 'true' : undefined}
-                  disabled={localStageBusy !== null}
-                  onClick={(event) => setStageMenu({ anchorEl: event.currentTarget, stage })}
-                  sx={{ width: 44, height: 44 }}
-                >
-                  {localStageBusy === stage.localStage?.id ? <CircularProgress size={18} color="inherit" /> : <MoreVertIcon fontSize="small" />}
-                </IconButton>
-              </span>
-            </Tooltip>
-          </Stack>
-        )}
-      </Box>
-    );
-  };
+              {localStageBusy === stage.localStage?.id ? <CircularProgress size={18} color="inherit" /> : <MoreVertIcon fontSize="small" />}
+            </IconButton>
+          </span>
+        </Tooltip>
+      ) : undefined}
+    />
+  );
 
   const showFilters = stages.length > 0;
   const stageToolbar = (
@@ -632,15 +478,11 @@ export default function UserStagesDashboardPanel({ showViewAll = true, appearanc
 
   const stageCollection = viewMode === 'cards' ? (
     <Box ref={collectionRef} sx={{ display: 'grid', gridTemplateColumns: { xs: 'minmax(0, 1fr)', sm: 'repeat(2, minmax(0, 1fr))', lg: 'repeat(3, minmax(0, 1fr))' }, gap: 1.25 }}>
-      {visibleStages.map((stage, index) => (
-        <Box key={stage.key} sx={{ minWidth: 0, overflow: 'hidden', border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
-          {renderStageRow(stage, index)}
-        </Box>
-      ))}
+      {visibleStages.map((stage, index) => renderStageCard(stage, index))}
     </Box>
   ) : (
     <Box ref={collectionRef} sx={appearance === 'page' ? { border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden' } : undefined}>
-      {visibleStages.map((stage, index) => renderStageRow(stage, index))}
+      {visibleStages.map((stage, index) => renderStageCard(stage, index))}
     </Box>
   );
 
@@ -695,62 +537,22 @@ export default function UserStagesDashboardPanel({ showViewAll = true, appearanc
         {stageMenu.stage.localStage.publication?.active ? 'Unpublish' : 'Cancel request'}
       </MenuItem>}
     </Menu>
-    <Dialog open={Boolean(detailsStage)} onClose={() => setDetailsStage(null)} maxWidth="sm" fullWidth>
-      <DialogTitle>Stage details</DialogTitle>
-      <DialogContent>
-        {detailsStage && (() => {
-          const local = detailsStage.localStage;
-          if (!local) return null;
-          const key = `${local.id}:${local.revision}`;
-          let details = stageDetailsCacheRef.current.get(key);
-          if (!details) {
-            details = buildStageDetails(local);
-            stageDetailsCacheRef.current.set(key, details);
-          }
-          const previewUrl = local.previewUrl ? previewObjectUrls[local.previewUrl] : undefined;
-          const rows: Array<[string, string]> = [
-            ['Revision', details.revision],
-            ['Slug', details.slug],
-            ['Objects', details.objects],
-            ['Floor', details.floor],
-            ['Size', details.size],
-            ['Checksum', details.checksum],
-            ['Visibility', details.visibility],
-            ['Publication', details.publication],
-            ['Source', details.source],
-            ['Created', details.created],
-            ['Updated', details.updated],
-          ];
-          return (
-            <Stack spacing={2} sx={{ pt: 0.5 }}>
-              {previewUrl && <Box component="img" src={previewUrl} alt="" sx={{ width: '100%', maxHeight: 180, objectFit: 'cover', borderRadius: 1, border: '1px solid', borderColor: 'divider' }} />}
-              <Box>
-                <Typography variant="subtitle2" fontWeight={700}>{detailsStage.title}</Typography>
-                <Typography variant="body2" color="text.secondary">{detailsStage.description || 'No description'}</Typography>
-              </Box>
-              <Box sx={{ display: 'grid', gridTemplateColumns: 'auto minmax(0, 1fr)', columnGap: 2, rowGap: 1 }}>
-                {rows.map(([label, value]) => (
-                  <React.Fragment key={label}>
-                    <Typography variant="caption" color="text.secondary">{label}</Typography>
-                    <Typography variant="body2" sx={{ overflowWrap: 'anywhere' }}>{value}</Typography>
-                  </React.Fragment>
-                ))}
-              </Box>
-            </Stack>
-          );
-        })()}
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={() => setDetailsStage(null)}>Close</Button>
-      </DialogActions>
-    </Dialog>
+    {detailsStage?.localStage && (
+      <StageDetailsDialog
+        open
+        onClose={() => setDetailsStage(null)}
+        title={detailsStage.title}
+        description={detailsStage.description}
+        previewUrl={detailsStage.localStage.previewUrl ? previewObjectUrls[detailsStage.localStage.previewUrl] : undefined}
+        rows={localStageDetailRows(detailsStage.localStage)}
+      />
+    )}
     <CardDialog
       open={stagePickerOpen}
       onClose={closeStagePicker}
       onSelect={() => undefined}
       onSelectStage={openStageInBuilder}
       onCreateStage={() => navigate('/stage-builder')}
-      stageActionLabel="Use stage"
     />
   </>;
 
