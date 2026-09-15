@@ -190,8 +190,10 @@ export function EditorTopBar({
 
   return (
     <Toolbar variant="dense" sx={{ minHeight: 48, height: 48, px: 1, gap: 1, bgcolor: editorColors.topbar, color: editorColors.keycapInk, borderBottom: `1px solid ${editorColors.divider}` }}>
-      <Tooltip title="Back to stages">
-        <IconButton size="small" onClick={onBack} sx={{ color: 'inherit' }} aria-label="Back to stages"><ArrowBackIcon fontSize="small" /></IconButton>
+      <Tooltip title={localStageBusy ? 'Saving stage…' : 'Back to stages'}>
+        <span>
+          <IconButton size="small" onClick={onBack} disabled={localStageBusy} sx={{ color: 'inherit' }} aria-label="Back to stages"><ArrowBackIcon fontSize="small" /></IconButton>
+        </span>
       </Tooltip>
       <Tooltip title="Open stage settings">
         <ButtonBase

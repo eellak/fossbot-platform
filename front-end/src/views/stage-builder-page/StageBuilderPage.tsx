@@ -9,7 +9,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from 'src/authentication/AuthProvider';
 import type { EditorStage, EditorStageObject, StageBuilderMode, StageLabelAttachment, StageSemanticKind, Vec3 } from 'src/components/stage-builder/types';
 import { downloadStageJson, makeLocalStageId, stageRecordFromImportedJson } from 'src/components/stage-builder/localStages';
-import { StageBuilderScene, type StageBuilderCameraView, type StageBuilderTransformMode } from 'src/components/stage-builder/StageBuilderScene';
+import { StageBuilderScene, type StageBuilderCameraView, type StageBuilderSceneHandle, type StageBuilderTransformMode } from 'src/components/stage-builder/StageBuilderScene';
 import { configToEditorStage, createDemoEditorStage, DEFAULT_STAGE_FLOOR, DEFAULT_STAGE_METADATA, editorStageToRecord } from 'src/components/stage-builder/serialize';
 import {
   defaultStageBuilderPreferences,
@@ -41,7 +41,7 @@ import { SaveToProviderDialog, type SaveToProviderValues } from 'src/stages/Save
 import { OpenFromProviderDialog } from 'src/stages/OpenFromProviderDialog';
 import { getMarketplaceStageStatus, publishStageToMarketplace, MarketplaceRequestError, type MarketplaceStageStatusResponse, type PublishMarketplaceResponse } from 'src/stages/MarketplaceApi';
 import { PublishToMarketplaceDialog, type PublishMarketplaceValues } from 'src/stages/PublishToMarketplaceDialog';
-import { invalidateMarketplaceFirstPage, invalidateMyMarketplaceStages, invalidateUserStages, refreshMarketplaceFirstPage, refreshMyMarketplaceStages, refreshUserStages, stageListUserKey, subscribeUserStages, userStagesSnapshot } from 'src/stages/stageListCache';
+import { invalidateLocalStages, invalidateMarketplaceFirstPage, invalidateMyMarketplaceStages, invalidateUserStages, refreshMarketplaceFirstPage, refreshMyMarketplaceStages, refreshUserStages, stageListUserKey, subscribeUserStages, userStagesSnapshot } from 'src/stages/stageListCache';
 import { createLocalStage, listLocalStages, loadLocalStage, LocalStageRequestError, publishLocalStage, updateLocalStage, type LocalPublicationSubmissionSummary, type LocalStage } from 'src/stages/LocalStagesApi';
 import { OpenLocalStageDialog } from 'src/stages/OpenLocalStageDialog';
 import { useFeatureFlags } from 'src/config/FeatureFlags';
@@ -396,6 +396,7 @@ const StageBuilderPage = () => {
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const customObjectInputRef = useRef<HTMLInputElement | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const sceneHandleRef = useRef<StageBuilderSceneHandle | null>(null);
   const providerStatusCacheRef = useRef(0);
   const marketplaceStatusCacheRef = useRef<{ key: string; checkedAt: number }>({ key: '', checkedAt: 0 });
   const historyRef = useRef<StageBuilderHistory>(createStageBuilderHistory());
@@ -1162,14 +1163,21 @@ const StageBuilderPage = () => {
     setLocalStageSaving(true);
     try {
       const record = editorStageToRecord(stage);
+      // Regenerate the low-res stage preview on every save. The capture falls
+      // back to null when the viewport is hidden (mobile drawers) so the save
+      // still succeeds with the previous preview.
+      const previewDataUrl = sceneHandleRef.current?.captureStagePreview() ?? null;
       const saved = localStage
-        ? await updateLocalStage(token, localStage, record)
-        : await createLocalStage(token, record);
+        ? await updateLocalStage(token, localStage, record, previewDataUrl)
+        : await createLocalStage(token, record, previewDataUrl);
       setLocalStage(saved);
       setRemoteStage(null);
       setLastExportFingerprint(stageFingerprint(stage));
       setExportedAt(new Date().toISOString());
       clearStageBuilderDraft(scope);
+      // Tell the Stages panel to refetch even if it already mounted while this
+      // save was in flight.
+      invalidateLocalStages();
       setMessage(`Saved to your account: ${saved.title} · r${saved.revision}`);
       if (openLocalStageOpen) setLocalStages(await listLocalStages(token));
     } catch (error) {
@@ -1781,6 +1789,7 @@ const StageBuilderPage = () => {
 
         <Box sx={{ flex: '1 1 0%', minWidth: 0, minHeight: 0, position: 'relative', bgcolor: editorColors.viewport }}>
           <StageBuilderScene
+            ref={sceneHandleRef}
             objects={activeStage.objects}
             groups={activeStage.metadata.groups}
             selectedId={selectedId}

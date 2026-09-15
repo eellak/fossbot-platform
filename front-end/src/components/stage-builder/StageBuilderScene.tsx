@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useEffect, useImperativeHandle, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
@@ -66,6 +66,11 @@ export interface StageBuilderSceneProps {
   onPlacementStatusChange?: (status: StageBuilderPlacementStatus | null) => void;
   onLockedSelectionAttempt?: () => void;
 }
+
+export type StageBuilderSceneHandle = {
+  /** Renders the current stage from the default preview camera and returns a small PNG data URL. */
+  captureStagePreview: (width?: number, height?: number) => string | null;
+};
 
 export type MeshRecord = {
   objectId: string;
@@ -1690,7 +1695,7 @@ function applyStageBuilderCameraView(sceneHandle: SceneHandle, view: StageBuilde
   sceneHandle.controls.update();
 }
 
-export function StageBuilderScene({
+export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, StageBuilderSceneProps>(function StageBuilderScene({
   objects,
   groups = [],
   selectedId,
@@ -1723,7 +1728,7 @@ export function StageBuilderScene({
   onPlaceAt,
   onPlacementStatusChange,
   onLockedSelectionAttempt,
-}: StageBuilderSceneProps) {
+}: StageBuilderSceneProps, ref) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const sceneRef = useRef<SceneHandle | null>(null);
   const transformRef = useRef<TransformControls | null>(null);
@@ -1987,7 +1992,7 @@ export function StageBuilderScene({
   useEffect(() => {
     if (!containerRef.current) return;
 
-    const sceneHandle = initScene(containerRef.current, { gizmo: false });
+    const sceneHandle = initScene(containerRef.current, { gizmo: false, preserveDrawingBuffer: true });
     sceneRef.current = sceneHandle;
     // Override the simulator's hardcoded dark scene background with the active
     // variant's viewport color so the editor's 3D viewport matches the chrome
@@ -2668,5 +2673,101 @@ export function StageBuilderScene({
     syncTransformAttachment();
   }, [lookThroughCameraId, objects]);
 
+  const captureStagePreview = React.useCallback((width = 480, height = 360): string | null => {
+    const sceneHandle = sceneRef.current;
+    if (!sceneHandle) return null;
+    const source = sceneHandle.renderer.domElement;
+    if (!source.clientWidth || !source.clientHeight) return null;
+
+    // Hide the editor-only chrome for the capture, then put it back so the
+    // viewport returns to exactly the state the user left it in.
+    const gridGroup = gridGroupRef.current;
+    const boundary = boundaryRef.current;
+    const transform = transformRef.current;
+    const selectionHelper = selectionHelperRef.current;
+    const groupSelectionHelper = groupSelectionHelperRef.current;
+    const friendlyHandles = friendlyHandlesRef.current;
+    const ghost = ghostRef.current;
+    const previousVisibility = {
+      grid: gridGroup?.visible,
+      boundary: boundary?.visible,
+      transform: transform?.visible,
+      selection: selectionHelper?.visible,
+      groupSelection: groupSelectionHelper?.visible,
+      friendly: friendlyHandles?.root.visible,
+      ghost: ghost?.root.visible,
+    };
+    const camera = sceneHandle.camera;
+    const previousCamera = {
+      position: camera.position.clone(),
+      quaternion: camera.quaternion.clone(),
+      up: camera.up.clone(),
+      fov: camera.fov,
+      target: sceneHandle.controls.target.clone(),
+    };
+
+    if (gridGroup) gridGroup.visible = false;
+    if (boundary) boundary.visible = false;
+    if (transform) transform.visible = false;
+    if (selectionHelper) selectionHelper.visible = false;
+    if (groupSelectionHelper) groupSelectionHelper.visible = false;
+    if (friendlyHandles) friendlyHandles.root.visible = false;
+    if (ghost) ghost.root.visible = false;
+
+    camera.up.set(0, 1, 0);
+    applyStageBuilderCameraView(sceneHandle, 'perspective', stageDimensionsRef.current);
+    // Pull back 15% from the editor's tight perspective fit so the stage has
+    // context around it and the preview strip does not crop into the floor.
+    const framingTarget = sceneHandle.controls.target.clone();
+    const pullbackOffset = camera.position.clone().sub(framingTarget).multiplyScalar(1.15);
+    camera.position.copy(framingTarget).add(pullbackOffset);
+    camera.lookAt(framingTarget);
+    camera.updateProjectionMatrix();
+    sceneHandle.controls.enabled = false;
+    renderScene(sceneHandle);
+
+    const output = document.createElement('canvas');
+    output.width = width;
+    output.height = height;
+    const context = output.getContext('2d');
+    let dataUrl: string | null = null;
+    if (context) {
+      context.drawImage(source, 0, 0, source.width, source.height, 0, 0, width, height);
+      dataUrl = output.toDataURL('image/png');
+      // Keep the stored preview clear of the backend's 512 KiB cap for noisy stages.
+      if (dataUrl.length > 480 * 1024) {
+        const smaller = document.createElement('canvas');
+        smaller.width = Math.round(width / 2);
+        smaller.height = Math.round(height / 2);
+        const smallerContext = smaller.getContext('2d');
+        if (smallerContext) {
+          smallerContext.drawImage(source, 0, 0, source.width, source.height, 0, 0, smaller.width, smaller.height);
+          dataUrl = smaller.toDataURL('image/png');
+        }
+      }
+    }
+
+    camera.position.copy(previousCamera.position);
+    camera.quaternion.copy(previousCamera.quaternion);
+    camera.up.copy(previousCamera.up);
+    camera.fov = previousCamera.fov;
+    camera.updateProjectionMatrix();
+    sceneHandle.controls.target.copy(previousCamera.target);
+    sceneHandle.controls.enabled = true;
+    sceneHandle.controls.update();
+    if (gridGroup) gridGroup.visible = previousVisibility.grid ?? true;
+    if (boundary) boundary.visible = previousVisibility.boundary ?? true;
+    if (transform) transform.visible = previousVisibility.transform ?? true;
+    if (selectionHelper) selectionHelper.visible = previousVisibility.selection ?? true;
+    if (groupSelectionHelper) groupSelectionHelper.visible = previousVisibility.groupSelection ?? true;
+    if (friendlyHandles) friendlyHandles.root.visible = previousVisibility.friendly ?? true;
+    if (ghost) ghost.root.visible = previousVisibility.ghost ?? true;
+    renderScene(sceneHandle);
+
+    return dataUrl;
+  }, []);
+
+  useImperativeHandle(ref, () => ({ captureStagePreview }), [captureStagePreview]);
+
   return <div ref={containerRef} style={{ width: '100%', height: '100%', minHeight: 420, position: 'relative' }} />;
-}
+});

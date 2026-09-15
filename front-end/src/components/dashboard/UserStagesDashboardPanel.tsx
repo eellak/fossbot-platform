@@ -1,18 +1,19 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Box, Button, Chip, CircularProgress, IconButton, Menu, MenuItem, Skeleton, Stack, Tooltip, Typography } from '@mui/material';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Alert, Box, Button, ButtonBase, Chip, CircularProgress, FormControl, IconButton, InputAdornment, InputLabel, Menu, MenuItem, Pagination, Select, Skeleton, Stack, TextField, ToggleButton, ToggleButtonGroup, Tooltip, Typography } from '@mui/material';
 import GitHubIcon from '@mui/icons-material/GitHub';
-import EditIcon from '@mui/icons-material/Edit';
 import UploadIcon from '@mui/icons-material/Upload';
 import CloseIcon from '@mui/icons-material/Close';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import StorageIcon from '@mui/icons-material/Storage';
 import AddIcon from '@mui/icons-material/Add';
+import { IconLayoutGrid, IconLayoutList, IconSearch, IconX } from '@tabler/icons-react';
 import DashboardCard from 'src/components/shared/DashboardCardWithChildren';
 import { useConfirmDialog } from 'src/components/shared/ConfirmDialog';
+import { useNotifications } from 'src/components/notifications/NotificationProvider';
 import CardDialog, { type StageSelection } from 'src/components/stage-select-popup/CardDialog';
 import { useAuth } from 'src/authentication/AuthProvider';
-import { listLocalStages, unpublishLocalStage, type LocalStage } from 'src/stages/LocalStagesApi';
+import { fetchLocalStagePreview, listLocalStages, unpublishLocalStage, type LocalStage } from 'src/stages/LocalStagesApi';
 import { getGitHubLoginUrl, getGitHubProviderStatus, type GitHubProviderStatus } from 'src/stages/ProviderAuthApi';
 import type { MyMarketplaceStage } from 'src/stages/MarketplaceApi';
 import type { ProviderStageListItem } from 'src/stages/StagesApi';
@@ -25,13 +26,14 @@ import {
   refreshMyMarketplaceStages,
   refreshUserStages,
   stageListUserKey,
+  subscribeLocalStages,
   subscribeMyMarketplaceStages,
   subscribeUserStages,
   userStagesSnapshot,
 } from 'src/stages/stageListCache';
 import { formatStageRelativeTime } from 'src/stages/StageCard';
 import { MARKETPLACE_COPY } from 'src/stages/marketplaceCopy';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { Link as RouterLink, useLocation, useNavigate } from 'react-router-dom';
 
 type DashboardStage = {
   key: string;
@@ -40,10 +42,27 @@ type DashboardStage = {
   href: string;
   source: 'local' | 'github';
   detail: string;
+  description?: string;
   localStage?: LocalStage;
   notice?: string;
   status?: string;
+  statusKey: 'draft' | 'published' | 'pending' | 'rejected';
   statusColor?: 'success' | 'warning' | 'error' | 'default';
+  previewUrl?: string | null;
+};
+
+const STAGES_LIST_PER_PAGE = 5;
+const STAGES_CARDS_PER_PAGE = 6;
+const STAGE_VIEW_MODE_STORAGE_KEY = 'fossbot-stages-view-mode';
+
+const STAGE_PREVIEW_MASK = 'linear-gradient(to right, #000 0%, transparent 85%)';
+
+const readStoredStageViewMode = (): 'list' | 'cards' => {
+  try {
+    return window.localStorage.getItem(STAGE_VIEW_MODE_STORAGE_KEY) === 'cards' ? 'cards' : 'list';
+  } catch {
+    return 'list';
+  }
 };
 
 function githubKey(owner: string, repo: string): string {
@@ -68,15 +87,16 @@ function publicationAsStage(publication: MyMarketplaceStage): ProviderStageListI
   };
 }
 
-function localStatus(stage: LocalStage): Pick<DashboardStage, 'status' | 'statusColor'> {
-  if (stage.submission?.status === 'pending') return { status: `r${stage.submission.stageRevision} awaiting review`, statusColor: 'warning' };
-  if (stage.submission?.status === 'rejected') return { status: `r${stage.submission.stageRevision} rejected`, statusColor: 'error' };
-  if (stage.publication?.active) return { status: stage.publication.stageRevision === stage.revision ? 'Published' : `Published r${stage.publication.stageRevision}`, statusColor: 'success' };
-  return {};
+function localStatus(stage: LocalStage): Pick<DashboardStage, 'status' | 'statusKey' | 'statusColor'> {
+  if (stage.submission?.status === 'pending') return { status: `r${stage.submission.stageRevision} awaiting review`, statusKey: 'pending', statusColor: 'warning' };
+  if (stage.submission?.status === 'rejected') return { status: `r${stage.submission.stageRevision} rejected`, statusKey: 'rejected', statusColor: 'error' };
+  if (stage.publication?.active) return { status: stage.publication.stageRevision === stage.revision ? 'Published' : `Published r${stage.publication.stageRevision}`, statusKey: 'published', statusColor: 'success' };
+  return { statusKey: 'draft' };
 }
 
-export default function UserStagesDashboardPanel({ showViewAll = true }: { showViewAll?: boolean }) {
+export default function UserStagesDashboardPanel({ showViewAll = true, appearance = 'card' }: { showViewAll?: boolean; appearance?: 'card' | 'page' }) {
   const confirmDialog = useConfirmDialog();
+  const { notify } = useNotifications();
   const { token, user } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
@@ -89,9 +109,30 @@ export default function UserStagesDashboardPanel({ showViewAll = true }: { showV
   const [error, setError] = useState('');
   const [connecting, setConnecting] = useState(false);
   const [localStageBusy, setLocalStageBusy] = useState<number | null>(null);
-  const [actionMessage, setActionMessage] = useState('');
   const [stageMenu, setStageMenu] = useState<{ anchorEl: HTMLElement; stage: DashboardStage } | null>(null);
   const [stagePickerOpen, setStagePickerOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const [sourceFilter, setSourceFilter] = useState<'all' | 'local' | 'github'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'draft' | 'published' | 'pending' | 'rejected'>('all');
+  const [viewMode, setViewMode] = useState<'list' | 'cards'>(readStoredStageViewMode);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(STAGES_LIST_PER_PAGE);
+  const collectionRef = useRef<HTMLDivElement | null>(null);
+  const previewObjectUrlsRef = useRef<Map<string, string>>(new Map());
+  const [previewObjectUrls, setPreviewObjectUrls] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(STAGE_VIEW_MODE_STORAGE_KEY, viewMode);
+    } catch {
+      // Storage can be unavailable; the in-memory preference still applies.
+    }
+  }, [viewMode]);
+
+  useEffect(() => () => {
+    previewObjectUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
+    previewObjectUrlsRef.current.clear();
+  }, []);
 
   useEffect(() => {
     if (new URLSearchParams(location.search).get('create') === '1') setStagePickerOpen(true);
@@ -144,6 +185,22 @@ export default function UserStagesDashboardPanel({ showViewAll = true }: { showV
     const unsubscribePublications = subscribeMyMarketplaceStages(userKey, syncPublications);
     return () => { unsubscribeGitHub(); unsubscribePublications(); };
   }, [userKey]);
+
+  const refreshLocalStages = useCallback(async () => {
+    if (!token) return;
+    try {
+      setLocalStages(await listLocalStages(token));
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : 'Could not load local stages.');
+    }
+  }, [token]);
+
+  // Refetch when a Stage Builder save finishes, including saves that commit
+  // after this panel has already mounted.
+  useEffect(() => {
+    if (!token) return undefined;
+    return subscribeLocalStages(() => { void refreshLocalStages(); });
+  }, [refreshLocalStages, token]);
 
   useEffect(() => {
     if (!token) {
@@ -204,13 +261,12 @@ export default function UserStagesDashboardPanel({ showViewAll = true }: { showV
 
     setLocalStageBusy(stage.id);
     setError('');
-    setActionMessage('');
     try {
       await unpublishLocalStage(token, stage.id);
       setLocalStages(await listLocalStages(token));
       invalidateMarketplaceFirstPage();
       await refreshMarketplaceFirstPage(token, { force: true });
-      setActionMessage(published ? 'Stage unpublished.' : 'Publication request cancelled.');
+      notify(published ? 'Stage unpublished.' : 'Publication request cancelled.', { severity: 'success' });
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Could not update the publication.');
     } finally {
@@ -222,11 +278,13 @@ export default function UserStagesDashboardPanel({ showViewAll = true }: { showV
     const rows: DashboardStage[] = localStages.map((stage) => ({
       key: `local:${stage.id}`,
       title: stage.title,
+      description: stage.description,
       updatedAt: stage.updatedAt,
       href: `/stage-builder?open=local&id=${stage.id}`,
       source: 'local',
       detail: `r${stage.revision}`,
       localStage: stage,
+      previewUrl: stage.previewUrl,
       notice: stage.submission?.status === 'rejected' ? stage.submission.reviewReason || 'A reviewer rejected this revision.' : undefined,
       ...localStatus(stage),
     }));
@@ -240,60 +298,311 @@ export default function UserStagesDashboardPanel({ showViewAll = true }: { showV
     githubByKey.forEach(({ stage, publication }, key) => rows.push({
       key: `github:${key}`,
       title: stage.title || stage.repoName,
+      description: stage.description,
       updatedAt: stage.updatedAt || publication?.entry.updatedAt || '',
       href: githubEditorUrl(stage),
       source: 'github',
       detail: `${stage.repoOwner}/${stage.repoName} · ${stage.private ? 'Private' : 'Public'}`,
       status: publication ? 'Published' : undefined,
+      statusKey: publication ? 'published' : 'draft',
       statusColor: publication ? 'success' : undefined,
+      previewUrl: publication?.entry.previewUrl,
     }));
     return rows.sort((left, right) => new Date(right.updatedAt || 0).getTime() - new Date(left.updatedAt || 0).getTime());
   }, [githubStages, localStages, publications]);
 
+  useEffect(() => {
+    if (!token) return undefined;
+    let active = true;
+    stages.forEach((stage) => {
+      const previewUrl = stage.previewUrl;
+      if (!previewUrl || previewObjectUrlsRef.current.has(previewUrl)) return;
+      void fetchLocalStagePreview(token, previewUrl).then((objectUrl) => {
+        if (!active) {
+          URL.revokeObjectURL(objectUrl);
+          return;
+        }
+        previewObjectUrlsRef.current.set(previewUrl, objectUrl);
+        setPreviewObjectUrls((current) => ({ ...current, [previewUrl]: objectUrl }));
+      }).catch(() => undefined);
+    });
+    return () => { active = false; };
+  }, [stages, token]);
+
+  const query = search.trim().toLowerCase();
+  const filteredStages = useMemo(() => stages.filter((stage) => {
+    const haystack = [stage.title, stage.description, stage.detail, stage.status, stage.notice].filter(Boolean).join(' ').toLowerCase();
+    return (!query || haystack.includes(query))
+      && (sourceFilter === 'all' || stage.source === sourceFilter)
+      && (statusFilter === 'all' || stage.statusKey === statusFilter);
+  }), [query, sourceFilter, stages, statusFilter]);
+
+  const stagesPerPage = pageSize;
+  const pageCount = Math.max(1, Math.ceil(filteredStages.length / stagesPerPage));
+  const pageStart = (page - 1) * stagesPerPage;
+  const visibleStages = filteredStages.slice(pageStart, pageStart + stagesPerPage);
+
+  // On the browsing page, pack as many rows as the viewport can show. The
+  // Dashboard card keeps the fixed page sizes above because it is a small
+  // panel inside a dashboard column.
+  useLayoutEffect(() => {
+    if (appearance !== 'page') {
+      setPageSize(viewMode === 'cards' ? STAGES_CARDS_PER_PAGE : STAGES_LIST_PER_PAGE);
+      return undefined;
+    }
+    const measure = () => {
+      const container = collectionRef.current;
+      if (!container) return;
+      // Average the visible items so a short first row (e.g. no description)
+      // cannot skew the estimate, while short pages still fill the viewport.
+      const heights = Array.from(container.children)
+        .map((child) => (child as HTMLElement).getBoundingClientRect().height)
+        .filter((height) => height > 0);
+      const itemHeight = heights.length ? heights.reduce((sum, height) => sum + height, 0) / heights.length : (viewMode === 'cards' ? 190 : 100);
+      const available = window.innerHeight - Math.max(0, container.getBoundingClientRect().top) - 96;
+      if (available <= 0 || itemHeight <= 0) return;
+      if (viewMode === 'cards') {
+        // Match the grid's MUI breakpoints (xs/sm/lg) so the computed page size
+        // lines up with the actual number of columns.
+        const columns = window.innerWidth >= 1200 ? 3 : window.innerWidth >= 600 ? 2 : 1;
+        const gap = 10;
+        const rows = Math.max(1, Math.floor((available + gap) / (itemHeight + gap)));
+        setPageSize(rows * columns);
+      } else {
+        setPageSize(Math.max(1, Math.floor(available / itemHeight)));
+      }
+    };
+    measure();
+    // Re-measure after the browser settles the toolbar/tab layout so the
+    // container top is final before we decide how many rows fit.
+    const raf = window.requestAnimationFrame(measure);
+    window.addEventListener('resize', measure);
+    return () => {
+      window.cancelAnimationFrame(raf);
+      window.removeEventListener('resize', measure);
+    };
+  }, [appearance, filteredStages.length, viewMode]);
+  const hasActiveFilters = Boolean(query || sourceFilter !== 'all' || statusFilter !== 'all');
+  const clearFilters = () => {
+    setSearch('');
+    setSourceFilter('all');
+    setStatusFilter('all');
+    setPage(1);
+  };
+
+  useEffect(() => {
+    setPage((currentPage) => Math.min(currentPage, pageCount));
+  }, [pageCount]);
+
   const showConnect = !loading && (!providerStatus?.connected || providerStatus.needsReconnect);
+  const createStageButton = <Button size="small" variant="contained" startIcon={<AddIcon />} onClick={() => showViewAll ? navigate('/stages?create=1') : setStagePickerOpen(true)}>Create new stage</Button>;
+  const connectButton = showConnect ? <Button size="small" variant="outlined" startIcon={connecting ? <CircularProgress size={16} color="inherit" /> : <GitHubIcon />} disabled={connecting} onClick={connectGitHub}>{connecting ? 'Connecting…' : MARKETPLACE_COPY.connectGitHub}</Button> : null;
   const actions = (
     <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" justifyContent="flex-end">
-      <Button size="small" variant="contained" startIcon={<AddIcon />} onClick={() => showViewAll ? navigate('/stages?create=1') : setStagePickerOpen(true)}>Create new stage</Button>
-      {showConnect && <Button size="small" variant="outlined" startIcon={connecting ? <CircularProgress size={16} color="inherit" /> : <GitHubIcon />} disabled={connecting} onClick={connectGitHub}>{connecting ? 'Connecting…' : MARKETPLACE_COPY.connectGitHub}</Button>}
+      {createStageButton}
+      {connectButton}
       {showViewAll && <Button component="a" href="/stages?tab=mine" size="small" variant="outlined">View all</Button>}
     </Stack>
   );
 
-  return <DashboardCard title={MARKETPLACE_COPY.myStages} subtitle="Stages saved locally or on GitHub." action={actions} compact>
-    {error && <Alert severity={stages.length ? 'warning' : 'error'} sx={{ mb: stages.length ? 1.5 : 0 }}>{error}</Alert>}
-    {actionMessage && <Alert severity="success" sx={{ mb: 1.5 }} onClose={() => setActionMessage('')}>{actionMessage}</Alert>}
-    {loading && !stages.length ? <Stack spacing={1}>{Array.from({ length: 4 }).map((_, index) => <Skeleton key={index} variant="rounded" height={64} />)}</Stack>
-      : !stages.length ? <Box sx={{ py: 2 }}><Typography variant="subtitle2" fontWeight={600}>No saved stages yet</Typography><Typography variant="body2" color="text.secondary">Create your first stage here, or connect GitHub to access existing repositories.</Typography></Box>
-        : <Stack spacing={1}>{stages.map((stage) => <Box key={stage.key} sx={{ p: 1.5, border: '1px solid', borderColor: 'divider', borderRadius: 1.5, display: 'flex', alignItems: { xs: 'flex-start', sm: 'center' }, justifyContent: 'space-between', gap: 1.5, flexDirection: { xs: 'column', sm: 'row' } }}>
-          <Box minWidth={0}>
+  const renderStageRow = (stage: DashboardStage, index: number) => {
+    const previewUrl = stage.previewUrl ? previewObjectUrls[stage.previewUrl] : undefined;
+    return (
+      <Box
+        key={stage.key}
+        sx={{
+          position: 'relative',
+          overflow: 'hidden',
+          minWidth: 0,
+          display: 'flex',
+          alignItems: 'center',
+          borderTop: viewMode === 'cards' || !index ? 'none' : '1px solid',
+          borderColor: 'divider',
+        }}
+      >
+        {previewUrl && (
+          <Box
+            component="img"
+            src={previewUrl}
+            alt=""
+            aria-hidden="true"
+            sx={{
+              position: 'absolute',
+              top: 0,
+              bottom: 0,
+              left: 0,
+              width: { xs: 96, sm: 156 },
+              height: '100%',
+              objectFit: 'cover',
+              bgcolor: 'action.hover',
+              // The theme's action.hover is a solid fill, so keep the preview
+              // above the button's hover background (and click-through).
+              zIndex: 1,
+              pointerEvents: 'none',
+              WebkitMaskImage: STAGE_PREVIEW_MASK,
+              maskImage: STAGE_PREVIEW_MASK,
+            }}
+          />
+        )}
+        <ButtonBase
+          component={RouterLink}
+          to={stage.href}
+          aria-label={`Open ${stage.title}`}
+          sx={{
+            position: 'relative',
+            flex: 1,
+            minWidth: 0,
+            display: 'flex',
+            alignItems: { xs: 'flex-start', sm: 'center' },
+            justifyContent: 'flex-start',
+            textAlign: 'left',
+            gap: 1.5,
+            py: 2,
+            pr: 1,
+            pl: previewUrl ? { xs: '92px', sm: '148px' } : 2,
+            '&:hover': { bgcolor: 'action.hover' },
+            '&:hover .stage-title': { color: 'primary.main', textDecoration: 'underline' },
+          }}
+        >
+          {!previewUrl && (
+            <Box
+              className="visual-language-supporting-panel"
+              aria-hidden="true"
+              sx={{ width: 36, height: 36, flexShrink: 0, display: 'grid', placeItems: 'center', bgcolor: 'primary.light', color: 'primary.main' }}
+            >
+              {stage.source === 'local' ? <StorageIcon fontSize="small" /> : <GitHubIcon fontSize="small" />}
+            </Box>
+          )}
+          <Box minWidth={0} sx={{ flex: 1 }}>
             <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
-              <Typography variant="subtitle2" fontWeight={800}>{stage.title}</Typography>
-              {stage.source === 'local' && <Chip size="small" icon={<StorageIcon />} label="Local" variant="outlined" sx={{ '& .MuiChip-icon': { fontSize: 15 } }} />}
-              {stage.source === 'github' && <Chip size="small" icon={<GitHubIcon />} label="GitHub" variant="outlined" />}
+              <Typography className="stage-title" variant="body2" color="primary.main" fontWeight={600} sx={{ overflowWrap: 'anywhere' }}>{stage.title}</Typography>
               {stage.status && <Chip size="small" label={stage.status} color={stage.statusColor} variant="outlined" />}
             </Stack>
-            <Typography variant="caption" color="text.secondary" noWrap>{stage.detail} · {formatStageRelativeTime(stage.updatedAt).toLowerCase()}</Typography>
+            {stage.description && <Typography variant="body2" color="text.secondary" noWrap>{stage.description}</Typography>}
+            <Typography variant="caption" color="text.secondary" noWrap>{stage.source === 'local' ? 'Local' : 'GitHub'} · {stage.detail} · {formatStageRelativeTime(stage.updatedAt).toLowerCase()}</Typography>
             {stage.notice && <Typography variant="caption" color="error" sx={{ display: 'block', overflowWrap: 'anywhere' }}>{stage.notice}</Typography>}
           </Box>
-          <Stack direction="row" spacing={1} flexWrap="wrap" sx={{ flexShrink: 0 }}>
-            <Button component="a" href={stage.href} size="small" variant="contained" startIcon={<EditIcon />}>Open</Button>
-            {stage.source === 'local' && <Tooltip title="More actions">
+        </ButtonBase>
+        {stage.source === 'local' && (
+          <Stack direction="row" alignItems="center" sx={{ position: 'relative', flexShrink: 0, pr: 2 }}>
+            <Tooltip title="More actions">
               <span>
                 <IconButton
-                  size="small"
                   aria-label={`More actions for ${stage.title}`}
                   aria-controls={stageMenu?.stage.key === stage.key ? 'local-stage-actions-menu' : undefined}
                   aria-haspopup="menu"
                   aria-expanded={stageMenu?.stage.key === stage.key ? 'true' : undefined}
                   disabled={localStageBusy !== null}
                   onClick={(event) => setStageMenu({ anchorEl: event.currentTarget, stage })}
+                  sx={{ width: 44, height: 44 }}
                 >
                   {localStageBusy === stage.localStage?.id ? <CircularProgress size={18} color="inherit" /> : <MoreVertIcon fontSize="small" />}
                 </IconButton>
               </span>
-            </Tooltip>}
+            </Tooltip>
           </Stack>
-        </Box>)}</Stack>}
+        )}
+      </Box>
+    );
+  };
+
+  const showFilters = stages.length > 0;
+  const stageToolbar = (
+    <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ mb: 1 }}>
+      {showFilters && <TextField
+        size="small"
+        value={search}
+        onChange={(event) => { setSearch(event.target.value); setPage(1); }}
+        placeholder="Search stages"
+        inputProps={{ 'aria-label': 'Search stages' }}
+        InputProps={{
+          startAdornment: <InputAdornment position="start"><IconSearch size={18} aria-hidden="true" /></InputAdornment>,
+          endAdornment: search ? (
+            <InputAdornment position="end">
+              <IconButton size="small" edge="end" aria-label="Clear stage search" onClick={() => { setSearch(''); setPage(1); }}>
+                <IconX size={17} />
+              </IconButton>
+            </InputAdornment>
+          ) : undefined,
+        }}
+        sx={{ flex: 1, minWidth: 0 }}
+      />}
+      {showFilters && <FormControl size="small" sx={{ minWidth: { xs: '100%', sm: 150 } }}>
+        <InputLabel id="stages-source-filter-label">Source</InputLabel>
+        <Select labelId="stages-source-filter-label" value={sourceFilter} label="Source" onChange={(event) => { setSourceFilter(event.target.value as typeof sourceFilter); setPage(1); }}>
+          <MenuItem value="all">All sources</MenuItem>
+          <MenuItem value="local">Local</MenuItem>
+          <MenuItem value="github">GitHub</MenuItem>
+        </Select>
+      </FormControl>}
+      {showFilters && <FormControl size="small" sx={{ minWidth: { xs: '100%', sm: 160 } }}>
+        <InputLabel id="stages-status-filter-label">Status</InputLabel>
+        <Select labelId="stages-status-filter-label" value={statusFilter} label="Status" onChange={(event) => { setStatusFilter(event.target.value as typeof statusFilter); setPage(1); }}>
+          <MenuItem value="all">All statuses</MenuItem>
+          <MenuItem value="draft">Draft</MenuItem>
+          <MenuItem value="published">Published</MenuItem>
+          <MenuItem value="pending">Awaiting review</MenuItem>
+          <MenuItem value="rejected">Rejected</MenuItem>
+        </Select>
+      </FormControl>}
+      {appearance === 'page' && (
+        <Stack direction="row" spacing={1} flexWrap="wrap" justifyContent="flex-end" sx={{ ml: { sm: 'auto' } }}>
+          {createStageButton}
+          {connectButton}
+        </Stack>
+      )}
+      {showFilters && <ToggleButtonGroup
+        exclusive
+        size="small"
+        value={viewMode}
+        onChange={(_, nextView) => { if (!nextView) return; setViewMode(nextView); setPage(1); }}
+        aria-label="Stage view mode"
+        sx={{ alignSelf: { xs: 'flex-end', sm: 'center' }, ml: { xs: 0, sm: appearance === 'page' ? 0 : 'auto' } }}
+      >
+        <ToggleButton value="list" aria-label="List view" title="List view"><IconLayoutList size={18} /></ToggleButton>
+        <ToggleButton value="cards" aria-label="Card view" title="Card view"><IconLayoutGrid size={18} /></ToggleButton>
+      </ToggleButtonGroup>}
+    </Stack>
+  );
+
+  const stageCollection = viewMode === 'cards' ? (
+    <Box ref={collectionRef} sx={{ display: 'grid', gridTemplateColumns: { xs: 'minmax(0, 1fr)', sm: 'repeat(2, minmax(0, 1fr))', lg: 'repeat(3, minmax(0, 1fr))' }, gap: 1.25 }}>
+      {visibleStages.map((stage, index) => (
+        <Box key={stage.key} sx={{ minWidth: 0, overflow: 'hidden', border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
+          {renderStageRow(stage, index)}
+        </Box>
+      ))}
+    </Box>
+  ) : (
+    <Box ref={collectionRef} sx={appearance === 'page' ? { border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden' } : undefined}>
+      {visibleStages.map((stage, index) => renderStageRow(stage, index))}
+    </Box>
+  );
+
+  const content = <>
+    {error && <Alert severity={stages.length ? 'warning' : 'error'} sx={{ mb: stages.length ? 1.5 : 0 }}>{error}</Alert>}
+    {loading && !stages.length ? <Stack spacing={1}>{Array.from({ length: 4 }).map((_, index) => <Skeleton key={index} variant="rounded" height={64} />)}</Stack>
+      : <>
+        {stageToolbar}
+        {!stages.length ? <Box sx={{ py: 2 }}><Typography variant="subtitle2" fontWeight={600}>No saved stages yet</Typography><Typography variant="body2" color="text.secondary">Create your first stage here, or connect GitHub to access existing repositories.</Typography></Box>
+          : filteredStages.length === 0 ? (
+            <Box sx={{ py: 4, textAlign: 'center' }}>
+              <Typography variant="body2" fontWeight={600}>{hasActiveFilters ? 'No stages match your filters' : 'No saved stages yet'}</Typography>
+              <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.5 }}>Try another search or clear the filters.</Typography>
+              <Button size="small" onClick={clearFilters} sx={{ mt: 1 }}>Clear filters</Button>
+            </Box>
+          ) : <>
+            {stageCollection}
+            {filteredStages.length > stagesPerPage && (
+              <Stack direction={{ xs: 'column', sm: 'row' }} alignItems="center" justifyContent="space-between" spacing={1} sx={{ mt: 1.25, pt: 0.5 }}>
+                <Typography variant="caption" color="text.secondary">
+                  Showing {pageStart + 1}–{Math.min(pageStart + stagesPerPage, filteredStages.length)} of {filteredStages.length}
+                </Typography>
+                <Pagination count={pageCount} page={page} onChange={(_, nextPage) => setPage(nextPage)} size="small" color="primary" siblingCount={0} aria-label="Stage pages" />
+              </Stack>
+            )}
+          </>}
+      </>}
     <Menu id="local-stage-actions-menu" anchorEl={stageMenu?.anchorEl || null} open={Boolean(stageMenu)} onClose={() => setStageMenu(null)}>
       {stageMenu?.stage.localStage && <MenuItem
         component="a"
@@ -323,5 +632,11 @@ export default function UserStagesDashboardPanel({ showViewAll = true }: { showV
       onCreateStage={() => navigate('/stage-builder')}
       stageActionLabel="Use stage"
     />
-  </DashboardCard>;
+  </>;
+
+  if (appearance === 'page') {
+    return content;
+  }
+
+  return <DashboardCard title={MARKETPLACE_COPY.myStages} subtitle="Stages saved locally or on GitHub." action={actions} compact>{content}</DashboardCard>;
 }

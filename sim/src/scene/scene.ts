@@ -35,10 +35,10 @@ function getContainerSize(container: HTMLElement): { width: number; height: numb
   }
 }
 
-export function initScene(container: HTMLElement, opts?: { gizmo?: boolean }): SceneHandle {
+export function initScene(container: HTMLElement, opts?: { gizmo?: boolean; preserveDrawingBuffer?: boolean }): SceneHandle {
   const useGizmo = opts?.gizmo ?? true
   const initialSize = getContainerSize(container)
-  const renderer = new THREE.WebGLRenderer({ antialias: true })
+  const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: opts?.preserveDrawingBuffer ?? false })
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
   renderer.outputColorSpace = THREE.SRGBColorSpace
   renderer.setSize(initialSize.width, initialSize.height, false)

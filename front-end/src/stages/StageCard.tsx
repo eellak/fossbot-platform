@@ -98,17 +98,16 @@ export function StageCard({ title, description, previewUrl, metadata, badges, ac
         overflow: 'hidden',
         border: '1px solid',
         borderColor: 'divider',
-        borderRadius: embedded ? 1.5 : 2,
+        borderRadius: 1,
         bgcolor: embedded ? 'transparent' : 'background.paper',
         display: 'flex',
         flexDirection: 'column',
         cursor: interactive ? 'pointer' : 'default',
         transition: embedded
           ? 'background-color 180ms cubic-bezier(0.25, 1, 0.5, 1)'
-          : 'border-color 180ms cubic-bezier(0.25, 1, 0.5, 1), transform 180ms cubic-bezier(0.25, 1, 0.5, 1)',
-        '&:hover': interactive ? embedded ? { bgcolor: 'action.hover' } : { borderColor: 'primary.main', transform: 'translateY(-2px)' } : undefined,
+          : 'border-color 180ms cubic-bezier(0.25, 1, 0.5, 1)',
+        '&:hover': interactive ? embedded ? { bgcolor: 'action.hover' } : { borderColor: 'primary.main' } : undefined,
         '&:focus-visible': { outline: '3px solid', outlineColor: 'primary.main', outlineOffset: 2 },
-        '@media (prefers-reduced-motion: reduce)': { transition: 'none', '&:hover': { transform: 'none' } },
       }}
     >
       <StagePreview title={title} previewUrl={previewUrl} />
@@ -143,7 +142,7 @@ export function StageCard({ title, description, previewUrl, metadata, badges, ac
 export function StageCardSkeleton({ surface = 'outlined' }: { surface?: 'outlined' | 'embedded' }) {
   const embedded = surface === 'embedded';
   return (
-    <Box sx={{ height: '100%', overflow: 'hidden', border: '1px solid', borderColor: 'divider', borderRadius: embedded ? 1.5 : 2, bgcolor: embedded ? 'transparent' : 'background.paper' }} aria-hidden="true">
+    <Box sx={{ height: '100%', overflow: 'hidden', border: '1px solid', borderColor: 'divider', borderRadius: 1, bgcolor: embedded ? 'transparent' : 'background.paper' }} aria-hidden="true">
       <Skeleton variant="rectangular" height={156} animation="wave" />
       <Stack spacing={1.5} sx={{ p: 2 }}>
         <Skeleton width="62%" height={24} />

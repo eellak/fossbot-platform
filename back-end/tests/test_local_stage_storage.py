@@ -8,7 +8,7 @@ from database.database import Base, LocalMarketplacePublication, LocalMarketplac
 from fastapi import HTTPException
 from models.models import UserRole
 from routers.courses import StageReference, marketplace_reference
-from routers.local_stages import LocalMarketplacePublishRequest, LocalMarketplaceReviewRequest, copy_installed_github_stage, delete_local_stage, get_local_release_record, github_stage_provenance, publish_local_stage, review_local_publication, unpublish_local_stage
+from routers.local_stages import LocalMarketplacePublishRequest, LocalMarketplaceReviewRequest, LocalStageSaveRequest, copy_installed_github_stage, create_local_stage, delete_local_stage, get_local_release_record, get_local_stage_preview, github_stage_provenance, publish_local_stage, review_local_publication, unpublish_local_stage
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from utils.local_stage_storage import (
@@ -244,6 +244,18 @@ class LocalPublicationLifecycleTests(unittest.TestCase):
         with self.assertRaises(HTTPException) as raised:
             asyncio.run(delete_local_stage(self.stage.id, self.owner, self.db))
         self.assertEqual(raised.exception.status_code, 409)
+
+    def test_local_stage_preview_round_trip(self):
+        png = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==")
+        data_url = "data:image/png;base64," + base64.b64encode(png).decode()
+        record = {"title": "Previewed", "config": [{"type": "floor", "dimensions": [10, 10]}]}
+
+        created = asyncio.run(create_local_stage(LocalStageSaveRequest(record=record, previewDataUrl=data_url), self.owner, self.db))
+        self.assertIn(f"/api/local-stages/{created['id']}/preview", created["previewUrl"])
+
+        response = asyncio.run(get_local_stage_preview(created["id"], self.owner, self.db))
+        self.assertEqual(response.body, png)
+        self.assertEqual(response.media_type, "image/png")
 
 
 if __name__ == "__main__":

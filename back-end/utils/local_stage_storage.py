@@ -118,6 +118,7 @@ def copy_provenance(source: dict[str, Any], inherited: Optional[dict[str, Any]] 
 
 
 def local_stage_payload(stage: Any) -> dict[str, Any]:
+    has_preview = bool(getattr(stage, "preview_image", None))
     return {
         "id": stage.id,
         "slug": stage.slug,
@@ -128,6 +129,7 @@ def local_stage_payload(stage: Any) -> dict[str, Any]:
         "recordBytes": stage.record_bytes,
         "revision": stage.revision,
         "checksum": stage.checksum,
+        "previewUrl": f"{public_backend_url()}/api/local-stages/{stage.id}/preview?v={stage.revision}" if has_preview else None,
         "provenance": stage.provenance,
         "createdAt": stage.created_at.isoformat() + "Z",
         "updatedAt": stage.updated_at.isoformat() + "Z",
