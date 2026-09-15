@@ -755,7 +755,7 @@ async def delete_user(
 
 @app.get("/projects/")
 async def read_own_projects(current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):
-    projects = db.query(Projects).filter(Projects.user_id == current_user.id).all()
+    projects = db.query(Projects).filter(Projects.user_id == current_user.id).order_by(Projects.date_created.desc(), Projects.id.desc()).all()
     return [project_payload(project) for project in projects]
 
 @app.post("/projects/")
