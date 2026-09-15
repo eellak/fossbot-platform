@@ -1,10 +1,11 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Box, Button, ButtonBase, Chip, CircularProgress, FormControl, IconButton, InputAdornment, InputLabel, Menu, MenuItem, Pagination, Select, Skeleton, Stack, TextField, ToggleButton, ToggleButtonGroup, Tooltip, Typography } from '@mui/material';
+import { Alert, Box, Button, ButtonBase, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, FormControl, IconButton, InputAdornment, InputLabel, Menu, MenuItem, Pagination, Select, Skeleton, Stack, TextField, ToggleButton, ToggleButtonGroup, Tooltip, Typography } from '@mui/material';
 import GitHubIcon from '@mui/icons-material/GitHub';
 import UploadIcon from '@mui/icons-material/Upload';
 import CloseIcon from '@mui/icons-material/Close';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import StorageIcon from '@mui/icons-material/Storage';
 import AddIcon from '@mui/icons-material/Add';
 import { IconLayoutGrid, IconLayoutList, IconSearch, IconX } from '@tabler/icons-react';
@@ -88,10 +89,61 @@ function publicationAsStage(publication: MyMarketplaceStage): ProviderStageListI
 }
 
 function localStatus(stage: LocalStage): Pick<DashboardStage, 'status' | 'statusKey' | 'statusColor'> {
-  if (stage.submission?.status === 'pending') return { status: `r${stage.submission.stageRevision} awaiting review`, statusKey: 'pending', statusColor: 'warning' };
-  if (stage.submission?.status === 'rejected') return { status: `r${stage.submission.stageRevision} rejected`, statusKey: 'rejected', statusColor: 'error' };
-  if (stage.publication?.active) return { status: stage.publication.stageRevision === stage.revision ? 'Published' : `Published r${stage.publication.stageRevision}`, statusKey: 'published', statusColor: 'success' };
+  if (stage.submission?.status === 'pending') return { status: `v${stage.submission.stageRevision} awaiting review`, statusKey: 'pending', statusColor: 'warning' };
+  if (stage.submission?.status === 'rejected') return { status: `v${stage.submission.stageRevision} rejected`, statusKey: 'rejected', statusColor: 'error' };
+  if (stage.publication?.active) return { status: stage.publication.stageRevision === stage.revision ? 'Published' : `Published v${stage.publication.stageRevision}`, statusKey: 'published', statusColor: 'success' };
   return { statusKey: 'draft' };
+}
+
+type StageDetails = {
+  revision: string;
+  slug: string;
+  objects: string;
+  floor: string;
+  size: string;
+  checksum: string;
+  visibility: string;
+  publication: string;
+  source: string;
+  created: string;
+  updated: string;
+};
+
+/**
+ * Everything the details dialog shows is already in the local-stage payload the
+ * panel fetched, so this only reshapes it. The panel caches the result by
+ * `id:revision` and recomputes after a save bumps the revision.
+ */
+function buildStageDetails(stage: LocalStage): StageDetails {
+  const config = (stage.record?.config || []) as Array<{ type?: string; dimensions?: number[] }>;
+  const dimensions = config.find((entry) => entry?.type === 'floor')?.dimensions;
+  const objectCount = config.filter((entry) => entry?.type !== 'floor' && entry?.type !== 'skybox').length;
+  const provenance = stage.provenance as { sourceType?: string; repoOwner?: string; repoName?: string } | null | undefined;
+  const provenanceLabel = provenance?.sourceType
+    ? [provenance.sourceType, provenance.repoOwner && provenance.repoName ? `${provenance.repoOwner}/${provenance.repoName}` : undefined].filter(Boolean).join(' · ')
+    : 'Created in Stage Builder';
+  const publication = stage.submission?.status === 'pending'
+    ? `Awaiting review · v${stage.submission.stageRevision}`
+    : stage.submission?.status === 'rejected'
+      ? `Rejected · v${stage.submission.stageRevision}`
+      : stage.publication?.active
+        ? stage.publication.stageRevision === stage.revision
+          ? `Published · v${stage.revision}`
+          : `Published · v${stage.publication.stageRevision} (current v${stage.revision})`
+        : 'Not published';
+  return {
+    revision: `v${stage.revision}`,
+    slug: stage.slug,
+    objects: String(objectCount),
+    floor: dimensions && dimensions.length >= 2 ? `${dimensions[0]} × ${dimensions[1]}` : '—',
+    size: `${(stage.recordBytes / 1024).toFixed(1)} KiB`,
+    checksum: stage.checksum ? stage.checksum.slice(0, 12) : '—',
+    visibility: stage.visibility,
+    publication,
+    source: provenanceLabel,
+    created: new Date(stage.createdAt).toLocaleString(),
+    updated: new Date(stage.updatedAt).toLocaleString(),
+  };
 }
 
 export default function UserStagesDashboardPanel({ showViewAll = true, appearance = 'card' }: { showViewAll?: boolean; appearance?: 'card' | 'page' }) {
@@ -110,6 +162,8 @@ export default function UserStagesDashboardPanel({ showViewAll = true, appearanc
   const [connecting, setConnecting] = useState(false);
   const [localStageBusy, setLocalStageBusy] = useState<number | null>(null);
   const [stageMenu, setStageMenu] = useState<{ anchorEl: HTMLElement; stage: DashboardStage } | null>(null);
+  const [detailsStage, setDetailsStage] = useState<DashboardStage | null>(null);
+  const stageDetailsCacheRef = useRef<Map<string, StageDetails>>(new Map());
   const [stagePickerOpen, setStagePickerOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [sourceFilter, setSourceFilter] = useState<'all' | 'local' | 'github'>('all');
@@ -282,7 +336,7 @@ export default function UserStagesDashboardPanel({ showViewAll = true, appearanc
       updatedAt: stage.updatedAt,
       href: `/stage-builder?open=local&id=${stage.id}`,
       source: 'local',
-      detail: `r${stage.revision}`,
+      detail: `v${stage.revision}`,
       localStage: stage,
       previewUrl: stage.previewUrl,
       notice: stage.submission?.status === 'rejected' ? stage.submission.reviewReason || 'A reviewer rejected this revision.' : undefined,
@@ -302,7 +356,7 @@ export default function UserStagesDashboardPanel({ showViewAll = true, appearanc
       updatedAt: stage.updatedAt || publication?.entry.updatedAt || '',
       href: githubEditorUrl(stage),
       source: 'github',
-      detail: `${stage.repoOwner}/${stage.repoName} · ${stage.private ? 'Private' : 'Public'}`,
+      detail: `${stage.repoOwner}/${stage.repoName}\u00A0\u00A0${stage.private ? 'Private' : 'Public'}`,
       status: publication ? 'Published' : undefined,
       statusKey: publication ? 'published' : 'draft',
       statusColor: publication ? 'success' : undefined,
@@ -400,7 +454,6 @@ export default function UserStagesDashboardPanel({ showViewAll = true, appearanc
   const actions = (
     <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" justifyContent="flex-end">
       {createStageButton}
-      {connectButton}
       {showViewAll && <Button component="a" href="/stages?tab=mine" size="small" variant="outlined">View all</Button>}
     </Stack>
   );
@@ -475,11 +528,23 @@ export default function UserStagesDashboardPanel({ showViewAll = true, appearanc
           )}
           <Box minWidth={0} sx={{ flex: 1 }}>
             <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
-              <Typography className="stage-title" variant="body2" color="primary.main" fontWeight={600} sx={{ overflowWrap: 'anywhere' }}>{stage.title}</Typography>
+              <Typography className="stage-title" variant="body2" color="primary.main" fontWeight={600} noWrap>{stage.title}</Typography>
               {stage.status && <Chip size="small" label={stage.status} color={stage.statusColor} variant="outlined" />}
             </Stack>
-            {stage.description && <Typography variant="body2" color="text.secondary" noWrap>{stage.description}</Typography>}
-            <Typography variant="caption" color="text.secondary" noWrap>{stage.source === 'local' ? 'Local' : 'GitHub'} · {stage.detail} · {formatStageRelativeTime(stage.updatedAt).toLowerCase()}</Typography>
+            {/* Always render one description line so rows/cards keep the same height
+                (and the preview strip its aspect) whether or not a description exists. */}
+            <Typography
+              variant="body2"
+              noWrap
+              sx={{
+                minHeight: '1.5em',
+                color: stage.description ? 'text.secondary' : 'text.disabled',
+                fontStyle: stage.description ? 'normal' : 'italic',
+              }}
+            >
+              {stage.description || 'No description'}
+            </Typography>
+            <Typography variant="caption" color="text.secondary" noWrap>{stage.source === 'local' ? 'Local' : 'GitHub'}{'\u00A0\u00A0'}{stage.detail}{'\u00A0\u00A0'}{formatStageRelativeTime(stage.updatedAt).toLowerCase()}</Typography>
             {stage.notice && <Typography variant="caption" color="error" sx={{ display: 'block', overflowWrap: 'anywhere' }}>{stage.notice}</Typography>}
           </Box>
         </ButtonBase>
@@ -605,6 +670,12 @@ export default function UserStagesDashboardPanel({ showViewAll = true, appearanc
       </>}
     <Menu id="local-stage-actions-menu" anchorEl={stageMenu?.anchorEl || null} open={Boolean(stageMenu)} onClose={() => setStageMenu(null)}>
       {stageMenu?.stage.localStage && <MenuItem
+        onClick={() => { setDetailsStage(stageMenu.stage); setStageMenu(null); }}
+      >
+        <InfoOutlinedIcon fontSize="small" sx={{ mr: 1 }} />
+        Details
+      </MenuItem>}
+      {stageMenu?.stage.localStage && <MenuItem
         component="a"
         href={`${stageMenu.stage.href}&action=github-copy`}
         onClick={() => setStageMenu(null)}
@@ -624,6 +695,55 @@ export default function UserStagesDashboardPanel({ showViewAll = true, appearanc
         {stageMenu.stage.localStage.publication?.active ? 'Unpublish' : 'Cancel request'}
       </MenuItem>}
     </Menu>
+    <Dialog open={Boolean(detailsStage)} onClose={() => setDetailsStage(null)} maxWidth="sm" fullWidth>
+      <DialogTitle>Stage details</DialogTitle>
+      <DialogContent>
+        {detailsStage && (() => {
+          const local = detailsStage.localStage;
+          if (!local) return null;
+          const key = `${local.id}:${local.revision}`;
+          let details = stageDetailsCacheRef.current.get(key);
+          if (!details) {
+            details = buildStageDetails(local);
+            stageDetailsCacheRef.current.set(key, details);
+          }
+          const previewUrl = local.previewUrl ? previewObjectUrls[local.previewUrl] : undefined;
+          const rows: Array<[string, string]> = [
+            ['Revision', details.revision],
+            ['Slug', details.slug],
+            ['Objects', details.objects],
+            ['Floor', details.floor],
+            ['Size', details.size],
+            ['Checksum', details.checksum],
+            ['Visibility', details.visibility],
+            ['Publication', details.publication],
+            ['Source', details.source],
+            ['Created', details.created],
+            ['Updated', details.updated],
+          ];
+          return (
+            <Stack spacing={2} sx={{ pt: 0.5 }}>
+              {previewUrl && <Box component="img" src={previewUrl} alt="" sx={{ width: '100%', maxHeight: 180, objectFit: 'cover', borderRadius: 1, border: '1px solid', borderColor: 'divider' }} />}
+              <Box>
+                <Typography variant="subtitle2" fontWeight={700}>{detailsStage.title}</Typography>
+                <Typography variant="body2" color="text.secondary">{detailsStage.description || 'No description'}</Typography>
+              </Box>
+              <Box sx={{ display: 'grid', gridTemplateColumns: 'auto minmax(0, 1fr)', columnGap: 2, rowGap: 1 }}>
+                {rows.map(([label, value]) => (
+                  <React.Fragment key={label}>
+                    <Typography variant="caption" color="text.secondary">{label}</Typography>
+                    <Typography variant="body2" sx={{ overflowWrap: 'anywhere' }}>{value}</Typography>
+                  </React.Fragment>
+                ))}
+              </Box>
+            </Stack>
+          );
+        })()}
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={() => setDetailsStage(null)}>Close</Button>
+      </DialogActions>
+    </Dialog>
     <CardDialog
       open={stagePickerOpen}
       onClose={closeStagePicker}
