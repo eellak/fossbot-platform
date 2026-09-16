@@ -659,6 +659,55 @@ def test_rejects_unsafe_urls_and_rich_text_embeds(client_for, users):
     assert "unsupported formatting" in response.text
 
 
+def test_drafts_save_incomplete_activities_but_publish_rejects_them(client_for, users):
+    tutor, *_ = users
+    teacher = client_for(tutor)
+    course = create_course(teacher)
+    lesson = add_lesson(teacher, course["id"], title="Reflect")
+    incomplete = [{
+        "key": "reflect",
+        "version": 1,
+        "required": True,
+        "type": "short_reflection",
+        "prompt": "",
+        "collectResponse": True,
+    }]
+
+    # Work in progress must be savable even though a required prompt is empty.
+    saved = teacher.put(
+        f"/courses/{course['id']}/lessons/{lesson['id']}",
+        json={"activities": incomplete, "expected_updated_at": lesson["updated_at"]},
+    )
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["activities"][0]["prompt"] == ""
+
+    # The same draft is still not publishable.
+    validation = teacher.post(f"/courses/{course['id']}/validate").json()
+    assert validation["valid"] is False
+    assert any(issue["code"] == "activity" for issue in validation["errors"])
+    assert teacher.post(f"/courses/{course['id']}/publish").status_code == 422
+
+    # Safety is not deferred: an unsafe draft is rejected at save time.
+    unsafe = [{
+        "key": "reflect",
+        "version": 1,
+        "required": True,
+        "type": "rich_text",
+        "content": {
+            "type": "doc",
+            "content": [{
+                "type": "paragraph",
+                "content": [{"type": "text", "text": "Open me", "marks": [{"type": "link", "attrs": {"href": "javascript:alert(1)"}}]}],
+            }],
+        },
+    }]
+    rejected = teacher.put(
+        f"/courses/{course['id']}/lessons/{lesson['id']}",
+        json={"activities": unsafe, "expected_updated_at": saved.json()["updated_at"]},
+    )
+    assert rejected.status_code == 422
+
+
 def test_teacher_to_student_core_regression(client_for, users):
     tutor, _, student, _ = users
     teacher = client_for(tutor)

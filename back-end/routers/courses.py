@@ -43,6 +43,7 @@ from utils.activity_schema import (
     grade_submission,
     student_release_lessons,
     validate_activities,
+    validate_activities_draft,
 )
 from utils.marketplace_schema import MarketplaceSchemaError, marketplace_entry_path
 from utils.scoring import evaluate_score
@@ -212,7 +213,7 @@ class LessonCreate(BaseModel):
     @model_validator(mode="after")
     def valid_starter(self):
         validate_starter(self.editor_type, self.starter_content)
-        validate_activities(self.activities)
+        validate_activities_draft(self.activities)
         return self
 
 
@@ -229,20 +230,10 @@ class LessonUpdate(BaseModel):
     stage_reference: Optional[StageReference] = Field(default=None, alias="stageReference")
     expected_updated_at: Optional[datetime.datetime] = None
 
-    @field_validator("title")
-    @classmethod
-    def title_not_blank(cls, value: Optional[str]) -> Optional[str]:
-        if value is None:
-            return None
-        value = value.strip()
-        if not value:
-            raise ValueError("must not be blank")
-        return value
-
     @field_validator("activities")
     @classmethod
-    def valid_activity_list(cls, value: Optional[list[dict[str, Any]]]):
-        validate_activities(value)
+    def draft_activity_list(cls, value: Optional[list[dict[str, Any]]]):
+        validate_activities_draft(value)
         return value
 
 

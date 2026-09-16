@@ -358,6 +358,56 @@ def validate_activities(activities: Optional[list[dict[str, Any]]]) -> None:
             raise ValueError("hint forActivityKey must reference a question or activity in the same lesson")
 
 
+def validate_activities_draft(activities: Optional[list[dict[str, Any]]]) -> None:
+    """Draft-tolerant validation for saved work in progress.
+
+    Authors must be able to save incomplete lessons, so completeness checks
+    (required prompts, option sets, mission objectives, numeric ranges) are
+    deferred to publication. Structure and safety still apply: a stored draft
+    can never contain unsupported node types or formatting, an executable
+    mission rule, or a required hint.
+    """
+    if activities is None:
+        return
+    if not isinstance(activities, list):
+        raise ValueError("activities must be a list")
+    keys: set[str] = set()
+    for activity in activities:
+        if not isinstance(activity, dict):
+            raise ValueError("activities must be objects")
+        activity_type = activity.get("type")
+        if activity_type not in ACTIVITY_TYPES:
+            raise ValueError("activity type is not supported")
+        if activity.get("version", ACTIVITY_SCHEMA_VERSION) != ACTIVITY_SCHEMA_VERSION:
+            raise ValueError(f"activity version must be {ACTIVITY_SCHEMA_VERSION}")
+        key = _required_text(activity.get("key"), "activity key")
+        if key in keys:
+            raise ValueError("activities need unique stable keys")
+        if not isinstance(activity.get("required", False), bool):
+            raise ValueError("activity required must be true or false")
+        keys.add(key)
+
+        if activity_type == "rich_text":
+            _validate_rich_content(activity.get("content", ""))
+        elif activity_type == "hint":
+            _validate_rich_content(activity.get("content", ""), "hint content")
+            if activity.get("required", False):
+                raise ValueError("a hint cannot be required")
+        elif activity_type == "mission":
+            _reject_executable_fields(activity)
+
+    linkable_keys = {
+        activity["key"] for activity in activities
+        if activity.get("type") not in {"rich_text", "hint"}
+    }
+    for activity in activities:
+        if activity.get("type") != "hint":
+            continue
+        target = activity.get("forActivityKey")
+        if target is not None and target not in linkable_keys:
+            raise ValueError("hint forActivityKey must reference a question or activity in the same lesson")
+
+
 def student_activity(activity: dict[str, Any]) -> dict[str, Any]:
     safe = copy.deepcopy(activity)
     for field in HIDDEN_STUDENT_FIELDS:
