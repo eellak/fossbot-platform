@@ -433,6 +433,18 @@ const components: any = (theme: Theme, approved = false) => {
         root: { color: theme.palette.text.secondary },
       },
     };
+    // MUI's default checked switch leaves the track translucent behind a saturated
+    // thumb, so it reads as a ball hanging off a pill. Fill the track and use the
+    // contrasting thumb so the on/off state is unambiguous in both modes.
+    result.MuiSwitch = {
+      styleOverrides: {
+        switchBase: {
+          '&.Mui-checked': { color: theme.palette.primary.contrastText },
+          '&.Mui-checked + .MuiSwitch-track': { backgroundColor: theme.palette.primary.main, opacity: 1 },
+        },
+        track: { borderRadius: 7 },
+      },
+    };
     result.MuiCard.styleOverrides.root = {
       ...result.MuiCard.styleOverrides.root,
       border: `1px solid ${theme.palette.divider}`,

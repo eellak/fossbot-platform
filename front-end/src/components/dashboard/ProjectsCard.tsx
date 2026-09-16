@@ -216,6 +216,7 @@ const ProjectsCard = ({ previewAppearance = true }: { previewAppearance?: boolea
         title={t('projects-card.card-title')}
         subtitle={t('projects-card.subtitle')}
         compact={previewAppearance}
+        collapsible
         action={
           previewAppearance && !loading && projects.length === 0 ? undefined : previewAppearance ? <Button variant="contained" startIcon={<IconPlus size={18} />} onClick={() => setShowDrawer(true)} sx={{ flexShrink: 0, whiteSpace: 'nowrap' }}>{t('newProject')}</Button> : <Fab color="success" aria-label="add" onClick={() => setShowDrawer(true)}>
             <FontAwesomeIcon icon={faAdd} size="2x" />

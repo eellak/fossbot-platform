@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type PointerEventHandler } from 'react';
 import { Alert, Box, Button, Chip, Collapse, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, LinearProgress, Skeleton, Stack, Tab, Tabs, Tooltip, Typography, useMediaQuery, useTheme } from '@mui/material';
-import { IconArrowLeft, IconArrowRight, IconCamera, IconCircleCheck, IconLayoutSidebarLeftCollapse, IconLayoutSidebarLeftExpand, IconPlayerPlay, IconPlayerStop, IconRefresh, IconRestore } from '@tabler/icons-react';
+import { IconArrowLeft, IconArrowRight, IconCamera, IconCircleCheck, IconLayoutSidebarLeftCollapse, IconLayoutSidebarLeftExpand, IconPlayerPlay, IconPlayerStop, IconRefresh, IconRestore, IconX } from '@tabler/icons-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { v4 as uuidv4 } from 'uuid';
@@ -17,6 +17,7 @@ import { useAuth } from 'src/authentication/AuthProvider';
 import { completeLesson, CourseRequestError, listMyEnrollments, readEnrollment, readLessonWorkspace, readLessonWorkspaceHistory, resetLessonWorkspace, saveLessonWorkspace, startLesson, uncompleteLesson } from 'src/courses/CoursesApi';
 import type { Enrollment, LessonWorkspace, LessonWorkspaceHistory } from 'src/courses/types';
 import { loadStageFromProvider } from 'src/stages/StagesApi';
+import { loadLocalStage } from 'src/stages/LocalStagesApi';
 import type { RawStageConfig } from 'src/simulator/stages';
 import { CAMERA_MODES } from 'src/simulator/ui/cameraTypes';
 import { changeCameraView, endSensorRun, pauseSensorRun, resumeSensorRun, WebGLApp } from 'src/simulator-adapter/Simulator';
@@ -43,9 +44,15 @@ type LessonWorkspacePageProps = {
     enrollment: Enrollment;
     workspace: LessonWorkspace;
   };
+  /** Fills its parent instead of the shell viewport (used inside the editor preview dialog). */
+  fillParent?: boolean;
+  /** Renders the header control as “Close preview” and exits the editor preview. */
+  onExitPreview?: () => void;
+  /** Lets the editor preview switch lessons without leaving the draft. */
+  onPreviewLessonChange?: (lessonKey: string) => void;
 };
 
-export default function LessonWorkspacePage({ previewAppearance = true, courseIdOverride, lessonKeyOverride, previewFixture }: LessonWorkspacePageProps = {}) {
+export default function LessonWorkspacePage({ previewAppearance = true, courseIdOverride, lessonKeyOverride, previewFixture, fillParent = false, onExitPreview, onPreviewLessonChange }: LessonWorkspacePageProps = {}) {
   const { t } = useTranslation();
   const { token } = useAuth();
   const navigate = useNavigate();
@@ -65,7 +72,7 @@ export default function LessonWorkspacePage({ previewAppearance = true, courseId
   const [loading, setLoading] = useState(!previewFixture);
   const [error, setError] = useState('');
   const [previousRequired, setPreviousRequired] = useState<string | null>(null);
-  const [outlineOpen, setOutlineOpen] = useState(!previewAppearance);
+  const [outlineOpen, setOutlineOpen] = useState(false);
   const [activePane, setActivePane] = useState<Pane>('instructions');
   const [resetOpen, setResetOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -170,6 +177,10 @@ export default function LessonWorkspacePage({ previewAppearance = true, courseId
 
   const lessonIndex = enrollment?.active_release.lessons.findIndex((item) => item.lessonKey === lessonKey) ?? -1;
   const lesson = lessonIndex >= 0 ? enrollment?.active_release.lessons[lessonIndex] : undefined;
+  const openLesson = (key: string) => {
+    if (previewFixture) { onPreviewLessonChange?.(key); return; }
+    navigate(`/courses/${courseId}/learn/${key}`);
+  };
   const stage = lesson?.stageReference || null;
   const stageSourceType = stage?.sourceType;
   const stageVisibility = stage?.visibility;
@@ -177,26 +188,39 @@ export default function LessonWorkspacePage({ previewAppearance = true, courseId
   const stageRepoName = stage?.repoName;
   const stageCommitSha = stage?.commitSha;
   const stageUrl = stage?.url;
+  const stageLocalStageId = stage?.localStageId;
+  const hasEmbeddedStage = Array.isArray(lesson?.stageConfig);
   useEffect(() => {
     setTelemetry(null); setPreviousSummary(null); hasRun.current = false; setIsRunning(false);
     setSensorHelpersVisible(Boolean(lesson?.activities.some((activity) => activity.type === 'simulator_observation' && activity.sensorHelperMode === 'always_visible')));
+    if (!previewFixture) return;
+    // The editor preview keeps every draft lesson in one fixture, so re-seed the
+    // workspace from the newly selected lesson's starter content.
+    const target = previewFixture.enrollment.active_release.lessons.find((item) => item.lessonKey === lessonKey);
+    const nextContent = target?.starterContent ?? (target?.editorType === 'python' ? '' : null);
+    setContent(nextContent); setGeneratedPython(''); lastSaved.current = contentKey(nextContent); setSaveState('saved');
   }, [lessonKey]);
 
   useEffect(() => {
     if (!stageSourceType) { setStageConfig(null); setStageAssetBase(null); setStageError(''); return; }
+    // Local stages are embedded in the published release so students can open them
+    // without access to the author's library.
+    if (hasEmbeddedStage) { setStageConfig(lesson?.stageConfig as RawStageConfig); setStageAssetBase(null); setStageError(''); return; }
     let cancelled = false;
     setStageConfig(undefined); setStageAssetBase(null); setStageError('');
     const request = stageSourceType === 'github' && stageVisibility === 'private' && stageRepoOwner && stageRepoName
       ? loadStageFromProvider(token, stageRepoOwner, stageRepoName, stageCommitSha).then((loaded) => ({ config: loaded.record.config, base: loaded.rawBaseUrl || null }))
-      : fetch(stageUrl || '').then(async (response) => {
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const payload = await response.json();
-        return { config: (Array.isArray(payload) ? payload : payload.config) as RawStageConfig, base: stageUrl ? new URL('.', new URL(stageUrl, window.location.origin)).toString() : null };
-      });
+      : stageSourceType === 'local' && stageLocalStageId
+        ? loadLocalStage(token, stageLocalStageId).then((loaded) => ({ config: loaded.record.config as RawStageConfig, base: null }))
+        : fetch(stageUrl || '').then(async (response) => {
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          const payload = await response.json();
+          return { config: (Array.isArray(payload) ? payload : payload.config) as RawStageConfig, base: stageUrl ? new URL('.', new URL(stageUrl, window.location.origin)).toString() : null };
+        });
     request.then(({ config, base }) => { if (!cancelled) { setStageConfig(config); setStageAssetBase(base); } })
       .catch((reason) => { if (!cancelled) { setStageConfig(null); setStageError(reason instanceof Error ? reason.message : String(reason)); } });
     return () => { cancelled = true; };
-  }, [simulatorKey, stageCommitSha, stageRepoName, stageRepoOwner, stageSourceType, stageUrl, stageVisibility, token]);
+  }, [hasEmbeddedStage, simulatorKey, stageCommitSha, stageLocalStageId, stageRepoName, stageRepoOwner, stageSourceType, stageUrl, stageVisibility, token]);
 
   useEffect(() => {
     if (previewFixture || !workspace || contentKey(content) === lastSaved.current) return;
@@ -369,14 +393,17 @@ export default function LessonWorkspacePage({ previewAppearance = true, courseId
   const results = <LessonExecution ref={executionRef} code={code} sessionId={sessionId} hasStage={hasStage} hasMission={hasMission} showCommandHelper={!previewAppearance && lesson.editorType === 'python'} showPrimaryControls={!previewAppearance} showSecondaryControls={!previewAppearance} useEditorControlLayout={previewAppearance} onBeforeRun={runAfterReset} onResetSimulation={() => resetSimulation(true)} onChangeCamera={changeCamera} onExecutionEvent={handleExecutionEvent} />;
   const hasWorkPane = hasStage || hasEditor;
   const desktopAreas = hasStage && hasEditor ? '"instructions simulator" "editor results"' : hasStage ? '"instructions simulator"' : hasEditor ? '"instructions editor" "instructions results"' : '"instructions"';
-  const previousControl = <Button startIcon={<IconArrowLeft size={18} />} disabled={!previous} onClick={() => previous && navigate(`/courses/${courseId}/learn/${previous.lessonKey}`)}>{t('education.student.previous')}</Button>;
+  const previousControl = <Button startIcon={<IconArrowLeft size={18} />} disabled={!previous} onClick={() => previous && openLesson(previous.lessonKey)}>{t('education.student.previous')}</Button>;
   const lessonActions = <Stack direction="row" spacing={1} justifyContent="center" flexWrap="wrap">{workspaceHistory.length > 0 && <Button onClick={() => setHistoryOpen(true)}>{t('education.workspace.previousCode')}</Button>}{hasEditor && <Button startIcon={<IconRestore size={18} />} disabled={saveState === 'saving'} onClick={() => setResetOpen(true)}>{t('education.workspace.resetWorkspace')}</Button>}{(lesson.completionPolicy === 'self' || lesson.completionPolicy === 'hybrid') && (progress?.state === 'completed' ? <Button onClick={() => void setCompletion(false)}>{t('education.student.undoCompletion')}</Button> : <Button variant="contained" startIcon={<IconCircleCheck size={18} />} onClick={() => void setCompletion(true)}>{t('education.student.finished')}</Button>)}</Stack>;
-  const nextControl = <Button endIcon={<IconArrowRight size={18} />} disabled={!next} onClick={() => next && navigate(`/courses/${courseId}/learn/${next.lessonKey}`)}>{t('education.student.next')}</Button>;
+  const nextControl = <Button endIcon={<IconArrowRight size={18} />} disabled={!next} onClick={() => next && openLesson(next.lessonKey)}>{t('education.student.next')}</Button>;
 
-  return <Box sx={{ height: previewAppearance ? workspaceShellHeight : undefined, minHeight: previewAppearance ? 0 : 'calc(100vh - 64px)', display: 'flex', flexDirection: 'column', overflowX: 'clip', bgcolor: 'background.paper', '& .MuiButton-containedPrimary': { color: theme.palette.getContrastText(theme.palette.primary.main) }, '& .MuiButtonBase-root:focus-visible': { outline: '2px solid', outlineColor: 'text.primary', outlineOffset: 2 }, '@media (pointer: coarse), (max-width: 768px)': { '& .MuiButtonBase-root': { minHeight: 44 }, '& .MuiIconButton-root': { minWidth: 44 } } }}>
+  const rootHeight = fillParent ? '100%' : previewAppearance ? workspaceShellHeight : undefined;
+  const rootMinHeight = fillParent ? 0 : previewAppearance ? 0 : 'calc(100vh - 64px)';
+
+  return <Box sx={{ height: rootHeight, minHeight: rootMinHeight, display: 'flex', flexDirection: 'column', overflowX: 'clip', bgcolor: 'background.paper', '& .MuiButton-containedPrimary': { color: theme.palette.getContrastText(theme.palette.primary.main) }, '& .MuiButtonBase-root:focus-visible': { outline: '2px solid', outlineColor: 'text.primary', outlineOffset: 2 }, '@media (pointer: coarse), (max-width: 768px)': { '& .MuiButtonBase-root': { minHeight: 44 }, '& .MuiSwitch-switchBase, & .MuiCheckbox-root, & .MuiRadio-root': { minHeight: 0 }, '& .MuiIconButton-root': { minWidth: 44 } } }}>
     <Box component="header" sx={{ minHeight: workspaceLayout.headerMinHeight, px: workspaceLayout.horizontalPadding, py: workspaceLayout.verticalPadding, borderBottom: '1px solid', borderColor: 'divider' }}>
       <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 1.5 }}>
-        <Button size="small" startIcon={<IconArrowLeft size={17} />} onClick={previewFixture ? undefined : () => navigate(`/courses/${courseId}`)}>{t('education.student.backToCourses')}</Button>
+        <Button size="small" startIcon={onExitPreview ? <IconX size={17} /> : <IconArrowLeft size={17} />} onClick={onExitPreview || (previewFixture ? undefined : () => navigate(`/courses/${courseId}`))}>{onExitPreview ? t('education.preview.close') : t('education.student.backToCourses')}</Button>
         <Box sx={{ minWidth: 0, pl: 1.5, borderLeft: '1px solid', borderColor: 'divider' }}>
           <Typography variant="caption" color="text.secondary" sx={{ display: 'block', lineHeight: 1.2 }}>{t('education.settings.course')}</Typography>
           <Typography variant="subtitle2" fontWeight={700} noWrap>{enrollment.course.title}</Typography>
@@ -408,9 +435,9 @@ export default function LessonWorkspacePage({ previewAppearance = true, courseId
       </Box>
     </Box>}
     <Box sx={{ position: 'relative', display: 'flex', flex: 1, minHeight: 0, overflow: previewAppearance ? 'hidden' : undefined }}>
-      {!compact && previewAppearance && <Collapse in={outlineOpen} orientation="horizontal" unmountOnExit sx={{ position: 'absolute', inset: '0 auto 0 0', zIndex: 6, height: '100%', '& .MuiCollapse-wrapper, & .MuiCollapse-wrapperInner': { height: '100%' } }}><Box id="course-outline-panel" component="aside" sx={{ width: outlineWidth, height: '100%', p: 2, bgcolor: 'background.paper', boxShadow: 3 }}><StudentCourseOutline lessons={enrollment.active_release.lessons} progress={enrollment.progress} selectedKey={lessonKey} title={t('education.student.outline')} completedLabel={t('education.student.completed')} onSelect={(key) => { if (!previewFixture) navigate(`/courses/${courseId}/learn/${key}`); }} /></Box></Collapse>}
+      {!compact && previewAppearance && <Collapse in={outlineOpen} orientation="horizontal" unmountOnExit sx={{ position: 'absolute', inset: '0 auto 0 0', zIndex: 6, height: '100%', '& .MuiCollapse-wrapper, & .MuiCollapse-wrapperInner': { height: '100%' } }}><Box id="course-outline-panel" component="aside" sx={{ width: outlineWidth, height: '100%', p: 2, bgcolor: 'background.paper', boxShadow: 3 }}><StudentCourseOutline lessons={enrollment.active_release.lessons} progress={enrollment.progress} selectedKey={lessonKey} title={t('education.student.outline')} completedLabel={t('education.student.completed')} onSelect={(key) => openLesson(key)} /></Box></Collapse>}
       {!compact && previewAppearance && outlineOpen && <Box sx={{ position: 'absolute', zIndex: 7, top: 0, bottom: 0, left: outlineWidth - 8, display: 'flex' }}><WorkspaceResizeHandle direction="vertical" valueNow={outlineWidth} valueMin={220} valueMax={420} label={t('education.workspace.resizeOutline')} onPointerDown={beginResize('outline')} onReset={resetPaneSizes} onKeyboardResize={resizePaneWithKeyboard('outline')} /></Box>}
-      {!compact && !previewAppearance && <Collapse in={outlineOpen} orientation="horizontal"><Box id="course-outline-panel" component="aside" sx={{ width: outlineWidth, height: '100%', p: 2, bgcolor: 'action.hover' }}><StudentCourseOutline lessons={enrollment.active_release.lessons} progress={enrollment.progress} selectedKey={lessonKey} title={t('education.student.outline')} completedLabel={t('education.student.completed')} onSelect={(key) => { if (!previewFixture) navigate(`/courses/${courseId}/learn/${key}`); }} /></Box></Collapse>}
+      {!compact && !previewAppearance && <Collapse in={outlineOpen} orientation="horizontal"><Box id="course-outline-panel" component="aside" sx={{ width: outlineWidth, height: '100%', p: 2, bgcolor: 'action.hover' }}><StudentCourseOutline lessons={enrollment.active_release.lessons} progress={enrollment.progress} selectedKey={lessonKey} title={t('education.student.outline')} completedLabel={t('education.student.completed')} onSelect={(key) => openLesson(key)} /></Box></Collapse>}
       {!compact && !previewAppearance && outlineOpen && <WorkspaceResizeHandle direction="vertical" valueNow={outlineWidth} valueMin={220} valueMax={420} label={t('education.workspace.resizeOutline')} onPointerDown={beginResize('outline')} onReset={resetPaneSizes} onKeyboardResize={resizePaneWithKeyboard('outline')} />}
       <Box component="main" sx={{ flex: 1, minWidth: 0, minHeight: previewAppearance ? 0 : undefined, p: previewAppearance ? 0 : { xs: 1.5, md: 2 }, display: previewAppearance ? 'flex' : undefined, flexDirection: previewAppearance ? 'column' : undefined }}>
         <Box sx={{ flex: previewAppearance ? 1 : undefined, minHeight: previewAppearance ? 0 : undefined, p: previewAppearance ? workspaceLayout.contentPadding : 0, display: previewAppearance ? 'flex' : undefined, flexDirection: previewAppearance ? 'column' : undefined }}>

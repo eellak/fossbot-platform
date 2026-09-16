@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, InputAdornment, Menu, MenuItem, Paper, Skeleton, Stack, Tab, Tabs, TextField, Typography } from '@mui/material';
-import { IconDotsVertical, IconPlus, IconSearch } from '@tabler/icons-react';
+import { IconDotsVertical, IconPlus, IconSchool, IconSearch } from '@tabler/icons-react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from 'src/authentication/AuthProvider';
@@ -9,6 +9,7 @@ import type { CourseSummary } from 'src/courses/types';
 import ClassGroupsTeacherPage from '../class-groups-teacher-page/ClassGroupsTeacherPage';
 import { pageTabsSx, TabbedPageHeader } from 'src/components/shared/PageHeader';
 import { useConfirmDialog } from 'src/components/shared/ConfirmDialog';
+import ListCard from 'src/components/shared/ListCard';
 
 export default function TeacherCoursesPage() {
   const { t } = useTranslation();
@@ -56,7 +57,7 @@ export default function TeacherCoursesPage() {
       });
       for (const lesson of draft.lessons) {
         await addLesson(token, copy.id, {
-          title: lesson.title, activities: lesson.activities, completion_policy: lesson.completion_policy, start_mode: lesson.position === 1 ? 'fresh' : lesson.start_mode,
+          title: lesson.title, activities: lesson.activities, completion_policy: lesson.completion_policy, start_mode: 'fresh',
           editor_type: lesson.editor_type, starter_content: lesson.starter_content, simulator_settings: lesson.simulator_settings, stageReference: lesson.stageReference,
         });
       }
@@ -92,18 +93,21 @@ export default function TeacherCoursesPage() {
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
       {loading ? <Stack spacing={1}>{[1, 2, 3].map((item) => <Skeleton key={item} variant="rounded" height={92} />)}</Stack> : filtered.length === 0 ? (
         <Paper variant="outlined" sx={{ py: 7, px: 3, textAlign: 'center' }}><Typography variant="h5">{search ? t('education.courseList.noResults') : t('education.courseList.empty')}</Typography><Typography color="text.secondary" sx={{ mt: 1 }}>{t('education.courseList.emptyHelp')}</Typography></Paper>
-      ) : <Stack spacing={1}>
-        {filtered.map((course) => <Paper variant="outlined" key={course.id} sx={{ p: 2 }}>
-          <Stack direction="row" alignItems="center" gap={2}>
-            <Box sx={{ minWidth: 0, flex: 1, cursor: 'pointer' }} onClick={() => navigate(`/teach/courses/${course.id}`)}>
-              <Stack direction="row" gap={1} alignItems="center" flexWrap="wrap"><Typography variant="h6" noWrap>{course.title}</Typography><Chip size="small" color={course.status === 'published' ? 'success' : course.status === 'archived' ? 'default' : 'warning'} label={t(`education.status.${course.status}`)} /></Stack>
-              <Typography color="text.secondary" noWrap>{course.description}</Typography>
-              <Typography variant="caption" color="text.secondary">{course.latest_published_release_version ? t('education.courseList.latestRelease', { version: course.latest_published_release_version }) : t('education.courseList.noRelease')}</Typography>
-            </Box>
-            <IconButton aria-label={t('education.courseList.actions')} onClick={(event) => setMenu({ anchor: event.currentTarget, course })}><IconDotsVertical size={20} /></IconButton>
-          </Stack>
-        </Paper>)}
-      </Stack>}</Box>}
+      ) : <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden' }}>
+        {filtered.map((course, index) => <ListCard
+          key={course.id}
+          surface="row"
+          divided={index > 0}
+          title={course.title}
+          description={course.description}
+          fallbackIcon={<IconSchool size={20} />}
+          status={<Chip size="small" color={course.status === 'published' ? 'success' : course.status === 'archived' ? 'default' : 'warning'} label={t(`education.status.${course.status}`)} />}
+          meta={course.latest_published_release_version ? t('education.courseList.latestRelease', { version: course.latest_published_release_version }) : t('education.courseList.noRelease')}
+          openLabel={t('education.courseList.edit')}
+          onOpen={() => navigate(`/teach/courses/${course.id}`)}
+          action={<IconButton aria-label={t('education.courseList.actions')} onClick={(event) => setMenu({ anchor: event.currentTarget, course })}><IconDotsVertical size={20} /></IconButton>}
+        />)}
+      </Box>}</Box>}
       {tab === 1 && <ClassGroupsTeacherPage embedded />}
       <Menu anchorEl={menu?.anchor} open={!!menu} onClose={() => setMenu(null)}>
         <MenuItem onClick={() => menu && navigate(`/teach/courses/${menu.course.id}`)}>{t('education.courseList.edit')}</MenuItem>

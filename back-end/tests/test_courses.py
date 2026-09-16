@@ -2,7 +2,7 @@ from unittest.mock import patch
 
 import pytest
 
-from database.database import ActivityAnswer, Course, CourseRelease, Enrollment, Lesson, LessonProgress, LessonWorkspace, MissionAttempt, User
+from database.database import ActivityAnswer, Course, CourseRelease, Enrollment, Lesson, LessonProgress, LessonWorkspace, LocalStage, MissionAttempt, User
 from models.models import UserRole
 from utils.activity_schema import grade_submission, validate_activities
 
@@ -336,6 +336,44 @@ def test_stage_variants_are_normalized_and_remote_references_are_pinned(client_f
             assert release.status_code == 201
             pinned = release.json()["snapshot"]["lessons"][0]["stageReference"]
             assert pinned["commitSha"] == "a" * 40
+
+
+def test_local_stage_reference_is_embedded_in_the_release(client_for, users, db):
+    tutor, other_tutor, _, _ = users
+    client = client_for(tutor)
+    stage = LocalStage(
+        user_id=tutor.id,
+        slug="maze-runner",
+        title="Maze runner",
+        description="A locally saved stage.",
+        visibility="private",
+        record={"title": "Maze runner", "config": [{"type": "skybox", "mode": "color", "color": "#ddf0fb"}]},
+        record_bytes=64,
+        revision=1,
+        checksum="b" * 64,
+    )
+    db.add(stage)
+    db.commit()
+    db.refresh(stage)
+
+    course = create_course(client, title="Local stage course")
+    lesson = add_lesson(client, course["id"], stageReference={"sourceType": "local", "localStageId": stage.id})
+    assert lesson["stageReference"]["sourceType"] == "local"
+    assert lesson["stageReference"]["commitSha"] == "b" * 64
+
+    release = client.post(f"/courses/{course['id']}/publish")
+    assert release.status_code == 201, release.text
+    snapshot_lesson = release.json()["snapshot"]["lessons"][0]
+    assert snapshot_lesson["stageReference"]["sourceType"] == "local"
+    assert snapshot_lesson["stageConfig"] == [{"type": "skybox", "mode": "color", "color": "#ddf0fb"}]
+
+    # Another tutor cannot reference a stage from someone else's library.
+    other_course = create_course(client_for(other_tutor), title="Other course")
+    denied = client_for(other_tutor).post(
+        f"/courses/{other_course['id']}/lessons",
+        json={"title": "Nope", "stageReference": {"sourceType": "local", "localStageId": stage.id}},
+    )
+    assert denied.status_code == 404
 
 
 def test_archiving_is_soft_and_release_rows_remain(client_for, users, db):

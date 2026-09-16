@@ -143,7 +143,7 @@ Buttons share the global 40px minimum height, 8px radius, 16px horizontal paddin
 
 ### Fields, chips, alerts, and notifications
 
-Outlined fields use the shared divider at rest, stronger secondary text color on hover, and framework focus/error states. Labels remain visible; ordinary-looking text must not be the only indication that a title or description is editable.
+Outlined fields use the shared divider at rest, stronger secondary text color on hover, and framework focus/error states. Labels remain visible; ordinary-looking text must not be the only indication that a title or description is editable. Switches use the approved treatment: a filled `primary` track and a contrasting thumb when on, with the thumb vertically centered on the track, so on/off reads in both modes.
 
 Chips are compact 12px/600 metadata or statuses. Use semantic color only when the status warrants it, and pair color with text. Routine state belongs beside the title or relevant control. Alerts are reserved for errors, conflicts, missing dependencies, consequential warnings, and information that changes the next action; healthy or stable state should use muted text, helper copy, or a chip.
 

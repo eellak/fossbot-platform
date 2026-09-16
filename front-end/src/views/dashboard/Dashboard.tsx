@@ -5,7 +5,7 @@ import StageMarketplacePanel from 'src/components/dashboard/StageMarketplacePane
 import UserStagesDashboardPanel from 'src/components/dashboard/UserStagesDashboardPanel';
 import { Box, Grid } from '@mui/material';
 import { useTranslation } from 'react-i18next';
-import CourseResumeCard from 'src/components/dashboard/CourseResumeCard';
+import CoursesDashboardPanel from 'src/components/dashboard/CoursesDashboardPanel';
 import { useFeatureFlags } from 'src/config/FeatureFlags';
 import PageHeader from 'src/components/shared/PageHeader';
 
@@ -22,7 +22,7 @@ const Modern = ({ previewAppearance = true }: { previewAppearance?: boolean }) =
           </Box>
         )}
         <Grid container spacing={3}>
-          {marketplace && <Grid item xs={12}><CourseResumeCard /></Grid>}
+          {marketplace && <Grid item xs={12}><CoursesDashboardPanel previewAppearance={previewAppearance} /></Grid>}
           <Grid item xs={12} lg={12}>
             <ProjectsCard previewAppearance={previewAppearance} />
           </Grid>

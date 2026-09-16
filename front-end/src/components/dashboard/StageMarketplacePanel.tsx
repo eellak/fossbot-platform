@@ -148,7 +148,7 @@ function MarketplaceStageCard({ entry, onSelect, embedded = false }: { entry: Ma
 function MarketplacePanelFrame({ preview, action, children }: { preview: boolean; action: React.ReactNode; children: React.ReactNode }) {
   const subtitle = preview ? 'Discover community stages for FOSSBot simulations.' : 'Browse public stages for FOSSBot simulations.';
   if (preview) {
-    return <DashboardCard title={MARKETPLACE_COPY.stageLibrary} titleAdornment={<BetaBadge feature="stages" />} subtitle={subtitle} action={action} compact>{children}</DashboardCard>;
+    return <DashboardCard title={MARKETPLACE_COPY.stageLibrary} titleAdornment={<BetaBadge feature="stages" />} subtitle={subtitle} action={action} compact collapsible>{children}</DashboardCard>;
   }
   return (
     <>

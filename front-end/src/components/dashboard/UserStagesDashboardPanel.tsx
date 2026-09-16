@@ -380,7 +380,7 @@ export default function UserStagesDashboardPanel({ showViewAll = true, appearanc
   const actions = (
     <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" justifyContent="flex-end">
       {createStageButton}
-      {showViewAll && <Button component="a" href="/stages?tab=mine" size="small" variant="outlined">View all</Button>}
+      {showViewAll && <Button component="a" href="/stages?tab=mine" size="small" variant="outlined">All stages</Button>}
     </Stack>
   );
 
@@ -560,5 +560,5 @@ export default function UserStagesDashboardPanel({ showViewAll = true, appearanc
     return content;
   }
 
-  return <DashboardCard title={MARKETPLACE_COPY.myStages} subtitle="Stages saved locally or on GitHub." action={actions} compact>{content}</DashboardCard>;
+  return <DashboardCard title={MARKETPLACE_COPY.myStages} subtitle="Stages saved locally or on GitHub." action={actions} compact collapsible>{content}</DashboardCard>;
 }

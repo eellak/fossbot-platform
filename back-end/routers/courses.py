@@ -9,7 +9,7 @@ import xml.etree.ElementTree as ElementTree
 from typing import Any, Literal, Optional
 from urllib.parse import urlsplit
 
-from database.database import ActivityAnswer, Course, CourseRelease, Enrollment, Lesson, LessonProgress, LessonWorkspace, MarketplaceModerationOverride, MissionAttempt, User
+from database.database import ActivityAnswer, Course, CourseRelease, Enrollment, Lesson, LessonProgress, LessonWorkspace, LocalStage, MarketplaceModerationOverride, MissionAttempt, User
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError
@@ -81,7 +81,7 @@ def validate_optional_web_url(value: Optional[str]) -> Optional[str]:
 class StageReference(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
-    source_type: Literal["default", "github", "marketplace"] = Field(alias="sourceType")
+    source_type: Literal["default", "github", "marketplace", "local"] = Field(alias="sourceType")
     local_stage_id: Optional[int] = Field(default=None, alias="localStageId", ge=1)
     repo_owner: Optional[str] = Field(default=None, alias="repoOwner")
     repo_name: Optional[str] = Field(default=None, alias="repoName")
@@ -587,6 +587,28 @@ def marketplace_reference(reference: StageReference, db: Session) -> dict[str, A
     raise stage_error(404, "marketplace_stage_not_found", "Choose a stage that is already published in the marketplace.")
 
 
+def local_reference(reference: StageReference, user: User, db: Session) -> dict[str, Any]:
+    """Pin a stage saved in this FOSSBot instance. The stage config is embedded
+    into the published release, so students never need access to the author's
+    local library."""
+    if not reference.local_stage_id:
+        raise stage_error(400, "validation_failed", "Choose a stage saved in this FOSSBot instance.")
+    stage = db.query(LocalStage).filter(LocalStage.id == reference.local_stage_id).first()
+    if stage is None or (stage.user_id != user.id and user.role != UserRole.ADMIN):
+        raise stage_error(404, "stage_not_found", "Choose a stage saved in this FOSSBot instance.")
+    return {
+        "sourceType": "local",
+        "localStageId": stage.id,
+        "repoOwner": None,
+        "repoName": None,
+        "visibility": None,
+        "marketplaceEntryPath": None,
+        "title": stage.title,
+        "url": None,
+        "commitSha": stage.checksum,
+    }
+
+
 def github_reference(reference: StageReference, user: User, db: Session) -> dict[str, Any]:
     if not reference.repo_owner or not reference.repo_name:
         raise stage_error(400, "validation_failed", "GitHub stage references need repoOwner and repoName.")
@@ -655,6 +677,8 @@ def normalize_course_stage_reference(reference: Optional[StageReference], user: 
         }
     if reference.source_type == "github":
         return github_reference(reference, user, db)
+    if reference.source_type == "local":
+        return local_reference(reference, user, db)
     return marketplace_reference(reference, db)
 
 
@@ -837,7 +861,7 @@ def canonical_hash(payload: Any) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
-def release_lesson_snapshot(lesson: Lesson, stage_reference: Optional[dict[str, Any]]) -> dict[str, Any]:
+def release_lesson_snapshot(lesson: Lesson, stage_reference: Optional[dict[str, Any]], stage_config: Optional[list[dict[str, Any]]] = None) -> dict[str, Any]:
     activities = []
     for activity in lesson.activities:
         item = dict(activity)
@@ -856,6 +880,7 @@ def release_lesson_snapshot(lesson: Lesson, stage_reference: Optional[dict[str, 
         "starterContent": lesson.starter_content,
         "simulatorSettings": lesson.simulator_settings,
         "stageReference": stage_reference,
+        "stageConfig": stage_config,
     }
     definition["definitionHash"] = canonical_hash(definition)
     return definition
@@ -1169,7 +1194,14 @@ def publish_course(course_id: int, user: User = Depends(get_current_user), db: S
     lesson_snapshots = []
     for lesson in lessons:
         pinned_stage = normalize_course_stage_reference(stage_model_from_lesson(lesson), user, db)
-        lesson_snapshots.append(release_lesson_snapshot(lesson, pinned_stage))
+        stage_config = None
+        if pinned_stage and pinned_stage.get("sourceType") == "local":
+            local_stage = db.query(LocalStage).filter(LocalStage.id == pinned_stage.get("localStageId")).first()
+            if local_stage is not None:
+                record = local_stage.record or {}
+                config = record.get("config") if isinstance(record, dict) else None
+                stage_config = config if isinstance(config, list) else None
+        lesson_snapshots.append(release_lesson_snapshot(lesson, pinned_stage, stage_config))
     version = (db.query(func.max(CourseRelease.version)).filter(CourseRelease.course_id == course.id).scalar() or 0) + 1
     snapshot = {
         "schemaVersion": RELEASE_SCHEMA_VERSION,

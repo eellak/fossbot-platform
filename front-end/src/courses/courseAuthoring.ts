@@ -36,14 +36,6 @@ export function textFromTiptap(node?: TiptapNode | null): string {
   return [own, ...children].filter(Boolean).join(node.type === 'paragraph' ? ' ' : '\n').trim();
 }
 
-export function inheritanceChanges(before: Lesson[], after: Lesson[]): number[] {
-  const previousByLesson = new Map<number, number | null>();
-  before.forEach((lesson, index) => previousByLesson.set(lesson.id, before[index - 1]?.id || null));
-  return after
-    .filter((lesson, index) => lesson.start_mode === 'inherit_previous_code' && previousByLesson.get(lesson.id) !== (after[index - 1]?.id || null))
-    .map((lesson) => lesson.id);
-}
-
 export function moveLesson(lessons: Lesson[], lessonId: number, direction: -1 | 1): Lesson[] {
   const from = lessons.findIndex((lesson) => lesson.id === lessonId);
   const to = from + direction;
