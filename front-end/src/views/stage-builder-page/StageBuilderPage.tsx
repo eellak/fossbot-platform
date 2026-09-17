@@ -477,8 +477,10 @@ const StageBuilderPage = () => {
   const selectedGroupObjectIds = selectedGroup ? selectedGroup.objectIds.filter((id) => stage.objects.some((object) => object.id === id)) : [];
   const selectedCount = selectedGroup ? selectedGroupObjectIds.length : selectedIds.length || (selectedId ? 1 : 0);
   const assistantSelectedIds = selectedGroup ? selectedGroupObjectIds : selectedIds.length ? selectedIds : selectedId ? [selectedId] : [];
-  const dirty = useMemo(() => stageFingerprint(stage) !== lastExportFingerprint, [stage, lastExportFingerprint]);
-  const localStageHasChanges = useMemo(() => localStage ? stageFingerprint(stage) !== stageFingerprint(configToEditorStage(localStage.record)) : dirty, [dirty, localStage, stage]);
+  const currentFingerprint = useMemo(() => stageFingerprint(stage), [stage]);
+  const savedLocalFingerprint = useMemo(() => localStage ? stageFingerprint(configToEditorStage(localStage.record)) : null, [localStage]);
+  const dirty = currentFingerprint !== lastExportFingerprint;
+  const localStageHasChanges = savedLocalFingerprint === null ? dirty : currentFingerprint !== savedLocalFingerprint;
   const gridVisible = stage.metadata.gridVisible ?? true;
   const gridSize = stage.metadata.gridSize ?? 0.5;
   const selectedStatus = selectedGroup ? selectedGroup.name : selectedObject ? selectedObject.name : selectedCount ? `${selectedCount} objects` : inspectorTab === 'stage' ? 'Stage' : 'None';

@@ -11,12 +11,13 @@ import { disposeScene, initScene, renderScene, type SceneHandle } from 'src/simu
 import { loadRobotV2 } from 'src/simulator/robot/v2';
 import { SENSOR_LAYOUT } from 'src/simulator/sensors/layout';
 import { createStageAssetResolver } from 'src/simulator/stages/assets';
+import { objectVisualKey } from './stageBuilderVisualKey';
 import type { EditorStageObject, StageBuilderGroup, StageBuilderMode, StageBuilderSkyboxSettings, StageBuilderTransformSpace, StageLabelAttachment, StageLabelFace, StageTextStyle, Vec3 } from './types';
 import type { StageBuilderControlScheme, StageBuilderLockMode, StageBuilderStyleVariant } from './stageBuilderPreferences';
 import type { StageBuilderSnapSettings } from './stageBuilderSnapping';
 import { getSnapSettings, snapAngle, snapDimensions, snapPosition } from './stageBuilderSnapping';
 import type { StageBuilderValidationResult } from './stageBuilderValidation';
-import { objectBounds, stageHalfExtents, cameraLookDirection } from './stageBuilderGeometry';
+import { cloneStage, objectBounds, stageHalfExtents, cameraLookDirection } from './stageBuilderGeometry';
 import { getEditorColors, getEditorTones } from './stageBuilderEditorTheme';
 import { normalizeStageBuilderSkybox } from './stageBuilderSkybox';
 import { CUSTOM_OBJECT_MIN_SCALE } from './stageBuilderCustomObjects';
@@ -111,6 +112,8 @@ export type ObjectVisualOptions = {
   validationSeverity?: 'error' | 'warning' | 'info';
   sensorHelpersVisible?: boolean;
   collisionWireVisible?: boolean;
+  /** Pre-resolved model asset URL, so callers that already resolved it avoid a second call. */
+  resolvedAssetUrl?: string;
 };
 
 type ColorableMaterial = THREE.Material & { color?: THREE.Color; _color?: THREE.Color };
@@ -121,6 +124,10 @@ const transformAxisGuideColors = {
   Y: 0x00ff00,
   Z: 0x0000ff,
 };
+
+// Named so `applyObjectVisualTransform` can re-anchor the range ring when an audio
+// source is moved without rebuilding its TubeGeometry.
+const AUDIO_RANGE_RING_NAME = 'audio range ring';
 const transformGuideNeutralColor = 0xffffff;
 
 const stageBuilderObjLoader = new OBJLoader();
@@ -139,7 +146,7 @@ const dragStartPosition = new THREE.Vector3();
 const robotSpawnForward = new THREE.Vector3();
 
 function cloneObjectForTransform(object: EditorStageObject): EditorStageObject {
-  return JSON.parse(JSON.stringify(object));
+  return cloneStage(object);
 }
 
 function loadStageBuilderOBJ(url: string): Promise<THREE.Group> {
@@ -197,9 +204,9 @@ function loadStageBuilderGLB(url: string): Promise<THREE.Group> {
   return pending.then(cloneGltfScene);
 }
 
-async function loadStageBuilderModel(object: Extract<EditorStageObject, { kind: 'model' }>, resolveAssetUrl: (url: string) => string = (url) => url): Promise<THREE.Object3D> {
+async function loadStageBuilderModel(object: Extract<EditorStageObject, { kind: 'model' }>, resolveAssetUrl: (url: string) => string = (url) => url, resolvedUrl?: string): Promise<THREE.Object3D> {
   const name = (object.originalFileName || object.filename).toLowerCase();
-  const modelUrl = resolveAssetUrl(object.filename);
+  const modelUrl = resolvedUrl ?? resolveAssetUrl(object.filename);
   if (object.format === 'stl' || (!object.format && name.endsWith('.stl'))) {
     const geometry = await loadStageBuilderSTL(modelUrl);
     const group = new THREE.Group();
@@ -531,10 +538,7 @@ function makeCollisionEdgesLocal(root: THREE.Object3D, anchor: THREE.Object3D, c
 
 function makeImportedModelRoot(object: Extract<EditorStageObject, { kind: 'model' }>, options: ObjectVisualOptions, colors: ReturnType<typeof getEditorColors>, pickables: THREE.Object3D[], resolveAssetUrl?: (url: string) => string): THREE.Group {
   const group = new THREE.Group();
-  group.position.set(...object.position);
-  group.scale.setScalar(object.scale);
-  if (object.orientation) group.rotation.set(object.orientation[0], object.orientation[1], object.orientation[2]);
-  else group.rotation.y = object.rotationY;
+  applyImportedModelTransform(group, object);
 
   const placeholder = new THREE.Mesh(
     new THREE.BoxGeometry(0.4, 0.4, 0.4),
@@ -554,8 +558,11 @@ function makeImportedModelRoot(object: Extract<EditorStageObject, { kind: 'model
     group.add(initialWire);
   }
 
-  loadStageBuilderModel(object, resolveAssetUrl).then((loaded) => {
-    if (group.userData.stageBuilderDisposed) return;
+  loadStageBuilderModel(object, resolveAssetUrl, options.resolvedAssetUrl).then((loaded) => {
+    if (group.userData.stageBuilderDisposed) {
+      disposeObject(loaded);
+      return;
+    }
     group.remove(placeholder);
     placeholder.geometry.dispose();
     (placeholder.material as THREE.Material).dispose();
@@ -584,6 +591,72 @@ function makeImportedModelRoot(object: Extract<EditorStageObject, { kind: 'model
   });
 
   return group;
+}
+
+function applyImportedModelTransform(root: THREE.Object3D, object: Extract<EditorStageObject, { kind: 'model' }>): void {
+  root.position.set(...object.position);
+  root.scale.setScalar(object.scale);
+  if (object.orientation) root.rotation.set(...object.orientation);
+  else root.rotation.set(0, object.rotationY, 0);
+}
+
+/**
+ * Re-applies an object's transform to a reused root. Must mirror exactly how
+ * `makeObjectRoot` positions each kind at construction time; the matching visual
+ * key excludes these fields. Line and text visuals bake their transform into
+ * geometry/textures and are never reused, so they are intentionally absent.
+ */
+function applyObjectVisualTransform(root: THREE.Object3D, object: EditorStageObject): void {
+  // A friendly resize previews by scaling the live root; clear that unless the model
+  // branch below sets the object's own scale.
+  if (object.kind !== 'model') root.scale.setScalar(1);
+  switch (object.kind) {
+    case 'base':
+      root.position.set(object.position[0], 0.006, object.position[2]);
+      return;
+    case 'camera':
+      root.position.set(...object.position);
+      root.rotation.order = 'YXZ';
+      root.rotation.set(-object.pitch, object.rotationY, 0);
+      return;
+    case 'light':
+      root.position.set(...object.position);
+      root.rotation.y = object.rotationY;
+      return;
+    case 'audio': {
+      root.position.set(...object.position);
+      const ring = root.getObjectByName(AUDIO_RANGE_RING_NAME);
+      if (ring) ring.position.y = -object.position[1] + 0.04;
+      return;
+    }
+    case 'model':
+      applyImportedModelTransform(root, object);
+      return;
+    case 'fossbot':
+      root.position.set(...object.position);
+      root.rotation.y = object.rotationY;
+      return;
+    case 'cylinder':
+    case 'sphere':
+      root.position.set(...object.position);
+      return;
+    case 'cube':
+    case 'wedge':
+    case 'arrow':
+      root.position.set(...object.position);
+      if (object.orientation) root.rotation.set(...object.orientation);
+      else root.rotation.set(0, object.rotationY, 0);
+      return;
+    case 'text':
+      // Attached labels are never reused (their pose follows the parent); unattached
+      // labels bake scale into geometry, so only position and floor rotation move.
+      if (object.attachment?.parentId) return;
+      root.rotation.set(object.onFloor ? -Math.PI / 2 : 0, 0, 0);
+      root.position.set(...object.position);
+      return;
+    default:
+      return;
+  }
 }
 
 function yawFromObject(root: THREE.Object3D, fallback = 0): number {
@@ -1357,6 +1430,7 @@ export function makeObjectRoot(object: EditorStageObject, options: ObjectVisualO
 
     if (object.spatial) {
       const ring = makeAudioRangeRing(object.range, iconColor, options);
+      ring.name = AUDIO_RANGE_RING_NAME;
       ring.position.y = -object.position[1] + 0.04;
       ring.renderOrder = 6;
       group.add(ring);
@@ -1594,12 +1668,24 @@ function tintGhost(root: THREE.Object3D, valid: boolean, colors: ReturnType<type
   });
 }
 
-function validationSeverityFor(objectId: string, results: StageBuilderValidationResult[]): 'error' | 'warning' | 'info' | undefined {
-  const active = results.filter((item) => item.objectIds.includes(objectId) && !(item.overridable && item.overridden));
-  if (active.some((item) => item.severity === 'error')) return 'error';
-  if (active.some((item) => item.severity === 'warning')) return 'warning';
-  if (active.some((item) => item.severity === 'info')) return 'info';
-  return undefined;
+const validationSeverityRank = { info: 1, warning: 2, error: 3 } as const;
+
+/**
+ * Flattens validation results into one severity per object so the object-map effect
+ * does not rescan every result for every object (previously O(objects x results)).
+ */
+function validationSeverityMap(results: StageBuilderValidationResult[]): Map<string, 'error' | 'warning' | 'info'> {
+  const severities = new Map<string, 'error' | 'warning' | 'info'>();
+  for (const item of results) {
+    if (item.overridable && item.overridden) continue;
+    for (const objectId of item.objectIds) {
+      const current = severities.get(objectId);
+      if (!current || validationSeverityRank[item.severity] > validationSeverityRank[current]) {
+        severities.set(objectId, item.severity);
+      }
+    }
+  }
+  return severities;
 }
 
 type CornerBoundsHelper = THREE.LineSegments<THREE.BufferGeometry, THREE.LineBasicMaterial>;
@@ -1737,6 +1823,7 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
   const friendlyHandlesRef = useRef<FriendlyHandleRecord | null>(null);
   const groupPivotRef = useRef<THREE.Group | null>(null);
   const objectMapRef = useRef<Map<string, MeshRecord>>(new Map());
+  const visualKeysRef = useRef<Map<string, string>>(new Map());
   const ghostRef = useRef<MeshRecord | null>(null);
   const floorMeshRef = useRef<THREE.Mesh | null>(null);
   const gridGroupRef = useRef<THREE.Group | null>(null);
@@ -2540,24 +2627,47 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
     if (!scene) return;
 
     transformRef.current?.detach();
-
-    for (const record of objectMapRef.current.values()) {
-      scene.remove(record.root);
-      disposeObject(record.root);
-    }
-    objectMapRef.current.clear();
+    const previous = objectMapRef.current;
+    const previousKeys = visualKeysRef.current;
+    const next = new Map<string, MeshRecord>();
+    const nextKeys = new Map<string, string>();
+    const severities = validationSeverityMap(validationResultsRef.current);
+    const objectsById = new Map(objects.map((item) => [item.id, item]));
 
     for (const object of objects) {
       if (object.hidden) continue;
-      if (object.kind === 'text' && object.attachment?.parentId && objects.find((item) => item.id === object.attachment?.parentId)?.hidden) continue;
-      const record = makeObjectRoot(object, { validationSeverity: validationSeverityFor(object.id, validationResultsRef.current), sensorHelpersVisible, collisionWireVisible }, { objects, colors: styleColorsRef.current, resolveAssetUrl });
+      if (object.kind === 'text' && object.attachment?.parentId && objectsById.get(object.attachment.parentId)?.hidden) continue;
+      const severity = severities.get(object.id);
+      // Attached labels follow their parent's transform, so they always rebuild. Everything
+      // else (including unattached labels) can be reused when its visual key is stable.
+      const reusableKind = !(object.kind === 'text' && object.attachment?.parentId);
+      const resolvedAssetUrl = object.kind === 'model' ? resolveAssetUrl(object.filename) : undefined;
+      const key = reusableKind
+        ? objectVisualKey(object, { severity, sensorHelpersVisible, collisionWireVisible, styleVariant, resolvedAssetUrl })
+        : null;
+      const reusable = key && previousKeys.get(object.id) === key ? previous.get(object.id) : null;
+      const record = reusable || makeObjectRoot(object, { validationSeverity: severity, sensorHelpersVisible, collisionWireVisible, resolvedAssetUrl }, { objects, colors: styleColorsRef.current, resolveAssetUrl });
+      if (reusable) {
+        // The root may have been hidden by look-through mode on a previous pass.
+        record.root.visible = true;
+        applyObjectVisualTransform(record.root, object);
+      }
+      if (key) nextKeys.set(object.id, key);
       if (object.id === lookThroughCameraId) record.root.visible = false;
-      objectMapRef.current.set(object.id, record);
-      scene.add(record.root);
+      next.set(object.id, record);
+      if (!reusable) scene.add(record.root);
     }
 
+    for (const [id, record] of previous) {
+      if (next.get(id) === record) continue;
+      scene.remove(record.root);
+      disposeObject(record.root);
+    }
+    objectMapRef.current = next;
+    visualKeysRef.current = nextKeys;
+
     syncTransformAttachment();
-  }, [objects, validationResults, lookThroughCameraId, sensorHelpersVisible, collisionWireVisible, resolveAssetUrl]);
+  }, [objects, validationResults, lookThroughCameraId, sensorHelpersVisible, collisionWireVisible, resolveAssetUrl, styleVariant]);
 
   useEffect(() => {
     const scene = sceneRef.current?.scene;

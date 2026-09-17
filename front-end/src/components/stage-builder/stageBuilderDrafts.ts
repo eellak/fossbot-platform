@@ -16,9 +16,45 @@ export type StageBuilderDraft = {
   stageRecord: LocalStageRecord;
 };
 
+// Deterministic, non-retaining identity for embedded asset data URLs.
+//
+// The first implementation keyed a module-level `Map<string, number>` by the
+// full data URL, which kept every imported model's base64 payload alive for the
+// lifetime of the tab even after the object was deleted. This derives the id
+// from the content instead: a small fixed number of sampled characters plus the
+// string length. That is O(1), never retains the payload, and stays stable for
+// equal strings so fingerprints and visual reuse do not churn.
+const ASSET_SAMPLE_COUNT = 64;
+const ASSET_HASH_SEED_A = 2166136261;
+const ASSET_HASH_SEED_B = 0x9e3779b9;
+const FNV_PRIME = 16777619;
+const ASSET_PRIME_B = 2246822519;
+const ASSET_LOW_BITS = 2 ** 21;
+
+export function stageAssetIdentity(value: string): number {
+  const length = value.length;
+  let hashA = ASSET_HASH_SEED_A ^ length;
+  let hashB = ASSET_HASH_SEED_B ^ length;
+  const step = Math.max(1, Math.floor(length / ASSET_SAMPLE_COUNT));
+  for (let index = 0; index < length; index += step) {
+    const code = value.charCodeAt(index);
+    hashA = Math.imul(hashA ^ code, FNV_PRIME);
+    hashB = Math.imul(hashB ^ code, ASSET_PRIME_B);
+  }
+  // Always mix in the final character so trailing-only edits are still seen.
+  const tail = value.charCodeAt(length - 1);
+  hashA = Math.imul(hashA ^ tail, FNV_PRIME);
+  hashB = Math.imul(hashB ^ tail, ASSET_PRIME_B);
+  // 32 + 21 bits stays within Number.MAX_SAFE_INTEGER while making accidental
+  // collisions between two different models effectively impossible.
+  return (hashA >>> 0) * ASSET_LOW_BITS + ((hashB >>> 0) % ASSET_LOW_BITS);
+}
+
 export function stageFingerprint(stage: EditorStage): string {
-  const record = editorStageToRecord(stage);
-  return JSON.stringify({ title: record.title, description: record.description, config: record.config, editor: record.editor });
+  // The config is derived from these fields. Avoid serializing embedded model
+  // data twice for every dirty-state check after a transform.
+  return JSON.stringify({ title: stage.title, description: stage.description, floor: stage.floor, metadata: stage.metadata, objects: stage.objects }, (key, value) =>
+    key === 'filename' && typeof value === 'string' && value.startsWith('data:') ? { assetId: stageAssetIdentity(value) } : value);
 }
 
 export function readStageBuilderDraft(scope?: string | number | null): StageBuilderDraft | null {

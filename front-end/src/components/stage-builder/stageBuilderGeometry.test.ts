@@ -1,4 +1,4 @@
-import { objectBounds, wallEnclosureStatus } from './stageBuilderGeometry';
+import { cloneStage, objectBounds, wallEnclosureStatus } from './stageBuilderGeometry';
 import type { EditorCubeObject, EditorStage } from './types';
 
 declare const describe: any;
@@ -19,6 +19,16 @@ const wall = (id: string, position: [number, number, number], rotationY: number,
 });
 
 describe('stageBuilderGeometry', () => {
+  it('clones stage structure without copying embedded model data', () => {
+    const filename = `data:model/stl;base64,${'A'.repeat(100_000)}`;
+    const original = { objects: [{ filename, position: [0, 0, 0] }] };
+    const copy = cloneStage(original);
+    expect(copy).not.toBe(original);
+    expect(copy.objects[0]).not.toBe(original.objects[0]);
+    expect(copy.objects[0].filename).toBe(filename);
+    copy.objects[0].position[0] = 4;
+    expect(original.objects[0].position[0]).toBe(0);
+  });
   it('uses rotation when calculating cube bounds', () => {
     const bounds = objectBounds(wall('vertical', [0, 0.25, 0], Math.PI / 2));
     expect(bounds?.maxX).toBeCloseTo(0.04);

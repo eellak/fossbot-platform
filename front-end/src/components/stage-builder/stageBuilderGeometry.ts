@@ -23,7 +23,11 @@ type FloorPoint = [number, number];
 export const DEFAULT_STAGE_SIZE: [number, number] = [10, 10];
 
 export function cloneStage<T>(value: T): T {
-  return JSON.parse(JSON.stringify(value));
+  if (Array.isArray(value)) return value.map((item) => cloneStage(item)) as T;
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, cloneStage(item)])) as T;
+  }
+  return value;
 }
 
 export function stageHalfExtents(stage: Pick<EditorStage, 'floor'>): { x: number; z: number } {
