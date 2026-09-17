@@ -1,4 +1,4 @@
-const backendUrl: string = process.env.REACT_APP_BACKEND_URL;
+import { backendUrl, resolveBackendAssetUrl } from '../utils/backendUrl';
 
 export type MarketplaceValidationState = 'validated' | 'unvalidated' | 'error';
 
@@ -283,7 +283,7 @@ async function parseJsonResponse<T>(response: Response): Promise<T> {
 }
 
 function withBackendAssetUrls(entry: MarketplaceStageEntry): MarketplaceStageEntry {
-  const absolute = (value?: string | null) => value?.startsWith('/') ? `${backendUrl}${value}` : value;
+  const absolute = (value?: string | null) => resolveBackendAssetUrl(value?.startsWith('/') ? `${backendUrl}${value}` : value);
   return { ...entry, previewUrl: absolute(entry.previewUrl), recordUrl: absolute(entry.recordUrl) };
 }
 

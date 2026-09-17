@@ -13,7 +13,7 @@ import type {
   AIStreamEvent,
 } from './types';
 
-const backendUrl: string = process.env.REACT_APP_BACKEND_URL;
+import { backendUrl } from '../utils/backendUrl';
 
 export class AIRequestError extends Error {
   status: number;

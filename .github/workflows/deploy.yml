@@ -127,6 +127,7 @@ jobs:
           POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
           POSTGRES_DB=${{ secrets.POSTGRES_DB }}
           DATABASE=postgresql://${{ secrets.POSTGRES_USER }}:${{ secrets.POSTGRES_PASSWORD }}@db:5432/${{ secrets.POSTGRES_DB }}
+          FOSSBOT_BACKEND_URL=https://fossbot.gr/api
           MATOMO_DATABASE_HOST=${{ secrets.MATOMO_DATABASE_HOST }}
           MATOMO_DATABASE_USERNAME=${{ secrets.MATOMO_DATABASE_USERNAME }}
           MATOMO_DATABASE_PASSWORD=${{ secrets.MATOMO_DATABASE_PASSWORD }}

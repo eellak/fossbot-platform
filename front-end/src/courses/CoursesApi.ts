@@ -29,7 +29,7 @@ import type {
   LeaderboardType,
 } from './types';
 
-const backendUrl: string = process.env.REACT_APP_BACKEND_URL;
+import { backendUrl } from '../utils/backendUrl';
 
 export class CourseRequestError extends Error {
   status: number;

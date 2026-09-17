@@ -1,7 +1,7 @@
 import type { LocalStageRecord } from 'src/components/stage-builder/types';
 import type { MarketplaceStageEntry } from './MarketplaceApi';
 
-const backendUrl: string = process.env.REACT_APP_BACKEND_URL;
+import { backendUrl, resolveBackendAssetUrl } from '../utils/backendUrl';
 
 export interface LocalStage {
   id: number;
@@ -113,7 +113,7 @@ export async function updateLocalStage(token: string, stage: LocalStage, record:
  * an `<img>` at the protected URL.
  */
 export async function fetchLocalStagePreview(token: string, previewUrl: string): Promise<string> {
-  const response = await fetch(previewUrl, { headers: { Authorization: `Bearer ${token}` } });
+  const response = await fetch(resolveBackendAssetUrl(previewUrl), { headers: { Authorization: `Bearer ${token}` } });
   if (!response.ok) throw new LocalStageRequestError('Could not load the stage preview.', response.status);
   return URL.createObjectURL(await response.blob());
 }
