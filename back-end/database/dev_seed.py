@@ -1593,7 +1593,13 @@ def seed_dev_sample_course(db: Session, admin_username: str) -> Course:
     return course
 
 
-def seed_dev_data(db: Session, admin_username: str, test_user_password: str) -> Course:
+def seed_dev_data(db: Session, admin_username: str, test_user_password: str) -> Course | None:
+    # Defense in depth: the caller already gates this behind SEED_DEV_SAMPLE_COURSE,
+    # but the seed must never create predictable local accounts in a deployed
+    # environment. Require a second, explicit opt-in that production does not set.
+    if os.getenv("DEV_SEED_ALLOWED", "false").lower() not in {"1", "true", "yes"}:
+        logger.warning("Development seed skipped: set DEV_SEED_ALLOWED=true to enable it.")
+        return None
     seed_dev_test_users(db, test_user_password)
     seed_dev_ai_data(db, admin_username)
     sample = seed_dev_sample_course(db, admin_username)

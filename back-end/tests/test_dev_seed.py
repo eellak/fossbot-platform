@@ -181,6 +181,7 @@ def test_education_examples_publish_three_courses_and_eight_lessons(db, users):
 
 
 def test_seed_dev_data_runs_all_current_seed_steps(db, monkeypatch):
+    monkeypatch.setenv("DEV_SEED_ALLOWED", "true")
     calls = []
     sample = object()
     monkeypatch.setattr(dev_seed, "seed_dev_test_users", lambda session, password: calls.append(("users", session, password)))
@@ -203,6 +204,22 @@ def test_seed_dev_data_runs_all_current_seed_steps(db, monkeypatch):
         ("simple-projects", db, "dev_admin"),
         ("simple-stages", db, "dev_admin"),
     ]
+
+
+def test_seed_dev_data_is_a_no_op_without_explicit_opt_in(db, monkeypatch):
+    monkeypatch.delenv("DEV_SEED_ALLOWED", raising=False)
+    calls = []
+    monkeypatch.setattr(dev_seed, "seed_dev_test_users", lambda *args: calls.append("users"))
+    monkeypatch.setattr(dev_seed, "seed_dev_ai_data", lambda *args: calls.append("ai"))
+    monkeypatch.setattr(dev_seed, "seed_dev_sample_course", lambda *args: calls.append("course"))
+    monkeypatch.setattr(dev_seed, "seed_education_example_courses", lambda *args: calls.append("examples"))
+    monkeypatch.setattr(dev_seed, "seed_dev_simple_courses", lambda *args: calls.append("simple-courses"))
+    monkeypatch.setattr(dev_seed, "seed_dev_simple_projects", lambda *args: calls.append("simple-projects"))
+    monkeypatch.setattr(dev_seed, "seed_dev_simple_stages", lambda *args: calls.append("simple-stages"))
+
+    assert dev_seed.seed_dev_data(db, "dev_admin", "password") is None
+    assert calls == []
+    assert db.query(User).filter(User.username.in_([item["username"] for item in DEV_TEST_USERS])).count() == 0
 
 
 def test_simple_dev_content_seeds_five_of_each_and_is_idempotent(db, users):
