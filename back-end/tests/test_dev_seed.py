@@ -1,17 +1,24 @@
 import database.dev_seed as dev_seed
-from database.database import AIInstanceSettings, AIPolicyRule, AIProviderConfig, Course, CourseRelease, Lesson, MarketplaceRoleAssignment, User
+from database.database import AIInstanceSettings, AIPolicyRule, AIProviderConfig, Course, CourseRelease, Lesson, LocalStage, MarketplaceRoleAssignment, Projects, User
 from database.dev_seed import (
     DEV_SAMPLE_LESSONS_TAG,
     DEV_SAMPLE_MISSIONS_TAG,
     DEV_SAMPLE_TAG,
+    DEV_SIMPLE_COURSE_TAG,
     DEV_TEST_USERS,
     DEV_AI_PROVIDER_NAME,
     EDUCATION_EXAMPLE_TAG,
     education_example_definitions,
     seed_education_example_courses,
     seed_dev_education_data,
+    seed_dev_simple_courses,
+    seed_dev_simple_projects,
+    seed_dev_simple_stages,
     seed_dev_test_users,
     seed_dev_ai_data,
+    simple_course_definitions,
+    simple_project_definitions,
+    simple_stage_definitions,
 )
 from models.models import UserRole
 from utils.utils_hash import verify_hashed
@@ -180,6 +187,9 @@ def test_seed_dev_data_runs_all_current_seed_steps(db, monkeypatch):
     monkeypatch.setattr(dev_seed, "seed_dev_ai_data", lambda session, username: calls.append(("ai", session, username)))
     monkeypatch.setattr(dev_seed, "seed_dev_sample_course", lambda session, username: calls.append(("course", session, username)) or sample)
     monkeypatch.setattr(dev_seed, "seed_education_example_courses", lambda session: calls.append(("examples", session)))
+    monkeypatch.setattr(dev_seed, "seed_dev_simple_courses", lambda session, username: calls.append(("simple-courses", session, username)))
+    monkeypatch.setattr(dev_seed, "seed_dev_simple_projects", lambda session, username: calls.append(("simple-projects", session, username)))
+    monkeypatch.setattr(dev_seed, "seed_dev_simple_stages", lambda session, username: calls.append(("simple-stages", session, username)))
 
     result = dev_seed.seed_dev_data(db, "dev_admin", "password")
 
@@ -189,4 +199,40 @@ def test_seed_dev_data_runs_all_current_seed_steps(db, monkeypatch):
         ("ai", db, "dev_admin"),
         ("course", db, "dev_admin"),
         ("examples", db),
+        ("simple-courses", db, "dev_admin"),
+        ("simple-projects", db, "dev_admin"),
+        ("simple-stages", db, "dev_admin"),
     ]
+
+
+def test_simple_dev_content_seeds_five_of_each_and_is_idempotent(db, users):
+    *_, admin = users
+
+    courses = seed_dev_simple_courses(db, admin.username)
+    projects = seed_dev_simple_projects(db, admin.username)
+    stages = seed_dev_simple_stages(db, admin.username)
+
+    assert len(simple_course_definitions()) == 5
+    assert len(simple_project_definitions()) == 5
+    assert len(simple_stage_definitions()) == 5
+    assert len(courses) == 5
+    assert len(projects) == 5
+    assert len(stages) == 5
+    assert db.query(Course).filter(Course.author_id == admin.id, Course.status == "published").count() == 5
+    assert db.query(Projects).filter(Projects.user_id == admin.id).count() == 5
+    assert db.query(LocalStage).filter(LocalStage.user_id == admin.id).count() == 5
+    assert all(DEV_SIMPLE_COURSE_TAG in course.tags for course in courses)
+    assert all(lesson.course_id in {course.id for course in courses} for lesson in db.query(Lesson).all())
+    assert all(stage.record.get("config") for stage in stages)
+
+    again = (
+        seed_dev_simple_courses(db, admin.username),
+        seed_dev_simple_projects(db, admin.username),
+        seed_dev_simple_stages(db, admin.username),
+    )
+    assert [course.id for course in again[0]] == [course.id for course in courses]
+    assert [project.id for project in again[1]] == [project.id for project in projects]
+    assert [stage.id for stage in again[2]] == [stage.id for stage in stages]
+    assert db.query(Course).filter(Course.author_id == admin.id, Course.status == "published").count() == 5
+    assert db.query(Projects).filter(Projects.user_id == admin.id).count() == 5
+    assert db.query(LocalStage).filter(LocalStage.user_id == admin.id).count() == 5
