@@ -1440,6 +1440,7 @@ export class SimEngine {
         }
 
         const pos = this.robotPhysics.body.translation()
+        this.currentStage?.updateAudio(pos)
         const rot = this.robotPhysics.body.rotation()
         this.updateAttemptRuntime(pos)
 

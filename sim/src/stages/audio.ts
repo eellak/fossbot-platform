@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { registerSource, unregisterSource } from '../sensors/mic/SoundSourceRegistry'
+import { robotInsideAudioRange } from './audioRange'
 
 export interface StageAudioEntry {
   type: 'audio'
@@ -21,15 +22,20 @@ export interface StageAudioRuntimeOptions {
 }
 
 export interface StageAudioRuntimeHandle {
+  updateRobotPosition(position: { x: number; z: number }): void
   dispose(): void
 }
 
 type StageAudioRecord = {
   id: string
   sound: THREE.Audio | THREE.PositionalAudio
+  media?: HTMLAudioElement
   object: THREE.Object3D
   loaded: boolean
   shouldPlay: boolean
+  spatial: boolean
+  range: number
+  position: [number, number, number]
   volume: number
   scratch: THREE.Vector3
 }
@@ -60,19 +66,35 @@ export function createStageAudioRuntime(
   opts: StageAudioRuntimeOptions = {},
 ): StageAudioRuntimeHandle {
   if (!entries.length || !opts.camera || typeof window === 'undefined') {
-    return { dispose() {} }
+    return { updateRobotPosition() {}, dispose() {} }
   }
 
   const listener = new THREE.AudioListener()
   opts.camera.add(listener)
   const loader = new THREE.AudioLoader()
   const context = listener.context
+  const gestureDocument = opts.gestureTarget?.ownerDocument ?? document
   const records: StageAudioRecord[] = []
   const pendingStart = new Set<StageAudioRecord>()
+  const pendingMedia = new Set<StageAudioRecord>()
   let disposed = false
 
   function tryStart(record: StageAudioRecord): void {
     if (disposed || !record.loaded || !record.shouldPlay) return
+    if (record.media) {
+      void record.media.play().then(() => {
+        if (!record.shouldPlay) record.media?.pause()
+        pendingMedia.delete(record)
+        if (!pendingMedia.size) stopListeningForMediaGesture()
+      }, (error) => {
+        if (disposed || !record.shouldPlay) return
+        console.warn('[stage-audio] media playback failed', error)
+        pendingMedia.add(record)
+        gestureDocument.addEventListener('pointerdown', onMediaGesture, true)
+        gestureDocument.addEventListener('keydown', onMediaGesture, true)
+      })
+      return
+    }
     if (context.state === 'suspended') {
       pendingStart.add(record)
       return
@@ -92,17 +114,51 @@ export function createStageAudioRuntime(
     }
   }
 
-  function onFirstGesture(): void {
-    opts.gestureTarget?.removeEventListener('pointerdown', onFirstGesture)
-    opts.gestureTarget?.removeEventListener('keydown', onFirstGesture)
-    if (context.state === 'suspended') context.resume().then(flushPending, () => {})
-    else flushPending()
+  function stopListeningForMediaGesture(): void {
+    gestureDocument.removeEventListener('pointerdown', onMediaGesture, true)
+    gestureDocument.removeEventListener('keydown', onMediaGesture, true)
   }
 
-  if (context.state === 'suspended' && opts.gestureTarget) {
-    opts.gestureTarget.addEventListener('pointerdown', onFirstGesture)
-    opts.gestureTarget.addEventListener('keydown', onFirstGesture)
+  function onMediaGesture(): void {
+    for (const record of Array.from(pendingMedia)) tryStart(record)
   }
+
+  function onContextStateChange(): void {
+    if (context.state === 'running') {
+      stopListeningForGesture()
+      flushPending()
+    }
+  }
+
+  function stopListeningForGesture(): void {
+    gestureDocument.removeEventListener('pointerdown', onGesture, true)
+    gestureDocument.removeEventListener('keydown', onGesture, true)
+  }
+
+  function onGesture(): void {
+    if (disposed) return
+    if (context.state !== 'suspended') {
+      stopListeningForGesture()
+      flushPending()
+      return
+    }
+    // A simulator can be opened from an editor control outside its canvas.
+    // Keep listening until resume succeeds, including after a rejected attempt.
+    void context.resume().then(() => {
+      if (disposed) return
+      stopListeningForGesture()
+      flushPending()
+    }, () => {})
+  }
+
+  if (context.state === 'suspended') {
+    gestureDocument.addEventListener('pointerdown', onGesture, true)
+    gestureDocument.addEventListener('keydown', onGesture, true)
+    // Browsers with sticky user activation can resume immediately after the
+    // editor's Run Test gesture, even though loading the stage is asynchronous.
+    if (navigator.userActivation?.hasBeenActive) onGesture()
+  }
+  context.addEventListener('statechange', onContextStateChange)
 
   entries.forEach((entry, index) => {
     const url = sourceUrl(entry, opts.resolveAssetUrl)
@@ -121,14 +177,12 @@ export function createStageAudioRuntime(
     if (spatial) {
       const positional = sound as THREE.PositionalAudio
       positional.position.set(position[0], position[1], position[2])
-      // Keep positional playback audible from normal simulator camera distances.
-      // The stage-builder range is a design radius, but using it as a hard
-      // linear WebAudio cutoff can make clips sound like a 0.1s blip when the
-      // camera/listener starts just outside that radius.
+      // The robot's position gates playback. Camera distance must not silence
+      // audio while the robot is inside the marked range.
       positional.setRefDistance(Math.min(1, range))
       positional.setMaxDistance(Math.max(range, 20))
       positional.setDistanceModel('inverse')
-      positional.setRolloffFactor(0.8)
+      positional.setRolloffFactor(0)
       scene.add(positional)
     } else {
       listener.add(sound)
@@ -139,7 +193,10 @@ export function createStageAudioRuntime(
       sound,
       object: sound,
       loaded: false,
-      shouldPlay: entry.autoplay ?? true,
+      shouldPlay: spatial ? false : entry.autoplay ?? true,
+      spatial,
+      range,
+      position,
       volume,
       scratch: new THREE.Vector3(),
     }
@@ -152,7 +209,7 @@ export function createStageAudioRuntime(
           record.object.getWorldPosition(record.scratch)
           return record.scratch
         },
-        currentAmplitude0to1: () => (record.sound.isPlaying ? record.volume : 0),
+        currentAmplitude0to1: () => (record.sound.isPlaying || (record.media && !record.media.paused) ? record.volume : 0),
         dispose: () => {},
       })
     }
@@ -166,19 +223,65 @@ export function createStageAudioRuntime(
         tryStart(record)
       },
       undefined,
-      (error) => console.warn(`[stage-audio] failed to load ${url}`, error),
+      (error) => {
+        if (disposed) return
+        // HTML media can play cross-origin URLs that Web Audio cannot decode
+        // without CORS. Fall back to audible non-positional playback.
+        console.warn('[stage-audio] Web Audio load failed; trying media playback', error)
+        const media = new Audio(url)
+        media.volume = volume
+        media.loop = entry.loop ?? false
+        media.onerror = () => {
+          pendingMedia.delete(record)
+          if (!pendingMedia.size) stopListeningForMediaGesture()
+          console.warn('[stage-audio] media source failed to load', url)
+        }
+        record.media = media
+        record.loaded = true
+        pendingStart.delete(record)
+        tryStart(record)
+      },
     )
   })
 
   return {
+    updateRobotPosition(robotPosition) {
+      if (disposed) return
+      for (const record of records) {
+        if (!record.spatial) continue
+        const inside = robotInsideAudioRange(robotPosition, record.position, record.range)
+        if (inside === record.shouldPlay) continue
+        record.shouldPlay = inside
+        if (inside) {
+          if (record.loaded) tryStart(record)
+        } else {
+          pendingStart.delete(record)
+          pendingMedia.delete(record)
+          if (!pendingMedia.size) stopListeningForMediaGesture()
+          if (record.sound.isPlaying) record.sound.stop()
+          if (record.media) {
+            record.media.pause()
+            record.media.currentTime = 0
+          }
+        }
+      }
+    },
     dispose() {
       if (disposed) return
       disposed = true
-      opts.gestureTarget?.removeEventListener('pointerdown', onFirstGesture)
-      opts.gestureTarget?.removeEventListener('keydown', onFirstGesture)
+      stopListeningForGesture()
+      stopListeningForMediaGesture()
+      context.removeEventListener('statechange', onContextStateChange)
       pendingStart.clear()
+      pendingMedia.clear()
       for (const record of records) {
         if (record.sound.isPlaying) record.sound.stop()
+        if (record.media) {
+          record.media.pause()
+          record.media.onerror = null
+          record.media.removeAttribute('src')
+          record.media.load()
+        }
         unregisterSource(record.id)
         record.object.removeFromParent()
       }

@@ -36,6 +36,7 @@ export interface StageHandle {
   /** Optional start camera captured from a `camera` stage entry. */
   startCamera?: { position: [number, number, number]; yaw: number; pitch: number; fov: number }
   syncDynamicObjects: () => void
+  updateAudio: (position: { x: number; z: number }) => void
   dispose: () => void
   disposed: boolean
 }
@@ -368,6 +369,9 @@ export async function loadStageEntries(
         // Attached labels live as children of the dynamic object, so they
         // follow the body automatically once the parent mesh is synced.
       }
+    },
+    updateAudio(position) {
+      if (!disposed) stageAudio.updateRobotPosition(position)
     },
     dispose() {
       if (disposed) return

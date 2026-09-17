@@ -765,16 +765,16 @@ function makeAudioWave(radius: number, colorValue: THREE.Color, options: ObjectV
   );
 }
 
-function makeAudioRangeRing(range: number, colorValue: THREE.Color, options: ObjectVisualOptions): THREE.LineLoop {
+function makeAudioRangeRing(range: number, colorValue: THREE.Color, options: ObjectVisualOptions): THREE.Mesh {
   const points: THREE.Vector3[] = [];
   const radius = Math.max(0.1, range);
   for (let i = 0; i < 96; i++) {
     const angle = (Math.PI * 2 * i) / 96;
     points.push(new THREE.Vector3(Math.cos(angle) * radius, 0, Math.sin(angle) * radius));
   }
-  return new THREE.LineLoop(
-    new THREE.BufferGeometry().setFromPoints(points),
-    new THREE.LineBasicMaterial({ color: colorValue, transparent: true, opacity: options.ghost ? 0.18 : 0.28, depthWrite: false }),
+  return new THREE.Mesh(
+    new THREE.TubeGeometry(new THREE.CatmullRomCurve3(points, true), 96, 0.025, 6, true),
+    new THREE.MeshBasicMaterial({ color: colorValue, transparent: true, opacity: options.ghost ? 0.45 : 0.9, depthWrite: false }),
   );
 }
 
@@ -1357,7 +1357,7 @@ export function makeObjectRoot(object: EditorStageObject, options: ObjectVisualO
 
     if (object.spatial) {
       const ring = makeAudioRangeRing(object.range, iconColor, options);
-      ring.position.y = -object.position[1] + 0.014;
+      ring.position.y = -object.position[1] + 0.04;
       ring.renderOrder = 6;
       group.add(ring);
     }
