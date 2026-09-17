@@ -25,3 +25,6 @@ front-end/.local-certs/
 
 /secrets/
 *adminsdk*.json
+
+# Local design-review artifacts; not part of the product
+.impeccable/
