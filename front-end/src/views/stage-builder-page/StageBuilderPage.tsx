@@ -1156,7 +1156,9 @@ const StageBuilderPage = () => {
       setMessage('Sign in before saving a stage to your account.');
       return;
     }
-    if (localStage && !localStageHasChanges) {
+    // A stage without a preview (imported, migrated, or seeded) must still be
+    // able to capture one: only short-circuit when there is an existing image.
+    if (localStage && !localStageHasChanges && localStage.previewUrl) {
       setMessage(`No changes to save. ${localStage.title} is already at v${localStage.revision}.`);
       return;
     }
