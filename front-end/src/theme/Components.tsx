@@ -1,13 +1,55 @@
 // project imports
 import './DefaultColors';
-import { Theme } from '@mui/material/styles';
+import { alpha, Theme } from '@mui/material/styles';
 
 const components: any = (theme: Theme, approved = false) => {
+  // One scrollbar treatment for the whole app: a thin, low-contrast thumb over a
+  // transparent track. The standard properties win in Chromium and Firefox; the
+  // WebKit pseudo-elements are the fallback for Safari.
+  const scrollbarSize = 10;
+  const scrollThumb = alpha(theme.palette.text.primary, theme.palette.mode === 'dark' ? 0.28 : 0.26);
+  const scrollThumbHover = alpha(theme.palette.text.primary, theme.palette.mode === 'dark' ? 0.5 : 0.45);
   const result: any = {
     MuiCssBaseline: {
       styleOverrides: {
         '*': {
           boxSizing: 'border-box',
+          scrollbarWidth: 'thin',
+          scrollbarColor: `${scrollThumb} transparent`,
+        },
+        '*::-webkit-scrollbar': {
+          width: scrollbarSize,
+          height: scrollbarSize,
+        },
+        '*::-webkit-scrollbar-track, *::-webkit-scrollbar-corner': {
+          backgroundColor: 'transparent',
+        },
+        '*::-webkit-scrollbar-thumb': {
+          backgroundColor: scrollThumb,
+          borderRadius: 999,
+          border: '2px solid transparent',
+          backgroundClip: 'content-box',
+        },
+        '*::-webkit-scrollbar-thumb:hover': {
+          backgroundColor: scrollThumbHover,
+        },
+        // SimpleBar (the shared `custom-scroll/Scrollbar`) draws its own thumb, so match it
+        // to the native thin scrollbar above instead of its default 11px black bar.
+        '[data-simplebar] .simplebar-track.simplebar-vertical': {
+          width: scrollbarSize,
+        },
+        '[data-simplebar] .simplebar-track.simplebar-horizontal': {
+          height: scrollbarSize,
+        },
+        '.simplebar-track .simplebar-scrollbar:before': {
+          backgroundColor: scrollThumb,
+          borderRadius: 999,
+        },
+        '.simplebar-track .simplebar-scrollbar.simplebar-visible:before': {
+          opacity: 1,
+        },
+        '.simplebar-track .simplebar-scrollbar.simplebar-visible:hover:before': {
+          backgroundColor: scrollThumbHover,
         },
         html: {
           height: '100%',

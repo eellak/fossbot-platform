@@ -62,7 +62,7 @@ export function EditorLeftPanel(props: EditorLeftPanelProps) {
         </Tooltip>
       </Box>
       <Divider sx={{ borderColor: editorColors.border }} />
-      <Box sx={{ flex: 1, overflow: 'auto', p: 1, scrollbarWidth: 'none', msOverflowStyle: 'none', '&::-webkit-scrollbar': { display: 'none' } }}>
+      <Box sx={{ flex: 1, overflow: 'auto', p: 1 }}>
         {tab === 'library' ? (
           <StageObjectLibrary prefabs={props.prefabs} onAddKind={props.onAddKind} onAddPrefab={props.onAddPrefab} onImportObject={props.onImportObject} />
         ) : (

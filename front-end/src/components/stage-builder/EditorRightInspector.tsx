@@ -345,7 +345,7 @@ export function EditorRightInspector({
           </IconButton>
         </Tooltip>
       </Box>
-      <Box sx={{ flex: 1, overflow: 'auto', scrollbarWidth: 'none', msOverflowStyle: 'none', '&::-webkit-scrollbar': { display: 'none' } }}>
+      <Box sx={{ flex: 1, overflow: 'auto' }}>
         {context === 'object' && (
           <StageInspector
             object={selectedObject}

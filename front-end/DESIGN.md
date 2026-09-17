@@ -161,6 +161,10 @@ Define the complete state set through Material UI and shared components rather t
 
 State transitions should explain a change and normally complete within 150–200ms. Respect reduced-motion preferences. Do not add decorative page entrances, perpetual motion, or card scaling on hover.
 
+### Scrollbars
+
+Every scrolling region uses one scrollbar treatment: a thin (10px), low-contrast thumb over a transparent track, with a slightly stronger hover state. It is defined once in [`theme/Components.tsx`](src/theme/Components.tsx) (`MuiCssBaseline`) for native scrollbars and mirrored on the shared SimpleBar ([`custom-scroll/Scrollbar`](src/components/custom-scroll/Scrollbar.tsx)) and Monaco. Do not hide scrollbars on stage-builder panels or restyle scrollbars per feature.
+
 ### Navigation and editor chrome
 
 The production sidebar is one readable feature list with the current route clearly selected. Courses sits directly below Dashboard; Stages is the entry point for creating, opening, and managing stages, while Stage Builder is reached from that flow. Feature lifecycle badges belong on the relevant page, not as sidebar clutter.
