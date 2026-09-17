@@ -1,9 +1,13 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import {
   Alert, Box, Button, Chip, CircularProgress, Collapse, Dialog, DialogActions, DialogContent,
-  DialogTitle, Divider, Fab, IconButton, LinearProgress, MenuItem, Paper, Portal, Stack, TextField, Tooltip, Typography,
+  DialogTitle, Fab, IconButton, LinearProgress, MenuItem, Paper, Portal, Stack, TextField, Tooltip, Typography,
 } from '@mui/material';
-import { IconMinus, IconRobot, IconSettings, IconSparkles } from '@tabler/icons-react';
+import {
+  IconArrowLeft, IconArrowRight, IconCheck, IconChevronDown, IconCode, IconMinus, IconRefresh,
+  IconRobot, IconSettings, IconShieldCheck, IconTrash, IconWand, IconX,
+} from '@tabler/icons-react';
+import { keyframes } from '@emotion/react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useTranslation } from 'react-i18next';
@@ -24,6 +28,7 @@ import LessonSuggestionPreview from './LessonSuggestionPreview';
 
 type ConversationTurn = { role: 'user' | 'assistant'; content: string };
 type RequestMode = 'explain' | 'suggest';
+type BuddyView = 'ask' | 'working' | 'answer' | 'review' | 'failed' | 'applied';
 
 export type AssistantBenchmarkPrompt = {
   id: string;
@@ -53,6 +58,29 @@ type Props = {
   benchmarkPrompts?: AssistantBenchmarkPrompt[];
 };
 
+// Shared rhythm, in MUI spacing units (1 unit = 8px), so the panel stays on the theme scale.
+const rhythm = {
+  inset: 2.5, // 20px — panel content padding
+  blockGap: 2.5, // 20px — between stacked blocks
+  actionGap: 1.5, // 12px — between a prompt row and its primary action
+  actionStackGap: 1.25, // 10px — between stacked rows inside an action area
+};
+
+const workingSteps = ['preparing', 'connecting', 'drafting', 'validating'] as const;
+
+const markdownSx = {
+  overflowWrap: 'anywhere',
+  '& > :first-of-type': { mt: 0 },
+  '& > :last-child': { mb: 0 },
+  '& p': { my: 1 },
+  '& ul, & ol': { my: 1, pl: 3 },
+  '& blockquote': { mx: 0, pl: 1.5, borderLeft: 3, borderColor: 'divider', color: 'text.secondary' },
+  '& pre': { p: 1.25, overflowX: 'auto', bgcolor: 'action.hover', borderRadius: 1 },
+  '& code': { fontFamily: 'monospace', fontSize: '0.875em' },
+  '& table': { display: 'block', maxWidth: '100%', overflowX: 'auto', borderCollapse: 'collapse' },
+  '& th, & td': { px: 1, py: 0.5, border: 1, borderColor: 'divider' },
+};
+
 const suggestionBase = (suggestion: AIAssistantSuggestion) => suggestion.type === 'lesson_operations' ? suggestion.baseRevision : suggestion.baseFingerprint;
 
 const conversationProposal = (suggestion: AIAssistantSuggestion) => {
@@ -69,6 +97,88 @@ const conversationProposal = (suggestion: AIAssistantSuggestion) => {
 const debugErrorData = (reason: unknown) => reason instanceof Error
   ? { type: reason.name, message: reason.message, stack: reason.stack || '' }
   : { type: typeof reason, message: String(reason) };
+
+const writeLine = keyframes`
+  0%, 12% { clip-path: inset(0 82% 0 0); opacity: .35; }
+  42%, 78% { clip-path: inset(0 0 0 0); opacity: 1; }
+  100% { clip-path: inset(0 82% 0 0); opacity: .35; }
+`;
+
+// The drafting mark composes three short lines to show Buddy is working without a spinner.
+function DraftingMark() {
+  const markRef = useRef<HTMLDivElement>(null);
+  const [inView, setInView] = useState(true);
+  const [documentVisible, setDocumentVisible] = useState(() => typeof document === 'undefined' || document.visibilityState === 'visible');
+
+  useEffect(() => {
+    const mark = markRef.current;
+    if (!mark || typeof IntersectionObserver === 'undefined') return;
+    const observer = new IntersectionObserver(([entry]) => setInView(entry.isIntersecting), { threshold: 0.1 });
+    observer.observe(mark);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    const handleVisibility = () => setDocumentVisible(document.visibilityState === 'visible');
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, []);
+
+  return <Box
+    ref={markRef}
+    aria-hidden="true"
+    sx={{
+      width: 28,
+      height: 28,
+      flex: '0 0 auto',
+      display: 'flex',
+      flexDirection: 'column',
+      justifyContent: 'center',
+      gap: '3px',
+      px: 0.75,
+      borderRadius: 1,
+      bgcolor: 'primary.light',
+    }}
+  >
+    {[0, 1, 2].map((index) => <Box
+      key={index}
+      sx={{
+        width: index === 2 ? '68%' : '100%',
+        height: 2,
+        borderRadius: 1,
+        bgcolor: 'primary.main',
+        animation: `${writeLine} 1.8s ${index * 180}ms cubic-bezier(0.16, 1, 0.3, 1) infinite`,
+        animationPlayState: inView && documentVisible ? 'running' : 'paused',
+        '@media (prefers-reduced-motion: reduce)': {
+          animation: 'none',
+          clipPath: 'inset(0 0 0 0)',
+          opacity: 1,
+        },
+      }}
+    />)}
+  </Box>;
+}
+
+function PromptChip({ label, onClick }: { label: string; onClick: () => void }) {
+  return <Chip
+    clickable
+    label={label}
+    onClick={onClick}
+    sx={{
+      minHeight: 40,
+      bgcolor: 'action.hover',
+      color: 'text.secondary',
+      '&:hover, &:focus-visible': { bgcolor: 'primary.light', color: 'primary.main' },
+      '@media (pointer: coarse)': { minHeight: 44 },
+    }}
+  />;
+}
+
+function BuddyRobotTile({ size = 36 }: { size?: number }) {
+  return <Box sx={{ width: size, height: size, flex: '0 0 auto', display: 'grid', placeItems: 'center', bgcolor: 'primary.light', color: 'primary.main', borderRadius: 1.25 }}>
+    <IconRobot size={Math.round(size * 0.58)} aria-hidden="true" />
+  </Box>;
+}
 
 export default function AssistantPanel({ adapter, explainCapability, suggestCapability, confirmationBody, appliedMessage, singleMode = false, contextControls, contextKey = '', onPreviewStageChange, benchmarkPrompts = [] }: Props) {
   const { t } = useTranslation();
@@ -93,6 +203,12 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
   const [debugEnabled, setDebugEnabled] = useState(false);
   const [debugEntries, setDebugEntries] = useState<AIDebugTraceEntry[]>([]);
   const [consent, setConsent] = useState<{ provider: AIPublicProvider; question: string; mode: RequestMode; kind: 'download' | 'local'; benchmark?: boolean } | null>(null);
+  // Lifecycle view overrides. `compose` lets the user return to the ask state without losing the
+  // previous answer; `applied` distinguishes a completed apply from a plain answer.
+  const [compose, setCompose] = useState(false);
+  const [applied, setApplied] = useState(false);
+  const [showWorkingSteps, setShowWorkingSteps] = useState(false);
+  const workingStepsId = useId();
   const abortRef = useRef<AbortController | null>(null);
   const runtimeRef = useRef<AIAssistantRuntime | null>(null);
   const contextKeyRef = useRef(contextKey);
@@ -124,7 +240,7 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
     abortRef.current?.abort();
     runtimeRef.current?.cancel();
     contextKeyRef.current = contextKey;
-    setQuestion(''); setHistory([]); setOutput(''); setStatus('idle'); setRequestError(''); setPreview(null); setPreviewCapability(null); setLastRequest(null); setRuntimeStatus({ readiness: 'idle' });
+    setQuestion(''); setHistory([]); setOutput(''); setStatus('idle'); setRequestError(''); setPreview(null); setPreviewCapability(null); setLastRequest(null); setRuntimeStatus({ readiness: 'idle' }); setCompose(false); setApplied(false); setShowWorkingSteps(false);
     clearDebug();
   }, [contextKey]);
 
@@ -164,6 +280,7 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
     if (benchmark) { clearDebug(); setHistory([]); }
     setRequestError(''); setOutput(''); setPreview(null); setPreviewCapability(null); setRequestStage('preparing'); setStatus('streaming');
     setQuestion(trimmed); setMode(nextMode); setLastRequest({ question: trimmed, mode: nextMode, benchmark });
+    setCompose(false); setApplied(false); setShowWorkingSteps(false);
     const controller = new AbortController();
     abortRef.current = controller;
     let streamed = '';
@@ -332,7 +449,7 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
       appendDebug('client-validator', 'apply.revalidated', preview.suggestion);
       await adapter.applySuggestion(preview.suggestion);
       appendDebug('client', 'apply.completed', { capability, suggestion: preview.suggestion });
-      setConfirmOpen(false); setPreview(null); setPreviewCapability(null); setOutput(appliedMessage || t('aiAssistant.applied')); setStatus('done');
+      setConfirmOpen(false); setPreview(null); setPreviewCapability(null); setOutput(appliedMessage || t('aiAssistant.applied')); setStatus('done'); setApplied(true);
     } catch (reason) {
       appendDebug('client', 'apply.failed', debugErrorData(reason));
       const code = reason instanceof Error ? reason.message.split(':')[0] : 'invalid_suggestion';
@@ -354,62 +471,219 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
     setPreviewCapability(null);
     setMode('suggest');
     setQuestion(t('aiAssistant.modifyPrompt'));
+    setCompose(true);
     window.requestAnimationFrame(() => questionRef.current?.focus());
   };
 
-  const panel = <Paper id="fossbot-buddy-panel" role="dialog" aria-label={t('aiAssistant.title')} elevation={8} sx={{ width: '100%', boxSizing: 'border-box', p: 2, maxHeight: 'calc(100vh - 40px)', overflowY: 'auto', overflowX: 'hidden', borderRadius: 2, '& .MuiButton-root': { minHeight: { xs: 44, md: 36 } }, '& .MuiChip-clickable': { minHeight: { xs: 44, md: 32 } } }}>
-    <Stack spacing={2}>
-      <Stack direction="row" alignItems="center" spacing={1}>
-        <IconRobot size={22} aria-hidden="true" />
-        <Box sx={{ flex: 1 }}><Typography variant="h6">{t('aiAssistant.title')}</Typography><Typography variant="caption" color="text.secondary">{t('aiAssistant.subtitle')}</Typography></Box>
-        {allowedProviders.length > 0 && <IconButton aria-label={t('aiAssistant.settings')} aria-expanded={settingsOpen} onClick={() => setSettingsOpen((current) => !current)}><IconSettings size={19} /></IconButton>}
-        <IconButton aria-label={t('aiAssistant.minimize')} onClick={() => setOpen(false)}><IconMinus size={19} /></IconButton>
-      </Stack>
-      <Collapse in={settingsOpen} unmountOnExit>
-        <Stack spacing={1.25} sx={{ p: 1.25, bgcolor: 'action.hover', borderRadius: 1 }}>
-          {allowedProviders.length > 0 && <TextField select size="small" label={t('aiAssistant.provider')} value={selectedProvider?.id || ''} onChange={(event) => { setSelectedProviderId(Number(event.target.value)); setRuntimeStatus({ readiness: 'idle' }); }} disabled={status === 'streaming'} sx={{ minWidth: 0, '& .MuiInputBase-root': { minWidth: 0 }, '& .MuiSelect-select': { minWidth: 0, maxWidth: '100%', boxSizing: 'border-box' } }}>{allowedProviders.map((provider) => <MenuItem key={provider.id} value={provider.id}>{provider.name}</MenuItem>)}</TextField>}
-          {selectedProvider?.runtime === 'browser' && <Button size="small" color="error" sx={{ alignSelf: 'flex-start' }} disabled={status === 'streaming'} onClick={() => { const runtime = runtimeFor(selectedProvider, token); if (runtime instanceof WebLLMRuntime) void runtime.clearCache().then(() => { localStorage.removeItem(webLLMConsentKey(selectedProvider)); setRuntimeStatus({ readiness: 'idle', cached: false }); }).catch(() => setRuntimeStatus({ readiness: 'error', message: 'webllm_worker_stopped' })); }}>{t('aiAssistant.clearModel')}</Button>}
-          {isAdmin && <AdminDebugToggle enabled={debugEnabled} disabled={status === 'streaming'} onChange={(enabled) => { setDebugEnabled(enabled); clearDebug(); }} />}
+  const askAgain = (prompt?: string) => {
+    setQuestion(prompt ?? '');
+    setRequestError('');
+    setCompose(true);
+    window.requestAnimationFrame(() => questionRef.current?.focus());
+  };
+
+  const stopRun = () => {
+    runtimeRef.current?.cancel();
+    abortRef.current?.abort();
+    setStatus('stopped');
+  };
+
+  const noCapability = !loading && !accessError && !explain?.allowed && !suggest?.allowed;
+  const canAsk = Boolean(explain?.allowed || suggest?.allowed);
+  const primaryMode: RequestMode = explain?.allowed ? 'explain' : 'suggest';
+  const primaryLabel = primaryMode === 'explain' ? t('aiAssistant.ask') : t('aiAssistant.actions.change');
+  const showSecondarySuggest = primaryMode === 'explain' && canSuggest;
+  const busy = status === 'streaming';
+  const view: BuddyView = busy
+    ? 'working'
+    : compose
+      ? 'ask'
+      : preview
+        ? 'review'
+        : status === 'error'
+          ? 'failed'
+          : applied
+            ? 'applied'
+            : output
+              ? 'answer'
+              : 'ask';
+  const viewLabel = view === 'ask' ? t('aiAssistant.states.ask') : view === 'working' ? t('aiAssistant.states.working') : view === 'answer' ? t('aiAssistant.states.answer') : view === 'review' ? t('aiAssistant.states.review') : '';
+  const promptKeys = adapter.surface === 'python'
+    ? ['pythonError', 'pythonTrace', 'pythonApi']
+    : adapter.surface === 'blockly'
+      ? ['blocklyExplain', 'blocklyPython', 'blocklyError']
+      : adapter.surface === 'lesson'
+        ? ['outline', 'simplify', 'activity']
+        : ['line', 'obstacle', 'fixValidation'];
+  const promptNamespace = adapter.surface === 'lesson' ? 'aiAssistant.authoring.prompts' : adapter.surface === 'stage' ? 'aiAssistant.stage.prompts' : 'aiAssistant.prompts';
+  const surfacePrompts = promptKeys.map((key) => t(`${promptNamespace}.${key}`));
+  const workingIndex = Math.max(0, workingSteps.indexOf(requestStage));
+  const previewLabel = preview?.kind === 'python'
+    ? t('aiAssistant.pythonDiff')
+    : preview?.kind === 'blockly'
+      ? t('aiAssistant.generatedPython')
+      : preview?.kind === 'lesson'
+        ? t('aiAssistant.authoring.changes')
+        : t('aiAssistant.preview');
+  const renderedOutput = output
+    ? <Box ref={outputRef} tabIndex={0} aria-live="polite" sx={{ maxHeight: 320, overflowY: 'auto', overscrollBehavior: 'contain', ...markdownSx }}><ReactMarkdown remarkPlugins={[remarkGfm]}>{output}</ReactMarkdown></Box>
+    : null;
+  const restartFromApplied = () => { setApplied(false); setOutput(''); setPreview(null); setPreviewCapability(null); setStatus('idle'); };
+
+  const panel = <Paper id="fossbot-buddy-panel" role="dialog" aria-label={t('aiAssistant.title')} elevation={8} sx={{ width: '100%', boxSizing: 'border-box', maxHeight: 'calc(100vh - 104px)', overflowY: 'auto', overflowX: 'hidden', borderRadius: 2, '& .MuiButton-root': { minHeight: 44 }, '& .MuiChip-clickable': { minHeight: 40 } }}>
+    <Stack direction="row" alignItems="center" spacing={1.25} sx={{ minHeight: 64, px: 2, py: 1, borderBottom: 1, borderColor: 'divider' }}>
+      <BuddyRobotTile />
+      <Box sx={{ flex: 1, minWidth: 0 }}>
+        <Stack direction="row" alignItems="center" spacing={1} sx={{ minWidth: 0 }}>
+          <Typography component="h2" variant="h5" fontWeight={700} lineHeight={1.25} sx={{ overflowWrap: 'anywhere' }}>{t('aiAssistant.title')}</Typography>
+          {viewLabel && <Chip size="small" variant="outlined" label={viewLabel} sx={{ flex: '0 0 auto' }} />}
         </Stack>
-      </Collapse>
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>{t('aiAssistant.subtitle')}</Typography>
+      </Box>
+      {allowedProviders.length > 0 && <IconButton aria-label={t('aiAssistant.settings')} aria-expanded={settingsOpen} onClick={() => setSettingsOpen((current) => !current)} sx={{ width: 44, height: 44 }}><IconSettings size={19} /></IconButton>}
+      <IconButton aria-label={t('aiAssistant.minimize')} onClick={() => setOpen(false)} sx={{ width: 44, height: 44 }}><IconMinus size={19} /></IconButton>
+    </Stack>
+    <Collapse in={settingsOpen} unmountOnExit>
+      <Stack spacing={1.25} sx={{ p: rhythm.inset, borderBottom: 1, borderColor: 'divider', bgcolor: 'action.hover' }}>
+        {allowedProviders.length > 0 && <TextField select size="small" label={t('aiAssistant.provider')} value={selectedProvider?.id || ''} onChange={(event) => { setSelectedProviderId(Number(event.target.value)); setRuntimeStatus({ readiness: 'idle' }); }} disabled={busy} sx={{ minWidth: 0, '& .MuiInputBase-root': { minWidth: 0 }, '& .MuiSelect-select': { minWidth: 0, maxWidth: '100%', boxSizing: 'border-box' } }}>{allowedProviders.map((provider) => <MenuItem key={provider.id} value={provider.id}>{provider.name}</MenuItem>)}</TextField>}
+        {selectedProvider?.runtime === 'browser' && <Button size="small" color="error" sx={{ alignSelf: 'flex-start' }} disabled={busy} onClick={() => { const runtime = runtimeFor(selectedProvider, token); if (runtime instanceof WebLLMRuntime) void runtime.clearCache().then(() => { localStorage.removeItem(webLLMConsentKey(selectedProvider)); setRuntimeStatus({ readiness: 'idle', cached: false }); }).catch(() => setRuntimeStatus({ readiness: 'error', message: 'webllm_worker_stopped' })); }}>{t('aiAssistant.clearModel')}</Button>}
+        {isAdmin && <AdminDebugToggle enabled={debugEnabled} disabled={busy} onChange={(enabled) => { setDebugEnabled(enabled); clearDebug(); }} />}
+      </Stack>
+    </Collapse>
+    <Box sx={{ p: rhythm.inset, display: 'flex', flexDirection: 'column', gap: rhythm.blockGap }}>
       {contextControls}
       {isAdmin && debugEnabled && benchmarkPrompts.length > 0 && <Stack spacing={0.75} sx={{ p: 1.25, bgcolor: 'action.hover', borderRadius: 1 }}>
         <Box><Typography variant="subtitle2">{t('aiAssistant.debug.benchmarksTitle')}</Typography><Typography variant="caption" color="text.secondary">{t('aiAssistant.debug.benchmarksHelp')}</Typography></Box>
         <Stack direction="row" gap={0.75} flexWrap="wrap">
-          {benchmarkPrompts.map((benchmarkPrompt) => <Button key={benchmarkPrompt.id} size="small" variant="outlined" disabled={status === 'streaming'} onClick={() => void run(benchmarkPrompt.prompt, benchmarkPrompt.mode || 'suggest', false, undefined, true)}>{benchmarkPrompt.label}</Button>)}
+          {benchmarkPrompts.map((benchmarkPrompt) => <Button key={benchmarkPrompt.id} size="small" variant="outlined" disabled={busy} onClick={() => void run(benchmarkPrompt.prompt, benchmarkPrompt.mode || 'suggest', false, undefined, true)}>{benchmarkPrompt.label}</Button>)}
         </Stack>
       </Stack>}
-      <Box component="span" role="status" aria-live="polite" sx={{ position: 'absolute', width: 1, height: 1, p: 0, m: -1, overflow: 'hidden', clip: 'rect(0, 0, 0, 0)', whiteSpace: 'nowrap', border: 0 }}>{status === 'streaming' ? t('aiAssistant.streaming') : status === 'done' ? t('aiAssistant.completed') : status === 'stopped' ? t('aiAssistant.stopped') : ''}</Box>
+      <Box component="span" role="status" aria-live="polite" sx={{ position: 'absolute', width: 1, height: 1, p: 0, m: -1, overflow: 'hidden', clip: 'rect(0, 0, 0, 0)', whiteSpace: 'nowrap', border: 0 }}>{busy ? t('aiAssistant.streaming') : status === 'done' ? t('aiAssistant.completed') : status === 'stopped' ? t('aiAssistant.stopped') : ''}</Box>
       {loading && <Stack direction="row" spacing={1} alignItems="center"><CircularProgress size={18} /><Typography>{t('loading')}</Typography></Stack>}
       {accessError && <Alert severity="warning" action={<Button onClick={() => void refresh()}>{t('retry')}</Button>}>{t('aiAssistant.errors.access')}</Alert>}
-      {!loading && !accessError && !explain?.allowed && !suggest?.allowed && <Alert severity="info">{t('aiAssistant.unavailable')}</Alert>}
-      {(explain?.allowed || suggest?.allowed) && <>
+      {noCapability && <Alert severity="info">{t('aiAssistant.unavailable')}</Alert>}
+      {canAsk && <>
         {runtimeStatus.readiness === 'loading' && <Box><Typography variant="caption">{runtimeStatus.message || t('aiAssistant.runtimeLoading')}</Typography><LinearProgress variant={typeof runtimeStatus.progress === 'number' ? 'determinate' : 'indeterminate'} value={(runtimeStatus.progress || 0) * 100} /></Box>}
         {(runtimeStatus.readiness === 'error' || runtimeStatus.readiness === 'unavailable') && <Alert severity="warning">{t(`aiAssistant.errors.${runtimeStatus.message || 'provider_error'}`, t('aiAssistant.errors.provider_error'))}</Alert>}
         {unavailableReason && <Alert severity="info">{unavailableReason}</Alert>}
-        <TextField inputRef={questionRef} label={t('aiAssistant.message')} value={question} onChange={(event) => setQuestion(event.target.value)} multiline minRows={2} inputProps={{ maxLength: 2000 }} disabled={status === 'streaming'} />
-        <Stack direction="row" spacing={1} flexWrap="wrap">
-          {singleMode ? <Button variant="contained" startIcon={<IconSparkles size={18} />} disabled={!activeDecision?.allowed || !question.trim() || status === 'streaming'} onClick={() => void run(question, mode)}>{t('aiAssistant.actions.send')}</Button> : <>
-            {explain?.allowed && <Button variant="contained" startIcon={<IconSparkles size={18} />} disabled={!question.trim() || status === 'streaming'} onClick={() => void run(question, 'explain')}>{t('aiAssistant.actions.help')}</Button>}
-            {canSuggest && <Button variant="outlined" disabled={!question.trim() || status === 'streaming'} onClick={() => void run(question, 'suggest')}>{t('aiAssistant.actions.change')}</Button>}
-          </>}
-          {status === 'streaming' && <Button color="error" onClick={() => { runtimeRef.current?.cancel(); abortRef.current?.abort(); setStatus('stopped'); }}>{t('aiAssistant.stop')}</Button>}
-          {(status === 'error' || status === 'stopped') && lastRequest && <Button onClick={() => void run(lastRequest.question, lastRequest.mode, false, undefined, Boolean(lastRequest.benchmark))}>{t('aiAssistant.retry')}</Button>}
-        </Stack>
-        {status === 'stopped' && <Alert severity="info">{t('aiAssistant.stopped')}</Alert>}
         {requestError && <Alert severity="error">{requestError}</Alert>}
+        {status === 'stopped' && <Alert severity="info">{t('aiAssistant.stopped')}</Alert>}
         {isAdmin && debugEnabled && <AdminDebugTrace entries={debugEntries} onClear={clearDebug} />}
-        {status === 'streaming' && !output && <Paper variant="outlined" role="status" aria-live="polite" sx={{ p: 1.5, bgcolor: 'action.hover' }}><Stack direction="row" spacing={1.25} alignItems="center"><CircularProgress size={20} /><Box><Typography variant="body2" fontWeight={700}>{t(`aiAssistant.progress.${requestStage}`)}</Typography><Typography variant="caption" color="text.secondary">{waitingSeconds >= 10 ? t('aiAssistant.progress.longWait') : t('aiAssistant.progress.safe')}</Typography></Box></Stack></Paper>}
-        {output && <Box ref={outputRef} tabIndex={0} aria-live="polite" sx={{ maxHeight: 280, overflowY: 'auto', overscrollBehavior: 'contain' }}><Chip size="small" color="secondary" label={t('aiAssistant.generated')} /><Box sx={{ mt: 1, overflowWrap: 'anywhere', '& > :first-of-type': { mt: 0 }, '& > :last-child': { mb: 0 }, '& p': { my: 1 }, '& ul, & ol': { my: 1, pl: 3 }, '& blockquote': { mx: 0, pl: 1.5, borderLeft: 3, borderColor: 'divider', color: 'text.secondary' }, '& pre': { p: 1.25, overflowX: 'auto', bgcolor: 'action.hover', borderRadius: 1 }, '& code': { fontFamily: 'monospace', fontSize: '0.875em' }, '& table': { display: 'block', maxWidth: '100%', overflowX: 'auto', borderCollapse: 'collapse' }, '& th, & td': { px: 1, py: 0.5, border: 1, borderColor: 'divider' } }}><ReactMarkdown remarkPlugins={[remarkGfm]}>{output}</ReactMarkdown></Box></Box>}
-        {preview && <Paper variant="outlined" sx={{ p: 1.5 }}><Typography variant="subtitle2">{t('aiAssistant.preview')}</Typography><Typography sx={{ my: 1 }}>{preview.summary}</Typography><Divider />{preview.kind === 'lesson' ? <><Box sx={{ mt: 1 }}><Typography variant="caption" color="text.secondary">{t('aiAssistant.authoring.changes')}</Typography><Stack direction="row" gap={0.5} flexWrap="wrap" sx={{ mt: 0.5 }}>{preview.changes?.map((change, index) => <Chip key={`${change}-${index}`} size="small" label={t(`aiAssistant.authoring.operations.${change}`, change)} />)}</Stack></Box><LessonSuggestionPreview preview={preview} /></> : preview.kind === 'stage' ? <StageSuggestionPreview preview={preview} onPreviewLiveToggle={onPreviewStageChange} /> : <><Typography variant="caption" color="text.secondary">{preview.kind === 'python' ? t('aiAssistant.pythonDiff') : t('aiAssistant.generatedPython')}</Typography><Box component="pre" tabIndex={0} sx={{ mt: 1, p: 1, maxHeight: 180, overflow: 'auto', bgcolor: 'action.hover', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{preview.kind === 'python' ? preview.after : preview.detail}</Box></>}<Stack direction="row" spacing={1} flexWrap="wrap" sx={{ mt: 1 }}><Button variant="contained" onClick={() => setConfirmOpen(true)}>{t('aiAssistant.apply')}</Button>{preview.kind === 'stage' && <><Button variant="outlined" onClick={modifyPreview}>{t('aiAssistant.modify')}</Button><Button color="inherit" onClick={declinePreview}>{t('aiAssistant.decline')}</Button></>}</Stack></Paper>}
+
+        {view === 'working' && <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1.5}>
+          <Box sx={{ minWidth: 0 }}>
+            <Typography component="h3" variant="h5">{t(`aiAssistant.progress.${requestStage}`)}</Typography>
+            <Typography variant="body2" color="text.secondary">{waitingSeconds >= 10 ? t('aiAssistant.progress.longWait') : t('aiAssistant.progress.safe')}</Typography>
+          </Box>
+        </Stack>}
+        {view === 'working' && <Box>
+          <Button size="small" onClick={() => setShowWorkingSteps((value) => !value)} aria-expanded={showWorkingSteps} aria-controls={workingStepsId} endIcon={<IconChevronDown size={15} />} sx={{ mb: 1.5, px: 0, minWidth: 0, fontSize: '0.75rem', color: 'text.secondary', '&:hover': { color: 'primary.main' }, '& .MuiButton-endIcon': { ml: 0.5, transition: 'transform 150ms ease-out', transform: showWorkingSteps ? 'rotate(180deg)' : 'none' }, '@media (prefers-reduced-motion: reduce)': { '& .MuiButton-endIcon': { transition: 'none' } } }}>{showWorkingSteps ? t('aiAssistant.hideDetails') : t('aiAssistant.showDetails')}</Button>
+          <Stack id={workingStepsId} spacing={2.25}>
+            {workingSteps.map((step, index) => {
+              const done = index < workingIndex;
+              const live = index === workingIndex;
+              if (!live && !showWorkingSteps) return null;
+              return <Stack key={step} direction="row" spacing={1.25} alignItems="center">
+                {done
+                  ? <Box sx={{ width: 28, height: 28, flex: '0 0 auto', display: 'grid', placeItems: 'center', borderRadius: '50%', bgcolor: 'success.light', color: 'success.main' }}><IconCheck size={16} /></Box>
+                  : live
+                    ? <DraftingMark />
+                    : <Box sx={{ width: 28, height: 28, flex: '0 0 auto', borderRadius: '50%', border: 1, borderColor: 'divider' }} />}
+                <Typography variant="body2" fontWeight={live ? 700 : 500} color={live ? 'text.primary' : 'text.secondary'}>{t(`aiAssistant.progress.${step}`)}</Typography>
+              </Stack>;
+            })}
+          </Stack>
+        </Box>}
+        {view === 'working' && <Button fullWidth variant="contained" color="error" startIcon={<IconX size={18} />} onClick={stopRun} sx={{ minHeight: 48 }}>{t('aiAssistant.stop')}</Button>}
+
+        {view === 'ask' && <Stack spacing={rhythm.blockGap}>
+          <Typography component="h3" variant="h5">{t('aiAssistant.question')}</Typography>
+          <Stack direction="row" gap={1} flexWrap="wrap">{surfacePrompts.map((prompt) => <PromptChip key={prompt} label={prompt} onClick={() => { setQuestion(prompt); questionRef.current?.focus(); }} />)}</Stack>
+          <TextField inputRef={questionRef} label={t('aiAssistant.message')} value={question} onChange={(event) => setQuestion(event.target.value)} multiline minRows={2} inputProps={{ maxLength: 2000 }} disabled={busy} />
+          <Stack spacing={rhythm.actionGap}>
+            <Button fullWidth variant="contained" size="large" endIcon={<IconArrowRight size={19} />} disabled={!question.trim() || busy || !activeDecision?.allowed} onClick={() => void run(question, primaryMode)} sx={{ minHeight: 48 }}>{primaryLabel}</Button>
+            {showSecondarySuggest && <Button fullWidth variant="outlined" disabled={!question.trim() || busy} onClick={() => void run(question, 'suggest')} sx={{ minHeight: 44 }}>{t('aiAssistant.actions.change')}</Button>}
+            <Stack direction="row" justifyContent="center" alignItems="center" spacing={0.75} sx={{ color: 'text.secondary' }}>
+              <IconShieldCheck size={15} aria-hidden="true" />
+              <Typography variant="caption">{t('aiAssistant.askNote')}</Typography>
+            </Stack>
+            {compose && output && <Button onClick={() => setCompose(false)} startIcon={<IconArrowLeft size={17} />} sx={{ alignSelf: 'center' }}>{t('aiAssistant.backToAnswer')}</Button>}
+          </Stack>
+        </Stack>}
+
+        {view === 'answer' && <Stack spacing={rhythm.blockGap}>
+          <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={1.5}>
+            <Typography component="h3" variant="h5">{t('aiAssistant.states.answer')}</Typography>
+            <Chip size="small" color="secondary" label={t('aiAssistant.generated')} />
+          </Stack>
+          {renderedOutput}
+          <Stack spacing={rhythm.actionGap}>
+            <Stack direction="row" gap={1} flexWrap="wrap">{surfacePrompts.map((prompt) => <PromptChip key={prompt} label={prompt} onClick={() => askAgain(prompt)} />)}</Stack>
+            <Button fullWidth variant="contained" endIcon={<IconArrowRight size={18} />} onClick={() => askAgain()} sx={{ minHeight: 48 }}>{t('aiAssistant.followUp')}</Button>
+          </Stack>
+        </Stack>}
+
+        {view === 'review' && preview && <Stack spacing={rhythm.blockGap}>
+          <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1.5}>
+            <Typography component="h3" variant="h5">{t('aiAssistant.preview')}</Typography>
+            <Chip icon={<IconShieldCheck size={16} />} color="success" label={t('aiAssistant.validated')} size="small" sx={{ flex: '0 0 auto' }} />
+          </Stack>
+          {renderedOutput}
+          <Paper variant="outlined" sx={{ overflow: 'hidden', borderRadius: 1.5 }}>
+            <Stack direction="row" alignItems="center" spacing={1} sx={{ px: 1.5, py: 1, bgcolor: 'action.hover', borderBottom: 1, borderColor: 'divider' }}>
+              {preview.kind === 'python' ? <IconCode size={17} aria-hidden="true" /> : <IconWand size={17} aria-hidden="true" />}
+              <Typography variant="caption" fontWeight={700}>{previewLabel}</Typography>
+            </Stack>
+            <Box sx={{ p: 1.5 }}>
+              {preview.kind === 'lesson' ? <>
+                <Box><Typography variant="caption" color="text.secondary">{t('aiAssistant.authoring.changes')}</Typography><Stack direction="row" gap={0.5} flexWrap="wrap" sx={{ mt: 0.5 }}>{preview.changes?.map((change, index) => <Chip key={`${change}-${index}`} size="small" label={t(`aiAssistant.authoring.operations.${change}`, change)} />)}</Stack></Box>
+                <LessonSuggestionPreview preview={preview} />
+              </> : preview.kind === 'stage' ? <StageSuggestionPreview preview={preview} onPreviewLiveToggle={onPreviewStageChange} /> : <Box component="pre" tabIndex={0} sx={{ m: 0, maxHeight: 180, overflow: 'auto', bgcolor: 'action.hover', p: 1, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{preview.kind === 'python' ? preview.after : preview.detail}</Box>}
+            </Box>
+          </Paper>
+          <Stack spacing={rhythm.actionStackGap}>
+            <Button fullWidth variant="contained" startIcon={<IconCheck size={18} />} onClick={() => setConfirmOpen(true)} sx={{ minHeight: 48 }}>{t('aiAssistant.apply')}</Button>
+            <Stack direction="row" spacing={1}>
+              <Button fullWidth variant="outlined" startIcon={<IconWand size={17} />} onClick={modifyPreview} sx={{ minHeight: 44 }}>{t('aiAssistant.modify')}</Button>
+              <Button fullWidth color="error" startIcon={<IconTrash size={17} />} onClick={declinePreview} sx={{ minHeight: 44 }}>{t('aiAssistant.decline')}</Button>
+            </Stack>
+          </Stack>
+        </Stack>}
+
+        {view === 'failed' && <Paper variant="outlined" sx={{ p: rhythm.inset, borderRadius: 2 }}>
+          <Stack direction="row" spacing={1.5} alignItems="flex-start">
+            <Box sx={{ width: 40, height: 40, flex: '0 0 auto', display: 'grid', placeItems: 'center', borderRadius: 1.25, bgcolor: 'error.light', color: 'error.main' }}><IconRefresh size={20} /></Box>
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 0.5 }}>{t('aiAssistant.compact.failedTitle')}</Typography>
+              <Typography variant="body2" color="text.secondary">{t('aiAssistant.failedTurn')}</Typography>
+            </Box>
+          </Stack>
+          <Stack direction="row" spacing={1} sx={{ mt: rhythm.blockGap }}>
+            {lastRequest && <Button variant="contained" onClick={() => void run(lastRequest.question, lastRequest.mode, false, undefined, Boolean(lastRequest.benchmark))} sx={{ minHeight: 44 }}>{t('aiAssistant.retry')}</Button>}
+            <Button variant="outlined" onClick={() => askAgain()} sx={{ minHeight: 44 }}>{t('aiAssistant.states.ask')}</Button>
+          </Stack>
+        </Paper>}
+
+        {view === 'applied' && <Paper variant="outlined" sx={{ p: rhythm.inset, borderRadius: 2 }}>
+          <Stack direction="row" spacing={1.5} alignItems="flex-start">
+            <Box sx={{ width: 40, height: 40, flex: '0 0 auto', display: 'grid', placeItems: 'center', borderRadius: 1.25, bgcolor: 'success.light', color: 'success.main' }}><IconCheck size={20} /></Box>
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 0.5 }}>{t('aiAssistant.compact.appliedTitle')}</Typography>
+              <Typography variant="body2" color="text.secondary">{output || appliedMessage || t('aiAssistant.applied')}</Typography>
+            </Box>
+          </Stack>
+          <Stack direction="row" spacing={1} sx={{ mt: rhythm.blockGap }}>
+            <Button variant="contained" endIcon={<IconArrowRight size={17} />} onClick={restartFromApplied} sx={{ minHeight: 44 }}>{t('aiAssistant.compact.askAnother')}</Button>
+          </Stack>
+        </Paper>}
       </>}
-    </Stack>
+    </Box>
   </Paper>;
 
   return <>
     <Portal>
       <Box sx={{ position: 'fixed', right: { xs: 12, sm: 20 }, bottom: { xs: 12, sm: 20 }, zIndex: (currentTheme) => currentTheme.zIndex.modal - 1, width: open ? 'min(430px, calc(100vw - 24px))' : 'auto', maxWidth: 'calc(100vw - 24px)' }}>
-        {open ? panel : <Tooltip title={t('aiAssistant.open')} placement="left"><Fab color="primary" aria-controls="fossbot-buddy-panel" aria-expanded={false} aria-label={t('aiAssistant.open')} onClick={() => setOpen(true)}>{status === 'streaming' ? <CircularProgress size={22} color="inherit" /> : <IconRobot size={24} />}</Fab></Tooltip>}
+        {open ? panel : <Tooltip title={t('aiAssistant.open')} placement="left"><Fab color="primary" aria-controls="fossbot-buddy-panel" aria-expanded={false} aria-label={t('aiAssistant.open')} onClick={() => setOpen(true)}>{busy ? <CircularProgress size={22} color="inherit" /> : <IconRobot size={24} />}</Fab></Tooltip>}
       </Box>
     </Portal>
     <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)}><DialogTitle>{t('aiAssistant.confirmTitle')}</DialogTitle><DialogContent><Typography>{confirmationBody || t('aiAssistant.confirmBody')}</Typography></DialogContent><DialogActions><Button onClick={() => setConfirmOpen(false)}>{t('cancel')}</Button><Button variant="contained" onClick={() => void apply()}>{t('aiAssistant.apply')}</Button></DialogActions></Dialog>
