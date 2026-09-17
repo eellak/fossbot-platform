@@ -223,6 +223,6 @@ Manual smoke test after meaningful changes:
 3. Move/rotate/scale objects; verify undo/redo and snapping.
 4. Rename, hide/show, lock/unlock, duplicate/delete, group/ungroup in Scene hierarchy.
 5. Edit stage title, floor size/color, grid, and snap settings.
-6. Confirm validation blocks missing robot spawn/target and opens the Validation context.
+6. Confirm validation blocks a missing robot spawn, allows a stage without a target, and opens the Validation context for errors.
 7. Export JSON, import it back, and confirm objects/metadata survive.
 8. Run Test and confirm the separate simulator route receives the current exported config.

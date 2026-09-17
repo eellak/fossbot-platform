@@ -54,11 +54,6 @@ export function validateStageBuilderStage(stage: EditorStage): StageBuilderValid
     results.push(result(stage, 'stage:spawn-missing', 'error', [], 'Robot spawn is missing.', 'Place a Robot Spawn so the simulator knows where FOSSBot starts.', false));
   }
 
-  const target = stage.objects.find((object) => object.semanticKind === 'target' && !object.hidden);
-  if (!target) {
-    results.push(result(stage, 'stage:target-missing', 'error', [], 'Target is missing.', 'Place a Target marker to define the minimum valid challenge goal.', false));
-  }
-
   const challengeObjects = stage.objects.filter((object) => !object.hidden && object.challenge);
   const markerOwners = new Map<string, EditorStageObject[]>();
   for (const object of challengeObjects) {

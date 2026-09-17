@@ -409,8 +409,8 @@ def _validate_stage_operations(suggestion: StageAuthoringSuggestion, context: di
             raise SuggestionError("The stage group is invalid")
     if target == "create":
         added = {operation.semantic_kind for operation in suggestion.operations if operation.op == "add_object"}
-        if not {"robotSpawn", "target"}.issubset(added):
-            raise SuggestionError("A generated stage needs a robot spawn and target")
+        if "robotSpawn" not in added:
+            raise SuggestionError("A generated stage needs a robot spawn")
         intent = " ".join((str(context.get("request_question") or ""), suggestion.rationale, suggestion.expected_validation))
         if requires_wall_enclosure(intent):
             connected, enclosed = wall_enclosure_status(generated_wall_geometry(suggestion.operations))

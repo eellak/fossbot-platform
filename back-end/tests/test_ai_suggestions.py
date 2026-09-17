@@ -183,22 +183,24 @@ def test_lesson_suggestion_cannot_create_mission_rules():
         }), "lesson.suggest_changes", revision, context)
 
 
-def test_stage_create_requires_supported_spawn_and_target():
+def test_stage_create_requires_spawn_but_target_is_optional():
     fingerprint = "c" * 64
     context = {"target": "create", "selected_object_ids": [], "stage_payload": {"objects": [], "summary": {"knownObjectIds": []}}}
     suggestion = {
         "version": "1", "type": "stage_operations", "baseFingerprint": fingerprint,
-        "rationale": "Create a minimal challenge.", "expectedValidation": "Spawn and target remain visible.", "summary": "Create stage.",
+        "rationale": "Create a minimal challenge.", "expectedValidation": "Spawn remains visible.", "summary": "Create stage.",
         "operations": [
             {"op": "set_metadata", "patch": {"title": "Line challenge"}},
             {"op": "add_object", "tempId": "ai-spawn", "semanticKind": "robotSpawn", "position": [-2, 0, -2]},
-            {"op": "add_object", "tempId": "ai-target", "semanticKind": "target", "position": [2, 0, 2]},
         ],
     }
     parsed = parse_suggestion(json.dumps(suggestion), "stage.create", fingerprint, context)
     assert parsed.type == "stage_operations"
-    suggestion["operations"][2]["semanticKind"] = "downloadedModel"
+    suggestion["operations"].append({"op": "add_object", "tempId": "ai-invalid", "semanticKind": "downloadedModel", "position": [2, 0, 2]})
     with pytest.raises(SuggestionError, match="not supported"):
+        parse_suggestion(json.dumps(suggestion), "stage.create", fingerprint, context)
+    suggestion["operations"] = [{"op": "set_metadata", "patch": {"title": "No spawn"}}]
+    with pytest.raises(SuggestionError, match="robot spawn"):
         parse_suggestion(json.dumps(suggestion), "stage.create", fingerprint, context)
 
 
