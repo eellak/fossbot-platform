@@ -28,9 +28,24 @@ class LocalStageStorageTests(unittest.TestCase):
         self.assertGreater(size, 0)
         self.assertEqual(len(checksum), 64)
 
-    def test_rejects_custom_model(self):
-        with self.assertRaisesRegex(LocalStageValidationError, "Custom OBJ"):
+    def test_accepts_embedded_stl_round_trip(self):
+        data_url = "data:model/stl;base64," + base64.b64encode(b"solid test\n" + b" " * (300 * 1024) + b"\nendsolid test\n").decode()
+        record = {"config": [{"type": "model", "format": "stl", "filename": data_url}], "editor": {"objects": [{"kind": "model", "format": "stl", "filename": data_url}]}}
+        size, checksum = validate_local_stage_record(record)
+        self.assertGreater(size, MAX_STAGE_RECORD_BYTES)
+        self.assertEqual(len(checksum), 64)
+
+    def test_rejects_non_embedded_model(self):
+        with self.assertRaisesRegex(LocalStageValidationError, "embedded STL"):
             validate_local_stage_record({"config": [{"type": "model", "filename": "asset.stl"}]})
+
+    def test_rejects_invalid_stl_data(self):
+        with self.assertRaisesRegex(LocalStageValidationError, "invalid base64"):
+            validate_local_stage_record({"config": [{"type": "model", "format": "stl", "filename": "data:model/stl;base64,%%%"}]})
+
+    def test_rejects_other_embedded_models(self):
+        with self.assertRaisesRegex(LocalStageValidationError, "embedded STL"):
+            validate_local_stage_record({"config": [{"type": "model", "format": "glb", "filename": "data:model/gltf-binary;base64,AAAA"}]})
 
     def test_rejects_embedded_assets(self):
         with self.assertRaisesRegex(LocalStageValidationError, "Embedded"):

@@ -75,12 +75,14 @@ At the measured median (2,530 B compact), 10,000 editable stages contain about 2
 
 ## Limits
 
-- Stage JSON: 512 KiB, roughly 20 times the largest measured pretty-printed stage.
+- Stage JSON: 512 KiB without models; 30 MiB when it contains embedded STL models. The larger limit covers the editor and simulator copies of up to 10 MiB of STL data.
 - Preview PNG: 512 KiB, decoded into binary storage rather than base64 inside JSON.
 - Tags: 8 tags, 32 characters each.
-- Custom `model` entries (OBJ, STL, GLB): rejected for local storage in this version.
-- Embedded `data:` and temporary `blob:` values in asset fields: rejected.
+- Custom `model` entries: embedded base64 STL is supported up to 10 MiB per model. OBJ, GLB, and non-embedded model references are rejected.
+- Other embedded `data:` and temporary `blob:` values in asset fields: rejected.
 - Remote GitHub imports are pinned to the marketplace commit and subject to the same validation and size limits.
+
+The bundled nginx API proxy accepts requests up to 32 MiB so a 30 MiB STL stage record can be saved with its request metadata.
 
 PostgreSQL documents a 1 GB maximum field size, with oversized values moved out-of-line and compressed by TOAST. The application limits are deliberately far below that database ceiling: they bound request memory, backups, marketplace snapshots, and accidental asset embedding while leaving substantial room for ordinary stage growth. See the PostgreSQL [limits](https://www.postgresql.org/docs/current/limits.html) and [TOAST](https://www.postgresql.org/docs/current/storage-toast.html) documentation.
 
