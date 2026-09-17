@@ -389,6 +389,35 @@ def test_archiving_is_soft_and_release_rows_remain(client_for, users, db):
     assert db.query(Course).filter(Course.id == course["id"]).one().status == "archived"
 
 
+def test_permanent_delete_removes_unused_course(client_for, users, db):
+    tutor, other_tutor, _, _ = users
+    teacher = client_for(tutor)
+    course = create_course(teacher)
+    lesson = add_lesson(teacher, course["id"])
+    assert teacher.post(f"/courses/{course['id']}/publish").status_code == 201
+
+    assert client_for(other_tutor).delete(f"/courses/{course['id']}/permanent").status_code == 404
+    assert teacher.delete(f"/courses/{course['id']}/permanent").status_code == 204
+    assert db.query(Course).filter(Course.id == course["id"]).count() == 0
+    assert db.query(Lesson).filter(Lesson.id == lesson["id"]).count() == 0
+    assert db.query(CourseRelease).filter(CourseRelease.course_id == course["id"]).count() == 0
+    assert teacher.get(f"/courses/{course['id']}/draft").status_code == 404
+
+
+def test_permanent_delete_refuses_course_with_enrollments(client_for, users, db):
+    tutor, _, student, _ = users
+    teacher = client_for(tutor)
+    course = create_course(teacher)
+    add_lesson(teacher, course["id"])
+    assert teacher.post(f"/courses/{course['id']}/publish").status_code == 201
+    assert client_for(student).post(f"/courses/{course['id']}/enroll").status_code == 201
+
+    response = teacher.delete(f"/courses/{course['id']}/permanent")
+    assert response.status_code == 409
+    assert response.json()["detail"]["error"] == "course_has_enrollments"
+    assert db.query(Course).filter(Course.id == course["id"]).count() == 1
+
+
 def test_publication_validation_and_deprecated_aliases(client_for, users):
     tutor, _, _, _ = users
     client = client_for(tutor)

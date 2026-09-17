@@ -86,6 +86,11 @@ export async function archiveCourse(token: string, courseId: number): Promise<vo
   if (!response.ok) await parse(response);
 }
 
+export async function deleteCourse(token: string, courseId: number): Promise<void> {
+  const response = await fetch(`${backendUrl}/courses/${courseId}/permanent`, { method: 'DELETE', headers: headers(token) });
+  if (!response.ok) await parse(response);
+}
+
 export async function addLesson(token: string, courseId: number, request: LessonSaveRequest): Promise<Lesson> {
   return parse(await fetch(`${backendUrl}/courses/${courseId}/lessons`, { method: 'POST', headers: headers(token), body: JSON.stringify(request) }));
 }

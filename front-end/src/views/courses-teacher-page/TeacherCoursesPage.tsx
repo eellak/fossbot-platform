@@ -1,10 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, InputAdornment, Menu, MenuItem, Paper, Skeleton, Stack, Tab, Tabs, TextField, Typography } from '@mui/material';
+import { Alert, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, Divider, IconButton, InputAdornment, Menu, MenuItem, Paper, Skeleton, Stack, Tab, Tabs, TextField, Typography } from '@mui/material';
 import { IconDotsVertical, IconPlus, IconSchool, IconSearch } from '@tabler/icons-react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from 'src/authentication/AuthProvider';
-import { addLesson, archiveCourse, createCourse, listAuthoredCourses, readCourseDraft } from 'src/courses/CoursesApi';
+import { addLesson, archiveCourse, CourseRequestError, createCourse, deleteCourse, listAuthoredCourses, readCourseDraft } from 'src/courses/CoursesApi';
 import type { CourseSummary } from 'src/courses/types';
 import ClassGroupsTeacherPage from '../class-groups-teacher-page/ClassGroupsTeacherPage';
 import { pageTabsSx, TabbedPageHeader } from 'src/components/shared/PageHeader';
@@ -78,6 +78,27 @@ export default function TeacherCoursesPage() {
     try { await archiveCourse(token, course.id); await load(); } catch { setError(t('education.errors.archive')); }
   };
 
+  const remove = async (course: CourseSummary) => {
+    setMenu(null);
+    setError('');
+    const confirmed = await confirmDialog.confirm({
+      title: t('education.courseList.deleteTitle'),
+      message: t('education.courseList.deleteConfirm', { title: course.title }),
+      confirmLabel: t('delete'),
+      cancelLabel: t('cancel'),
+      danger: true,
+    });
+    if (!confirmed) return;
+    try {
+      await deleteCourse(token, course.id);
+      await load();
+    } catch (reason) {
+      if (reason instanceof CourseRequestError && reason.code === 'course_has_enrollments') setError(t('education.errors.deleteEnrolled'));
+      else if (reason instanceof CourseRequestError && reason.code === 'course_has_assignments') setError(t('education.errors.deleteAssigned'));
+      else setError(t('education.errors.delete'));
+    }
+  };
+
   return (
     <Stack spacing={3}>
       <TabbedPageHeader
@@ -114,6 +135,8 @@ export default function TeacherCoursesPage() {
         <MenuItem onClick={() => menu && navigate(`/teach/courses/${menu.course.id}/progress`)}>{t('education.analytics.title')}</MenuItem>
         <MenuItem onClick={() => menu && duplicate(menu.course)}>{t('education.courseList.duplicate')}</MenuItem>
         <MenuItem onClick={() => menu && archive(menu.course)}>{t('education.courseList.archive')}</MenuItem>
+        <Divider sx={{ my: 0.5 }} />
+        <MenuItem onClick={() => menu && remove(menu.course)} sx={{ color: 'error.main' }}>{t('education.courseList.delete')}</MenuItem>
       </Menu>
       <Dialog open={createOpen} onClose={() => !creating && setCreateOpen(false)} fullWidth maxWidth="sm">
         <DialogTitle>{t('education.create.title')}</DialogTitle>

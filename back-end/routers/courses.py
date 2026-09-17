@@ -9,7 +9,7 @@ import xml.etree.ElementTree as ElementTree
 from typing import Any, Literal, Optional
 from urllib.parse import urlsplit
 
-from database.database import ActivityAnswer, Course, CourseRelease, Enrollment, Lesson, LessonProgress, LessonWorkspace, LocalStage, MarketplaceModerationOverride, MissionAttempt, User
+from database.database import ActivityAnswer, ClassChallenge, Course, CourseAssignment, CourseRelease, Enrollment, Lesson, LessonProgress, LessonWorkspace, LocalStage, MarketplaceModerationOverride, MissionAttempt, User
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError
@@ -989,6 +989,41 @@ def archive_course(course_id: int, user: User = Depends(get_current_user), db: S
     require_teacher(user)
     course = authored_course_or_404(db, user, course_id)
     course.status = "archived"
+    safe_commit(db)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.delete("/courses/{course_id}/permanent", status_code=status.HTTP_204_NO_CONTENT)
+def delete_course(course_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Permanently remove a course that carries no student or classroom history."""
+    require_teacher(user)
+    course = authored_course_or_404(db, user, course_id)
+    if db.query(Enrollment.id).filter(Enrollment.course_id == course_id).first():
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error": "course_has_enrollments",
+                "detail": "Students are enrolled in this course. Archive it instead so their progress is preserved.",
+            },
+        )
+    if db.query(CourseAssignment.id).filter(CourseAssignment.course_id == course_id).first():
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error": "course_has_assignments",
+                "detail": "This course is assigned to a class. Archive it instead so the assignment and leaderboards are preserved.",
+            },
+        )
+    # Drop the self-referential pointer before deleting releases, then remove the
+    # authoring rows with bulk deletes so the ORM never tries to null their course_id.
+    course.latest_published_release_id = None
+    db.flush()
+    db.query(ClassChallenge).filter(
+        ClassChallenge.release_id.in_(db.query(CourseRelease.id).filter(CourseRelease.course_id == course_id))
+    ).delete(synchronize_session=False)
+    db.query(CourseRelease).filter(CourseRelease.course_id == course_id).delete(synchronize_session=False)
+    db.query(Lesson).filter(Lesson.course_id == course_id).delete(synchronize_session=False)
+    db.query(Course).filter(Course.id == course_id).delete(synchronize_session=False)
     safe_commit(db)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
