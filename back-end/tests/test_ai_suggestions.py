@@ -3,7 +3,7 @@ import json
 
 import pytest
 
-from utils.ai.schemas import ConversationTurn, ProviderStreamRequest
+from utils.ai.schemas import ConversationTurn, CourseAuthoringPatch, LessonAuthoringSuggestion, LessonOperation, ProviderStreamRequest
 from utils.ai.suggestions import SuggestionError, build_suggestion_repair_request, parse_suggestion, parse_suggestion_with_normalizations, repair_incomplete_json_object, suggestion_output_token_budget, suggestion_payload, suggestion_response_character_limit
 
 
@@ -113,6 +113,35 @@ def test_repair_instruction_points_invalid_activities_back_to_the_contract():
     repaired = build_suggestion_repair_request(request, "{}", error, 1)
     assert "platform activity schema" in repaired.messages[-1].content
     assert "numeric_answer needs prompt" in repaired.messages[-1].content
+
+
+def test_suggestion_payload_omits_null_optional_fields():
+    suggestion = LessonAuthoringSuggestion(
+        version="1",
+        type="lesson_operations",
+        base_revision="a" * 64,
+        operations=[LessonOperation(op="update_course", course_patch=CourseAuthoringPatch(description="A new description."))],
+        summary="Update the course description.",
+    )
+    payload = suggestion_payload(suggestion)
+    assert payload["operations"][0]["coursePatch"] == {"description": "A new description."}
+    assert "lessonId" not in payload["operations"][0]
+
+
+def test_lesson_update_requires_an_effective_patch():
+    revision = "a" * 64
+    course_context = {"target": "course", "target_payload": {"course": {}, "outline": []}}
+    with pytest.raises(SuggestionError, match="does not change"):
+        parse_suggestion(json.dumps({
+            "version": "1", "type": "lesson_operations", "baseRevision": revision, "summary": "No-op.",
+            "operations": [{"op": "update_course", "coursePatch": {}}],
+        }), "lesson.draft", revision, course_context)
+    lesson_context = {"target": "lesson", "target_payload": {"course": {}, "lesson": {"id": 7}, "outline": []}}
+    with pytest.raises(SuggestionError, match="missing its title"):
+        parse_suggestion(json.dumps({
+            "version": "1", "type": "lesson_operations", "baseRevision": revision, "summary": "No-op.",
+            "operations": [{"op": "update_lesson", "lessonId": 7, "lessonPatch": {}}],
+        }), "lesson.suggest_changes", revision, lesson_context)
 
 
 def test_blockly_suggestion_requires_well_formed_xml_and_matching_fingerprint():

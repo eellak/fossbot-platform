@@ -25,7 +25,14 @@ function assertActivity(value: unknown): Activity {
   if (activity.version === undefined) activity.version = 1;
   if (activity.version !== 1) throw new Error('invalid_suggestion');
   if (typeof activity.required !== 'boolean') activity.required = false;
-  if (activityValidation(activity).length) throw new Error('invalid_suggestion');
+  let activityErrors: string[];
+  try {
+    activityErrors = activityValidation(activity);
+  } catch {
+    // A malformed activity shape must fail as an invalid suggestion, not a TypeError.
+    throw new Error('invalid_suggestion');
+  }
+  if (activityErrors.length) throw new Error('invalid_suggestion');
   return activity;
 }
 
@@ -54,17 +61,26 @@ function applyOperations(course: CourseDraft, suggestion: LessonAuthoringSuggest
     if (!allowed.has(operation.op)) throw new Error('invalid_suggestion');
     if (operation.op === 'update_course') {
       const patch = operation.coursePatch;
-      if (!patch || (patch.title !== undefined && !patch.title.trim()) || (patch.description !== undefined && !patch.description.trim()) || (patch.learningObjectives !== undefined && (!patch.learningObjectives.length || patch.learningObjectives.some((item) => !item.trim())))) throw new Error('invalid_suggestion');
-      if (patch.title !== undefined) next.title = patch.title;
-      if (patch.description !== undefined) next.description = patch.description;
-      if (patch.learningObjectives !== undefined) next.learning_objectives = patch.learningObjectives;
+      if (!patch) throw new Error('invalid_suggestion');
+      // The backend serializes optional fields as null, so treat null like an omitted field.
+      const title = patch.title ?? undefined;
+      const description = patch.description ?? undefined;
+      const objectives = patch.learningObjectives ?? undefined;
+      if (title === undefined && description === undefined && objectives === undefined) throw new Error('invalid_suggestion');
+      if (title !== undefined && !title.trim()) throw new Error('invalid_suggestion');
+      if (description !== undefined && !description.trim()) throw new Error('invalid_suggestion');
+      if (objectives !== undefined && (!objectives.length || objectives.some((item) => !item?.trim()))) throw new Error('invalid_suggestion');
+      if (title !== undefined) next.title = title;
+      if (description !== undefined) next.description = description;
+      if (objectives !== undefined) next.learning_objectives = objectives;
       return;
     }
     const lesson = next.lessons.find((item) => item.id === operation.lessonId);
     if (!lesson || (selectedLesson && lesson.id !== selectedLesson.id)) throw new Error('invalid_suggestion');
     if (operation.op === 'update_lesson') {
-      if (!operation.lessonPatch?.title?.trim()) throw new Error('invalid_suggestion');
-      lesson.title = operation.lessonPatch.title;
+      const title = operation.lessonPatch?.title ?? undefined;
+      if (title === undefined || !title.trim()) throw new Error('invalid_suggestion');
+      lesson.title = title;
       return;
     }
     if (operation.op === 'insert_activity') {
@@ -117,13 +133,18 @@ const activityPreview = (fields: Record<string, unknown>): LessonPreviewItem => 
 function previewBoundaries(operations: LessonOperation[]) {
   const studentVisible: LessonPreviewItem[] = [];
   const teacherOnly: LessonPreviewItem[] = [];
+  const patchFields = (patch: Record<string, unknown>) => Object.entries(patch)
+    .filter(([, value]) => value !== null && value !== undefined)
+    .map(([name, value]) => ({ name, value: previewValue(value) }));
   operations.forEach((operation) => {
     if (operation.op === 'update_course' && operation.coursePatch) {
-      studentVisible.push({ title: 'course', fields: Object.entries(operation.coursePatch).map(([name, value]) => ({ name, value: previewValue(value) })) });
+      const fields = patchFields(operation.coursePatch as Record<string, unknown>);
+      if (fields.length) studentVisible.push({ title: 'course', fields });
       return;
     }
     if (operation.op === 'update_lesson' && operation.lessonPatch) {
-      studentVisible.push({ title: 'lesson', fields: Object.entries(operation.lessonPatch).map(([name, value]) => ({ name, value: previewValue(value) })) });
+      const fields = patchFields(operation.lessonPatch as Record<string, unknown>);
+      if (fields.length) studentVisible.push({ title: 'lesson', fields });
       return;
     }
     if (operation.op === 'remove_activity') {

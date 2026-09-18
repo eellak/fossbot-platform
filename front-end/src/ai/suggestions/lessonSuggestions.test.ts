@@ -44,3 +44,26 @@ describe('lessonSuggestions activity tolerance', () => {
     expect(() => previewLessonSuggestion(suggestion({ key: 'ai-intro', type: 'rich_text', content: 'Intro', version: 2 }), course, target)).toThrow('invalid_suggestion');
   });
 });
+
+describe('lessonSuggestions course patches', () => {
+  const courseTarget: AuthoringTarget = { type: 'course' };
+  const courseSuggestion = (coursePatch: Record<string, unknown>): LessonAuthoringSuggestion => ({
+    version: '1',
+    type: 'lesson_operations',
+    baseRevision: 'a'.repeat(64),
+    operations: [{ op: 'update_course', coursePatch }],
+    summary: 'Update the course.',
+  }) as unknown as LessonAuthoringSuggestion;
+
+  it('treats null patch fields from the backend as omitted', () => {
+    const preview = previewLessonSuggestion(courseSuggestion({ title: null, description: 'A new description.', learningObjectives: ['A new objective'] }), course, courseTarget);
+    expect(preview.kind).toBe('lesson');
+    const fields = preview.lesson?.studentVisible[0].fields.map((field) => field.name);
+    expect(fields).toEqual(['description', 'learningObjectives']);
+    expect(JSON.parse(preview.after).title).toBe('Robotics');
+  });
+
+  it('rejects a course patch that changes nothing', () => {
+    expect(() => previewLessonSuggestion(courseSuggestion({ title: null, description: null, learningObjectives: null }), course, courseTarget)).toThrow('invalid_suggestion');
+  });
+});

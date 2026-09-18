@@ -301,12 +301,14 @@ def _validate_lesson_operations(suggestion: LessonAuthoringSuggestion, context: 
                 raise SuggestionError("The course update is missing its patch")
             if operation.course_patch.learning_objectives and any(not item.strip() for item in operation.course_patch.learning_objectives):
                 raise SuggestionError("Learning objectives must not be blank")
+            if all(value is None for value in (operation.course_patch.title, operation.course_patch.description, operation.course_patch.learning_objectives)):
+                raise SuggestionError("The course update does not change any course field")
             continue
         if operation.lesson_id != lesson_id:
             raise SuggestionError("The lesson operation targets a different lesson")
         if operation.op == "update_lesson":
-            if operation.lesson_patch is None:
-                raise SuggestionError("The lesson update is missing its patch")
+            if operation.lesson_patch is None or not (operation.lesson_patch.title or "").strip():
+                raise SuggestionError("The lesson update is missing its title")
             continue
         if operation.op in {"insert_activity", "replace_activity"}:
             if operation.activity is None:
@@ -427,4 +429,6 @@ def _validate_stage_operations(suggestion: StageAuthoringSuggestion, context: di
 
 
 def suggestion_payload(suggestion: Suggestion) -> dict:
-    return suggestion.model_dump(by_alias=True)
+    # Optional fields must be omitted, not null: clients treat a null patch value as
+    # present and would call string methods on it.
+    return suggestion.model_dump(by_alias=True, exclude_none=True)
