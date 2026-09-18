@@ -3,6 +3,7 @@ import { Alert, Box, Button, Chip, FormControlLabel, Stack, Switch, ToggleButton
 import { IconCheck, IconCopy, IconTrash } from '@tabler/icons-react';
 import { useTranslation } from 'react-i18next';
 import type { AIDebugTraceEntry } from 'src/ai/types';
+import { copyText } from 'src/utils/platform';
 
 
 type CompactTraceEntry = Omit<AIDebugTraceEntry, 'data'> & {
@@ -135,7 +136,8 @@ export default function AdminDebugTrace({ entries, onClear }: { entries: AIDebug
   const [view, setView] = useState<'compact' | 'full'>('compact');
   const compactEntries = compactDebugEntries(entries);
   const copy = async () => {
-    await navigator.clipboard.writeText(JSON.stringify(view === 'compact' ? compactEntries : entries, null, 2));
+    const copied = await copyText(JSON.stringify(view === 'compact' ? compactEntries : entries, null, 2));
+    if (!copied) return;
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1_500);
   };

@@ -18,6 +18,7 @@ import type { SuggestionPreview } from 'src/ai/suggestions/codeSuggestions';
 import { parseAssistantSuggestion } from 'src/ai/suggestions/parseSuggestion';
 import type { AIAssistantSuggestion, AICapabilityId, AIAssistantSurface, AIDebugTraceEntry, AIPublicProvider, AIRuntimeStatus } from 'src/ai/types';
 import { parseClientSuggestionText } from 'src/ai/runtimes/prompt';
+import { randomId } from 'src/utils/platform';
 import { runtimeFor } from 'src/ai/runtimes/registry';
 import type { AIAssistantRuntime } from 'src/ai/runtimes/types';
 import { outputTokenBudget } from 'src/ai/outputBudgets';
@@ -321,7 +322,7 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
       const context = await adapter.getContext();
       appendDebug('client', 'context.prepared', context);
       setRequestStage('connecting');
-      const localRequestId = `local_${crypto.randomUUID().replace(/-/g, '')}`;
+      const localRequestId = `local_${randomId().replace(/-/g, '')}`;
       const localStartedAt = new Date().toISOString();
       let localInputTokens: number | undefined;
       let localOutputTokens: number | undefined;
