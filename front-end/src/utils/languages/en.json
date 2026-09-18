@@ -486,7 +486,7 @@
     "failedTurn": "That request ended before Buddy could return a valid response.",
     "failedReason": "Validator detail: {{reason}}",
     "progress": { "preparing": "Preparing the workspace context", "connecting": "Contacting Buddy", "drafting": "Buddy is preparing a response", "validating": "Checking the response before showing it", "safe": "Your workspace stays unchanged while Buddy works.", "longWait": "This provider is taking a little longer. You can stop safely at any time." },
-    "noResponse": "No displayable response was returned.", "answerCodeTitle": "Suggested code", "answerCodeSummary": "Code taken from Buddy's answer.",
+    "noResponse": "No displayable response was returned.", "answerCodeTitle": "Suggested code", "answerCodeSummary": "Code taken from Buddy's answer.", "answerCodeExampleTitle": "Code example, not a full program", "answerCodeExampleBody": "This block is an example, not a complete program. Ask Buddy to propose a complete change that fits your current code.",
     "preview": "Review proposed change",
     "pythonDiff": "Complete proposed Python source",
     "generatedPython": "Generated Python preview",

@@ -189,7 +189,16 @@ def test_provider_stream(payload: dict = Body(...)):
         elif "Capability: blockly.explain" in prompt:
             response = "Deterministic test-only explanation: these blocks generate Python in workspace order."
         elif "Capability: code.explain" in prompt:
-            if "[mock:fenced]" in prompt:
+            if "[mock:snippet]" in prompt:
+                response = (
+                    "Move the call into an async function and await it.\n\n"
+                    "```python\n"
+                    "async def main():\n"
+                    "    # ... your existing logic here ...\n"
+                    "```\n\n"
+                    "Then run it with asyncio.run(main())."
+                )
+            elif "[mock:fenced]" in prompt:
                 response = (
                     "Here is a small script to try.\n\n"
                     "```python\n"

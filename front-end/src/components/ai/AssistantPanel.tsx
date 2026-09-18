@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   Alert, Box, Button, Chip, CircularProgress, Collapse, Dialog, DialogActions, DialogContent,
   DialogTitle, Fab, IconButton, LinearProgress, MenuItem, Paper, Portal, Stack, TextField, Tooltip, Typography,
@@ -481,19 +481,14 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
   const codeSurface = adapter.surface === 'python' || adapter.surface === 'blockly' ? adapter.surface : null;
 
   // Turn a code block from a prose answer into a validated replacement proposal.
-  const applyAnswerCode = async (code: string) => {
+  const applyAnswerCode = async (block: { language: string; code: string }) => {
     if (!codeSurface || !canSuggest) return;
     setRequestError('');
     try {
-      const validation = await validateAIArtifact(token, codeSurface, code);
-      if (!validation.valid) {
-        setRequestError(t('aiAssistant.errors.code_invalid', { message: validation.message }));
-        return;
-      }
       const fingerprint = await adapter.getFingerprint();
       const suggestion: AIAssistantSuggestion = codeSurface === 'python'
-        ? { version: '1', type: 'python_replace', baseFingerprint: fingerprint, replacement: code, summary: t('aiAssistant.answerCodeSummary') }
-        : { version: '1', type: 'blockly_replace', baseFingerprint: fingerprint, xml: code, summary: t('aiAssistant.answerCodeSummary') };
+        ? { version: '1', type: 'python_replace', baseFingerprint: fingerprint, replacement: block.code, summary: t('aiAssistant.answerCodeSummary') }
+        : { version: '1', type: 'blockly_replace', baseFingerprint: fingerprint, xml: block.code, summary: t('aiAssistant.answerCodeSummary') };
       const validated = await adapter.previewSuggestion(suggestion, lastRequest?.question || '');
       setPreview(validated);
       setPreviewCapability(codeSurface === 'python' ? 'code.suggest_changes' : 'blockly.suggest_changes');
@@ -575,11 +570,34 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
   const renderedOutput = output
     ? <Box ref={outputRef} tabIndex={0} aria-live="polite" sx={{ maxHeight: 320, overflowY: 'auto', overscrollBehavior: 'contain', ...markdownSx }}><ReactMarkdown remarkPlugins={[remarkGfm]}>{output}</ReactMarkdown></Box>
     : null;
-  const answerCodeBlocks = codeSurface && canSuggest && output
-    ? codeBlocksFromMarkdown(output).filter((block) => (codeSurface === 'python'
+  const answerCodeBlocks = useMemo(() => {
+    if (!codeSurface || !canSuggest || !output) return [] as Array<{ language: string; code: string }>;
+    return codeBlocksFromMarkdown(output).filter((block) => block.code.trim() && (codeSurface === 'python'
       ? !block.language || ['python', 'py'].includes(block.language)
-      : !block.language || ['xml', 'blockly', 'html'].includes(block.language)))
-    : [];
+      : !block.language || ['xml', 'blockly', 'html'].includes(block.language)));
+  }, [canSuggest, codeSurface, output]);
+  const [codeChecks, setCodeChecks] = useState<Record<string, { valid: boolean; message: string }>>({});
+  const requestedCodeChecks = useRef<Set<string>>(new Set());
+
+  // Validate answer code blocks before offering them, so examples are not presented as applyable programs.
+  useEffect(() => {
+    if (!codeSurface || view !== 'answer' || !answerCodeBlocks.length) return undefined;
+    let cancelled = false;
+    answerCodeBlocks.forEach((block) => {
+      const key = `${block.language}:${block.code}`;
+      if (requestedCodeChecks.current.has(key)) return;
+      requestedCodeChecks.current.add(key);
+      void validateAIArtifact(token, codeSurface, block.code)
+        .then((result) => { if (!cancelled) setCodeChecks((current) => ({ ...current, [key]: result })); })
+        .catch(() => { if (!cancelled) setCodeChecks((current) => ({ ...current, [key]: { valid: false, message: '' } })); });
+    });
+    return () => { cancelled = true; };
+  }, [answerCodeBlocks, codeSurface, token, view]);
+  const applyableCodeBlocks = answerCodeBlocks.filter((block) => codeChecks[`${block.language}:${block.code}`]?.valid);
+  const exampleCodeBlocks = answerCodeBlocks.filter((block) => {
+    const check = codeChecks[`${block.language}:${block.code}`];
+    return Boolean(check && !check.valid);
+  });
   const restartFromApplied = () => { setApplied(false); setOutput(''); setPreview(null); setPreviewCapability(null); setStatus('idle'); };
 
   const panel = <Paper id="fossbot-buddy-panel" role="dialog" aria-label={t('aiAssistant.title')} elevation={8} sx={{ width: '100%', boxSizing: 'border-box', maxHeight: 'calc(100vh - 104px)', overflowY: 'auto', overflowX: 'hidden', borderRadius: 2, '& .MuiButton-root': { minHeight: 44 }, '& .MuiChip-clickable': { minHeight: 40 } }}>
@@ -683,16 +701,27 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
             <Chip size="small" color="secondary" label={t('aiAssistant.generated')} />
           </Stack>
           {renderedOutput}
-          {answerCodeBlocks.map((block, index) => <Paper key={`${index}-${block.code.slice(0, 24)}`} variant="outlined" sx={{ overflow: 'hidden', borderRadius: 1.5 }}>
+          {applyableCodeBlocks.map((block, index) => <Paper key={`${index}-${block.code.slice(0, 24)}`} variant="outlined" sx={{ overflow: 'hidden', borderRadius: 1.5 }}>
             <Stack direction="row" alignItems="center" spacing={1} sx={{ px: 1.5, py: 1, bgcolor: 'action.hover', borderBottom: 1, borderColor: 'divider' }}>
               <IconCode size={17} aria-hidden="true" />
               <Typography variant="caption" fontWeight={700}>{t('aiAssistant.answerCodeTitle')}</Typography>
             </Stack>
             <Box sx={{ p: 1.5 }}>
               <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1, fontFamily: 'monospace', overflowWrap: 'anywhere', whiteSpace: 'pre-wrap' }}>{block.code.split('\n').slice(0, 2).join('\n')}</Typography>
-              <Button fullWidth variant="outlined" startIcon={<IconWand size={17} />} onClick={() => void applyAnswerCode(block.code)} sx={{ minHeight: 44 }}>{t('aiAssistant.actions.applyCode')}</Button>
+              <Button fullWidth variant="outlined" startIcon={<IconWand size={17} />} onClick={() => void applyAnswerCode(block)} sx={{ minHeight: 44 }}>{t('aiAssistant.actions.applyCode')}</Button>
             </Box>
           </Paper>)}
+          {exampleCodeBlocks.length > 0 && <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 1.5 }}>
+            <Stack direction="row" spacing={1.25} alignItems="flex-start">
+              <Box sx={{ width: 32, height: 32, flex: '0 0 auto', display: 'grid', placeItems: 'center', borderRadius: 1, bgcolor: 'warning.light', color: 'warning.main' }}><IconCode size={17} aria-hidden="true" /></Box>
+              <Box sx={{ minWidth: 0 }}>
+                <Typography variant="subtitle2" fontWeight={700}>{t('aiAssistant.answerCodeExampleTitle')}</Typography>
+                <Typography variant="caption" color="text.secondary">{t('aiAssistant.answerCodeExampleBody')}</Typography>
+                {exampleCodeBlocks.map((block) => codeChecks[`${block.language}:${block.code}`]?.message).filter(Boolean).slice(0, 1).map((message) => <Typography key={message} variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5, overflowWrap: 'anywhere' }}>{t('aiAssistant.failedReason', { reason: message })}</Typography>)}
+              </Box>
+            </Stack>
+            <Button fullWidth variant="outlined" startIcon={<IconWand size={17} />} onClick={() => void run(lastRequest?.question || question, 'suggest')} sx={{ mt: 1.5, minHeight: 44 }}>{t('aiAssistant.actions.change')}</Button>
+          </Paper>}
           <Stack spacing={rhythm.actionGap}>
             <Stack direction="row" gap={1} flexWrap="wrap">
               {surfacePrompts.map((prompt) => <PromptChip key={prompt} label={prompt} onClick={() => askAgain(prompt)} />)}
