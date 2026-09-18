@@ -44,6 +44,7 @@ import DashboardCard from 'src/components/shared/DashboardCardWithChildren';
 import { useConfirmDialog } from 'src/components/shared/ConfirmDialog';
 import { copyMarketplaceStageToLocal } from 'src/stages/LocalStagesApi';
 import BetaBadge from 'src/components/shared/BetaBadge';
+import { copyText } from 'src/utils/platform';
 
 const validationBadges: Record<MarketplaceValidationState, { label: string; color: 'success' | 'warning' | 'error'; description: string }> = {
   validated: {
@@ -275,7 +276,7 @@ function MarketplaceDetailDrawer({
                 <Typography component="summary" variant="body2" fontWeight={700} sx={{ cursor: 'pointer', minHeight: 44, display: 'flex', alignItems: 'center' }}>Revision</Typography>
                 <Stack spacing={1} sx={{ pb: 1 }}>
                   <Typography variant="caption" color="text.secondary" sx={{ wordBreak: 'break-all' }}>{entry.commitSha}</Typography>
-                  <Button size="small" variant="outlined" onClick={() => void navigator.clipboard.writeText(entry.commitSha)} sx={{ alignSelf: 'flex-start' }}>Copy revision</Button>
+                  <Button size="small" variant="outlined" onClick={() => void copyText(entry.commitSha)} sx={{ alignSelf: 'flex-start' }}>Copy revision</Button>
                 </Stack>
               </Box>
               <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>

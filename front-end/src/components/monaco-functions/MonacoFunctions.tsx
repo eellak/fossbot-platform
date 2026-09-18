@@ -6,6 +6,7 @@ import { faCopy } from '@fortawesome/free-solid-svg-icons';
 import { IconChevronDown } from '@tabler/icons-react';
 import { Divider, Accordion, AccordionSummary, AccordionDetails, Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
+import { copyText } from 'src/utils/platform';
 
 const FunctionsManual = () => {
   // Declare the data state variable
@@ -19,8 +20,7 @@ const FunctionsManual = () => {
 
   const handleCopy = useCallback(async (command) => {
     try {
-      await navigator.clipboard.writeText(command);
-      console.log('Copying to clipboard was successful!');
+      await copyText(command);
       setCopiedCommand(command); // Set copiedCommand to the copied command
     } catch (err) {
       console.error('Failed to copy text: ', err);

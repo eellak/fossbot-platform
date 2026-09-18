@@ -1,4 +1,5 @@
 import COMMANDS_JSON from 'src/utils/toolboxMonaco/toolboxMonaco';
+import { copyText } from 'src/utils/platform';
 
 import { useState, useRef } from 'react';
 import {
@@ -75,7 +76,7 @@ const SearchBar = ({ variant = 'fab' }: { variant?: 'fab' | 'button' }) => {
   const [copySuccess, setCopySuccess] = useState(false);
 
   const handleCopy = (command: string) => {
-    navigator.clipboard.writeText(command);
+    void copyText(command);
     setCopiedCommand(command);
     setCopySuccess(true);
 

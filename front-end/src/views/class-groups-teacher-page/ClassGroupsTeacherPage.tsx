@@ -4,6 +4,7 @@ import {
 } from '@mui/material';
 import { IconChartBar, IconCopy, IconPlus, IconRefresh, IconTrash, IconUsersGroup } from '@tabler/icons-react';
 import { useTranslation } from 'react-i18next';
+import { copyText } from 'src/utils/platform';
 import { useAuth } from 'src/authentication/AuthProvider';
 import {
   assignCourseToClass, createClassChallenge, createClassGroup, listAuthoredCourses, listTeacherClassGroups,
@@ -78,7 +79,7 @@ function GroupDetail({ group, courses, token, run, t }: { group: TeacherClassGro
   return <Stack spacing={2}>
     <Paper variant="outlined" sx={{ p: 2 }}>
       <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" gap={2}>
-        <Box><Typography variant="h4">{group.name}</Typography><Stack direction="row" gap={1} alignItems="center" flexWrap="wrap"><Chip label={t('education.classrooms.joinCode', { code: group.join_code })} /><IconButton size="small" onClick={() => navigator.clipboard.writeText(group.join_code)} aria-label={t('education.classrooms.copyCode')}><IconCopy size={17} /></IconButton><Button size="small" startIcon={<IconRefresh size={16} />} onClick={() => void run(() => regenerateClassJoinCode(token, group.id))}>{t('education.classrooms.rotateCode')}</Button></Stack></Box>
+        <Box><Typography variant="h4">{group.name}</Typography><Stack direction="row" gap={1} alignItems="center" flexWrap="wrap"><Chip label={t('education.classrooms.joinCode', { code: group.join_code })} /><IconButton size="small" onClick={() => void copyText(group.join_code)} aria-label={t('education.classrooms.copyCode')}><IconCopy size={17} /></IconButton><Button size="small" startIcon={<IconRefresh size={16} />} onClick={() => void run(() => regenerateClassJoinCode(token, group.id))}>{t('education.classrooms.rotateCode')}</Button></Stack></Box>
         <Stack>
           <FormControlLabel control={<Switch checked={group.leaderboards_enabled} onChange={(event) => void run(() => updateClassGroup(token, group.id, { leaderboards_enabled: event.target.checked }))} />} label={t('education.classrooms.enableBoards')} />
           <Typography variant="caption" color="text.secondary">{t('education.classrooms.disabledDefault')}</Typography>
