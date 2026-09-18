@@ -51,14 +51,38 @@ function applyOperations(course: CourseDraft, suggestion: LessonAuthoringSuggest
   const next = JSON.parse(JSON.stringify(course)) as CourseDraft;
   const selectedLesson = next.lessons.find((lesson) => lesson.id === Number(suggestion.operations.find((item) => item.lessonId)?.lessonId));
   const allowed = {
-    course: new Set(['update_course']),
+    course: new Set(['update_course', 'create_lesson']),
     lesson: new Set(['update_lesson', 'insert_activity', 'reorder_activities']),
     activity: new Set(['replace_activity', 'remove_activity']),
-    validation: new Set(['update_course', 'update_lesson', 'insert_activity', 'replace_activity', 'remove_activity', 'reorder_activities']),
+    validation: new Set(['update_course', 'create_lesson', 'update_lesson', 'insert_activity', 'replace_activity', 'remove_activity', 'reorder_activities']),
   }[target.type];
 
   suggestion.operations.forEach((operation: LessonOperation) => {
     if (!allowed.has(operation.op)) throw new Error('invalid_suggestion');
+    if (operation.op === 'create_lesson') {
+      const title = operation.lessonTitle?.trim();
+      if (!title || operation.lessonId !== undefined) throw new Error('invalid_suggestion');
+      const activities = (operation.activities ?? []).map(assertActivity);
+      if (activities.some((activity) => !activity.key.startsWith('ai-'))) throw new Error('invalid_suggestion');
+      if (new Set(activities.map((activity) => activity.key)).size !== activities.length) throw new Error('invalid_suggestion');
+      // Negative ids mark lessons that do not exist on the server yet.
+      const pendingId = -(next.lessons.length + 1);
+      next.lessons.push({
+        id: pendingId,
+        lesson_key: `ai-lesson-${next.lessons.length + 1}`,
+        course_id: next.id,
+        title,
+        position: next.lessons.length + 1,
+        activities,
+        completion_policy: 'self',
+        start_mode: 'fresh',
+        editor_type: 'none',
+        archived: false,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+      return;
+    }
     if (operation.op === 'update_course') {
       const patch = operation.coursePatch;
       if (!patch) throw new Error('invalid_suggestion');
@@ -136,7 +160,23 @@ function previewBoundaries(operations: LessonOperation[]) {
   const patchFields = (patch: Record<string, unknown>) => Object.entries(patch)
     .filter(([, value]) => value !== null && value !== undefined)
     .map(([name, value]) => ({ name, value: previewValue(value) }));
+  const addActivity = (activity: Record<string, unknown>) => {
+    const visible: Record<string, unknown> = {};
+    const hidden: Record<string, unknown> = {};
+    Object.entries(activity).forEach(([key, value]) => (TEACHER_ONLY_FIELDS.has(key) ? hidden : visible)[key] = value);
+    studentVisible.push(activityPreview(visible));
+    if (Object.keys(hidden).length) teacherOnly.push(activityPreview(hidden));
+  };
   operations.forEach((operation) => {
+    if (operation.op === 'create_lesson') {
+      const activities = operation.activities || [];
+      studentVisible.push({ title: 'createLesson', fields: [
+        { name: 'lessonTitle', value: operation.lessonTitle || '' },
+        { name: 'activityCount', value: activities.length },
+      ] });
+      activities.forEach(addActivity);
+      return;
+    }
     if (operation.op === 'update_course' && operation.coursePatch) {
       const fields = patchFields(operation.coursePatch as Record<string, unknown>);
       if (fields.length) studentVisible.push({ title: 'course', fields });
@@ -158,11 +198,7 @@ function previewBoundaries(operations: LessonOperation[]) {
     if (!operation.activity) {
       return;
     }
-    const visible: Record<string, unknown> = {};
-    const hidden: Record<string, unknown> = {};
-    Object.entries(operation.activity).forEach(([key, value]) => (TEACHER_ONLY_FIELDS.has(key) ? hidden : visible)[key] = value);
-    studentVisible.push(activityPreview(visible));
-    if (Object.keys(hidden).length) teacherOnly.push(activityPreview(hidden));
+    addActivity(operation.activity);
   });
   return { studentVisible, teacherOnly };
 }

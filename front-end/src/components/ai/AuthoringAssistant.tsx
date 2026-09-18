@@ -11,7 +11,7 @@ type Props = {
   course: CourseDraft;
   lesson: Lesson | null;
   validationIssues: PublicationIssue[];
-  onApply: (course: CourseDraft) => void;
+  onApply: (course: CourseDraft) => void | Promise<void>;
 };
 
 type TargetValue = 'course' | 'lesson' | 'validation' | `activity:${string}`;
@@ -75,7 +75,7 @@ export default function AuthoringAssistant({ course, lesson, validationIssues, o
     },
     applySuggestion: async (suggestion) => {
       if (suggestion.type !== 'lesson_operations') throw new Error('invalid_suggestion');
-      onApply(applyLessonSuggestion(course, suggestion as LessonAuthoringSuggestion, target));
+      await onApply(applyLessonSuggestion(course, suggestion as LessonAuthoringSuggestion, target));
     },
   };
 

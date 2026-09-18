@@ -167,13 +167,15 @@ export interface BlocklyReplaceSuggestion {
 }
 
 export type LessonOperation = {
-  op: 'update_course' | 'update_lesson' | 'insert_activity' | 'replace_activity' | 'remove_activity' | 'reorder_activities';
+  op: 'update_course' | 'update_lesson' | 'create_lesson' | 'insert_activity' | 'replace_activity' | 'remove_activity' | 'reorder_activities';
   lessonId?: number;
   activityKey?: string;
   index?: number;
   coursePatch?: { title?: string; description?: string; learningObjectives?: string[] };
   lessonPatch?: { title?: string };
+  lessonTitle?: string;
   activity?: Record<string, unknown>;
+  activities?: Record<string, unknown>[];
   activityKeys?: string[];
 };
 

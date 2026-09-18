@@ -95,7 +95,29 @@ def test_provider_stream(payload: dict = Body(...)):
             lesson_id = prompt_value("Selected lesson ID")
             activity_key = prompt_value("Selected activity key")
             if target == "course" or lesson_id == "none":
-                operations = [{"op": "update_course", "coursePatch": {"description": "A concise, age-appropriate robotics course draft."}}]
+                if "create a lesson" in prompt.lower():
+                    operations = [{
+                        "op": "create_lesson",
+                        "lessonTitle": "Getting started with FOSSBot",
+                        "activities": [
+                            {"key": "ai-intro", "type": "rich_text", "version": 1, "required": False, "content": "Predict what the robot will do, then test it."},
+                            {
+                                "key": "ai-check",
+                                "type": "numeric_answer",
+                                "version": 1,
+                                "required": False,
+                                "prompt": "How many steps should FOSSBot move forward?",
+                                "expectedValue": 2,
+                                "unit": "steps",
+                                "tolerance": {"mode": "absolute", "value": 0},
+                                "validRange": {"minimum": 0, "maximum": 10},
+                                "feedbackCorrect": "Good observation.",
+                                "feedbackIncorrect": "Count the forward commands.",
+                            },
+                        ],
+                    }]
+                else:
+                    operations = [{"op": "update_course", "coursePatch": {"description": "A concise, age-appropriate robotics course draft."}}]
             elif target == "activity":
                 activity = {
                     "key": activity_key,

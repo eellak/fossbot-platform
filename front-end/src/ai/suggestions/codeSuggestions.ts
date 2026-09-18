@@ -8,7 +8,7 @@ export const CODE_SUGGESTION_VERSION = '1';
 
 export type LessonPreviewValue = string | number | boolean | LessonPreviewValue[] | Record<string, unknown>;
 export type LessonPreviewItem = {
-  title: 'course' | 'lesson' | 'activity' | 'removeActivity' | 'activityOrder';
+  title: 'course' | 'lesson' | 'createLesson' | 'activity' | 'removeActivity' | 'activityOrder';
   activityType?: string;
   fields: Array<{ name: string; value: LessonPreviewValue }>;
 };

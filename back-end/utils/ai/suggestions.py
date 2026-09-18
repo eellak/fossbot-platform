@@ -285,10 +285,10 @@ def _validate_lesson_operations(suggestion: LessonAuthoringSuggestion, context: 
     lesson_id = (payload.get("lesson") or {}).get("id")
     activity_key = (payload.get("activity") or {}).get("key")
     allowed_by_target = {
-        "course": {"update_course"},
+        "course": {"update_course", "create_lesson"},
         "lesson": {"update_lesson", "insert_activity", "reorder_activities"},
         "activity": {"replace_activity", "remove_activity"},
-        "validation": {"update_course", "update_lesson", "insert_activity", "replace_activity", "remove_activity", "reorder_activities"},
+        "validation": {"update_course", "create_lesson", "update_lesson", "insert_activity", "replace_activity", "remove_activity", "reorder_activities"},
     }
     if target not in allowed_by_target:
         raise SuggestionError("The lesson suggestion target is invalid")
@@ -296,6 +296,25 @@ def _validate_lesson_operations(suggestion: LessonAuthoringSuggestion, context: 
     for index, operation in enumerate(suggestion.operations):
         if operation.op not in allowed_by_target[target]:
             raise SuggestionError(f"operations[{index}] op '{operation.op}' is not valid for selected target '{target}'")
+        if operation.op == "create_lesson":
+            if operation.lesson_id is not None:
+                raise SuggestionError("A new lesson cannot target an existing lesson")
+            if not (operation.lesson_title or "").strip():
+                raise SuggestionError("A new lesson needs a title")
+            for activity_index, activity in enumerate(operation.activities or []):
+                try:
+                    validate_activities([activity])
+                except ValueError as error:
+                    raise SuggestionError(f"operations[{index}] new lesson activity {activity_index} is invalid: {error}") from error
+                key = str(activity.get("key") or "")
+                if not key.startswith("ai-"):
+                    raise SuggestionError("Generated activities need stable ai- keys")
+                if key in generated_keys:
+                    raise SuggestionError("Generated activity keys must be unique")
+                generated_keys.add(key)
+                if activity.get("type") == "mission":
+                    raise SuggestionError("AI suggestions cannot create or change executable mission rules")
+            continue
         if operation.op == "update_course":
             if operation.course_patch is None:
                 raise SuggestionError("The course update is missing its patch")

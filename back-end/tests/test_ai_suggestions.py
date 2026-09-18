@@ -144,6 +144,27 @@ def test_lesson_update_requires_an_effective_patch():
         }), "lesson.suggest_changes", revision, lesson_context)
 
 
+def test_create_lesson_is_validated_and_target_scoped():
+    revision = "a" * 64
+    course_context = {"target": "course", "target_payload": {"course": {}, "outline": []}}
+    activity = {"key": "ai-intro", "type": "rich_text", "version": 1, "required": False, "content": "Predict, then test."}
+    valid = {
+        "version": "1", "type": "lesson_operations", "baseRevision": revision, "summary": "Create lesson.",
+        "operations": [{"op": "create_lesson", "lessonTitle": "Getting started", "activities": [activity]}],
+    }
+    parsed = parse_suggestion(json.dumps(valid), "lesson.draft", revision, course_context)
+    payload = suggestion_payload(parsed)
+    assert payload["operations"][0]["lessonTitle"] == "Getting started"
+    assert payload["operations"][0]["activities"][0]["key"] == "ai-intro"
+    with pytest.raises(SuggestionError, match="needs a title"):
+        parse_suggestion(json.dumps({**valid, "operations": [{"op": "create_lesson", "lessonTitle": "  "}]}), "lesson.draft", revision, course_context)
+    with pytest.raises(SuggestionError, match="ai- keys"):
+        parse_suggestion(json.dumps({**valid, "operations": [{"op": "create_lesson", "lessonTitle": "New", "activities": [{**activity, "key": "fixed"}]}]}), "lesson.draft", revision, course_context)
+    lesson_context = {"target": "lesson", "target_payload": {"course": {}, "lesson": {"id": 7}}}
+    with pytest.raises(SuggestionError, match="not valid for selected target"):
+        parse_suggestion(json.dumps(valid), "lesson.draft", revision, lesson_context)
+
+
 def test_blockly_suggestion_requires_well_formed_xml_and_matching_fingerprint():
     fingerprint = hashlib.sha256(b"<xml></xml>").hexdigest()
     valid = parse_suggestion(json.dumps({

@@ -67,3 +67,31 @@ describe('lessonSuggestions course patches', () => {
     expect(() => previewLessonSuggestion(courseSuggestion({ title: null, description: null, learningObjectives: null }), course, courseTarget)).toThrow('invalid_suggestion');
   });
 });
+
+describe('lessonSuggestions create_lesson', () => {
+  const courseTarget: AuthoringTarget = { type: 'course' };
+  const createSuggestion = (activities: Record<string, unknown>[]): LessonAuthoringSuggestion => ({
+    version: '1',
+    type: 'lesson_operations',
+    baseRevision: 'a'.repeat(64),
+    operations: [{ op: 'create_lesson', lessonTitle: 'Getting started', activities }],
+    summary: 'Create a lesson.',
+  }) as unknown as LessonAuthoringSuggestion;
+
+  it('appends a pending lesson that the editor can persist', () => {
+    const preview = previewLessonSuggestion(createSuggestion([{ key: 'ai-intro', type: 'rich_text', content: 'Predict, then test.' }]), course, courseTarget);
+    const next = JSON.parse(preview.after);
+    expect(next.lessons).toHaveLength(2);
+    const created = next.lessons[1];
+    expect(created.id).toBeLessThan(0);
+    expect(created.title).toBe('Getting started');
+    expect(created.activities[0].key).toBe('ai-intro');
+    expect(preview.lesson?.studentVisible[0].title).toBe('createLesson');
+  });
+
+  it('requires a title and generated ai- activity keys', () => {
+    const untitled = { ...createSuggestion([]), operations: [{ op: 'create_lesson' }] } as unknown as LessonAuthoringSuggestion;
+    expect(() => previewLessonSuggestion(untitled, course, courseTarget)).toThrow('invalid_suggestion');
+    expect(() => previewLessonSuggestion(createSuggestion([{ key: 'intro', type: 'rich_text', content: 'x' }]), course, courseTarget)).toThrow('invalid_suggestion');
+  });
+});

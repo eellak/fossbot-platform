@@ -170,6 +170,7 @@ class LessonOperation(StrictModel):
     op: Literal[
         "update_course",
         "update_lesson",
+        "create_lesson",
         "insert_activity",
         "replace_activity",
         "remove_activity",
@@ -180,7 +181,9 @@ class LessonOperation(StrictModel):
     index: Optional[int] = Field(default=None, ge=0, le=255)
     course_patch: Optional[CourseAuthoringPatch] = None
     lesson_patch: Optional[LessonAuthoringPatch] = None
+    lesson_title: Optional[str] = Field(default=None, min_length=1, max_length=200)
     activity: Optional[dict[str, Any]] = None
+    activities: Optional[list[dict[str, Any]]] = Field(default=None, max_length=24)
     activity_keys: list[str] = Field(default_factory=list, max_length=256)
 
 

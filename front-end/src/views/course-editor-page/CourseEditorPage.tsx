@@ -463,23 +463,47 @@ export default function CourseEditorPage() {
     setConflict(null); setError(''); setErrorRecovery(null); setRevision((value) => value + 1);
   };
 
-  const applyAuthoringSuggestion = (proposed: CourseDraft) => {
+  const applyAuthoringSuggestion = async (proposed: CourseDraft) => {
     const current = courseRef.current;
     if (!current) return;
+    // Lessons with negative ids are proposals that do not exist on the server yet.
+    const pendingLessons = proposed.lessons.filter((lesson) => lesson.id < 0 && !current.lessons.some((item) => item.id === lesson.id));
+    let resolved = proposed;
+    const createdLessons: Lesson[] = [];
+    if (pendingLessons.length) {
+      setSaveState('saving'); setError(''); setErrorRecovery(null);
+      try {
+        for (const lesson of pendingLessons) {
+          createdLessons.push(await addLesson(token, current.id, {
+            title: lesson.title,
+            activities: lesson.activities,
+            completion_policy: lesson.completion_policy,
+            start_mode: lesson.start_mode,
+            editor_type: lesson.editor_type,
+          }));
+        }
+      } catch (err) {
+        handleSaveError(err, 'lesson', pendingLessons[0].id);
+        throw err;
+      }
+      const createdById = new Map(pendingLessons.map((lesson, index) => [lesson.id, createdLessons[index]]));
+      resolved = { ...proposed, lessons: proposed.lessons.map((lesson) => createdById.get(lesson.id) || lesson) };
+    }
     const beforeCourse = courseFields(current);
-    const afterCourse = courseFields(proposed);
+    const afterCourse = courseFields(resolved);
     const courseChanged = JSON.stringify(beforeCourse) !== JSON.stringify(afterCourse);
-    const changedLessonIds = proposed.lessons.filter((lesson) => {
+    const changedLessonIds = resolved.lessons.filter((lesson) => {
       const before = current.lessons.find((item) => item.id === lesson.id);
       return before && JSON.stringify(lessonFields(before)) !== JSON.stringify(lessonFields(lesson));
     }).map((lesson) => lesson.id);
     const lessonKeys = new Set(current.unpublished_change_summary?.lesson_keys || []);
     changedLessonIds.forEach((lessonId) => {
-      const lesson = proposed.lessons.find((item) => item.id === lessonId);
+      const lesson = resolved.lessons.find((item) => item.id === lessonId);
       if (lesson) lessonKeys.add(lesson.lesson_key);
     });
+    createdLessons.forEach((lesson) => lessonKeys.add(lesson.lesson_key));
     const next = {
-      ...proposed,
+      ...resolved,
       has_unpublished_changes: Boolean(current.latest_published_release_id),
       unpublished_change_summary: current.latest_published_release_id ? {
         ...(current.unpublished_change_summary || { course: false, outline: false, lesson_keys: [] }),
@@ -487,7 +511,12 @@ export default function CourseEditorPage() {
         lesson_keys: [...lessonKeys],
       } : current.unpublished_change_summary,
     };
-    recordHistory(current, next, `ai-authoring:${Date.now()}`);
+    if (createdLessons.length) {
+      // New lessons are already persisted, so an undo snapshot would desync from the server.
+      resetHistory(next);
+    } else {
+      recordHistory(current, next, `ai-authoring:${Date.now()}`);
+    }
     if (courseChanged) courseGeneration.current += 1;
     changedLessonIds.forEach((lessonId) => lessonGenerations.current.set(lessonId, (lessonGenerations.current.get(lessonId) || 0) + 1));
     setCourse(next); courseRef.current = next; setSaveState('unsaved'); setRevision((value) => value + 1);
