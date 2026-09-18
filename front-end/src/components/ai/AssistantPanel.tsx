@@ -12,7 +12,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from 'src/authentication/AuthProvider';
-import { AIRequestError, reportAILocalUsage } from 'src/ai/AssistantApi';
+import { AIRequestError, reportAILocalUsage, validateAIArtifact } from 'src/ai/AssistantApi';
 import { useAssistantAccess } from 'src/ai/AssistantProvider';
 import type { SuggestionPreview } from 'src/ai/suggestions/codeSuggestions';
 import { parseAssistantSuggestion } from 'src/ai/suggestions/parseSuggestion';
@@ -98,6 +98,19 @@ const conversationProposal = (suggestion: AIAssistantSuggestion) => {
 const debugErrorData = (reason: unknown) => reason instanceof Error
   ? { type: reason.name, message: reason.message, stack: reason.stack || '' }
   : { type: typeof reason, message: String(reason) };
+
+// Fenced code blocks in a prose answer. The panel can turn one into a validated
+// replacement instead of only showing it as text.
+const codeBlocksFromMarkdown = (text: string) => {
+  const blocks: Array<{ language: string; code: string }> = [];
+  const pattern = /```([^\n`]*)\r?\n([\s\S]*?)```/g;
+  let match = pattern.exec(text);
+  while (match !== null) {
+    blocks.push({ language: match[1].trim().toLowerCase(), code: match[2].replace(/\n$/, '') });
+    match = pattern.exec(text);
+  }
+  return blocks;
+};
 
 const writeLine = keyframes`
   0%, 12% { clip-path: inset(0 82% 0 0); opacity: .35; }
@@ -465,6 +478,34 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
     }
   };
 
+  const codeSurface = adapter.surface === 'python' || adapter.surface === 'blockly' ? adapter.surface : null;
+
+  // Turn a code block from a prose answer into a validated replacement proposal.
+  const applyAnswerCode = async (code: string) => {
+    if (!codeSurface || !canSuggest) return;
+    setRequestError('');
+    try {
+      const validation = await validateAIArtifact(token, codeSurface, code);
+      if (!validation.valid) {
+        setRequestError(t('aiAssistant.errors.code_invalid', { message: validation.message }));
+        return;
+      }
+      const fingerprint = await adapter.getFingerprint();
+      const suggestion: AIAssistantSuggestion = codeSurface === 'python'
+        ? { version: '1', type: 'python_replace', baseFingerprint: fingerprint, replacement: code, summary: t('aiAssistant.answerCodeSummary') }
+        : { version: '1', type: 'blockly_replace', baseFingerprint: fingerprint, xml: code, summary: t('aiAssistant.answerCodeSummary') };
+      const validated = await adapter.previewSuggestion(suggestion, lastRequest?.question || '');
+      setPreview(validated);
+      setPreviewCapability(codeSurface === 'python' ? 'code.suggest_changes' : 'blockly.suggest_changes');
+      setOutput(t('aiAssistant.answerCodeSummary'));
+      setStatus('done');
+    } catch (reason) {
+      appendDebug('client', 'answer_code.failed', debugErrorData(reason));
+      const code = reason instanceof Error ? reason.message.split(':')[0] : 'invalid_suggestion';
+      setRequestError(t(`aiAssistant.errors.${code}`, t('aiAssistant.errors.invalid_suggestion')));
+    }
+  };
+
   const declinePreview = () => {
     setPreview(null);
     setPreviewCapability(null);
@@ -534,6 +575,11 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
   const renderedOutput = output
     ? <Box ref={outputRef} tabIndex={0} aria-live="polite" sx={{ maxHeight: 320, overflowY: 'auto', overscrollBehavior: 'contain', ...markdownSx }}><ReactMarkdown remarkPlugins={[remarkGfm]}>{output}</ReactMarkdown></Box>
     : null;
+  const answerCodeBlocks = codeSurface && canSuggest && output
+    ? codeBlocksFromMarkdown(output).filter((block) => (codeSurface === 'python'
+      ? !block.language || ['python', 'py'].includes(block.language)
+      : !block.language || ['xml', 'blockly', 'html'].includes(block.language)))
+    : [];
   const restartFromApplied = () => { setApplied(false); setOutput(''); setPreview(null); setPreviewCapability(null); setStatus('idle'); };
 
   const panel = <Paper id="fossbot-buddy-panel" role="dialog" aria-label={t('aiAssistant.title')} elevation={8} sx={{ width: '100%', boxSizing: 'border-box', maxHeight: 'calc(100vh - 104px)', overflowY: 'auto', overflowX: 'hidden', borderRadius: 2, '& .MuiButton-root': { minHeight: 44 }, '& .MuiChip-clickable': { minHeight: 40 } }}>
@@ -637,6 +683,16 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
             <Chip size="small" color="secondary" label={t('aiAssistant.generated')} />
           </Stack>
           {renderedOutput}
+          {answerCodeBlocks.map((block, index) => <Paper key={`${index}-${block.code.slice(0, 24)}`} variant="outlined" sx={{ overflow: 'hidden', borderRadius: 1.5 }}>
+            <Stack direction="row" alignItems="center" spacing={1} sx={{ px: 1.5, py: 1, bgcolor: 'action.hover', borderBottom: 1, borderColor: 'divider' }}>
+              <IconCode size={17} aria-hidden="true" />
+              <Typography variant="caption" fontWeight={700}>{t('aiAssistant.answerCodeTitle')}</Typography>
+            </Stack>
+            <Box sx={{ p: 1.5 }}>
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1, fontFamily: 'monospace', overflowWrap: 'anywhere', whiteSpace: 'pre-wrap' }}>{block.code.split('\n').slice(0, 2).join('\n')}</Typography>
+              <Button fullWidth variant="outlined" startIcon={<IconWand size={17} />} onClick={() => void applyAnswerCode(block.code)} sx={{ minHeight: 44 }}>{t('aiAssistant.actions.applyCode')}</Button>
+            </Box>
+          </Paper>)}
           <Stack spacing={rhythm.actionGap}>
             <Stack direction="row" gap={1} flexWrap="wrap">
               {surfacePrompts.map((prompt) => <PromptChip key={prompt} label={prompt} onClick={() => askAgain(prompt)} />)}

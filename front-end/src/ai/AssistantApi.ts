@@ -118,6 +118,10 @@ export function testAIProvider(token: string, providerId: number): Promise<{ ok:
   return fetch(`${backendUrl}/api/admin/ai/providers/${providerId}/test`, { method: 'POST', headers: headers(token) }).then(parse<{ ok: boolean; modelFound?: boolean | null }>);
 }
 
+export function validateAIArtifact(token: string, surface: 'python' | 'blockly', content: string): Promise<{ valid: boolean; message: string }> {
+  return fetch(`${backendUrl}/api/ai/validate`, { method: 'POST', headers: headers(token), body: JSON.stringify({ surface, content }) }).then(parse<{ valid: boolean; message: string }>);
+}
+
 export async function streamAIAssist(
   token: string,
   input: AIAssistInput,

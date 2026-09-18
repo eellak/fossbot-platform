@@ -96,6 +96,11 @@ class AssistantRequest(StrictModel):
             raise ValueError("Unknown AI capability")
 
 
+class CodeValidationRequest(StrictModel):
+    surface: Literal["python", "blockly"]
+    content: str = Field(min_length=1, max_length=64_000)
+
+
 class LocalUsageReport(StrictModel):
     provider_id: int = Field(ge=1)
     capability: str = Field(min_length=1, max_length=80)

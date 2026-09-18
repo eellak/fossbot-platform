@@ -321,6 +321,29 @@ def test_admin_settings_update_enforces_usage_retention(db, users):
     assert db.query(AIUsageEvent).filter(AIUsageEvent.request_id == old_request_id).first() is None
 
 
+def test_answer_code_validation_is_capability_gated_and_syntax_checked(db, users):
+    tutor, _, _, admin = users
+    with client_for(db, tutor) as client:
+        assert client.post("/api/ai/validate", json={"surface": "python", "content": "x = 1"}).status_code == 403
+    db.add(AIInstanceSettings(id=1, enabled=True, registry_version="1", updated_by_id=admin.id))
+    seed_provider(db, admin)
+    for capability in ("code.suggest_changes", "blockly.suggest_changes"):
+        db.add(AIPolicyRule(scope_type="role", scope_key=tutor.role.value, capability=capability, effect="allow", created_by_id=admin.id, updated_by_id=admin.id))
+    db.commit()
+    with client_for(db, tutor) as client:
+        valid = client.post("/api/ai/validate", json={"surface": "python", "content": "for i in range(3):\n    print(i)\n"})
+        assert valid.status_code == 200
+        assert valid.json() == {"valid": True, "message": ""}
+        invalid = client.post("/api/ai/validate", json={"surface": "python", "content": "def broken(:\n"})
+        assert invalid.status_code == 200
+        assert invalid.json()["valid"] is False
+        assert invalid.json()["message"]
+        blockly = client.post("/api/ai/validate", json={"surface": "blockly", "content": "<xml xmlns=\"https://developers.google.com/blockly/xml\"></xml>"})
+        assert blockly.status_code == 200 and blockly.json()["valid"] is True
+        malformed = client.post("/api/ai/validate", json={"surface": "blockly", "content": "<xml>"})
+        assert malformed.status_code == 200 and malformed.json()["valid"] is False
+
+
 def test_provider_secret_create_preserve_rotate_and_clear(db, users, monkeypatch):
     admin = users[3]
     monkeypatch.setenv("SECRET_KEY", "deterministic-test-secret")

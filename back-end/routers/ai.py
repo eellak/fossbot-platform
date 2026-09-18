@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import ast
 import asyncio
 import datetime
 import json
 import os
 import uuid
+import xml.etree.ElementTree as ET
 
 from database.database import (
     AIInstanceSettings,
@@ -28,7 +30,7 @@ from utils.ai.policy import PolicyRuleInput, ProviderInventoryItem, resolve_capa
 from utils.ai.prompts import build_prompt
 from utils.ai.providers import hosted_provider
 from utils.ai.providers.base import ProviderError
-from utils.ai.schemas import AssistantRequest, LocalUsageReport, ProviderStreamRequest
+from utils.ai.schemas import AssistantRequest, CodeValidationRequest, LocalUsageReport, ProviderStreamRequest
 from utils.ai.secrets import decrypt_ai_secret
 from utils.ai.suggestion_contracts import is_suggestion_capability, suggestion_json_schema
 from utils.ai.suggestions import MAX_SUGGESTION_REPAIR_ATTEMPTS, SuggestionError, build_suggestion_repair_request, parse_suggestion_with_normalizations, repair_incomplete_json_object, suggestion_output_token_budget, suggestion_payload, suggestion_response_character_limit
@@ -187,22 +189,32 @@ def test_provider_stream(payload: dict = Body(...)):
         elif "Capability: blockly.explain" in prompt:
             response = "Deterministic test-only explanation: these blocks generate Python in workspace order."
         elif "Capability: code.explain" in prompt:
-            response = (
-                "### Trace the program\n\n"
-                "1. Start at the first executable line.\n"
-                "2. Record the current variable values.\n"
-                "3. Read the next expression left to right.\n"
-                "4. Check whether a condition is true.\n"
-                "5. Enter only the matching branch.\n"
-                "6. Update values after each assignment.\n"
-                "7. Recheck a loop before every iteration.\n"
-                "8. Follow one function call at a time.\n"
-                "9. Return to the calling line afterward.\n"
-                "10. Note each value sent to the robot.\n"
-                "11. Compare the result with your prediction.\n"
-                "12. Change one thing before testing again.\n\n"
-                "Use `print(value)` for a small observation."
-            )
+            if "[mock:fenced]" in prompt:
+                response = (
+                    "Here is a small script to try.\n\n"
+                    "```python\n"
+                    "for step in range(3):\n"
+                    "    print(step)\n"
+                    "```\n\n"
+                    "Run it and compare the output with your prediction."
+                )
+            else:
+                response = (
+                    "### Trace the program\n\n"
+                    "1. Start at the first executable line.\n"
+                    "2. Record the current variable values.\n"
+                    "3. Read the next expression left to right.\n"
+                    "4. Check whether a condition is true.\n"
+                    "5. Enter only the matching branch.\n"
+                    "6. Update values after each assignment.\n"
+                    "7. Recheck a loop before every iteration.\n"
+                    "8. Follow one function call at a time.\n"
+                    "9. Return to the calling line afterward.\n"
+                    "10. Note each value sent to the robot.\n"
+                    "11. Compare the result with your prediction.\n"
+                    "12. Change one thing before testing again.\n\n"
+                    "Use `print(value)` for a small observation."
+                )
         else:
             response = "Deterministic test-only provider: hosted streaming is working."
         for text_delta in (response[:34], response[34:]):
@@ -322,6 +334,33 @@ def read_ai_access(
             for provider in providers
         ],
     }
+
+
+@router.post("/validate")
+def validate_artifact(
+    payload: CodeValidationRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Syntax-check code taken from an assistant answer before it becomes a proposal."""
+    capability = "code.suggest_changes" if payload.surface == "python" else "blockly.suggest_changes"
+    decision = resolve_for_user(db, current_user, capability)
+    if not decision.allowed:
+        raise HTTPException(status_code=403, detail={"code": decision.reason_code, "message": "Assistant access is not available."})
+    if payload.surface == "python":
+        try:
+            ast.parse(payload.content)
+        except SyntaxError as error:
+            line = f"line {error.lineno}: " if error.lineno else ""
+            return {"valid": False, "message": f"{line}{error.msg}"}
+        return {"valid": True, "message": ""}
+    try:
+        root = ET.fromstring(payload.content)
+    except ET.ParseError as error:
+        return {"valid": False, "message": str(error)}
+    if root.tag.split("}")[-1] != "xml":
+        return {"valid": False, "message": "The Blockly workspace must have an xml root"}
+    return {"valid": True, "message": ""}
 
 
 @router.post("/usage", status_code=204)
