@@ -484,6 +484,7 @@
     "generated": "AI-generated",
     "waiting": "Waiting for the first response…",
     "failedTurn": "That request ended before Buddy could return a valid response.",
+    "failedReason": "Validator detail: {{reason}}",
     "progress": { "preparing": "Preparing the workspace context", "connecting": "Contacting Buddy", "drafting": "Buddy is preparing a response", "validating": "Checking the response before showing it", "safe": "Your workspace stays unchanged while Buddy works.", "longWait": "This provider is taking a little longer. You can stop safely at any time." },
     "noResponse": "No displayable response was returned.",
     "preview": "Review proposed change",

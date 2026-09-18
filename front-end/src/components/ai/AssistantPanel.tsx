@@ -194,6 +194,7 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
   const [requestStage, setRequestStage] = useState<'preparing' | 'connecting' | 'drafting' | 'validating'>('preparing');
   const [waitingSeconds, setWaitingSeconds] = useState(0);
   const [requestError, setRequestError] = useState('');
+  const [requestErrorDetail, setRequestErrorDetail] = useState('');
   const [preview, setPreview] = useState<SuggestionPreview | null>(null);
   const [previewCapability, setPreviewCapability] = useState<AICapabilityId | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -240,7 +241,7 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
     abortRef.current?.abort();
     runtimeRef.current?.cancel();
     contextKeyRef.current = contextKey;
-    setQuestion(''); setHistory([]); setOutput(''); setStatus('idle'); setRequestError(''); setPreview(null); setPreviewCapability(null); setLastRequest(null); setRuntimeStatus({ readiness: 'idle' }); setCompose(false); setApplied(false); setShowWorkingSteps(false);
+    setQuestion(''); setHistory([]); setOutput(''); setStatus('idle'); setRequestError(''); setRequestErrorDetail(''); setPreview(null); setPreviewCapability(null); setLastRequest(null); setRuntimeStatus({ readiness: 'idle' }); setCompose(false); setApplied(false); setShowWorkingSteps(false);
     clearDebug();
   }, [contextKey]);
 
@@ -278,7 +279,7 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
     const trimmed = nextQuestion.trim();
     if (!trimmed) return;
     if (benchmark) { clearDebug(); setHistory([]); }
-    setRequestError(''); setOutput(''); setPreview(null); setPreviewCapability(null); setRequestStage('preparing'); setStatus('streaming');
+    setRequestError(''); setRequestErrorDetail(''); setOutput(''); setPreview(null); setPreviewCapability(null); setRequestStage('preparing'); setStatus('streaming');
     setQuestion(trimmed); setMode(nextMode); setLastRequest({ question: trimmed, mode: nextMode, benchmark });
     setCompose(false); setApplied(false); setShowWorkingSteps(false);
     const controller = new AbortController();
@@ -286,6 +287,7 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
     let streamed = '';
     let receivedSuggestion: AIAssistantSuggestion | null = null;
     let streamFailed = '';
+    let streamErrorMessage = '';
     appendDebug('client', 'request.started', { mode: nextMode, question: trimmed, surface: adapter.surface, benchmark });
     try {
       const currentAccess = await refresh({ silent: true });
@@ -364,7 +366,10 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
           localOutputTokens = typeof event.data.outputTokens === 'number' ? event.data.outputTokens : undefined;
           localTokensEstimated = event.data.estimated !== false;
         }
-        if (event.type === 'error') streamFailed = String(event.data.code || 'provider_error');
+        if (event.type === 'error') {
+          streamFailed = String(event.data.code || 'provider_error');
+          streamErrorMessage = typeof event.data.message === 'string' ? event.data.message : '';
+        }
         },
         signal: controller.signal,
         onStatus: setRuntimeStatus,
@@ -427,6 +432,7 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
         const code = reason instanceof AIRequestError && reason.status === 429 ? 'quota' : reason instanceof AIRequestError ? reason.code : reason instanceof Error ? reason.message : 'provider_error';
         if (code.startsWith('webllm_') || code.startsWith('local_') || code === 'mixed_content') setRuntimeStatus({ readiness: 'error', message: code });
         setRequestError(t(`aiAssistant.errors.${code}`, t('aiAssistant.errors.provider_error')));
+        setRequestErrorDetail(streamFailed === 'invalid_suggestion' && streamErrorMessage ? streamErrorMessage.slice(0, 400) : '');
         setStatus('error');
       }
     } finally {
@@ -656,6 +662,7 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
             <Box sx={{ flex: 1, minWidth: 0 }}>
               <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 0.5 }}>{t('aiAssistant.compact.failedTitle')}</Typography>
               <Typography variant="body2" color="text.secondary">{t('aiAssistant.failedTurn')}</Typography>
+              {requestErrorDetail && <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.75, overflowWrap: 'anywhere' }}>{t('aiAssistant.failedReason', { reason: requestErrorDetail })}</Typography>}
             </Box>
           </Stack>
           <Stack direction="row" spacing={1} sx={{ mt: rhythm.blockGap }}>
