@@ -1,12 +1,15 @@
 import { activityTypes, activityValidation } from 'src/courses/activitySchema';
-import type { Activity, CourseDraft } from 'src/courses/types';
+import { textFromTiptap } from 'src/courses/courseAuthoring';
+import type { Activity, CourseDraft, TiptapNode } from 'src/courses/types';
 import type { LessonAuthoringSuggestion, LessonOperation } from '../types';
 import type { LessonPreviewItem, LessonPreviewValue, SuggestionPreview } from './codeSuggestions';
 
 export type AuthoringTarget = { type: 'course' | 'lesson' | 'activity' | 'validation'; activityKey?: string };
 
+// Keep in sync with the backend HIDDEN_STUDENT_FIELDS so the preview never shows an
+// answer key or feedback as student-visible content.
 const TEACHER_ONLY_FIELDS = new Set([
-  'correctOptionKey', 'correctOptionKeys', 'expectedValue', 'tolerance', 'validRange', 'scoreConfig',
+  'correctOptionKey', 'correctOptionKeys', 'expectedValue', 'feedbackCorrect', 'feedbackIncorrect', 'tolerance', 'validRange', 'scoreConfig',
 ]);
 
 export function parseLessonSuggestion(value: Record<string, unknown>): LessonAuthoringSuggestion {
@@ -143,7 +146,27 @@ function applyOperations(course: CourseDraft, suggestion: LessonAuthoringSuggest
 const previewValue = (value: unknown): LessonPreviewValue => {
   if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return value;
   if (Array.isArray(value)) return value.map((item) => previewValue(item));
-  return value && typeof value === 'object' ? value as Record<string, unknown> : String(value ?? '');
+  if (value && typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    // Rich text is stored as a Tiptap document; show its text instead of a node dump.
+    if (record.type === 'doc' || (typeof record.type === 'string' && Array.isArray(record.content))) {
+      const text = textFromTiptap(record as unknown as TiptapNode);
+      if (text) return text;
+    }
+    return record;
+  }
+  return String(value ?? '');
+};
+
+const activityLabel = (activity: Activity | undefined): string => {
+  if (!activity) return '';
+  if ('prompt' in activity && activity.prompt) return activity.prompt;
+  if ('title' in activity && activity.title) return activity.title;
+  if ('content' in activity) {
+    const text = typeof activity.content === 'string' ? activity.content : textFromTiptap(activity.content as TiptapNode);
+    if (text) return text;
+  }
+  return activity.key;
 };
 
 const activityPreview = (fields: Record<string, unknown>): LessonPreviewItem => ({
@@ -154,7 +177,7 @@ const activityPreview = (fields: Record<string, unknown>): LessonPreviewItem => 
     .map(([name, value]) => ({ name, value: previewValue(value) })),
 });
 
-function previewBoundaries(operations: LessonOperation[]) {
+function previewBoundaries(operations: LessonOperation[], course: CourseDraft) {
   const studentVisible: LessonPreviewItem[] = [];
   const teacherOnly: LessonPreviewItem[] = [];
   const patchFields = (patch: Record<string, unknown>) => Object.entries(patch)
@@ -188,11 +211,18 @@ function previewBoundaries(operations: LessonOperation[]) {
       return;
     }
     if (operation.op === 'remove_activity') {
-      studentVisible.push({ title: 'removeActivity', fields: [] });
+      const lesson = course.lessons.find((item) => item.id === operation.lessonId);
+      const label = activityLabel(lesson?.activities.find((item) => item.key === operation.activityKey));
+      studentVisible.push({ title: 'removeActivity', fields: label ? [{ name: 'removedActivity', value: label }] : [] });
       return;
     }
     if (operation.op === 'reorder_activities') {
-      studentVisible.push({ title: 'activityOrder', fields: [{ name: 'activityCount', value: operation.activityKeys?.length || 0 }] });
+      const lesson = course.lessons.find((item) => item.id === operation.lessonId);
+      const order = (operation.activityKeys || []).map((key) => activityLabel(lesson?.activities.find((item) => item.key === key)) || key);
+      studentVisible.push({ title: 'activityOrder', fields: [
+        { name: 'activityCount', value: order.length },
+        ...(order.length ? [{ name: 'newOrder', value: order }] : []),
+      ] });
       return;
     }
     if (!operation.activity) {
@@ -205,7 +235,7 @@ function previewBoundaries(operations: LessonOperation[]) {
 
 export function previewLessonSuggestion(suggestion: LessonAuthoringSuggestion, course: CourseDraft, target: AuthoringTarget): SuggestionPreview {
   const next = applyOperations(course, suggestion, target);
-  const boundaries = previewBoundaries(suggestion.operations);
+  const boundaries = previewBoundaries(suggestion.operations, course);
   return {
     suggestion,
     summary: suggestion.summary,
