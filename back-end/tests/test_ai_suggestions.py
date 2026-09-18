@@ -4,7 +4,8 @@ import json
 import pytest
 
 from utils.ai.schemas import ConversationTurn, CourseAuthoringPatch, LessonAuthoringSuggestion, LessonOperation, ProviderStreamRequest
-from utils.ai.suggestions import SuggestionError, build_suggestion_repair_request, parse_suggestion, parse_suggestion_with_normalizations, repair_incomplete_json_object, suggestion_output_token_budget, suggestion_payload, suggestion_response_character_limit
+from utils.ai.suggestion_contracts import suggestion_contract_prompt, suggestion_json_schema
+from utils.ai.suggestions import SuggestionError, apply_python_edits, build_suggestion_repair_request, parse_suggestion, parse_suggestion_with_normalizations, repair_incomplete_json_object, suggestion_output_token_budget, suggestion_payload, suggestion_response_character_limit
 
 
 def test_structured_output_budgets_match_capability_payload_sizes():
@@ -163,6 +164,40 @@ def test_create_lesson_is_validated_and_target_scoped():
     lesson_context = {"target": "lesson", "target_payload": {"course": {}, "lesson": {"id": 7}}}
     with pytest.raises(SuggestionError, match="not valid for selected target"):
         parse_suggestion(json.dumps(valid), "lesson.draft", revision, lesson_context)
+
+
+def test_python_edits_merge_line_ranges_and_validate():
+    source = "def greet():\n    print('hi')\n\nprint('bye')\n"
+    fingerprint = hashlib.sha256(source.encode()).hexdigest()
+    context = {"source": source}
+    suggestion = {
+        "version": "1", "type": "python_edits", "baseFingerprint": fingerprint,
+        "edits": [{"startLine": 2, "endLine": 2, "replacement": "    print('hello')"}],
+        "summary": "Update one line.",
+    }
+    parsed = parse_suggestion(json.dumps(suggestion), "code.suggest_changes", fingerprint, context)
+    assert parsed.type == "python_edits"
+    assert apply_python_edits(source, parsed.edits) == "def greet():\n    print('hello')\n\nprint('bye')\n"
+
+    delete = {**suggestion, "edits": [{"startLine": 3, "endLine": 3, "replacement": ""}]}
+    deleted = parse_suggestion(json.dumps(delete), "code.suggest_changes", fingerprint, context)
+    assert apply_python_edits(source, deleted.edits) == "def greet():\n    print('hi')\nprint('bye')\n"
+
+    with pytest.raises(SuggestionError, match="not syntactically valid"):
+        parse_suggestion(json.dumps({**suggestion, "edits": [{"startLine": 2, "endLine": 2, "replacement": "    print("}]}), "code.suggest_changes", fingerprint, context)
+    with pytest.raises(SuggestionError, match="must not overlap"):
+        parse_suggestion(json.dumps({**suggestion, "edits": [{"startLine": 2, "endLine": 3}, {"startLine": 3, "endLine": 4}]}), "code.suggest_changes", fingerprint, context)
+    with pytest.raises(SuggestionError, match="stay within"):
+        parse_suggestion(json.dumps({**suggestion, "edits": [{"startLine": 9, "endLine": 9, "replacement": "x"}]}), "code.suggest_changes", fingerprint, context)
+
+
+def test_code_suggestion_contract_documents_line_edits():
+    supplied = {"source_fingerprint": "a" * 64, "source": "print('hi')"}
+    schema = suggestion_json_schema("code.suggest_changes")
+    assert set(branch["properties"]["type"]["const"] for branch in schema["anyOf"]) == {"python_replace", "python_edits"}
+    prompt = suggestion_contract_prompt("code.suggest_changes", supplied)
+    assert '"type":"python_edits"' in prompt
+    assert "startLine" in prompt
 
 
 def test_blockly_suggestion_requires_well_formed_xml_and_matching_fingerprint():

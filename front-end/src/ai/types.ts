@@ -158,6 +158,20 @@ export interface PythonReplaceSuggestion {
   summary: string;
 }
 
+export interface PythonEdit {
+  startLine: number;
+  endLine: number;
+  replacement: string;
+}
+
+export interface PythonEditsSuggestion {
+  version: '1';
+  type: 'python_edits';
+  baseFingerprint: string;
+  edits: PythonEdit[];
+  summary: string;
+}
+
 export interface BlocklyReplaceSuggestion {
   version: '1';
   type: 'blockly_replace';
@@ -211,5 +225,5 @@ export interface StageAuthoringSuggestion {
   summary: string;
 }
 
-export type AICodeSuggestion = PythonReplaceSuggestion | BlocklyReplaceSuggestion;
+export type AICodeSuggestion = PythonReplaceSuggestion | PythonEditsSuggestion | BlocklyReplaceSuggestion;
 export type AIAssistantSuggestion = AICodeSuggestion | LessonAuthoringSuggestion | StageAuthoringSuggestion;

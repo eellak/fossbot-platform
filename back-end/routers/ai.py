@@ -86,7 +86,10 @@ def test_provider_stream(payload: dict = Body(...)):
             response = "{malformed suggestion"
         elif "Capability: code.suggest_changes" in prompt:
             fingerprint = prompt.split("baseFingerprint '", 1)[1].split("'", 1)[0]
-            response = json.dumps({"version": "1", "type": "python_replace", "baseFingerprint": fingerprint, "replacement": "# FOSSBot Buddy suggestion\nprint('Hello, FOSSBot!')\n", "summary": "Replace the program with a small, reviewable greeting."})
+            if "[mock:edits]" in prompt:
+                response = json.dumps({"version": "1", "type": "python_edits", "baseFingerprint": fingerprint, "edits": [{"startLine": 1, "endLine": 1, "replacement": "# FOSSBot Buddy one-line edit"}], "summary": "Replace the first line only."})
+            else:
+                response = json.dumps({"version": "1", "type": "python_replace", "baseFingerprint": fingerprint, "replacement": "# FOSSBot Buddy suggestion\nprint('Hello, FOSSBot!')\n", "summary": "Replace the program with a small, reviewable greeting."})
         elif "Capability: blockly.suggest_changes" in prompt:
             fingerprint = prompt.split("baseFingerprint '", 1)[1].split("'", 1)[0]
             xml = '<xml xmlns="https://developers.google.com/blockly/xml"><block type="text_print" id="ai-suggestion"><value name="TEXT"><shadow type="text" id="ai-text"><field name="TEXT">Hello, FOSSBot!</field></shadow></value></block></xml>'

@@ -6,7 +6,7 @@ from typing import Any, Type
 
 from pydantic import BaseModel
 
-from utils.ai.schemas import BlocklyReplaceSuggestion, LessonAuthoringSuggestion, PythonReplaceSuggestion, StageAuthoringSuggestion
+from utils.ai.schemas import BlocklyReplaceSuggestion, LessonAuthoringSuggestion, PythonEditsSuggestion, PythonReplaceSuggestion, StageAuthoringSuggestion
 
 
 SUGGESTION_CAPABILITIES = {
@@ -53,10 +53,16 @@ def _inline_local_refs(value: Any, definitions: dict[str, Any]) -> Any:
     }
 
 
+def _model_schema(model: Type[BaseModel]) -> dict[str, Any]:
+    raw = model.model_json_schema(by_alias=True)
+    return _inline_local_refs(raw, raw.get("$defs") or {})
+
+
 def suggestion_json_schema(capability: str) -> dict[str, Any]:
-    raw = _suggestion_model(capability).model_json_schema(by_alias=True)
-    definitions = raw.get("$defs") or {}
-    return _inline_local_refs(raw, definitions)
+    if capability == "code.suggest_changes":
+        # Whole-file replacement or a targeted set of line edits.
+        return {"anyOf": [_model_schema(PythonReplaceSuggestion), _model_schema(PythonEditsSuggestion)]}
+    return _model_schema(_suggestion_model(capability))
 
 
 def _stage_example(supplied: dict[str, Any]) -> dict[str, Any]:
@@ -112,6 +118,16 @@ def _lesson_example(supplied: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _python_edits_example(supplied: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "version": "1",
+        "type": "python_edits",
+        "baseFingerprint": supplied["source_fingerprint"],
+        "edits": [{"startLine": 1, "endLine": 1, "replacement": "print('updated')"}],
+        "summary": "Prepared one-line Python change for review.",
+    }
+
+
 def suggestion_example(capability: str, supplied: dict[str, Any]) -> dict[str, Any]:
     if capability == "code.suggest_changes":
         return {
@@ -143,10 +159,18 @@ def suggestion_contract_prompt(capability: str, supplied: dict[str, Any]) -> str
             " Every operations item is one flat object. The operation name belongs only in its op field; "
             "never wrap fields inside an object named set_floor, add_object, update_lesson, or another operation name."
         )
+    alternate = ""
+    if capability == "code.suggest_changes":
+        alternate = (
+            "Alternative valid shape for small, localized changes (prefer python_edits when only a few lines change; "
+            "startLine and endLine are 1-based inclusive lines of the current source and an empty replacement deletes them):\n"
+            f"{json.dumps(_python_edits_example(supplied), ensure_ascii=False, separators=(',', ':'))}\n"
+        )
     return (
         "Canonical response contract (JSON Schema):\n"
         f"{json.dumps(schema, ensure_ascii=False, separators=(',', ':'))}\n"
         "Canonical valid example (copy its structure, then change values for the requested task):\n"
         f"{json.dumps(example, ensure_ascii=False, separators=(',', ':'))}\n"
+        f"{alternate}"
         f"Return exactly one JSON object matching this contract.{operation_rule}"
     )

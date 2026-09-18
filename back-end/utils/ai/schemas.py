@@ -153,6 +153,20 @@ class PythonReplaceSuggestion(StrictModel):
     summary: str = Field(min_length=1, max_length=1_000)
 
 
+class PythonEdit(StrictModel):
+    start_line: int = Field(ge=1, le=100_000)
+    end_line: int = Field(ge=1, le=100_000)
+    replacement: str = Field(default="", max_length=12_000)
+
+
+class PythonEditsSuggestion(StrictModel):
+    version: Literal["1"] = "1"
+    type: Literal["python_edits"]
+    base_fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
+    edits: list[PythonEdit] = Field(min_length=1, max_length=32)
+    summary: str = Field(min_length=1, max_length=1_000)
+
+
 class BlocklyReplaceSuggestion(StrictModel):
     version: Literal["1"] = "1"
     type: Literal["blockly_replace"]

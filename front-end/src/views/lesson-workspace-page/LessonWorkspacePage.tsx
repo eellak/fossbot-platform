@@ -24,7 +24,7 @@ import { changeCameraView, endSensorRun, pauseSensorRun, resumeSensorRun, WebGLA
 import type { SensorRunSummary, SensorTelemetrySnapshot } from 'src/simulator/sensors/telemetry';
 import AssistantPanel, { type AssistantSurfaceAdapter } from 'src/components/ai/AssistantPanel';
 import { fingerprintText } from 'src/ai/fingerprint';
-import { allowedBlocklyBlockTypes, previewPythonSuggestion, validateBlocklySuggestion } from 'src/ai/suggestions/codeSuggestions';
+import { allowedBlocklyBlockTypes, applyPythonEdits, previewPythonSuggestion, validateBlocklySuggestion } from 'src/ai/suggestions/codeSuggestions';
 import type { MonacoEditorHandle } from 'src/components/editors/MonacoEditor';
 import type { BlocklyEditorHandle } from 'src/components/editors/BlocklyEditor';
 import { useSelector, type AppState } from 'src/store/Store';
@@ -344,10 +344,14 @@ export default function LessonWorkspacePage({ previewAppearance = true, courseId
       return handle && selection ? { source: handle.getSource(), ...selection } : null;
     },
     previewSuggestion: async (suggestion) => {
-      if (suggestion.type !== 'python_replace') throw new Error('invalid_suggestion');
+      if (suggestion.type !== 'python_replace' && suggestion.type !== 'python_edits') throw new Error('invalid_suggestion');
       return previewPythonSuggestion(suggestion, monacoRef.current?.getSource() ?? code);
     },
     applySuggestion: async (suggestion) => {
+      if (suggestion.type === 'python_edits') {
+        monacoRef.current?.replaceSource(applyPythonEdits(monacoRef.current?.getSource() ?? code, suggestion.edits));
+        return;
+      }
       if (suggestion.type !== 'python_replace') throw new Error('invalid_suggestion');
       monacoRef.current?.replaceSource(suggestion.replacement);
     },

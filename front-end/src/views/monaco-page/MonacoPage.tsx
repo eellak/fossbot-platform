@@ -60,7 +60,7 @@ import { useRobotConnection } from 'src/robot/RobotConnectionContext';
 import ProjectStageIndicator from 'src/components/editors/ProjectStageIndicator';
 import AssistantPanel, { type AssistantSurfaceAdapter } from 'src/components/ai/AssistantPanel';
 import { fingerprintText } from 'src/ai/fingerprint';
-import { previewPythonSuggestion } from 'src/ai/suggestions/codeSuggestions';
+import { applyPythonEdits, previewPythonSuggestion } from 'src/ai/suggestions/codeSuggestions';
 import WorkspaceResizeHandle from 'src/components/workspace/WorkspaceResizeHandle';
 import { WorkspaceFrame, WorkspacePane } from 'src/components/workspace/WorkspaceFrame';
 import PythonWorkspaceEditor from 'src/components/workspace/PythonWorkspaceEditor';
@@ -414,10 +414,14 @@ const MonacoPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppearan
       return handle && selection ? { source: handle.getSource(), ...selection } : null;
     },
     previewSuggestion: async (suggestion) => {
-      if (suggestion.type !== 'python_replace') throw new Error('invalid_suggestion');
+      if (suggestion.type !== 'python_replace' && suggestion.type !== 'python_edits') throw new Error('invalid_suggestion');
       return previewPythonSuggestion(suggestion, editorRef.current?.getSource() ?? editorValue);
     },
     applySuggestion: async (suggestion) => {
+      if (suggestion.type === 'python_edits') {
+        editorRef.current?.replaceSource(applyPythonEdits(editorRef.current?.getSource() ?? editorValue, suggestion.edits));
+        return;
+      }
       if (suggestion.type !== 'python_replace') throw new Error('invalid_suggestion');
       editorRef.current?.replaceSource(suggestion.replacement);
     },

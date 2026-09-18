@@ -9,7 +9,7 @@ from typing import Any, Optional, Union
 from pydantic import ValidationError
 
 from utils.activity_schema import validate_activities
-from utils.ai.schemas import BlocklyReplaceSuggestion, ConversationTurn, LessonAuthoringSuggestion, ProviderStreamRequest, PythonReplaceSuggestion, StageAuthoringSuggestion
+from utils.ai.schemas import BlocklyReplaceSuggestion, ConversationTurn, LessonAuthoringSuggestion, ProviderStreamRequest, PythonEdit, PythonEditsSuggestion, PythonReplaceSuggestion, StageAuthoringSuggestion
 from utils.ai.stage_geometry import generated_wall_geometry, requires_wall_enclosure, wall_enclosure_status
 
 
@@ -32,7 +32,7 @@ SUGGESTION_RESPONSE_CHARACTER_LIMITS = {
 }
 MAX_SUGGESTION_REPAIR_ATTEMPTS = 2
 MAX_REPAIR_TURN_CHARACTERS = 2_000
-Suggestion = Union[PythonReplaceSuggestion, BlocklyReplaceSuggestion, LessonAuthoringSuggestion, StageAuthoringSuggestion]
+Suggestion = Union[PythonReplaceSuggestion, PythonEditsSuggestion, BlocklyReplaceSuggestion, LessonAuthoringSuggestion, StageAuthoringSuggestion]
 LESSON_OPERATION_NAMES = {"update_course", "update_lesson", "insert_activity", "replace_activity", "remove_activity", "reorder_activities"}
 STAGE_OPERATION_NAMES = {"set_metadata", "set_floor", "add_object", "update_object", "move_object", "rotate_object", "resize_object", "set_line_points", "remove_object", "group_objects", "ungroup_objects"}
 
@@ -236,7 +236,7 @@ def parse_suggestion_with_normalizations(raw: str, capability: str, expected_fin
     try:
         payload, normalizations = normalize_suggestion_payload(_load_json_object(raw), capability)
         if capability == "code.suggest_changes":
-            suggestion = PythonReplaceSuggestion.model_validate(payload)
+            suggestion = PythonEditsSuggestion.model_validate(payload) if payload.get("type") == "python_edits" else PythonReplaceSuggestion.model_validate(payload)
         elif capability == "blockly.suggest_changes":
             suggestion = BlocklyReplaceSuggestion.model_validate(payload)
         elif capability in {"lesson.draft", "lesson.suggest_changes"}:
@@ -245,9 +245,16 @@ def parse_suggestion_with_normalizations(raw: str, capability: str, expected_fin
             suggestion = StageAuthoringSuggestion.model_validate(payload)
     except (json.JSONDecodeError, ValidationError, TypeError) as error:
         raise SuggestionError("The provider returned an invalid suggestion") from error
-    expected_type = "python_replace" if capability == "code.suggest_changes" else "blockly_replace" if capability == "blockly.suggest_changes" else "lesson_operations" if capability in {"lesson.draft", "lesson.suggest_changes"} else "stage_operations"
+    expected_types = {
+        "code.suggest_changes": {"python_replace", "python_edits"},
+        "blockly.suggest_changes": {"blockly_replace"},
+        "lesson.draft": {"lesson_operations"},
+        "lesson.suggest_changes": {"lesson_operations"},
+        "stage.create": {"stage_operations"},
+        "stage.suggest_changes": {"stage_operations"},
+    }.get(capability, set())
     suggestion_base = suggestion.base_revision if isinstance(suggestion, LessonAuthoringSuggestion) else suggestion.base_fingerprint
-    if suggestion.type != expected_type or suggestion_base != expected_fingerprint:
+    if suggestion.type not in expected_types or suggestion_base != expected_fingerprint:
         raise SuggestionError("The provider suggestion does not match the current workspace")
     validate_suggestion(suggestion, context)
     return suggestion, normalizations
@@ -258,10 +265,44 @@ def parse_suggestion(raw: str, capability: str, expected_fingerprint: str, conte
     return suggestion
 
 
+def python_edit_lines(replacement: str) -> list[str]:
+    """An empty replacement deletes the range; a trailing newline does not add a blank line."""
+    if replacement == "":
+        return []
+    if replacement.endswith("\n"):
+        replacement = replacement[:-1]
+    return replacement.split("\n")
+
+
+def apply_python_edits(source: str, edits: list[PythonEdit]) -> str:
+    lines = source.split("\n")
+    ordered = sorted(edits, key=lambda edit: (edit.start_line, edit.end_line))
+    previous_end = 0
+    for edit in ordered:
+        if edit.start_line > edit.end_line:
+            raise SuggestionError("A line replacement must end at or after its start line")
+        if edit.start_line <= previous_end or edit.end_line > len(lines):
+            raise SuggestionError("Line replacements must not overlap and must stay within the current source")
+        previous_end = edit.end_line
+    for edit in sorted(edits, key=lambda item: item.start_line, reverse=True):
+        lines[edit.start_line - 1:edit.end_line] = python_edit_lines(edit.replacement)
+    return "\n".join(lines)
+
+
 def validate_suggestion(suggestion: Suggestion, context: Optional[dict[str, Any]] = None) -> None:
     if isinstance(suggestion, PythonReplaceSuggestion):
         try:
             ast.parse(suggestion.replacement)
+        except SyntaxError as error:
+            raise SuggestionError("The suggested Python is not syntactically valid") from error
+        return
+    if isinstance(suggestion, PythonEditsSuggestion):
+        source = (context or {}).get("source")
+        if not isinstance(source, str):
+            raise SuggestionError("The suggestion context is missing the current source")
+        merged = apply_python_edits(source, suggestion.edits)
+        try:
+            ast.parse(merged)
         except SyntaxError as error:
             raise SuggestionError("The suggested Python is not syntactically valid") from error
         return

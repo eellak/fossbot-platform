@@ -26,9 +26,13 @@ def build_prompt(user_role: UserRole, request: AssistantRequest, context: Assemb
     if request.capability == "code.suggest_changes":
         fingerprint = context.payload["supplied"]["source_fingerprint"]
         mutation_policy = (
-            "Return only one JSON object with exactly: version '1', type 'python_replace', "
-            f"baseFingerprint '{fingerprint}', replacement containing the complete Python source, and a short summary. "
-            "Do not wrap the JSON in Markdown."
+            "Return only one JSON object that is one of two shapes, both with version '1' and "
+            f"baseFingerprint '{fingerprint}'. "
+            "For a whole-file rewrite use type 'python_replace' with replacement containing the complete Python source. "
+            "For a small, localized change prefer type 'python_edits' with edits: a list of {startLine, endLine, replacement} objects, "
+            "where startLine and endLine are 1-based inclusive lines of the supplied source, the replacement is the text for that range, "
+            "an empty replacement deletes the range, edits must not overlap, and line numbers must stay within the supplied source. "
+            "Include a short summary. Do not wrap the JSON in Markdown."
         )
     elif request.capability == "blockly.suggest_changes":
         fingerprint = context.payload["supplied"]["workspace_fingerprint"]

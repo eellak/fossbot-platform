@@ -15,7 +15,7 @@ const activityContract =
 const suggestionInstruction = (request: AIRuntimeRequest) => {
   const context = request.context;
   if (request.capability === 'code.suggest_changes') {
-    return `Return only one JSON object with version "1", type "python_replace", baseFingerprint "${String(context.sourceFingerprint || '')}", replacement containing the complete Python source, and a short summary.`;
+    return `Return only one JSON object with version "1" and baseFingerprint "${String(context.sourceFingerprint || '')}". For a whole-file rewrite use type "python_replace" with replacement containing the complete Python source. For a small, localized change prefer type "python_edits" with edits: a list of {startLine, endLine, replacement} objects using 1-based inclusive lines of the current source; an empty replacement deletes the range, edits must not overlap, and line numbers must stay within the source. Include a short summary.`;
   }
   if (request.capability === 'blockly.suggest_changes') {
     return `Return only one JSON object with version "1", type "blockly_replace", baseFingerprint "${String(context.workspaceFingerprint || '')}", xml containing the complete Blockly workspace, and a short summary. Use only allowedBlockTypes from the context.`;
