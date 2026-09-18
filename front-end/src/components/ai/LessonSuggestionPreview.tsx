@@ -9,7 +9,7 @@ const words = (value: string) => value
 
 function valueText(value: LessonPreviewValue, yes: string, no: string): string {
   if (typeof value === 'boolean') return value ? yes : no;
-  if (Array.isArray(value)) return value.join(' • ');
+  if (Array.isArray(value)) return value.map((item) => valueText(item, yes, no)).join(' • ');
   if (value && typeof value === 'object') return Object.entries(value).map(([key, item]) => `${words(key)}: ${valueText(item as LessonPreviewValue, yes, no)}`).join(' • ');
   return String(value);
 }

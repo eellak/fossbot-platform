@@ -102,7 +102,7 @@ function applyOperations(course: CourseDraft, suggestion: LessonAuthoringSuggest
 
 const previewValue = (value: unknown): LessonPreviewValue => {
   if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return value;
-  if (Array.isArray(value) && value.every((item) => typeof item === 'string')) return value;
+  if (Array.isArray(value)) return value.map((item) => previewValue(item));
   return value && typeof value === 'object' ? value as Record<string, unknown> : String(value ?? '');
 };
 

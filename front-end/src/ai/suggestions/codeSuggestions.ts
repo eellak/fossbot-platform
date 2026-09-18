@@ -6,7 +6,7 @@ import type { AIAssistantSuggestion, AICodeSuggestion, BlocklyReplaceSuggestion,
 
 export const CODE_SUGGESTION_VERSION = '1';
 
-export type LessonPreviewValue = string | number | boolean | string[] | Record<string, unknown>;
+export type LessonPreviewValue = string | number | boolean | LessonPreviewValue[] | Record<string, unknown>;
 export type LessonPreviewItem = {
   title: 'course' | 'lesson' | 'activity' | 'removeActivity' | 'activityOrder';
   activityType?: string;
