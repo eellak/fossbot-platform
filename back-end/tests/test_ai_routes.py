@@ -353,6 +353,43 @@ def test_provider_secret_create_preserve_rotate_and_clear(db, users, monkeypatch
         assert row.encrypted_secret is None
 
 
+def test_provider_removal_cleans_up_references(db, users):
+    tutor, _, _, admin = users
+    provider = seed_provider(db, admin)
+    other = AIProviderConfig(
+        name="Second hosted",
+        provider_type="openai",
+        runtime="hosted",
+        enabled=True,
+        model="second-model",
+        settings={"version": "1"},
+        created_by_id=admin.id,
+        updated_by_id=admin.id,
+    )
+    db.add(other)
+    db.flush()
+    settings = AIInstanceSettings(id=1, enabled=True, default_provider_id=provider.id, registry_version="1", updated_by_id=admin.id)
+    explicit_rule = AIPolicyRule(scope_type="instance", scope_key="*", capability="code.explain", effect="allow", provider_ids=[provider.id], runtimes=["hosted"], created_by_id=admin.id, updated_by_id=admin.id)
+    shared_rule = AIPolicyRule(scope_type="instance", scope_key="*", capability="code.suggest_changes", effect="allow", provider_ids=[provider.id, other.id], runtimes=["hosted"], created_by_id=admin.id, updated_by_id=admin.id)
+    event = AIUsageEvent(user_id=admin.id, provider_id=provider.id, capability="code.explain", provider_name="Deterministic hosted", model="test-model", runtime="hosted", request_id="req-delete-1", started_at=datetime.datetime.utcnow(), outcome="completed", policy_version="1")
+    db.add_all([settings, explicit_rule, shared_rule, event])
+    db.commit()
+    with client_for(db, tutor) as client:
+        assert client.delete(f"/api/admin/ai/providers/{provider.id}").status_code == 403
+    with client_for(db, admin) as client:
+        assert client.delete(f"/api/admin/ai/providers/{provider.id}").status_code == 204
+        assert client.delete(f"/api/admin/ai/providers/{provider.id}").status_code == 404
+    db.expire_all()
+    assert db.query(AIProviderConfig).filter(AIProviderConfig.id == provider.id).first() is None
+    assert db.query(AIInstanceSettings).filter(AIInstanceSettings.id == 1).one().default_provider_id is None
+    # An allow rule left with no providers is dropped; one with a remaining provider keeps it.
+    assert db.query(AIPolicyRule).filter(AIPolicyRule.capability == "code.explain").first() is None
+    assert db.query(AIPolicyRule).filter(AIPolicyRule.capability == "code.suggest_changes").one().provider_ids == [other.id]
+    usage = db.query(AIUsageEvent).filter(AIUsageEvent.request_id == "req-delete-1").one()
+    assert usage.provider_id is None
+    assert usage.provider_name == "Deterministic hosted"
+
+
 class FakeHostedProvider:
     async def stream(self, request):
         yield ProviderEvent("text_delta", {"text": "A safe hint."})

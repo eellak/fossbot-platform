@@ -10,9 +10,10 @@ import { Link } from 'react-router-dom';
 import { useAuth } from 'src/authentication/AuthProvider';
 import PageContainer from 'src/components/container/PageContainer';
 import {
-  createAIProvider, deleteAIPolicy, putAIPolicy, readAIAdminBootstrap, resolveAIAccess,
+  createAIProvider, deleteAIProvider, deleteAIPolicy, putAIPolicy, readAIAdminBootstrap, resolveAIAccess,
   streamAIAssist, testAIProvider, updateAIProvider, updateAISettings,
 } from 'src/ai/AssistantApi';
+import { useConfirmDialog } from 'src/components/shared/ConfirmDialog';
 import type {
   AIAdminBootstrap, AIAccessDecision, AICapabilityId, AIPolicyEffect, AIProviderConfig,
   AIProviderInput, AIRuntime, AIScopeType,
@@ -121,6 +122,18 @@ function SectionHeading({ title, description, action }: { title: string; descrip
 }
 
 function ProvidersTab({ data, token, saving, run, openCreate, openEdit, t }: { data: AIAdminBootstrap; token: string; saving: boolean; run: RunAction; openCreate: () => void; openEdit: (provider: AIProviderConfig) => void; t: any }) {
+  const confirmDialog = useConfirmDialog();
+  const remove = async (provider: AIProviderConfig) => {
+    const confirmed = await confirmDialog.confirm({
+      title: t('aiAdmin.providers.removeTitle', { name: provider.name }),
+      message: t('aiAdmin.providers.removeBody'),
+      confirmLabel: t('aiAdmin.providers.remove'),
+      cancelLabel: t('cancel'),
+      danger: true,
+    });
+    if (!confirmed) return;
+    await run(() => deleteAIProvider(token, provider.id), t('aiAdmin.messages.providerRemoved'));
+  };
   return <>
     <SectionHeading title={t('aiAdmin.providers.title')} description={t('aiAdmin.providers.description')} action={<Button variant="contained" startIcon={<IconPlus size={18} />} onClick={openCreate}>{t('aiAdmin.providers.add')}</Button>} />
     <Stack spacing={1.5}>
@@ -130,6 +143,7 @@ function ProvidersTab({ data, token, saving, run, openCreate, openEdit, t }: { d
           <FormControlLabel control={<Switch checked={provider.enabled} disabled={saving} onChange={(event) => void run(() => updateAIProvider(token, provider.id, { enabled: event.target.checked }), t('aiAdmin.messages.providerUpdated'))} />} label={provider.enabled ? t('aiAdmin.providers.available') : t('aiAdmin.providers.unavailable')} />
           {provider.runtime === 'hosted' && <Button disabled={saving} onClick={() => void run(() => testAIProvider(token, provider.id), t('aiAdmin.messages.providerHealthy'))}>{t('aiAdmin.providers.test')}</Button>}
           <Button disabled={saving} onClick={() => openEdit(provider)}>{t('edit')}</Button>
+          <Button disabled={saving} color="error" onClick={() => void remove(provider)}>{t('aiAdmin.providers.remove')}</Button>
         </Stack>
       </Paper>)}
       {!data.providers.length && <Alert severity="info">{t('aiAdmin.providers.empty')}</Alert>}

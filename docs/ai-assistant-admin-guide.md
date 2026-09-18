@@ -20,6 +20,8 @@ Open **Administration → AI assistant**. Add one provider, leave it disabled wh
 
 Credentials are write-only: API responses expose `hasSecret`, never the value. Editing a provider requires an explicit **preserve**, **rotate**, or **clear** action. Test after rotation, then disable the old credential at its issuer.
 
+**Remove** deletes a provider after a confirmation. Removal clears it as the instance default and drops it from policy rules; an allow rule left with no providers is deleted rather than widened to every provider. Usage history keeps the recorded provider name and model, so token/latency reports stay readable. Removal cannot be undone, so health-test the replacement provider before removing the old one.
+
 ## Instance settings and limits
 
 Choose the default provider, optional daily request/token ceilings, whether content-free local usage counts should be reported, and usage retention from 1–365 days (default 30). Retention is enforced when settings change and before a new usage event is recorded. Disabling the instance revokes every capability immediately.

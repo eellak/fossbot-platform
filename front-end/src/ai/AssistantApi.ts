@@ -70,6 +70,11 @@ export function updateAIProvider(token: string, providerId: number, input: Parti
   return fetch(`${backendUrl}/api/admin/ai/providers/${providerId}`, { method: 'PUT', headers: headers(token), body: JSON.stringify(input) }).then(parse<AIProviderConfig>);
 }
 
+export async function deleteAIProvider(token: string, providerId: number): Promise<void> {
+  const response = await fetch(`${backendUrl}/api/admin/ai/providers/${providerId}`, { method: 'DELETE', headers: headers(token) });
+  if (!response.ok) await parse(response);
+}
+
 export function updateAISettings(token: string, settings: Pick<AIInstanceSettings, 'enabled' | 'defaultProviderId' | 'requestLimit' | 'tokenLimit' | 'reportLocalUsage' | 'usageRetentionDays'>): Promise<AIInstanceSettings> {
   return fetch(`${backendUrl}/api/admin/ai/settings`, { method: 'PUT', headers: headers(token), body: JSON.stringify(settings) }).then(parse<AIInstanceSettings>);
 }
