@@ -106,6 +106,15 @@ def test_repair_instruction_prescribes_flat_operation_shape():
     assert 'Correct: {"op":"add_object"' in repaired.messages[-1].content
 
 
+def test_repair_instruction_points_invalid_activities_back_to_the_contract():
+    request = ProviderStreamRequest(model="test", system="system", messages=[ConversationTurn(role="user", content="Add an activity")])
+    error = SuggestionError("operations[0] op 'insert_activity' contains an invalid activity: numeric_answer unit must not be blank")
+    error.__cause__ = ValueError("numeric_answer unit must not be blank")
+    repaired = build_suggestion_repair_request(request, "{}", error, 1)
+    assert "platform activity schema" in repaired.messages[-1].content
+    assert "numeric_answer needs prompt" in repaired.messages[-1].content
+
+
 def test_blockly_suggestion_requires_well_formed_xml_and_matching_fingerprint():
     fingerprint = hashlib.sha256(b"<xml></xml>").hexdigest()
     valid = parse_suggestion(json.dumps({

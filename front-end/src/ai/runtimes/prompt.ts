@@ -1,6 +1,17 @@
 import type { AIRuntimeRequest } from './types';
 import { STAGE_CATALOG_GEOMETRY_PROMPT } from 'src/components/stage-builder/stageBuilderCatalog';
 
+const activityContract =
+  'Every activity object must match the platform activity schema exactly. Shared fields are key (string; generated keys start with "ai-"), type, version 1, and required (boolean). '
+  + 'rich_text: content is a Tiptap document object or a non-empty text string. '
+  + 'hint: content is a Tiptap document object or a non-empty text string, forActivityKey is a string or null, and a hint cannot be required. '
+  + 'multiple_choice: prompt (non-empty), options is a list of at least two {key,label} objects with unique keys, and correctOptionKey references one configured option key. '
+  + 'multiple_select: prompt (non-empty), options is a list of at least two {key,label} objects with unique keys, and correctOptionKeys is a non-empty unique subset of those keys. '
+  + 'numeric_answer: prompt (non-empty), expectedValue is a finite number, unit is a non-empty string, tolerance is {mode:"absolute"|"percentage", value: number >= 0}, and validRange is null or {minimum,maximum}. '
+  + 'short_reflection: prompt (non-empty) and collectResponse (boolean); a private reflection cannot be required. '
+  + 'simulator_observation: prompt (non-empty), allowedSensors is a non-empty unique subset of platform sensor IDs, sensorHelperMode is hidden, student_toggle, or always_visible, presentations is a non-empty subset of live, chart, or summary, and capturedStatistics plus visibleStatistics are subsets of minimum, maximum, average, or finalValue where visibleStatistics is a subset of capturedStatistics. '
+  + 'mission: assistant suggestions cannot create or change executable mission rules; keep completionMode, objectives, retryLimit, feedbackMode, and scoreConfig exactly as supplied.';
+
 const suggestionInstruction = (request: AIRuntimeRequest) => {
   const context = request.context;
   if (request.capability === 'code.suggest_changes') {
@@ -10,10 +21,10 @@ const suggestionInstruction = (request: AIRuntimeRequest) => {
     return `Return only one JSON object with version "1", type "blockly_replace", baseFingerprint "${String(context.workspaceFingerprint || '')}", xml containing the complete Blockly workspace, and a short summary. Use only allowedBlockTypes from the context.`;
   }
   if (request.capability === 'lesson.draft' || request.capability === 'lesson.suggest_changes') {
-    return `Return only one JSON object with version "1", type "lesson_operations", baseRevision "${String(context.baseRevision || '')}", constrained operations, and a short summary. Use camelCase fields such as lessonId, activityKey, coursePatch, lessonPatch, and activityKeys. Allowed operations are update_course, update_lesson, insert_activity, replace_activity, remove_activity, and reorder_activities. Generated activity keys begin with "ai-". Keep teacher-only answers and expected values out of student-visible text.`;
+    return `Return only one JSON object with version "1", type "lesson_operations", baseRevision "${String(context.baseRevision || '')}", constrained operations, and a short summary. Use camelCase fields such as lessonId, activityKey, coursePatch, lessonPatch, and activityKeys. Allowed operations are update_course, update_lesson, insert_activity, replace_activity, remove_activity, and reorder_activities. Generated activity keys begin with "ai-". Reorder operations must list every existing activity key exactly once. Keep teacher-only answers and expected values out of student-visible text. ${activityContract}`;
   }
   if (request.capability === 'stage.create' || request.capability === 'stage.suggest_changes') {
-    return `Return only one JSON object with version "1", type "stage_operations", baseFingerprint "${String(context.baseFingerprint || '')}", rationale, constrained operations, expectedValidation, and a short summary. Use camelCase fields such as objectId, tempId, semanticKind, rotationY, objectIds, and groupName. Allowed operations are set_metadata, set_floor, add_object, update_object, move_object, rotate_object, resize_object, set_line_points, remove_object, group_objects, and ungroup_objects. New temporary IDs begin with "ai-" and semanticKind must come from the supplied catalog. For a create target, add each object first, then use its tempId as objectId in later update_object, move_object, rotate_object, resize_object, or set_line_points operations. Create-target follow-up operations may reference only temporary IDs generated earlier in the same response. ${STAGE_CATALOG_GEOMETRY_PROMPT} Never add URLs, assets, provider data, storage fields, or timestamps.`;
+    return `Return only one JSON object with version "1", type "stage_operations", baseFingerprint "${String(context.baseFingerprint || '')}", rationale, constrained operations, expectedValidation, and a short summary. Use camelCase fields such as objectId, tempId, semanticKind, rotationY, objectIds, and groupName. Allowed operations are set_metadata, set_floor, add_object, update_object, move_object, rotate_object, resize_object, set_line_points, remove_object, group_objects, and ungroup_objects. New temporary IDs begin with "ai-" and semanticKind must come from the supplied catalog. For a create target, add each object first, then use its tempId as objectId in later update_object, move_object, rotate_object, resize_object, or set_line_points operations. Create-target follow-up operations may reference only temporary IDs generated earlier in the same response. When the target is validation, one proposal must address every supplied validation entry using as many operations as needed, never only the first issue. When the target is selection, apply the requested change to every selected object. ${STAGE_CATALOG_GEOMETRY_PROMPT} Never add URLs, assets, provider data, storage fields, or timestamps.`;
   }
   return '';
 };

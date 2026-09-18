@@ -73,6 +73,22 @@ HIDDEN_STUDENT_FIELDS = {
     "feedbackIncorrect",
 }
 
+# Compact, model-facing description of the authored activity contract. It is
+# embedded in assistant prompts so generated activities satisfy the same
+# validator used by the editor instead of being rejected field by field.
+ACTIVITY_CONTRACT_PROMPT = " ".join((
+    "Every activity object must match the platform activity schema exactly.",
+    "Shared fields are key (string; generated keys start with 'ai-'), type, version 1, and required (boolean).",
+    "rich_text: content is a Tiptap document object or a non-empty text string.",
+    "hint: content is a Tiptap document object or a non-empty text string, forActivityKey is a string or null, and a hint cannot be required.",
+    "multiple_choice: prompt (non-empty), options is a list of at least two {key,label} objects with unique keys, and correctOptionKey references one configured option key.",
+    "multiple_select: prompt (non-empty), options is a list of at least two {key,label} objects with unique keys, and correctOptionKeys is a non-empty unique subset of those keys.",
+    "numeric_answer: prompt (non-empty), expectedValue is a finite number, unit is a non-empty string, tolerance is {mode:'absolute'|'percentage', value: number >= 0}, and validRange is null or {minimum,maximum}.",
+    "short_reflection: prompt (non-empty) and collectResponse (boolean); a private reflection (collectResponse false) cannot be required.",
+    "simulator_observation: prompt (non-empty), allowedSensors is a non-empty unique subset of platform sensor IDs, sensorHelperMode is 'hidden'|'student_toggle'|'always_visible', presentations is a non-empty subset of 'live'|'chart'|'summary', and capturedStatistics plus visibleStatistics are subsets of 'minimum'|'maximum'|'average'|'finalValue' where visibleStatistics is a subset of capturedStatistics.",
+    "mission: assistant suggestions cannot create or change executable mission rules; keep completionMode, objectives, retryLimit, feedbackMode, and scoreConfig exactly as supplied.",
+))
+
 
 def _required_text(value: Any, field: str) -> str:
     if not isinstance(value, str) or not value.strip():

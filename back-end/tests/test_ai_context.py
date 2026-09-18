@@ -168,6 +168,36 @@ def test_student_prompt_is_hint_first_and_versioned(db, users):
     assert "student@example.test" not in prompt.system
 
 
+def test_lesson_prompt_documents_activity_contract(db, users):
+    tutor = users[0]
+    course = Course(title="Robotics", description="Course", author_id=tutor.id, learning_objectives=["Move safely"], status="draft", visibility="public")
+    db.add(course)
+    db.flush()
+    lesson = Lesson(course_id=course.id, lesson_key="move", title="Move", position=1, activities=[], completion_policy="self", start_mode="fresh", editor_type="none", archived=False)
+    db.add(lesson)
+    db.commit()
+    target_payload = {
+        "course": {"title": "Robotics", "description": "Course", "objectives": ["Move safely"]},
+        "lesson": {"id": lesson.id, "key": lesson.lesson_key, "title": lesson.title, "position": 1, "editorType": "none", "completionPolicy": "self", "activityCount": 0},
+        "outline": [{"key": lesson.lesson_key, "title": lesson.title, "position": 1}],
+    }
+    revision = hashlib.sha256(json.dumps(target_payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    payload = request("lesson", "lesson.suggest_changes", {"courseId": course.id, "target": "lesson", "baseRevision": revision, "targetPayload": target_payload})
+    prompt = build_prompt(tutor.role, payload, assemble_context(db, tutor, payload))
+    assert "numeric_answer: prompt" in prompt.system
+    assert "tolerance is {mode:'absolute'|'percentage'" in prompt.system
+    assert "cannot create or change executable mission rules" in prompt.system
+
+
+def test_stage_validation_prompt_requires_addressing_every_issue(db, users):
+    tutor = users[0]
+    stage = {"title": "Stage", "description": "", "floor": {"name": "Floor", "dimensions": [10, 10], "color": "#fff"}, "objects": [], "metadata": {}, "summary": {"objectCount": 0, "knownObjectIds": []}}
+    validation = [{"id": "stage:spawn-missing", "severity": "error", "objectIds": [], "message": "Robot spawn is missing.", "reason": "Place one."}]
+    payload = request("stage", "stage.suggest_changes", stage_context(stage, target="validation", validation=validation))
+    prompt = build_prompt(tutor.role, payload, assemble_context(db, tutor, payload))
+    assert "address every entry in the supplied validation list" in prompt.system
+
+
 def test_stage_prompt_uses_canonical_flat_contract_without_python_api(db, users):
     student = users[2]
     stage = {"title": "Stage", "description": "", "floor": {"name": "Floor", "dimensions": [10, 10], "color": "#fff"}, "objects": [], "metadata": {}, "summary": {"objectCount": 0, "knownObjectIds": []}}

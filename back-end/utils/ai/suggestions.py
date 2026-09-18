@@ -124,6 +124,12 @@ def build_suggestion_repair_request(
         guidance.append('The top-level version is the JSON string "1", not the number 1.')
     if "selected target" in lowered:
         guidance.append("Use only operations allowed for the selected target stated in the original system prompt.")
+    if "invalid activity" in lowered:
+        guidance.append(
+            "The activity failed the platform activity schema. Re-read the activity contract in the original system prompt and correct the named field. "
+            "Common fixes: numeric_answer needs prompt, expectedValue, unit, and tolerance {mode, value}; "
+            "multiple_choice needs options plus correctOptionKey; simulator_observation needs allowedSensors and presentations."
+        )
     if "output budget" in lowered or "incomplete" in lowered or "too large" in lowered:
         guidance.append("Return fewer essential operations and reserve tokens for the complete closing JSON braces.")
     prescriptive_guidance = "\n".join(guidance)

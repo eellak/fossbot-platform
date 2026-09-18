@@ -7,6 +7,7 @@ from models.models import UserRole
 from utils.ai.context import AssembledContext
 from utils.ai.fossbot_api import FOSSBOT_API_VERSION, prompt_reference_excerpt
 from utils.ai.schemas import AssistantRequest, PromptBundle
+from utils.activity_schema import ACTIVITY_CONTRACT_PROMPT
 from utils.ai.stage_geometry import STAGE_CATALOG_GEOMETRY_PROMPT
 from utils.ai.suggestion_contracts import is_suggestion_capability, suggestion_contract_prompt
 
@@ -47,9 +48,10 @@ def build_prompt(user_role: UserRole, request: AssistantRequest, context: Assemb
             "Allowed operations are update_course, update_lesson, insert_activity, replace_activity, remove_activity, and reorder_activities. "
             "Use camelCase fields: update_course requires coursePatch; update_lesson requires lessonId and lessonPatch; "
             "insert_activity requires lessonId, index, and activity; replace_activity requires lessonId, activityKey, and a complete activity; "
-            "remove_activity requires lessonId and activityKey; reorder_activities requires lessonId and activityKeys. "
+            "remove_activity requires lessonId and activityKey; reorder_activities requires lessonId and activityKeys, and must list every existing activity key exactly once in the new order. "
             "Use only the supported activity types and version 1. Stable generated keys must start with 'ai-'. "
             "Question answers, numeric expected values, tolerances, and valid ranges are teacher-only fields. "
+            f"{ACTIVITY_CONTRACT_PROMPT} "
             "Do not add executable mission rules or hidden answers to student-visible text. Do not wrap the JSON in Markdown. "
             f"Authoring target: '{supplied['target']}'. Selected lesson ID: '{lesson_id}'. Selected activity key: '{activity_key}'."
         )
@@ -69,6 +71,8 @@ def build_prompt(user_role: UserRole, request: AssistantRequest, context: Assemb
             "The top-level expectedValidation field must be a short string, not an object or array. "
             "add_object must use one catalog semanticKind and a unique temporary ID beginning with 'ai-'. Existing objects must be referenced only by the supplied stable IDs. "
             "A create target must add at least one robotSpawn and one target object. "
+            "When the target is 'validation', one proposal must address every entry in the supplied validation list: include as many operations as needed (up to 64), keep each change minimal, and never stop after the first issue. "
+            "When the target is 'selection', apply the requested change to every selected object. "
             "Do not invent model, texture, audio, URL, provider, source, storage, or timestamp fields. Do not save, export, publish, or run the stage. Do not wrap the JSON in Markdown. "
             f"Stage target: '{supplied['target']}'. Selected object IDs: '{','.join(supplied['selected_object_ids']) or 'none'}'. "
             f"Context truncated: '{str(supplied['context_truncated']).lower()}'. Catalog: '{','.join(supplied['catalog'])}'."
