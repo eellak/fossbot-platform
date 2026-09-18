@@ -23,11 +23,17 @@ function resolveTarget(value: TargetValue): AuthoringTarget {
 export default function AuthoringAssistant({ course, lesson, validationIssues, onApply }: Props) {
   const { t } = useTranslation();
   const [targetValue, setTargetValue] = useState<TargetValue>(lesson ? 'lesson' : 'course');
+  // The assistant can only edit the selected lesson plus course metadata, so a validation
+  // target must expose only the issues it can actually resolve. Sending course-wide issues
+  // makes the model propose operations the editor rejects as targeting another lesson.
+  const scopedValidationIssues = useMemo(() => (lesson
+    ? validationIssues.filter((issue) => !issue.lesson_id || issue.lesson_id === lesson.id)
+    : validationIssues), [lesson, validationIssues]);
   useEffect(() => {
     if (!lesson && targetValue !== 'course') setTargetValue('course');
     if (targetValue.startsWith('activity:') && !lesson?.activities.some((activity) => targetValue === `activity:${activity.key}`)) setTargetValue(lesson ? 'lesson' : 'course');
-    if (targetValue === 'validation' && !validationIssues.length) setTargetValue(lesson ? 'lesson' : 'course');
-  }, [lesson, targetValue, validationIssues.length]);
+    if (targetValue === 'validation' && !scopedValidationIssues.length) setTargetValue(lesson ? 'lesson' : 'course');
+  }, [lesson, scopedValidationIssues.length, targetValue]);
   const target = resolveTarget(targetValue);
   const selectedActivity = target.type === 'activity' ? lesson?.activities.find((activity) => activity.key === target.activityKey) : undefined;
 
@@ -50,9 +56,9 @@ export default function AuthoringAssistant({ course, lesson, validationIssues, o
       activityCount: lesson.activities.length,
     } } : {}),
     ...(selectedActivity ? { activity: selectedActivity } : {}),
-    ...(target.type === 'validation' ? { validation: validationIssues.map((issue) => ({ group: issue.group, code: issue.code, message: issue.message, field: issue.field || '', lessonId: issue.lesson_id || null })) } : {}),
+    ...(target.type === 'validation' ? { validation: scopedValidationIssues.map((issue) => ({ group: issue.group, code: issue.code, message: issue.message, field: issue.field || '', lessonId: issue.lesson_id || null })) } : {}),
     ...(lesson?.stageReference ? { stageSummary: { title: lesson.stageReference.title || '', sourceType: lesson.stageReference.sourceType, revision: lesson.stageReference.commitSha || '' } } : {}),
-  }), [course, lesson, selectedActivity, target.type, validationIssues]);
+  }), [course, lesson, scopedValidationIssues, selectedActivity, target.type]);
 
   const adapter: AssistantSurfaceAdapter = {
     surface: 'lesson',
@@ -92,7 +98,7 @@ export default function AuthoringAssistant({ course, lesson, validationIssues, o
         <MenuItem value="course">{t('aiAssistant.authoring.targets.course')}</MenuItem>
         {lesson && <MenuItem value="lesson">{t('aiAssistant.authoring.targets.lesson', { title: lesson.title })}</MenuItem>}
         {lesson?.activities.map((activity, index) => <MenuItem key={activity.key} value={`activity:${activity.key}`}>{t('aiAssistant.authoring.targets.activity', { index: index + 1, type: t(`education.activities.types.${activity.type}`) })}</MenuItem>)}
-        {validationIssues.length > 0 && <MenuItem value="validation">{t('aiAssistant.authoring.targets.validation', { count: validationIssues.length })}</MenuItem>}
+        {scopedValidationIssues.length > 0 && <MenuItem value="validation">{t('aiAssistant.authoring.targets.validation', { count: scopedValidationIssues.length })}</MenuItem>}
       </TextField>
     </Stack>}
   />;

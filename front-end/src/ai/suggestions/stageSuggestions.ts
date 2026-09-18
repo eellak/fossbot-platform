@@ -9,7 +9,13 @@ import type { SuggestionPreview } from './codeSuggestions';
 
 export type StageAuthoringTarget = 'create' | 'stage' | 'selection' | 'validation';
 
-const SUPPORTED_KINDS = new Set(STAGE_OBJECT_CATALOG.filter((item) => item.placeable && item.id !== 'audio' && item.id !== 'customObject').map((item) => item.id));
+// Keep this in sync with the backend stage validator and createCatalogObject.
+// `wedge` has a creator but no library tile, so it is allowed here even though it
+// is absent from STAGE_OBJECT_CATALOG.
+const SUPPORTED_KINDS = new Set([
+  ...STAGE_OBJECT_CATALOG.filter((item) => item.placeable && item.id !== 'audio' && item.id !== 'customObject').map((item) => item.id),
+  'wedge',
+]);
 const PATCH_FIELDS = new Set(['name', 'color', 'mass', 'immovable', 'collision', 'hidden', 'locked', 'text', 'scale', 'onFloor', 'intensity', 'range', 'angle', 'penumbra', 'fov', 'pitch', 'subtype', 'challenge']);
 
 export function parseStageSuggestion(value: Record<string, unknown>): StageAuthoringSuggestion {

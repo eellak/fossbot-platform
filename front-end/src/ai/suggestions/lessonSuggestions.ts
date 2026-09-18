@@ -19,7 +19,12 @@ export function parseLessonSuggestion(value: Record<string, unknown>): LessonAut
 function assertActivity(value: unknown): Activity {
   if (!value || typeof value !== 'object') throw new Error('invalid_suggestion');
   const activity = value as Activity;
-  if (!activityTypes.includes(activity.type) || activity.version !== 1 || typeof activity.key !== 'string' || !activity.key.trim() || typeof activity.required !== 'boolean') throw new Error('invalid_suggestion');
+  if (!activityTypes.includes(activity.type) || typeof activity.key !== 'string' || !activity.key.trim()) throw new Error('invalid_suggestion');
+  // Mirror the backend activity validator: version and required fall back to their
+  // defaults instead of failing the whole proposal on an omitted optional field.
+  if (activity.version === undefined) activity.version = 1;
+  if (activity.version !== 1) throw new Error('invalid_suggestion');
+  if (typeof activity.required !== 'boolean') activity.required = false;
   if (activityValidation(activity).length) throw new Error('invalid_suggestion');
   return activity;
 }
