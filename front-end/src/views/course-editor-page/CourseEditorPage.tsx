@@ -312,6 +312,15 @@ export default function CourseEditorPage() {
   }, [revision, conflict, saveDraft]);
 
   useEffect(() => {
+    if (selectedId === null) return undefined;
+    // Keep the selected lesson (for example one Buddy just created) visible in the outline.
+    const frame = window.requestAnimationFrame(() => {
+      document.querySelector(`[data-lesson-id="${selectedId}"]`)?.scrollIntoView({ block: 'nearest' });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [selectedId, course?.lessons.length]);
+
+  useEffect(() => {
     const warn = (event: BeforeUnloadEvent) => {
       if (!courseGeneration.current && !lessonGenerations.current.size) return;
       event.preventDefault(); event.returnValue = '';
@@ -522,7 +531,17 @@ export default function CourseEditorPage() {
     setCourse(next); courseRef.current = next; setSaveState('unsaved'); setRevision((value) => value + 1);
     const issues = localPublicationIssues(next, t);
     setValidationIssues(issues);
-    if (issues.length) { setSettingsTab('validation'); setMobilePanel('settings'); }
+    if (createdLessons.length) {
+      // Take the author straight to the lesson Buddy just created.
+      const lastCreated = createdLessons[createdLessons.length - 1];
+      setSelectedId(lastCreated.id);
+      setMobilePanel('content');
+      setContentTab('instructions');
+      setSettingsTab('lesson');
+    } else if (issues.length) {
+      setSettingsTab('validation');
+      setMobilePanel('settings');
+    }
   };
 
   if (loading) return <Box sx={{ p: 3 }}><Skeleton height={64} /><Skeleton variant="rounded" height={560} /></Box>;
@@ -608,7 +627,7 @@ function PanelResizeHandle({ side, onPointerDown, onDoubleClick, t }: { side: Re
 
 function OutlinePanel({ lessons, selectedId, changedLessonKeys, outlineChanged, publishedVersion, draggingId, dropTarget, onSelect, onAdd, onDuplicate, onDelete, onMove, onDrag, onDragOver, onDrop, t }: any) {
   return <Stack sx={{ height: '100%' }}><Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ p: 2, borderBottom: 1, borderColor: 'divider' }}><Box><Stack direction="row" alignItems="center" gap={0.5}><Typography sx={authoringTitleSx}>{t('education.panels.outline')}</Typography>{outlineChanged && <ChangeBadge publishedVersion={publishedVersion} t={t} />}</Stack><Typography variant="caption" color="text.secondary">{t('education.lesson.count', { count: lessons.length })}</Typography></Box><IconButton color="primary" onClick={onAdd} aria-label={t('education.lesson.add')}><IconPlus size={20} /></IconButton></Stack><Box component="ol" sx={{ p: 1, m: 0, listStyle: 'none', overflow: 'auto' }}>
-    {lessons.map((lesson: Lesson, index: number) => { const placement = dropTarget?.lessonId === lesson.id ? dropTarget.placement : null; const placementFor = (event: React.DragEvent) => { const rect = event.currentTarget.getBoundingClientRect(); const ratio = (event.clientY - rect.top) / rect.height; return ratio < 0.28 ? 'before' : ratio > 0.72 ? 'after' : 'replace'; }; return <Box component="li" key={lesson.id} onDragOver={(event: React.DragEvent) => { event.preventDefault(); onDragOver({ lessonId: lesson.id, placement: placementFor(event) }); }} onDrop={(event: React.DragEvent) => { event.preventDefault(); onDrop({ lessonId: lesson.id, placement: placementFor(event) }); }} sx={{ mb: 0.5, opacity: draggingId === lesson.id ? 0.45 : 1, position: 'relative', '&:before': placement === 'before' || placement === 'after' ? { content: '""', position: 'absolute', zIndex: 3, left: 4, right: 4, height: 3, borderRadius: 2, bgcolor: 'primary.main', top: placement === 'before' ? -3 : 'auto', bottom: placement === 'after' ? -3 : 'auto' } : undefined }}>
+    {lessons.map((lesson: Lesson, index: number) => { const placement = dropTarget?.lessonId === lesson.id ? dropTarget.placement : null; const placementFor = (event: React.DragEvent) => { const rect = event.currentTarget.getBoundingClientRect(); const ratio = (event.clientY - rect.top) / rect.height; return ratio < 0.28 ? 'before' : ratio > 0.72 ? 'after' : 'replace'; }; return <Box component="li" key={lesson.id} data-lesson-id={lesson.id} onDragOver={(event: React.DragEvent) => { event.preventDefault(); onDragOver({ lessonId: lesson.id, placement: placementFor(event) }); }} onDrop={(event: React.DragEvent) => { event.preventDefault(); onDrop({ lessonId: lesson.id, placement: placementFor(event) }); }} sx={{ mb: 0.5, opacity: draggingId === lesson.id ? 0.45 : 1, position: 'relative', '&:before': placement === 'before' || placement === 'after' ? { content: '""', position: 'absolute', zIndex: 3, left: 4, right: 4, height: 3, borderRadius: 2, bgcolor: 'primary.main', top: placement === 'before' ? -3 : 'auto', bottom: placement === 'after' ? -3 : 'auto' } : undefined }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, p: 1, borderRadius: 1.5, bgcolor: selectedId === lesson.id ? 'primary.light' : 'transparent', outline: placement === 'replace' ? '2px solid' : 'none', outlineColor: 'primary.main', outlineOffset: -2, '&:hover': { bgcolor: selectedId === lesson.id ? 'primary.light' : 'action.hover' } }}>
         <Box draggable onDragStart={(event) => { event.dataTransfer.effectAllowed = 'move'; onDrag(lesson.id); }} onDragEnd={() => onDrag(null)} aria-label={t('education.lesson.drag', { title: lesson.title })} title={t('education.lesson.dragHelp')} sx={{ display: 'flex', cursor: 'grab', '&:active': { cursor: 'grabbing' } }}><IconGripVertical size={16} aria-hidden /></Box><Box role="button" tabIndex={0} aria-current={selectedId === lesson.id ? 'true' : undefined} onClick={() => onSelect(lesson.id)} onKeyDown={(event) => { if (!['Enter', ' '].includes(event.key)) return; event.preventDefault(); onSelect(lesson.id); }} sx={{ minWidth: 0, flex: 1, cursor: 'pointer', borderRadius: 1, '&:focus-visible': { outline: '2px solid', outlineColor: 'text.primary', outlineOffset: 2 } }}><Tooltip title={lesson.title} placement="top-start"><Typography variant="body2" sx={authoringTitleSx} noWrap>{index + 1}. {lesson.title}</Typography></Tooltip><Stack direction="row" gap={0.5} alignItems="center" flexWrap="wrap">{changedLessonKeys.has(lesson.lesson_key) && <ChangeBadge publishedVersion={publishedVersion} t={t} />}</Stack></Box>
         <Stack direction="row" spacing={-0.5}><IconButton size="small" disabled={index === 0} onClick={(event) => { event.stopPropagation(); onMove(lesson.id, -1); }} aria-label={t('education.lesson.moveUp')}><IconArrowUp size={16} /></IconButton><IconButton size="small" disabled={index === lessons.length - 1} onClick={(event) => { event.stopPropagation(); onMove(lesson.id, 1); }} aria-label={t('education.lesson.moveDown')}><IconArrowDown size={16} /></IconButton></Stack>
