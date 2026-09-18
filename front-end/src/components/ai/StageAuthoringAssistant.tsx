@@ -68,9 +68,9 @@ export default function StageAuthoringAssistant({ stage, selectedIds, validation
       prompt: t('aiAssistant.debug.benchmarks.stageBuildingPrompt'),
       mode: 'suggest',
     }] : []}
-    contextControls={<Stack spacing={1}>
-      <Box><Typography variant="subtitle2">{t('aiAssistant.stage.targetTitle')}</Typography><Typography variant="caption" color="text.secondary">{t('aiAssistant.stage.targetHelp')}</Typography></Box>
-      <TextField select size="small" label={t('aiAssistant.stage.target')} value={target} onChange={(event) => setTarget(event.target.value as StageAuthoringTarget)}>
+    contextControls={<Stack spacing={1.25} sx={{ p: 1.5, border: 1, borderColor: 'divider', borderRadius: 1.5, bgcolor: 'action.hover' }}>
+      <Box><Typography variant="subtitle2" fontWeight={700}>{t('aiAssistant.stage.targetTitle')}</Typography><Typography variant="caption" color="text.secondary">{t('aiAssistant.stage.targetHelp')}</Typography></Box>
+      <TextField select fullWidth size="small" label={t('aiAssistant.stage.target')} value={target} onChange={(event) => setTarget(event.target.value as StageAuthoringTarget)}>
         <MenuItem value="create">{t('aiAssistant.stage.targets.create')}</MenuItem>
         <MenuItem value="stage">{t('aiAssistant.stage.targets.stage')}</MenuItem>
         {selectedIds.length > 0 && <MenuItem value="selection">{t('aiAssistant.stage.targets.selection', { count: selectedIds.length })}</MenuItem>}

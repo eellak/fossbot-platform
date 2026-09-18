@@ -92,9 +92,9 @@ export default function AuthoringAssistant({ course, lesson, validationIssues, o
       prompt: t('aiAssistant.debug.benchmarks.lessonTitlePrompt'),
       mode: 'suggest',
     }] : []}
-    contextControls={<Stack spacing={1}>
-      <Box><Typography variant="subtitle2">{t('aiAssistant.authoring.targetTitle')}</Typography><Typography variant="caption" color="text.secondary">{t('aiAssistant.authoring.targetHelp')}</Typography></Box>
-      <TextField select size="small" label={t('aiAssistant.authoring.target')} value={targetValue} onChange={(event) => setTargetValue(event.target.value as TargetValue)}>
+    contextControls={<Stack spacing={1.25} sx={{ p: 1.5, border: 1, borderColor: 'divider', borderRadius: 1.5, bgcolor: 'action.hover' }}>
+      <Box><Typography variant="subtitle2" fontWeight={700}>{t('aiAssistant.authoring.targetTitle')}</Typography><Typography variant="caption" color="text.secondary">{t('aiAssistant.authoring.targetHelp')}</Typography></Box>
+      <TextField select fullWidth size="small" label={t('aiAssistant.authoring.target')} value={targetValue} onChange={(event) => setTargetValue(event.target.value as TargetValue)}>
         <MenuItem value="course">{t('aiAssistant.authoring.targets.course')}</MenuItem>
         {lesson && <MenuItem value="lesson">{t('aiAssistant.authoring.targets.lesson', { title: lesson.title })}</MenuItem>}
         {lesson?.activities.map((activity, index) => <MenuItem key={activity.key} value={`activity:${activity.key}`}>{t('aiAssistant.authoring.targets.activity', { index: index + 1, type: t(`education.activities.types.${activity.type}`) })}</MenuItem>)}

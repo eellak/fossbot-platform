@@ -499,7 +499,6 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
   const canAsk = Boolean(explain?.allowed || suggest?.allowed);
   const primaryMode: RequestMode = explain?.allowed ? 'explain' : 'suggest';
   const primaryLabel = primaryMode === 'explain' ? t('aiAssistant.ask') : t('aiAssistant.actions.change');
-  const showSecondarySuggest = primaryMode === 'explain' && canSuggest;
   const busy = status === 'streaming';
   const view: BuddyView = busy
     ? 'working'
@@ -558,7 +557,6 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
       </Stack>
     </Collapse>
     <Box sx={{ p: rhythm.inset, display: 'flex', flexDirection: 'column', gap: rhythm.blockGap }}>
-      {contextControls}
       {isAdmin && debugEnabled && benchmarkPrompts.length > 0 && <Stack spacing={0.75} sx={{ p: 1.25, bgcolor: 'action.hover', borderRadius: 1 }}>
         <Box><Typography variant="subtitle2">{t('aiAssistant.debug.benchmarksTitle')}</Typography><Typography variant="caption" color="text.secondary">{t('aiAssistant.debug.benchmarksHelp')}</Typography></Box>
         <Stack direction="row" gap={0.75} flexWrap="wrap">
@@ -604,12 +602,27 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
         {view === 'working' && <Button fullWidth variant="contained" color="error" startIcon={<IconX size={18} />} onClick={stopRun} sx={{ minHeight: 48 }}>{t('aiAssistant.stop')}</Button>}
 
         {view === 'ask' && <Stack spacing={rhythm.blockGap}>
+          {contextControls}
           <Typography component="h3" variant="h5">{t('aiAssistant.question')}</Typography>
           <Stack direction="row" gap={1} flexWrap="wrap">{surfacePrompts.map((prompt) => <PromptChip key={prompt} label={prompt} onClick={() => { setQuestion(prompt); questionRef.current?.focus(); }} />)}</Stack>
-          <TextField inputRef={questionRef} label={t('aiAssistant.message')} value={question} onChange={(event) => setQuestion(event.target.value)} multiline minRows={2} inputProps={{ maxLength: 2000 }} disabled={busy} />
+          <TextField
+            inputRef={questionRef}
+            label={t('aiAssistant.message')}
+            value={question}
+            onChange={(event) => setQuestion(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key !== 'Enter' || event.shiftKey) return;
+              event.preventDefault();
+              if (!question.trim() || busy || !activeDecision?.allowed) return;
+              void run(question, primaryMode);
+            }}
+            multiline
+            minRows={2}
+            inputProps={{ maxLength: 2000 }}
+            disabled={busy}
+          />
           <Stack spacing={rhythm.actionGap}>
             <Button fullWidth variant="contained" size="large" endIcon={<IconArrowRight size={19} />} disabled={!question.trim() || busy || !activeDecision?.allowed} onClick={() => void run(question, primaryMode)} sx={{ minHeight: 48 }}>{primaryLabel}</Button>
-            {showSecondarySuggest && <Button fullWidth variant="outlined" disabled={!question.trim() || busy} onClick={() => void run(question, 'suggest')} sx={{ minHeight: 44 }}>{t('aiAssistant.actions.change')}</Button>}
             <Stack direction="row" justifyContent="center" alignItems="center" spacing={0.75} sx={{ color: 'text.secondary' }}>
               <IconShieldCheck size={15} aria-hidden="true" />
               <Typography variant="caption">{t('aiAssistant.askNote')}</Typography>
@@ -625,7 +638,10 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
           </Stack>
           {renderedOutput}
           <Stack spacing={rhythm.actionGap}>
-            <Stack direction="row" gap={1} flexWrap="wrap">{surfacePrompts.map((prompt) => <PromptChip key={prompt} label={prompt} onClick={() => askAgain(prompt)} />)}</Stack>
+            <Stack direction="row" gap={1} flexWrap="wrap">
+              {surfacePrompts.map((prompt) => <PromptChip key={prompt} label={prompt} onClick={() => askAgain(prompt)} />)}
+              {canSuggest && <PromptChip label={t('aiAssistant.actions.change')} onClick={() => void run(lastRequest?.question || question, 'suggest')} />}
+            </Stack>
             <Button fullWidth variant="contained" endIcon={<IconArrowRight size={18} />} onClick={() => askAgain()} sx={{ minHeight: 48 }}>{t('aiAssistant.followUp')}</Button>
           </Stack>
         </Stack>}
