@@ -338,6 +338,11 @@ export default function LessonWorkspacePage({ previewAppearance = true, courseId
         stageSummary: stage ? { title: stage.title || '', sourceType: stage.sourceType, revision: stage.commitSha || stage.url || '' } : {},
       };
     },
+    getSelection: async () => {
+      const handle = monacoRef.current;
+      const selection = handle?.getSelection();
+      return handle && selection ? { source: handle.getSource(), ...selection } : null;
+    },
     previewSuggestion: async (suggestion) => {
       if (suggestion.type !== 'python_replace') throw new Error('invalid_suggestion');
       return previewPythonSuggestion(suggestion, monacoRef.current?.getSource() ?? code);

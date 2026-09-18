@@ -63,6 +63,11 @@ export default function StarterCodeWorkspace({ lesson, onChange, t }: { lesson: 
         stageSummary: lesson.stageReference ? { title: lesson.stageReference.title || '', sourceType: lesson.stageReference.sourceType, revision: lesson.stageReference.commitSha || '' } : {},
       };
     },
+    getSelection: async () => {
+      const handle = monacoRef.current;
+      const selection = handle?.getSelection();
+      return handle && selection ? { source: handle.getSource(), ...selection } : null;
+    },
     previewSuggestion: async (suggestion) => {
       if (suggestion.type !== 'python_replace') throw new Error('invalid_suggestion');
       return previewPythonSuggestion(suggestion, monacoRef.current?.getSource() ?? serialized);

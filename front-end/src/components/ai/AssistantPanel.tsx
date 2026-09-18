@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
-  Alert, Box, Button, Chip, CircularProgress, Collapse, Dialog, DialogActions, DialogContent,
+  Alert, alpha, Box, Button, Chip, CircularProgress, Collapse, Dialog, DialogActions, DialogContent,
   DialogTitle, Fab, IconButton, LinearProgress, MenuItem, Paper, Portal, Stack, TextField, Tooltip, Typography,
 } from '@mui/material';
 import {
@@ -16,6 +16,7 @@ import { AIRequestError, reportAILocalUsage, validateAIArtifact } from 'src/ai/A
 import { useAssistantAccess } from 'src/ai/AssistantProvider';
 import type { SuggestionPreview } from 'src/ai/suggestions/codeSuggestions';
 import { parseAssistantSuggestion } from 'src/ai/suggestions/parseSuggestion';
+import { lineDiff, replaceSelectedLines } from 'src/ai/suggestions/selectionEdit';
 import type { AIAssistantSuggestion, AICapabilityId, AIAssistantSurface, AIDebugTraceEntry, AIPublicProvider, AIRuntimeStatus } from 'src/ai/types';
 import { parseClientSuggestionText } from 'src/ai/runtimes/prompt';
 import { randomId } from 'src/utils/platform';
@@ -38,12 +39,23 @@ export type AssistantBenchmarkPrompt = {
   mode?: RequestMode;
 };
 
+export type AssistantEditorSelection = {
+  source: string;
+  startLine: number;
+  startColumn: number;
+  endLine: number;
+  endColumn: number;
+  text: string;
+};
+
 export type AssistantSurfaceAdapter = {
   surface: Extract<AIAssistantSurface, 'python' | 'blockly' | 'lesson' | 'stage'>;
   getContext: () => Promise<Record<string, unknown>>;
   getFingerprint: () => Promise<string>;
   previewSuggestion: (suggestion: AIAssistantSuggestion, requestQuestion: string) => Promise<SuggestionPreview>;
   applySuggestion: (suggestion: AIAssistantSuggestion) => Promise<void>;
+  // Optional: lets a code answer replace only the lines the author selected.
+  getSelection?: () => Promise<AssistantEditorSelection | null>;
 };
 
 type Props = {
@@ -501,6 +513,38 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
     }
   };
 
+  // Replace only the lines the author selected, instead of the whole file.
+  const applyCodeToSelection = async (block: { language: string; code: string }) => {
+    if (codeSurface !== 'python' || !adapter.getSelection || !canSuggest) return;
+    setRequestError('');
+    try {
+      const selection = await adapter.getSelection();
+      if (!selection || !selection.text.trim()) {
+        setRequestError(t('aiAssistant.errors.select_lines'));
+        return;
+      }
+      const merged = replaceSelectedLines(selection.source, selection, block.code);
+      const codeLines = block.code.replace(/\n+$/, '').split('\n');
+      const validation = await validateAIArtifact(token, 'python', merged);
+      if (!validation.valid) {
+        setRequestError(t('aiAssistant.errors.code_invalid', { message: validation.message }));
+        return;
+      }
+      const fingerprint = await adapter.getFingerprint();
+      const summary = t('aiAssistant.answerCodeSelectionSummary', { count: codeLines.length });
+      const suggestion: AIAssistantSuggestion = { version: '1', type: 'python_replace', baseFingerprint: fingerprint, replacement: merged, summary };
+      const validated = await adapter.previewSuggestion(suggestion, lastRequest?.question || '');
+      setPreview(validated);
+      setPreviewCapability('code.suggest_changes');
+      setOutput(summary);
+      setStatus('done');
+    } catch (reason) {
+      appendDebug('client', 'answer_code_selection.failed', debugErrorData(reason));
+      const code = reason instanceof Error ? reason.message.split(':')[0] : 'invalid_suggestion';
+      setRequestError(t(`aiAssistant.errors.${code}`, t('aiAssistant.errors.invalid_suggestion')));
+    }
+  };
+
   const declinePreview = () => {
     setPreview(null);
     setPreviewCapability(null);
@@ -593,11 +637,6 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
     });
     return () => { cancelled = true; };
   }, [answerCodeBlocks, codeSurface, token, view]);
-  const applyableCodeBlocks = answerCodeBlocks.filter((block) => codeChecks[`${block.language}:${block.code}`]?.valid);
-  const exampleCodeBlocks = answerCodeBlocks.filter((block) => {
-    const check = codeChecks[`${block.language}:${block.code}`];
-    return Boolean(check && !check.valid);
-  });
   const restartFromApplied = () => { setApplied(false); setOutput(''); setPreview(null); setPreviewCapability(null); setStatus('idle'); };
 
   const panel = <Paper id="fossbot-buddy-panel" role="dialog" aria-label={t('aiAssistant.title')} elevation={8} sx={{ width: '100%', boxSizing: 'border-box', maxHeight: 'calc(100vh - 104px)', overflowY: 'auto', overflowX: 'hidden', borderRadius: 2, '& .MuiButton-root': { minHeight: 44 }, '& .MuiChip-clickable': { minHeight: 40 } }}>
@@ -701,27 +740,28 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
             <Chip size="small" color="secondary" label={t('aiAssistant.generated')} />
           </Stack>
           {renderedOutput}
-          {applyableCodeBlocks.map((block, index) => <Paper key={`${index}-${block.code.slice(0, 24)}`} variant="outlined" sx={{ overflow: 'hidden', borderRadius: 1.5 }}>
-            <Stack direction="row" alignItems="center" spacing={1} sx={{ px: 1.5, py: 1, bgcolor: 'action.hover', borderBottom: 1, borderColor: 'divider' }}>
-              <IconCode size={17} aria-hidden="true" />
-              <Typography variant="caption" fontWeight={700}>{t('aiAssistant.answerCodeTitle')}</Typography>
-            </Stack>
-            <Box sx={{ p: 1.5 }}>
-              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1, fontFamily: 'monospace', overflowWrap: 'anywhere', whiteSpace: 'pre-wrap' }}>{block.code.split('\n').slice(0, 2).join('\n')}</Typography>
-              <Button fullWidth variant="outlined" startIcon={<IconWand size={17} />} onClick={() => void applyAnswerCode(block)} sx={{ minHeight: 44 }}>{t('aiAssistant.actions.applyCode')}</Button>
-            </Box>
-          </Paper>)}
-          {exampleCodeBlocks.length > 0 && <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 1.5 }}>
-            <Stack direction="row" spacing={1.25} alignItems="flex-start">
-              <Box sx={{ width: 32, height: 32, flex: '0 0 auto', display: 'grid', placeItems: 'center', borderRadius: 1, bgcolor: 'warning.light', color: 'warning.main' }}><IconCode size={17} aria-hidden="true" /></Box>
-              <Box sx={{ minWidth: 0 }}>
-                <Typography variant="subtitle2" fontWeight={700}>{t('aiAssistant.answerCodeExampleTitle')}</Typography>
-                <Typography variant="caption" color="text.secondary">{t('aiAssistant.answerCodeExampleBody')}</Typography>
-                {exampleCodeBlocks.map((block) => codeChecks[`${block.language}:${block.code}`]?.message).filter(Boolean).slice(0, 1).map((message) => <Typography key={message} variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5, overflowWrap: 'anywhere' }}>{t('aiAssistant.failedReason', { reason: message })}</Typography>)}
+          {answerCodeBlocks.map((block, index) => {
+            const check = codeChecks[`${block.language}:${block.code}`];
+            const canReplaceSelection = codeSurface === 'python' && Boolean(adapter.getSelection);
+            return <Paper key={`${index}-${block.code.slice(0, 24)}`} variant="outlined" sx={{ overflow: 'hidden', borderRadius: 1.5 }}>
+              <Stack direction="row" alignItems="center" spacing={1} sx={{ px: 1.5, py: 1, bgcolor: 'action.hover', borderBottom: 1, borderColor: 'divider' }}>
+                <IconCode size={17} aria-hidden="true" />
+                <Typography variant="caption" fontWeight={700}>{t('aiAssistant.answerCodeTitle')}</Typography>
+              </Stack>
+              <Box sx={{ p: 1.5 }}>
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1, fontFamily: 'monospace', overflowWrap: 'anywhere', whiteSpace: 'pre-wrap' }}>{block.code.split('\n').slice(0, 2).join('\n')}</Typography>
+                <Stack spacing={rhythm.actionStackGap}>
+                  {canReplaceSelection && <Button fullWidth variant="contained" startIcon={<IconWand size={17} />} onClick={() => void applyCodeToSelection(block)} sx={{ minHeight: 44 }}>{t('aiAssistant.actions.replaceSelection')}</Button>}
+                  {check?.valid && <Button fullWidth variant={canReplaceSelection ? 'outlined' : 'contained'} startIcon={<IconWand size={17} />} onClick={() => void applyAnswerCode(block)} sx={{ minHeight: 44 }}>{t('aiAssistant.actions.replaceFile')}</Button>}
+                  {check && !check.valid && <>
+                    <Typography variant="caption" color="text.secondary">{t('aiAssistant.answerCodeExampleBody')}</Typography>
+                    {check.message && <Typography variant="caption" color="text.secondary" sx={{ overflowWrap: 'anywhere' }}>{t('aiAssistant.failedReason', { reason: check.message })}</Typography>}
+                    <Button fullWidth variant="outlined" startIcon={<IconWand size={17} />} onClick={() => void run(lastRequest?.question || question, 'suggest')} sx={{ minHeight: 44 }}>{t('aiAssistant.actions.change')}</Button>
+                  </>}
+                </Stack>
               </Box>
-            </Stack>
-            <Button fullWidth variant="outlined" startIcon={<IconWand size={17} />} onClick={() => void run(lastRequest?.question || question, 'suggest')} sx={{ mt: 1.5, minHeight: 44 }}>{t('aiAssistant.actions.change')}</Button>
-          </Paper>}
+            </Paper>;
+          })}
           <Stack spacing={rhythm.actionGap}>
             <Stack direction="row" gap={1} flexWrap="wrap">
               {surfacePrompts.map((prompt) => <PromptChip key={prompt} label={prompt} onClick={() => askAgain(prompt)} />)}
@@ -746,7 +786,13 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
               {preview.kind === 'lesson' ? <>
                 <Box><Typography variant="caption" color="text.secondary">{t('aiAssistant.authoring.changes')}</Typography><Stack direction="row" gap={0.5} flexWrap="wrap" sx={{ mt: 0.5 }}>{preview.changes?.map((change, index) => <Chip key={`${change}-${index}`} size="small" label={t(`aiAssistant.authoring.operations.${change}`, change)} />)}</Stack></Box>
                 <LessonSuggestionPreview preview={preview} />
-              </> : preview.kind === 'stage' ? <StageSuggestionPreview preview={preview} onPreviewLiveToggle={onPreviewStageChange} /> : <Box component="pre" tabIndex={0} sx={{ m: 0, maxHeight: 180, overflow: 'auto', bgcolor: 'action.hover', p: 1, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{preview.kind === 'python' ? preview.after : preview.detail}</Box>}
+              </> : preview.kind === 'stage' ? <StageSuggestionPreview preview={preview} onPreviewLiveToggle={onPreviewStageChange} /> : preview.kind === 'python' ? (() => {
+                const diff = lineDiff(preview.before, preview.after);
+                return <Box tabIndex={0} sx={{ maxHeight: 220, overflow: 'auto', fontFamily: 'monospace', fontSize: 12.5, lineHeight: 1.7 }}>
+                  {diff.removed.map((line, index) => <Box key={`removed-${index}`} sx={{ px: 1, color: 'error.main', bgcolor: (currentTheme) => alpha(currentTheme.palette.error.main, 0.08), whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>− {line || ' '}</Box>)}
+                  {diff.added.map((line, index) => <Box key={`added-${index}`} sx={{ px: 1, color: 'success.main', bgcolor: (currentTheme) => alpha(currentTheme.palette.success.main, 0.1), whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>+ {line || ' '}</Box>)}
+                </Box>;
+              })() : <Box component="pre" tabIndex={0} sx={{ m: 0, maxHeight: 180, overflow: 'auto', bgcolor: 'action.hover', p: 1, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{preview.detail}</Box>}
             </Box>
           </Paper>
           <Stack spacing={rhythm.actionStackGap}>

@@ -408,6 +408,11 @@ const MonacoPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppearan
         stageSummary: selectedStage ? { title: selectedStageLabel, sourceType: selectedStage.sourceType } : {},
       };
     },
+    getSelection: async () => {
+      const handle = editorRef.current;
+      const selection = handle?.getSelection();
+      return handle && selection ? { source: handle.getSource(), ...selection } : null;
+    },
     previewSuggestion: async (suggestion) => {
       if (suggestion.type !== 'python_replace') throw new Error('invalid_suggestion');
       return previewPythonSuggestion(suggestion, editorRef.current?.getSource() ?? editorValue);
