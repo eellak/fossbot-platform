@@ -833,7 +833,7 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
           </Stack>
         </Stack>}
 
-        {view === 'failed' && <Paper variant="outlined" sx={{ p: rhythm.inset, borderRadius: 2 }}>
+        {view === 'failed' && <Stack spacing={rhythm.blockGap}>
           <Stack direction="row" spacing={1.5} alignItems="flex-start">
             <Box sx={{ width: 40, height: 40, flex: '0 0 auto', display: 'grid', placeItems: 'center', borderRadius: 1.25, bgcolor: 'error.light', color: 'error.main' }}><IconRefresh size={20} /></Box>
             <Box sx={{ flex: 1, minWidth: 0 }}>
@@ -842,13 +842,13 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
               {requestErrorDetail && <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.75, overflowWrap: 'anywhere' }}>{t('aiAssistant.failedReason', { reason: requestErrorDetail })}</Typography>}
             </Box>
           </Stack>
-          <Stack direction="row" spacing={1} sx={{ mt: rhythm.blockGap }}>
+          <Stack direction="row" spacing={1}>
             {lastRequest && <Button variant="contained" onClick={() => void run(lastRequest.question, lastRequest.mode, false, undefined, Boolean(lastRequest.benchmark))} sx={{ minHeight: 44 }}>{t('aiAssistant.retry')}</Button>}
             <Button variant="outlined" onClick={() => askAgain()} sx={{ minHeight: 44 }}>{t('aiAssistant.states.ask')}</Button>
           </Stack>
-        </Paper>}
+        </Stack>}
 
-        {view === 'applied' && <Paper variant="outlined" sx={{ p: rhythm.inset, borderRadius: 2 }}>
+        {view === 'applied' && <Stack spacing={rhythm.blockGap}>
           <Stack direction="row" spacing={1.5} alignItems="flex-start">
             <Box sx={{ width: 40, height: 40, flex: '0 0 auto', display: 'grid', placeItems: 'center', borderRadius: 1.25, bgcolor: 'success.light', color: 'success.main' }}><IconCheck size={20} /></Box>
             <Box sx={{ flex: 1, minWidth: 0 }}>
@@ -856,10 +856,10 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
               <Typography variant="body2" color="text.secondary">{output || appliedMessage || t('aiAssistant.applied')}</Typography>
             </Box>
           </Stack>
-          <Stack direction="row" spacing={1} sx={{ mt: rhythm.blockGap }}>
+          <Stack direction="row" spacing={1}>
             <Button variant="contained" endIcon={<IconArrowRight size={17} />} onClick={restartFromApplied} sx={{ minHeight: 44 }}>{t('aiAssistant.compact.askAnother')}</Button>
           </Stack>
-        </Paper>}
+        </Stack>}
       </>}
     </Box>
   </Paper>;

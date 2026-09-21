@@ -63,6 +63,15 @@ describe('lessonSuggestions activity previews', () => {
     expect(fields.find((field) => field.name === 'content')?.value).toBe('Hello world');
   });
 
+  it('renders Markdown rich text content as formatted text instead of raw markers', () => {
+    const preview = previewLessonSuggestion(suggestionWith([{
+      op: 'insert_activity', lessonId: 7, index: 0,
+      activity: { key: 'ai-intro', type: 'rich_text', required: false, content: '# Title\n\nBody with **bold**.' },
+    }]), richCourse, lessonTarget);
+    const fields = preview.lesson?.studentVisible[0].fields || [];
+    expect(fields.find((field) => field.name === 'content')?.value).toBe('Title\nBody with bold.');
+  });
+
   it('separates answer feedback into the teacher-only section', () => {
     const preview = previewLessonSuggestion(suggestionWith([{
       op: 'replace_activity', lessonId: 7, activityKey: 'a-check',

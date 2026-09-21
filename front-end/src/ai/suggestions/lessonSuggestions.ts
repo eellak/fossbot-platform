@@ -1,5 +1,5 @@
 import { activityTypes, activityValidation } from 'src/courses/activitySchema';
-import { textFromTiptap } from 'src/courses/courseAuthoring';
+import { normalizeTiptapDocument, textFromTiptap } from 'src/courses/courseAuthoring';
 import type { Activity, CourseDraft, TiptapNode } from 'src/courses/types';
 import type { LessonAuthoringSuggestion, LessonOperation } from '../types';
 import type { LessonPreviewItem, LessonPreviewValue, SuggestionPreview } from './codeSuggestions';
@@ -169,12 +169,18 @@ const activityLabel = (activity: Activity | undefined): string => {
   return activity.key;
 };
 
+const contentPreview = (value: unknown): LessonPreviewValue => {
+  // Buddy stores rich text as a Markdown string; show the formatted text, not the raw markers.
+  if (typeof value === 'string') return textFromTiptap(normalizeTiptapDocument(value)) || value;
+  return previewValue(value);
+};
+
 const activityPreview = (fields: Record<string, unknown>): LessonPreviewItem => ({
   title: 'activity',
   activityType: typeof fields.type === 'string' ? fields.type : undefined,
   fields: Object.entries(fields)
     .filter(([key]) => !['key', 'type', 'version'].includes(key))
-    .map(([name, value]) => ({ name, value: previewValue(value) })),
+    .map(([name, value]) => ({ name, value: name === 'content' ? contentPreview(value) : previewValue(value) })),
 });
 
 function previewBoundaries(operations: LessonOperation[], course: CourseDraft) {

@@ -236,4 +236,4 @@ function ObservationFields({ activity, onChange, t }: { activity: Extract<Activi
   </Stack>;
 }
 
-const richTextLabels = (t: any) => ({ content: t('education.lesson.content'), bold: t('education.richText.bold'), italic: t('education.richText.italic'), heading: t('education.richText.heading'), bullets: t('education.richText.bullets'), numbered: t('education.richText.numbered') });
+const richTextLabels = (t: any) => ({ content: t('education.lesson.content'), bold: t('education.richText.bold'), italic: t('education.richText.italic'), code: t('education.richText.code'), heading: t('education.richText.heading'), bullets: t('education.richText.bullets'), numbered: t('education.richText.numbered') });

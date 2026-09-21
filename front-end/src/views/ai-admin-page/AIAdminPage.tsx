@@ -8,6 +8,7 @@ import { IconArrowLeft, IconPlus, IconRefresh, IconRobot } from '@tabler/icons-r
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { useAuth } from 'src/authentication/AuthProvider';
+import { useAssistantAccess } from 'src/ai/AssistantProvider';
 import PageContainer from 'src/components/container/PageContainer';
 import {
   createAIProvider, deleteAIProvider, deleteAIPolicy, putAIPolicy, readAIAdminBootstrap, resolveAIAccess,
@@ -29,6 +30,7 @@ const providerDefaults: AIProviderInput = {
 export default function AIAdminPage() {
   const { t } = useTranslation();
   const { token } = useAuth();
+  const { refresh: refreshAssistantAccess } = useAssistantAccess();
   const [data, setData] = useState<AIAdminBootstrap | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -48,7 +50,7 @@ export default function AIAdminPage() {
 
   const run: RunAction = async (action, message) => {
     setSaving(true); setError(''); setSuccess('');
-    try { await action(); await load(); setSuccess(message); return true; }
+    try { await action(); await load(); await refreshAssistantAccess({ silent: true }); setSuccess(message); return true; }
     catch { setError(t('aiAdmin.errors.save')); return false; }
     finally { setSaving(false); }
   };

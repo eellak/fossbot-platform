@@ -108,12 +108,26 @@ Activity questions and rich text content now keep their line breaks instead of c
 
 Files: `StudentActivities.tsx`, `RichTextContent.tsx`.
 
-Screenshots: `dogfood-output/screenshots/student-prompt-newlines.png`.
+## 13. Markdown opens as rich text in the WYSIWYG editor
+
+Authored text bodies are Markdown (Buddy writes them, and the old editor stored some of them as plain strings), but they used to show as literal `#`/``` ```/`**` text. Markdown is now converted on load and edited as rich text — no source field, no preview panel, no MD badge.
+
+- New `markdownToTiptap` in `courseAuthoring.ts` converts a Markdown body into a Tiptap document (headings, paragraphs, bulleted/ordered lists, fenced code blocks, blockquotes, horizontal rules, bold/italic/inline code, and links) with no new dependency.
+- `normalizeTiptapDocument` runs that converter for string content and for the single plain-text-paragraph document the old editor produced, so the editor and the student view open already formatted.
+- `RichTextEditor` is the single rich-text authoring path again, with the toolbar (bold, italic, inline code, heading, bulleted list, numbered list). Pasting plain-text Markdown converts it to rich text; pasted HTML keeps its native handling.
+- `RichTextContent` renders the normalized document (including code blocks, quotes, links, and inline marks) so students never see raw Markdown.
+- Deleted `MarkdownBadge.tsx` and `MarkdownContent.tsx`; removed the `education.richText.markdown*` keys from `en.json` and `gr.json` (added `education.richText.code`).
+- Buddy's proposal preview shows converted Markdown text instead of raw markers (`lessonSuggestions.ts`).
+- The backend rich-text allowlist now matches what the editor produces (`back-end/utils/activity_schema.py`): heading levels 1–6, blockquotes, fenced code blocks, horizontal rules, inline-code marks, and links whose `href` is a safe protocol or in-page/relative target. Before this, opening a converted activity and editing it failed autosave with a 422 because `codeBlock`, `code`, `link`, and non-2/3 headings were rejected.
+
+Files: `courseAuthoring.ts`, `courseAuthoring.test.ts`, `RichTextEditor.tsx`, `RichTextContent.tsx`, `ActivityComposer.tsx`, `lessonSuggestions.ts`, `lessonSuggestions.test.ts`, `en.json`, `gr.json`, `back-end/utils/activity_schema.py`, `back-end/tests/test_activity_schema.py`.
 
 ## Verification
 
 - `npx tsc --noEmit` — clean
-- `CI=true npx craco test --watchAll=false` — 22 suites / 79 tests pass
+- `CI=true npx craco test --watchAll=false` — 22 suites / 86 tests pass
+- backend `pytest tests` — 175 passed (includes the new `test_activity_schema.py`)
+- end-to-end save of a converted document (heading, inline code, link, code block, list, blockquote, rule) over `PUT /courses/11/lessons/{id}` — 200, then deleted
 - backend `pytest tests/test_ai_frontend_contract.py tests/test_ai_suggestions.py tests/test_ai_context.py` — 36 passed
 - production build — passes
 - Impeccable detector over changed UI files — no findings
@@ -121,6 +135,10 @@ Screenshots: `dogfood-output/screenshots/student-prompt-newlines.png`.
 - hover behaviour re-verified live: hover moves the outline, click leaves none, leaving the list / closing the menu clears it
 - click-into-menu re-verified 5/5: hovering `Course & outline` outlines the list, clicking it leaves nothing outlined (no jump to the next option), and clicking an activity still commits/expands it
 - corner consistency re-verified live: course / lesson / activity / validation all render `border-radius: 8px` while outlined
+- Markdown re-verified live in course 11: `Printing in Python`'s `ai-printing-explanation` document and `Variables and Data Types`'s `ai-1` Markdown string both open as formatted rich text (h1/h2, bold, inline code, fenced code blocks, lists) with the WYSIWYG toolbar and no MD badge
+- Pasting plain-text Markdown into a fresh rich-text activity converts it to rich text; pasted HTML keeps its native structure instead of the plain-text fallback
+- Student preview of `Printing in Python` renders the converted document with no raw `#`, `**`, or fences
+- Buddy proposal preview renders its activity fields; the Markdown string → readable text conversion is covered by `lessonSuggestions.test.ts`
 
 Screenshots: `dogfood-output/screenshots/hover-activity-highlight.png`, `hover-lesson-highlight.png`, `radius-lesson.png`, `radius-course.png`, `narrow-buddy-course.png`, `narrow-buddy-activity.png`, `buddy-validation-minimized.png`.
 
@@ -129,7 +147,7 @@ Full QA narrative: `dogfood-output/report.md`.
 ## Not changed (product decisions)
 
 1. **No free-form chat in Courses/Stages.** There is no explanation-only capability for lessons; `lesson.draft` always demands a `lesson_operations` proposal, so a genuine question there ends in "failed validation". Needs a new capability in `back-end/utils/ai/capabilities.py`, a prose prompt branch, the front-end `AICapabilityId`, admin labels and default policy rows.
-2. **Buddy-authored `rich_text` is stored as a plain markdown string** and rendered literally (student view `pre-wrap`; teacher editor shows the raw `#`/fences as paragraphs). See the chat note for the concrete example.
+2. **Buddy-authored `rich_text` arrives as a Markdown string.** The editor and the student view now convert it to rich text on load; no source/preview UI or MD badge. It is persisted as a Tiptap document the first time the teacher edits and autosave runs.
 3. **A stage proposal can introduce new validation notices and still be applied.** Left as-is per your call.
 
 ## Test data left in the dev database

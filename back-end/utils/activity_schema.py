@@ -39,8 +39,14 @@ MISSION_CONDITION_TYPES = {
 MISSION_OPERATORS = {"lt", "lte", "eq", "gte", "gt"}
 MISSION_INCIDENTS = {"collision", "fall", "runtime_error"}
 FORBIDDEN_EXECUTABLE_FIELDS = {"code", "script", "expression", "javascript", "python", "regex"}
-RICH_TEXT_NODES = {"doc", "paragraph", "heading", "bulletList", "orderedList", "listItem", "text", "hardBreak"}
-RICH_TEXT_MARKS = {"bold", "italic"}
+RICH_TEXT_NODES = {
+    "doc", "paragraph", "heading", "bulletList", "orderedList", "listItem",
+    "blockquote", "codeBlock", "horizontalRule", "text", "hardBreak",
+}
+RICH_TEXT_MARKS = {"bold", "italic", "code", "strike", "underline", "link"}
+RICH_TEXT_LEVELS = {1, 2, 3, 4, 5, 6}
+SAFE_LINK_PREFIXES = ("http://", "https://", "mailto:", "tel:")
+LINK_MARK_FIELDS = {"href", "target", "rel", "class", "title"}
 
 # Stable student-facing channels. Teachers select these IDs; getter names are
 # deliberately not part of the authored activity schema.
@@ -96,6 +102,30 @@ def _required_text(value: Any, field: str) -> str:
     return value.strip()
 
 
+def _safe_link_href(href: Any) -> bool:
+    if not isinstance(href, str):
+        return False
+    value = href.strip()
+    if not value or value.startswith("//"):
+        return False
+    if value.startswith(("#", "/")):
+        return True
+    return value.lower().startswith(SAFE_LINK_PREFIXES)
+
+
+def _valid_rich_mark(mark: Any) -> bool:
+    if not isinstance(mark, dict) or mark.get("type") not in RICH_TEXT_MARKS:
+        return False
+    if mark["type"] != "link":
+        return set(mark) == {"type"}
+    if set(mark) != {"type", "attrs"}:
+        return False
+    attrs = mark.get("attrs")
+    if not isinstance(attrs, dict) or set(attrs) - LINK_MARK_FIELDS:
+        return False
+    return _safe_link_href(attrs.get("href"))
+
+
 def _validate_rich_content(content: Any, field: str = "content") -> None:
     if not isinstance(content, (str, dict)):
         raise ValueError(f"{field} must be Tiptap JSON or text")
@@ -124,12 +154,34 @@ def _validate_rich_content(content: Any, field: str = "content") -> None:
                 raise ValueError(f"{field} text nodes must contain text")
             text_length += len(node.get("text", ""))
             marks = node.get("marks", [])
-            if not isinstance(marks, list) or any(not isinstance(mark, dict) or mark.get("type") not in RICH_TEXT_MARKS or set(mark) != {"type"} for mark in marks):
+            if not isinstance(marks, list) or any(not _valid_rich_mark(mark) for mark in marks):
                 raise ValueError(f"{field} contains unsupported formatting")
         elif node_type == "heading":
             allowed_fields.add("attrs")
-            if node.get("attrs") not in ({"level": 2}, {"level": 3}):
+            attrs = node.get("attrs")
+            if not isinstance(attrs, dict) or set(attrs) != {"level"} or attrs.get("level") not in RICH_TEXT_LEVELS:
                 raise ValueError(f"{field} contains an unsupported heading")
+        elif node_type == "codeBlock":
+            allowed_fields.add("attrs")
+            attrs = node.get("attrs") or {}
+            if not isinstance(attrs, dict) or set(attrs) - {"language"}:
+                raise ValueError(f"{field} contains unsupported rich text fields")
+            language = attrs.get("language")
+            if language is not None and not isinstance(language, str):
+                raise ValueError(f"{field} code block language must be text")
+        elif node_type == "orderedList":
+            allowed_fields.add("attrs")
+            attrs = node.get("attrs") or {}
+            if not isinstance(attrs, dict) or set(attrs) - {"start", "type"}:
+                raise ValueError(f"{field} contains unsupported rich text fields")
+            start = attrs.get("start")
+            if start is not None and (not isinstance(start, int) or isinstance(start, bool) or start < 1):
+                raise ValueError(f"{field} ordered list start must be a positive integer")
+            list_type = attrs.get("type")
+            if list_type is not None and not isinstance(list_type, str):
+                raise ValueError(f"{field} ordered list type must be text")
+        elif node_type == "horizontalRule":
+            allowed_fields = {"type"}
         if set(node) - allowed_fields:
             raise ValueError(f"{field} contains unsupported rich text fields")
         children = node.get("content", [])
