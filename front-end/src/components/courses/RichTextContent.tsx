@@ -25,5 +25,6 @@ function renderNode(node: TiptapNode | null | undefined, key: number | string): 
 export default function RichTextContent({ content }: { content: TiptapNode | string | null | undefined }) {
   if (typeof content === 'string') return <Typography sx={{ ...lessonProseSx, whiteSpace: 'pre-wrap', lineHeight: 1.75 }}>{content}</Typography>;
   if (!content) return null;
-  return <Box sx={lessonProseSx}>{renderNode(content, 'root')}</Box>;
+  // pre-wrap keeps line breaks from imported or generated text; typed rich text uses separate nodes.
+  return <Box sx={{ ...lessonProseSx, whiteSpace: 'pre-wrap' }}>{renderNode(content, 'root')}</Box>;
 }

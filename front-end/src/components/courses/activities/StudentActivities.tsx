@@ -186,7 +186,7 @@ function ActivityView({ activity, linkedHints, hintStates, onHintSubmit, submitt
           bgcolor: 'action.selected',
         }}
       >
-        <Typography id={heading} fontWeight={700} sx={{ fontSize: { xs: '1rem', sm: '1.08rem' } }}>{activity.prompt}</Typography>
+        <Typography id={heading} fontWeight={700} sx={{ fontSize: { xs: '1rem', sm: '1.08rem' }, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{activity.prompt}</Typography>
         {status}
       </Stack>
       {activity.type === 'multiple_choice' && <><RadioGroup value={answer || ''} onChange={(event) => onAnswer(event.target.value)} sx={{ gap: 1 }}>{activity.options.map((option: any) => <FormControlLabel key={option.key} value={option.key} control={<Radio disabled={Boolean(state?.satisfied)} />} label={option.label} sx={optionStyle} />)}</RadioGroup>{action(!answer || submitting, () => onSubmit(answer))}</>}
@@ -253,7 +253,7 @@ function observationSummary(activities: Activity[], summary: SensorRunSummary | 
   return Object.keys(sensors).length ? { runId: summary.runId, durationMs: summary.durationMs, sensors } : null;
 }
 
-const optionStyle = { m: 0, px: 1.5, minHeight: 48, border: '1px solid', borderColor: 'divider', borderRadius: 1.25, '&:hover': { bgcolor: 'action.hover' }, '&:has(.Mui-checked)': { borderColor: 'primary.main', bgcolor: 'action.selected' } } as const;
+const optionStyle = { m: 0, px: 1.5, minHeight: 48, border: '1px solid', borderColor: 'divider', borderRadius: 1.25, '& .MuiFormControlLabel-label': { whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }, '&:hover': { bgcolor: 'action.hover' }, '&:has(.Mui-checked)': { borderColor: 'primary.main', bgcolor: 'action.selected' } } as const;
 const visuallyHidden = { position: 'absolute', width: 1, height: 1, p: 0, m: -1, overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap', border: 0 } as const;
 const roundReading = (value: number) => Number(value.toFixed(2));
 

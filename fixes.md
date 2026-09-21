@@ -102,6 +102,14 @@ File: `AssistantPanel.tsx`.
 - Stage scope help shortened to one line and marked `noWrap` (full text in the tooltip title).
 - Focus labels shortened: `Course & outline`, `Lesson · <title>`, `Activity N · <type>`, `Fix N issue(s)` (EN/EL).
 
+## 12. Rich text line breaks
+
+Activity questions and rich text content now keep their line breaks instead of collapsing them. `StudentActivities` renders the question/instruction and choice labels with `whiteSpace: 'pre-wrap'`, and `RichTextContent` does the same for document text nodes.
+
+Files: `StudentActivities.tsx`, `RichTextContent.tsx`.
+
+Screenshots: `dogfood-output/screenshots/student-prompt-newlines.png`.
+
 ## Verification
 
 - `npx tsc --noEmit` — clean
