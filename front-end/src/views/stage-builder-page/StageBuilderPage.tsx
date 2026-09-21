@@ -1829,10 +1829,10 @@ const StageBuilderPage = () => {
               <Typography variant="subtitle2" fontWeight={700}>
                 {t('aiAssistant.stage.previewingLive', 'Previewing proposed stage changes in Stage Builder')}
               </Typography>
-              <Button size="small" variant="contained" color="success" onClick={() => { void applyAssistantStage(livePreviewStage, livePreviewTarget || 'stage').then((applied) => { if (applied) { setLivePreviewStage(null); setLivePreviewTarget(null); } }); }}>
+              <Button size="small" variant="contained" color="success" onClick={() => window.dispatchEvent(new CustomEvent('fossbot:buddy-apply'))}>
                 {t('aiAssistant.apply', 'Apply')}
               </Button>
-              <Button size="small" variant="outlined" onClick={() => { setLivePreviewStage(null); setLivePreviewTarget(null); }}>
+              <Button size="small" variant="outlined" onClick={() => { setLivePreviewStage(null); setLivePreviewTarget(null); window.dispatchEvent(new CustomEvent('fossbot:buddy-live-preview-off')); }}>
                 {t('aiAssistant.stage.backToBuddy', 'Back to Buddy')}
               </Button>
             </Paper>

@@ -31,3 +31,12 @@ export const authoringSummarySx = {
   mt: 0.25,
   overflowWrap: 'anywhere',
 } as const;
+
+// A single quiet boundary marks the exact editor element Buddy may change. The 8px radius
+// matches the theme surface language so every target reads as the same highlight.
+export const authoringTargetOutlineSx = {
+  outline: '2px solid',
+  outlineColor: 'primary.main',
+  outlineOffset: 2,
+  borderRadius: 1,
+} as const;

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Accordion, AccordionDetails, AccordionSummary, Alert, Box, Button, Checkbox, Chip, FormControlLabel, FormGroup, IconButton, MenuItem, Radio, Stack, Switch, TextField, Typography,
 } from '@mui/material';
@@ -10,15 +10,26 @@ import { normalizeTiptapDocument } from 'src/courses/courseAuthoring';
 import { useConfirmDialog } from 'src/components/shared/ConfirmDialog';
 import RichTextEditor from '../RichTextEditor';
 import MissionActivityEditor from './MissionActivityEditor';
-import { authoringAccordionSx, authoringControlButtonSx, authoringControlFieldSx, authoringIconButtonSx, authoringSummarySx, authoringTitleSx } from './authoringStyles';
+import { authoringAccordionSx, authoringControlButtonSx, authoringControlFieldSx, authoringIconButtonSx, authoringSummarySx, authoringTargetOutlineSx, authoringTitleSx } from './authoringStyles';
 
-type Props = { activities: Activity[]; onChange: (activities: Activity[]) => void; stageReference?: StageReference | null; token?: string; t: any };
+type Props = { activities: Activity[]; onChange: (activities: Activity[]) => void; stageReference?: StageReference | null; token?: string; highlightActivityKey?: string | null; focusActivityKey?: string | null; t: any };
 
-export default function ActivityComposer({ activities, onChange, stageReference, token, t }: Props) {
+export default function ActivityComposer({ activities, onChange, stageReference, token, highlightActivityKey, focusActivityKey, t }: Props) {
   const confirmDialog = useConfirmDialog();
   const [newType, setNewType] = useState<Activity['type']>('rich_text');
   const groups = activityGroups(activities);
   const [expandedKey, setExpandedKey] = useState<string | false>(groups[0]?.activity.key || false);
+
+  // The committed target is expanded and revealed; a hover preview only outlines the card.
+  useEffect(() => {
+    if (!focusActivityKey || !activities.some((activity) => activity.key === focusActivityKey)) return undefined;
+    setExpandedKey(focusActivityKey);
+    const frame = window.requestAnimationFrame(() => {
+      document.querySelector(`[data-activity-key="${focusActivityKey}"]`)?.scrollIntoView({ block: 'nearest' });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [activities, focusActivityKey]);
+
   const update = (key: string, activity: Activity) => onChange(activities.map((item) => item.key === key ? activity : item));
   const move = (index: number, direction: -1 | 1) => {
     const target = index + direction;
@@ -40,6 +51,7 @@ export default function ActivityComposer({ activities, onChange, stageReference,
       index={index}
       count={groups.length}
       expanded={expandedKey === activity.key}
+      highlighted={highlightActivityKey === activity.key}
       onExpandedChange={(expanded) => setExpandedKey(expanded ? activity.key : false)}
       onChange={(next) => update(activity.key, next)}
       onHintsChange={(hints) => updateHints(activity.key, hints)}
@@ -83,11 +95,11 @@ export default function ActivityComposer({ activities, onChange, stageReference,
   </Stack>;
 }
 
-function ActivityCard({ activity, linkedHints, index, count, expanded, onExpandedChange, onChange, onHintsChange, onMove, onDuplicate, onDelete, stageReference, token, t }: { activity: Activity; linkedHints: HintActivity[]; index: number; count: number; expanded: boolean; onExpandedChange: (expanded: boolean) => void; onChange: (activity: Activity) => void; onHintsChange: (hints: HintActivity[]) => void; onMove: (direction: -1 | 1) => void; onDuplicate: () => void; onDelete: () => void | Promise<void>; stageReference?: StageReference | null; token?: string; t: any }) {
+function ActivityCard({ activity, linkedHints, index, count, expanded, highlighted, onExpandedChange, onChange, onHintsChange, onMove, onDuplicate, onDelete, stageReference, token, t }: { activity: Activity; linkedHints: HintActivity[]; index: number; count: number; expanded: boolean; highlighted?: boolean; onExpandedChange: (expanded: boolean) => void; onChange: (activity: Activity) => void; onHintsChange: (hints: HintActivity[]) => void; onMove: (direction: -1 | 1) => void; onDuplicate: () => void; onDelete: () => void | Promise<void>; stageReference?: StageReference | null; token?: string; t: any }) {
   const errors = activityValidation(activity);
   const patch = (value: Partial<Activity>) => onChange({ ...activity, ...value } as Activity);
   const cannotRequire = activity.type === 'hint' || (activity.type === 'short_reflection' && !activity.collectResponse);
-  return <Box component="section" aria-labelledby={`activity-${activity.key}`}>
+  return <Box component="section" aria-labelledby={`activity-${activity.key}`} data-activity-key={activity.key} sx={highlighted ? authoringTargetOutlineSx : undefined}>
   <Accordion variant="outlined" disableGutters expanded={expanded} onChange={(_, nextExpanded) => onExpandedChange(nextExpanded)} sx={authoringAccordionSx}>
     <AccordionSummary expandIcon={<IconChevronDown size={18} />} aria-controls={`activity-${activity.key}-content`} id={`activity-${activity.key}`} sx={{ '& .MuiAccordionSummary-content': { minWidth: 0 } }}>
       <Box sx={{ flex: 1, minWidth: 0 }}>

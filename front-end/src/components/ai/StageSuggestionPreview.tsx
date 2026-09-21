@@ -25,6 +25,13 @@ export default function StageSuggestionPreview({
     onPreviewLiveToggleRef.current?.(null);
   }, []);
 
+  // Stage Builder can hide the live preview from its own overlay without discarding the proposal.
+  useEffect(() => {
+    const handlePreviewOff = () => setLive(false);
+    window.addEventListener('fossbot:buddy-live-preview-off', handlePreviewOff);
+    return () => window.removeEventListener('fossbot:buddy-live-preview-off', handlePreviewOff);
+  }, []);
+
   const handleToggle = (checked: boolean) => {
     setLive(checked);
     onPreviewLiveToggle?.(checked && stage?.editorStage ? stage.editorStage : null);

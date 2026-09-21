@@ -24,7 +24,8 @@ import StarterCodeWorkspace from 'src/components/courses/StarterCodeWorkspace';
 import ActivityComposer from 'src/components/courses/activities/ActivityComposer';
 import { useConfirmDialog } from 'src/components/shared/ConfirmDialog';
 import AuthoringAssistant from 'src/components/ai/AuthoringAssistant';
-import { authoringAccordionSx, authoringTitleSx } from 'src/components/courses/activities/authoringStyles';
+import type { AuthoringTarget } from 'src/ai/suggestions/lessonSuggestions';
+import { authoringAccordionSx, authoringTargetOutlineSx, authoringTitleSx } from 'src/components/courses/activities/authoringStyles';
 
 type SaveState = 'saved' | 'unsaved' | 'saving' | 'failed';
 type Panel = 'outline' | 'content' | 'settings';
@@ -136,6 +137,9 @@ export default function CourseEditorPage() {
   const historyGroupRef = useRef<{ scope: string; at: number } | null>(null);
   const historyPersistTimer = useRef<number | null>(null);
   const [historyRevision, setHistoryRevision] = useState(0);
+  const [authoringTarget, setAuthoringTarget] = useState<AuthoringTarget | null>(null);
+  const [authoringHoverTarget, setAuthoringHoverTarget] = useState<AuthoringTarget | null>(null);
+  const settingsTabBeforeValidationHover = useRef<SettingsTab | null>(null);
   const historyStorageKey = `fossbot.course-authoring-history.v1:${id}`;
 
   useEffect(() => { courseRef.current = course; }, [course]);
@@ -319,6 +323,52 @@ export default function CourseEditorPage() {
     });
     return () => window.cancelAnimationFrame(frame);
   }, [selectedId, course?.lessons.length]);
+
+  // Buddy's focus decides which editor panel is shown; the outline itself only follows hover.
+  const showAuthoringTarget = useCallback((target: AuthoringTarget | null) => {
+    if (!target) return;
+    if (target.type === 'course') setMobilePanel('outline');
+    else if (target.type === 'validation') { setSettingsTab('validation'); setMobilePanel('settings'); }
+    else { if (target.type === 'activity') setContentTab('instructions'); setMobilePanel('content'); }
+  }, []);
+
+  const handleAuthoringTarget = useCallback((target: AuthoringTarget) => {
+    setAuthoringTarget((current) => current && current.type === target.type && (current as { activityKey?: string }).activityKey === (target as { activityKey?: string }).activityKey ? current : target);
+    // A committed validation target owns the settings tab; only a hover preview restores it.
+    if (target.type === 'validation') settingsTabBeforeValidationHover.current = null;
+    showAuthoringTarget(target);
+  }, [showAuthoringTarget]);
+
+  // Selecting a list option commits the target; only hovering an option outlines it.
+  const handleAuthoringTargetHover = useCallback((target: AuthoringTarget | null) => {
+    setAuthoringHoverTarget(target);
+    if (target?.type === 'validation') {
+      if (settingsTabBeforeValidationHover.current === null) settingsTabBeforeValidationHover.current = settingsTab;
+      setSettingsTab('validation');
+      return;
+    }
+    if (!target) {
+      // Closing or leaving the list without choosing: put the settings tab back.
+      if (settingsTabBeforeValidationHover.current !== null) {
+        setSettingsTab(settingsTabBeforeValidationHover.current);
+        settingsTabBeforeValidationHover.current = null;
+      }
+      showAuthoringTarget(authoringTarget);
+    }
+  }, [authoringTarget, settingsTab, showAuthoringTarget]);
+
+  useEffect(() => {
+    if (!authoringTarget) return undefined;
+    const selector = authoringTarget.type === 'course'
+      ? '[data-authoring-target="course"]'
+      : authoringTarget.type === 'lesson'
+        ? '[data-authoring-target="lesson"]'
+        : authoringTarget.type === 'activity'
+          ? `[data-activity-key="${authoringTarget.activityKey}"]`
+          : '[data-authoring-target="validation"]';
+    const frame = window.requestAnimationFrame(() => document.querySelector(selector)?.scrollIntoView({ block: 'nearest' }));
+    return () => window.cancelAnimationFrame(frame);
+  }, [authoringTarget, compact, mobilePanel, selectedId]);
 
   useEffect(() => {
     const warn = (event: BeforeUnloadEvent) => {
@@ -565,7 +615,12 @@ export default function CourseEditorPage() {
   const releaseState = !course.latest_published_release_id ? 'draft' : course.has_unpublished_changes ? 'unpublished' : 'live';
   const changeSummary = course.unpublished_change_summary || { course: false, outline: false, lesson_keys: [] };
   const changedLessonKeys = new Set(changeSummary.lesson_keys);
-  const outline = <OutlinePanel lessons={course.lessons} selectedId={selectedId} changedLessonKeys={changedLessonKeys} outlineChanged={changeSummary.outline} publishedVersion={course.latest_published_release_version} draggingId={draggingId} dropTarget={dropTarget} onSelect={(lessonId: number) => { setSelectedId(lessonId); setMobilePanel('content'); }} onAdd={addNewLesson} onDuplicate={duplicateLesson} onDelete={removeLesson} onMove={(lessonId: number, direction: -1 | 1) => applyReorder(moveLesson(course.lessons, lessonId, direction))} onDrag={(lessonId: number | null) => { setDraggingId(lessonId); if (!lessonId) setDropTarget(null); }} onDragOver={setDropTarget} onDrop={(target: OutlineDropTarget) => {
+  const highlightOutline = authoringHoverTarget?.type === 'course';
+  const highlightLesson = authoringHoverTarget?.type === 'lesson';
+  const highlightActivityKey = authoringHoverTarget?.type === 'activity' ? authoringHoverTarget.activityKey : null;
+  const highlightValidation = authoringHoverTarget?.type === 'validation';
+  const focusActivityKey = authoringTarget?.type === 'activity' ? authoringTarget.activityKey : null;
+  const outline = <OutlinePanel lessons={course.lessons} selectedId={selectedId} changedLessonKeys={changedLessonKeys} outlineChanged={changeSummary.outline} publishedVersion={course.latest_published_release_version} draggingId={draggingId} dropTarget={dropTarget} highlighted={highlightOutline} onSelect={(lessonId: number) => { setSelectedId(lessonId); setMobilePanel('content'); }} onAdd={addNewLesson} onDuplicate={duplicateLesson} onDelete={removeLesson} onMove={(lessonId: number, direction: -1 | 1) => applyReorder(moveLesson(course.lessons, lessonId, direction))} onDrag={(lessonId: number | null) => { setDraggingId(lessonId); if (!lessonId) setDropTarget(null); }} onDragOver={setDropTarget} onDrop={(target: OutlineDropTarget) => {
     if (!draggingId || draggingId === target.lessonId) { setDraggingId(null); setDropTarget(null); return; }
     const from = course.lessons.findIndex((lesson) => lesson.id === draggingId);
     const targetIndex = course.lessons.findIndex((lesson) => lesson.id === target.lessonId);
@@ -580,8 +635,8 @@ export default function CourseEditorPage() {
     setDraggingId(null); setDropTarget(null); applyReorder(next.map((lesson, index) => ({ ...lesson, position: index + 1 })));
   }} t={t} />;
 
-  const content = selectedLesson ? <ContentPanel lesson={selectedLesson} changed={changedLessonKeys.has(selectedLesson.lesson_key)} publishedVersion={course.latest_published_release_version} token={token} tab={contentTab} onTab={setContentTab} onChange={(patch) => markLesson(selectedLesson.id, patch)} t={t} /> : <EmptyLesson onAdd={addNewLesson} t={t} />;
-  const settings = <SettingsPanel course={course} lesson={selectedLesson} courseChanged={changeSummary.course} publishedVersion={course.latest_published_release_version} userLabel={user ? `${user.firstname} ${user.lastname}`.trim() || user.username : ''} token={token} tab={settingsTab} issues={validationIssues} liveIssues={liveIssues} onTab={setSettingsTab} onCourse={markCourse} onLesson={(patch) => selectedLesson && markLesson(selectedLesson.id, patch)} onIssue={navigateIssue} t={t} />;
+  const content = selectedLesson ? <ContentPanel lesson={selectedLesson} changed={changedLessonKeys.has(selectedLesson.lesson_key)} publishedVersion={course.latest_published_release_version} token={token} tab={contentTab} onTab={setContentTab} onChange={(patch) => markLesson(selectedLesson.id, patch)} highlighted={highlightLesson} highlightActivityKey={highlightActivityKey} focusActivityKey={focusActivityKey} t={t} /> : <EmptyLesson onAdd={addNewLesson} t={t} />;
+  const settings = <SettingsPanel course={course} lesson={selectedLesson} courseChanged={changeSummary.course} publishedVersion={course.latest_published_release_version} userLabel={user ? `${user.firstname} ${user.lastname}`.trim() || user.username : ''} token={token} tab={settingsTab} issues={validationIssues} liveIssues={liveIssues} highlightedValidation={highlightValidation} onTab={setSettingsTab} onCourse={markCourse} onLesson={(patch) => selectedLesson && markLesson(selectedLesson.id, patch)} onIssue={navigateIssue} t={t} />;
 
   return (
     <Box sx={{ minHeight: 'calc(100vh - 70px)', display: 'flex', flexDirection: 'column', bgcolor: 'background.default', '& .MuiButton-containedPrimary': { color: theme.palette.getContrastText(theme.palette.primary.main) }, '& .MuiButtonBase-root': { minHeight: 44 }, '& .MuiSwitch-switchBase, & .MuiCheckbox-root, & .MuiRadio-root': { minHeight: 0 }, '& .MuiIconButton-root': { minWidth: 44 }, '& .MuiButtonBase-root:focus-visible': { outline: '2px solid', outlineColor: 'text.primary', outlineOffset: 2 } }}>
@@ -598,7 +653,7 @@ export default function CourseEditorPage() {
           <Tooltip title={course.latest_published_release_id && !course.has_unpublished_changes ? t('education.publish.noChanges') : ''}><span><Button variant="contained" disabled={validating || saveState === 'saving' || !!conflict || Boolean(course.latest_published_release_id && !course.has_unpublished_changes)} onClick={validateForPublish}>{course.latest_published_release_id ? t('education.publish.update') : t('education.publish.first')}</Button></span></Tooltip>
         </Stack>
       </Paper>
-      {(!selectedLesson || contentTab !== 'code' || selectedLesson.editor_type === 'none') && <AuthoringAssistant course={course} lesson={selectedLesson} validationIssues={validationIssues} onApply={applyAuthoringSuggestion} />}
+      {(!selectedLesson || contentTab !== 'code' || selectedLesson.editor_type === 'none') && <AuthoringAssistant course={course} lesson={selectedLesson} validationIssues={validationIssues.length ? validationIssues : liveIssues} onApply={applyAuthoringSuggestion} onTargetChange={handleAuthoringTarget} onTargetHover={handleAuthoringTargetHover} />}
       {error && <Alert severity="error" action={errorRecovery ? <Button color="inherit" size="small" disabled={validating || saveState === 'saving'} onClick={retryError}>{retryErrorLabel}</Button> : undefined} onClose={() => { setError(''); setErrorRecovery(null); }} sx={{ borderRadius: 0 }}>{error}</Alert>}
       {conflict && <Alert severity="warning" icon={<IconAlertTriangle size={20} />} action={<Stack direction="row"><Button color="inherit" size="small" onClick={load}>{t('education.conflict.reload')}</Button><Button color="inherit" size="small" onClick={overwriteConflict}>{t('education.conflict.overwrite')}</Button></Stack>} sx={{ borderRadius: 0 }}>{t('education.conflict.message')}</Alert>}
       {compact && <Tabs value={mobilePanel} onChange={(_, value) => setMobilePanel(value)} variant="fullWidth" sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: 'background.paper' }}><Tab value="outline" label={t('education.panels.outline')} /><Tab value="content" label={t('education.panels.content')} /><Tab value="settings" label={t('education.panels.settings')} /></Tabs>}
@@ -625,8 +680,8 @@ function PanelResizeHandle({ side, onPointerDown, onDoubleClick, t }: { side: Re
   return <Box role="separator" aria-orientation="vertical" aria-label={t('education.panels.resize', { panel: t(`education.panels.${side === 'left' ? 'outline' : 'settings'}`) })} title={t('education.panels.resizeHelp')} onPointerDown={onPointerDown} onDoubleClick={onDoubleClick} sx={{ width: panelSizing.handle, flex: `0 0 ${panelSizing.handle}px`, mx: `-${panelSizing.handle / 2}px`, cursor: 'col-resize', touchAction: 'none', position: 'relative', zIndex: 2, '&:before': { content: '""', position: 'absolute', top: 0, bottom: 0, left: '50%', width: 2, transform: 'translateX(-50%)', bgcolor: 'divider' }, '&:hover:before': { bgcolor: 'primary.main' } }} />;
 }
 
-function OutlinePanel({ lessons, selectedId, changedLessonKeys, outlineChanged, publishedVersion, draggingId, dropTarget, onSelect, onAdd, onDuplicate, onDelete, onMove, onDrag, onDragOver, onDrop, t }: any) {
-  return <Stack sx={{ height: '100%' }}><Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ p: 2, borderBottom: 1, borderColor: 'divider' }}><Box><Stack direction="row" alignItems="center" gap={0.5}><Typography sx={authoringTitleSx}>{t('education.panels.outline')}</Typography>{outlineChanged && <ChangeBadge publishedVersion={publishedVersion} t={t} />}</Stack><Typography variant="caption" color="text.secondary">{t('education.lesson.count', { count: lessons.length })}</Typography></Box><IconButton color="primary" onClick={onAdd} aria-label={t('education.lesson.add')}><IconPlus size={20} /></IconButton></Stack><Box component="ol" sx={{ p: 1, m: 0, listStyle: 'none', overflow: 'auto' }}>
+function OutlinePanel({ lessons, selectedId, changedLessonKeys, outlineChanged, publishedVersion, draggingId, dropTarget, highlighted, onSelect, onAdd, onDuplicate, onDelete, onMove, onDrag, onDragOver, onDrop, t }: any) {
+  return <Stack sx={{ height: '100%' }}><Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ p: 2, borderBottom: 1, borderColor: 'divider' }}><Box><Stack direction="row" alignItems="center" gap={0.5}><Typography sx={authoringTitleSx}>{t('education.panels.outline')}</Typography>{outlineChanged && <ChangeBadge publishedVersion={publishedVersion} t={t} />}</Stack><Typography variant="caption" color="text.secondary">{t('education.lesson.count', { count: lessons.length })}</Typography></Box><IconButton color="primary" onClick={onAdd} aria-label={t('education.lesson.add')}><IconPlus size={20} /></IconButton></Stack><Box component="ol" data-authoring-target="course" sx={{ p: 1, m: 0, listStyle: 'none', overflow: 'auto', borderRadius: 1, ...(highlighted ? authoringTargetOutlineSx : {}) }}>
     {lessons.map((lesson: Lesson, index: number) => { const placement = dropTarget?.lessonId === lesson.id ? dropTarget.placement : null; const placementFor = (event: React.DragEvent) => { const rect = event.currentTarget.getBoundingClientRect(); const ratio = (event.clientY - rect.top) / rect.height; return ratio < 0.28 ? 'before' : ratio > 0.72 ? 'after' : 'replace'; }; return <Box component="li" key={lesson.id} data-lesson-id={lesson.id} onDragOver={(event: React.DragEvent) => { event.preventDefault(); onDragOver({ lessonId: lesson.id, placement: placementFor(event) }); }} onDrop={(event: React.DragEvent) => { event.preventDefault(); onDrop({ lessonId: lesson.id, placement: placementFor(event) }); }} sx={{ mb: 0.5, opacity: draggingId === lesson.id ? 0.45 : 1, position: 'relative', '&:before': placement === 'before' || placement === 'after' ? { content: '""', position: 'absolute', zIndex: 3, left: 4, right: 4, height: 3, borderRadius: 2, bgcolor: 'primary.main', top: placement === 'before' ? -3 : 'auto', bottom: placement === 'after' ? -3 : 'auto' } : undefined }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, p: 1, borderRadius: 1.5, bgcolor: selectedId === lesson.id ? 'primary.light' : 'transparent', outline: placement === 'replace' ? '2px solid' : 'none', outlineColor: 'primary.main', outlineOffset: -2, '&:hover': { bgcolor: selectedId === lesson.id ? 'primary.light' : 'action.hover' } }}>
         <Box draggable onDragStart={(event) => { event.dataTransfer.effectAllowed = 'move'; onDrag(lesson.id); }} onDragEnd={() => onDrag(null)} aria-label={t('education.lesson.drag', { title: lesson.title })} title={t('education.lesson.dragHelp')} sx={{ display: 'flex', cursor: 'grab', '&:active': { cursor: 'grabbing' } }}><IconGripVertical size={16} aria-hidden /></Box><Box role="button" tabIndex={0} aria-current={selectedId === lesson.id ? 'true' : undefined} onClick={() => onSelect(lesson.id)} onKeyDown={(event) => { if (!['Enter', ' '].includes(event.key)) return; event.preventDefault(); onSelect(lesson.id); }} sx={{ minWidth: 0, flex: 1, cursor: 'pointer', borderRadius: 1, '&:focus-visible': { outline: '2px solid', outlineColor: 'text.primary', outlineOffset: 2 } }}><Tooltip title={lesson.title} placement="top-start"><Typography variant="body2" sx={authoringTitleSx} noWrap>{index + 1}. {lesson.title}</Typography></Tooltip><Stack direction="row" gap={0.5} alignItems="center" flexWrap="wrap">{changedLessonKeys.has(lesson.lesson_key) && <ChangeBadge publishedVersion={publishedVersion} t={t} />}</Stack></Box>
@@ -636,15 +691,15 @@ function OutlinePanel({ lessons, selectedId, changedLessonKeys, outlineChanged, 
   </Box><Button startIcon={<IconPlus size={18} />} onClick={onAdd} sx={{ m: 1, mt: 'auto' }}>{t('education.lesson.add')}</Button></Stack>;
 }
 
-function ContentPanel({ lesson, changed, publishedVersion, token, tab, onTab, onChange, t }: { lesson: Lesson; changed: boolean; publishedVersion?: number | null; token?: string; tab: ContentTab; onTab: (tab: ContentTab) => void; onChange: (patch: Partial<Lesson>) => void; t: any }) {
-  return <Stack spacing={2.5} sx={{ maxWidth: 1100, mx: 'auto' }}><Box><Stack direction="row" alignItems="center" gap={0.5}><Typography variant="caption" color="text.secondary">{t('education.lesson.number', { position: lesson.position })}</Typography>{changed && <ChangeBadge publishedVersion={publishedVersion} t={t} />}</Stack><TextField fullWidth required value={lesson.title} onChange={(event) => onChange({ title: event.target.value })} variant="standard" inputProps={{ 'aria-label': t('education.lesson.title') }} sx={{ '& input': { fontSize: { xs: '1.5rem', sm: '1.875rem' }, lineHeight: 1.25, fontWeight: 600, py: 1 } }} /></Box><Tabs value={tab} onChange={(_, value) => onTab(value)} sx={{ borderBottom: 1, borderColor: 'divider' }}><Tab value="instructions" label={t('education.activities.title')} /><Tab value="code" label={t('education.code.title')} /></Tabs>{tab === 'instructions' ? <ActivityComposer activities={lesson.activities} stageReference={lesson.stageReference} token={token} onChange={(activities) => onChange({ activities })} t={t} /> : lesson.editor_type === 'none' ? <Alert severity="info">{t('education.code.chooseEditor')}</Alert> : <StarterCodeWorkspace key={lesson.id} lesson={lesson} onChange={onChange} t={t} />}</Stack>;
+function ContentPanel({ lesson, changed, publishedVersion, token, tab, onTab, onChange, highlighted, highlightActivityKey, focusActivityKey, t }: { lesson: Lesson; changed: boolean; publishedVersion?: number | null; token?: string; tab: ContentTab; onTab: (tab: ContentTab) => void; onChange: (patch: Partial<Lesson>) => void; highlighted?: boolean; highlightActivityKey?: string | null; focusActivityKey?: string | null; t: any }) {
+  return <Stack spacing={2.5} data-authoring-target="lesson" sx={{ maxWidth: 1100, mx: 'auto', ...(highlighted ? authoringTargetOutlineSx : {}) }}><Box><Stack direction="row" alignItems="center" gap={0.5}><Typography variant="caption" color="text.secondary">{t('education.lesson.number', { position: lesson.position })}</Typography>{changed && <ChangeBadge publishedVersion={publishedVersion} t={t} />}</Stack><TextField fullWidth required value={lesson.title} onChange={(event) => onChange({ title: event.target.value })} variant="standard" inputProps={{ 'aria-label': t('education.lesson.title') }} sx={{ '& input': { fontSize: { xs: '1.5rem', sm: '1.875rem' }, lineHeight: 1.25, fontWeight: 600, py: 1 } }} /></Box><Tabs value={tab} onChange={(_, value) => onTab(value)} sx={{ borderBottom: 1, borderColor: 'divider' }}><Tab value="instructions" label={t('education.activities.title')} /><Tab value="code" label={t('education.code.title')} /></Tabs>{tab === 'instructions' ? <ActivityComposer activities={lesson.activities} stageReference={lesson.stageReference} token={token} highlightActivityKey={highlightActivityKey} focusActivityKey={focusActivityKey} onChange={(activities) => onChange({ activities })} t={t} /> : lesson.editor_type === 'none' ? <Alert severity="info">{t('education.code.chooseEditor')}</Alert> : <StarterCodeWorkspace key={lesson.id} lesson={lesson} onChange={onChange} t={t} />}</Stack>;
 }
 
 function EmptyLesson({ onAdd, t }: any) { return <Paper variant="outlined" sx={{ py: 8, textAlign: 'center' }}><Typography variant="h5">{t('education.lesson.empty')}</Typography><Typography color="text.secondary" sx={{ my: 1 }}>{t('education.lesson.emptyHelp')}</Typography><Button variant="contained" startIcon={<IconPlus size={18} />} onClick={onAdd}>{t('education.lesson.add')}</Button></Paper>; }
 
-function SettingsPanel({ course, lesson, courseChanged, publishedVersion, userLabel, token, tab, issues, liveIssues, onTab, onCourse, onLesson, onIssue, t }: any) {
+function SettingsPanel({ course, lesson, courseChanged, publishedVersion, userLabel, token, tab, issues, liveIssues, highlightedValidation, onTab, onCourse, onLesson, onIssue, t }: any) {
   const shownIssues = issues.length ? issues : liveIssues;
-  return <Stack sx={{ height: '100%' }}><Tabs value={tab} onChange={(_, value) => onTab(value)} variant="scrollable" scrollButtons="auto" allowScrollButtonsMobile sx={{ borderBottom: 1, borderColor: 'divider', minHeight: 44 }}><Tab value="course" aria-label={courseChanged ? t('education.publish.changedSection', { section: t('education.settings.course'), version: publishedVersion }) : undefined} label={<Stack component="span" direction="row" alignItems="center" gap={0.5} sx={{ whiteSpace: 'nowrap' }}><span>{t('education.settings.course')}</span>{courseChanged && <ChangeBadge publishedVersion={publishedVersion} t={t} />}</Stack>} /><Tab value="lesson" label={t('education.settings.lesson')} /><Tab value="validation" label={<Stack component="span" direction="row" alignItems="center" gap={0.5} sx={{ whiteSpace: 'nowrap' }}><span>{t('education.settings.validation')}</span>{shownIssues.length > 0 && <Chip size="small" color="warning" label={shownIssues.length} sx={{ height: 18, '& .MuiChip-label': { px: 0.75, fontSize: '0.6875rem', fontWeight: 600 } }} />}</Stack>} /></Tabs><Box sx={{ p: 2, overflow: 'auto', '& .MuiInputBase-input': { fontSize: '0.875rem', lineHeight: 1.5 } }}>
+  return <Stack sx={{ height: '100%' }}><Tabs value={tab} onChange={(_, value) => onTab(value)} variant="scrollable" scrollButtons="auto" allowScrollButtonsMobile sx={{ borderBottom: 1, borderColor: 'divider', minHeight: 44 }}><Tab value="course" aria-label={courseChanged ? t('education.publish.changedSection', { section: t('education.settings.course'), version: publishedVersion }) : undefined} label={<Stack component="span" direction="row" alignItems="center" gap={0.5} sx={{ whiteSpace: 'nowrap' }}><span>{t('education.settings.course')}</span>{courseChanged && <ChangeBadge publishedVersion={publishedVersion} t={t} />}</Stack>} /><Tab value="lesson" label={t('education.settings.lesson')} /><Tab value="validation" label={<Stack component="span" direction="row" alignItems="center" gap={0.5} sx={{ whiteSpace: 'nowrap' }}><span>{t('education.settings.validation')}</span>{shownIssues.length > 0 && <Chip size="small" color="warning" label={shownIssues.length} sx={{ height: 18, '& .MuiChip-label': { px: 0.75, fontSize: '0.6875rem', fontWeight: 600 } }} />}</Stack>} /></Tabs><Box {...(tab === 'validation' ? { 'data-authoring-target': 'validation' } : {})} sx={{ p: 2, overflow: 'auto', '& .MuiInputBase-input': { fontSize: '0.875rem', lineHeight: 1.5 }, ...(tab === 'validation' && highlightedValidation ? authoringTargetOutlineSx : {}) }}>
     {tab === 'course' && <Stack spacing={2.5}>
       <Stack spacing={2}>
         <TextField required size="small" label={t('education.fields.title')} value={course.title} error={!course.title.trim()} helperText={!course.title.trim() ? t('education.validation.titleRequired') : undefined} onChange={(event) => onCourse({ title: event.target.value })} />

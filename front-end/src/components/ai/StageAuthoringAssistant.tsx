@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Box, MenuItem, Stack, TextField, Typography } from '@mui/material';
+import { Alert, MenuItem, Stack, TextField, Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { fingerprintValue } from 'src/ai/fingerprint';
 import { buildStageAssistantContext } from 'src/ai/stageContext';
@@ -68,14 +68,14 @@ export default function StageAuthoringAssistant({ stage, selectedIds, validation
       prompt: t('aiAssistant.debug.benchmarks.stageBuildingPrompt'),
       mode: 'suggest',
     }] : []}
-    contextControls={<Stack spacing={1.25} sx={{ p: 1.5, border: 1, borderColor: 'divider', borderRadius: 1.5, bgcolor: 'action.hover' }}>
-      <Box><Typography variant="subtitle2" fontWeight={700}>{t('aiAssistant.stage.targetTitle')}</Typography><Typography variant="caption" color="text.secondary">{t('aiAssistant.stage.targetHelp')}</Typography></Box>
-      <TextField select fullWidth size="small" label={t('aiAssistant.stage.target')} value={target} onChange={(event) => setTarget(event.target.value as StageAuthoringTarget)}>
+    contextControls={<Stack spacing={0.5}>
+      <TextField select fullWidth size="small" label={t('aiAssistant.stage.target')} inputProps={{ 'aria-label': t('aiAssistant.stage.targetTitle') }} value={target} onChange={(event) => setTarget(event.target.value as StageAuthoringTarget)}>
         <MenuItem value="create">{t('aiAssistant.stage.targets.create')}</MenuItem>
         <MenuItem value="stage">{t('aiAssistant.stage.targets.stage')}</MenuItem>
         {selectedIds.length > 0 && <MenuItem value="selection">{t('aiAssistant.stage.targets.selection', { count: selectedIds.length })}</MenuItem>}
         {validation.length > 0 && <MenuItem value="validation">{t('aiAssistant.stage.targets.validation', { count: validation.length })}</MenuItem>}
       </TextField>
+      <Typography variant="caption" color="text.secondary" noWrap title={t('aiAssistant.stage.targetHelp')}>{t('aiAssistant.stage.targetHelp')}</Typography>
       {bounded.contextTruncated && <Alert severity="info">{t('aiAssistant.stage.truncated')}</Alert>}
     </Stack>}
   />;

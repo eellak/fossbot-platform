@@ -482,6 +482,8 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
       await adapter.applySuggestion(preview.suggestion);
       appendDebug('client', 'apply.completed', { capability, suggestion: preview.suggestion });
       setConfirmOpen(false); setPreview(null); setPreviewCapability(null); setOutput(appliedMessage || t('aiAssistant.applied')); setStatus('done'); setApplied(true);
+      // Dismiss any live stage preview once the change is real, so the overlay cannot apply it twice.
+      onPreviewStageChange?.(null);
     } catch (reason) {
       appendDebug('client', 'apply.failed', debugErrorData(reason));
       const code = reason instanceof Error ? reason.message.split(':')[0] : 'invalid_suggestion';
@@ -489,6 +491,18 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
       setConfirmOpen(false); setStatus('error');
     }
   };
+
+  // The stage live-preview overlay asks this panel to run the one true apply path.
+  const previewRef = useRef(preview);
+  previewRef.current = preview;
+  const applyRef = useRef(apply);
+  applyRef.current = apply;
+  useEffect(() => {
+    if (adapter.surface !== 'stage') return undefined;
+    const handleApplyRequest = () => { if (previewRef.current) void applyRef.current(); };
+    window.addEventListener('fossbot:buddy-apply', handleApplyRequest);
+    return () => window.removeEventListener('fossbot:buddy-apply', handleApplyRequest);
+  }, [adapter.surface]);
 
   const codeSurface = adapter.surface === 'python' || adapter.surface === 'blockly' ? adapter.surface : null;
 
@@ -578,7 +592,10 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
   const noCapability = !loading && !accessError && !explain?.allowed && !suggest?.allowed;
   const canAsk = Boolean(explain?.allowed || suggest?.allowed);
   const primaryMode: RequestMode = explain?.allowed ? 'explain' : 'suggest';
-  const primaryLabel = primaryMode === 'explain' ? t('aiAssistant.ask') : t('aiAssistant.actions.change');
+  // Lesson and stage have no explanation-only capability: their request always produces a
+  // reviewable proposal, so the primary action names that instead of implying free-form chat.
+  const proposalSurface = adapter.surface === 'lesson' || adapter.surface === 'stage';
+  const primaryLabel = proposalSurface ? t('aiAssistant.actions.change') : primaryMode === 'explain' ? t('aiAssistant.ask') : t('aiAssistant.actions.change');
   const busy = status === 'streaming';
   const view: BuddyView = busy
     ? 'working'
@@ -602,7 +619,19 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
         ? ['outline', 'simplify', 'activity']
         : ['line', 'obstacle', 'fixValidation'];
   const promptNamespace = adapter.surface === 'lesson' ? 'aiAssistant.authoring.prompts' : adapter.surface === 'stage' ? 'aiAssistant.stage.prompts' : 'aiAssistant.prompts';
-  const surfacePrompts = promptKeys.map((key) => t(`${promptNamespace}.${key}`));
+  // Authoring prompt chips read as change requests, so they run as proposals instead of prose.
+  const promptMode: RequestMode = adapter.surface === 'lesson' || adapter.surface === 'stage' ? 'suggest' : 'explain';
+  const promptsRunDirectly = adapter.surface === 'lesson'
+    ? canSuggest
+    : adapter.surface === 'stage'
+      ? Boolean(explain?.allowed || suggest?.allowed)
+      : false;
+  const surfacePrompts = promptKeys.map((key) => ({ key, label: t(`${promptNamespace}.${key}`), mode: promptMode }));
+  const usePrompt = (prompt: { label: string; mode: RequestMode }) => {
+    if (promptsRunDirectly) { void run(prompt.label, prompt.mode); return; }
+    setQuestion(prompt.label);
+    questionRef.current?.focus();
+  };
   const workingIndex = Math.max(0, workingSteps.indexOf(requestStage));
   const previewLabel = preview?.kind === 'python'
     ? t('aiAssistant.pythonDiff')
@@ -637,7 +666,7 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
     });
     return () => { cancelled = true; };
   }, [answerCodeBlocks, codeSurface, token, view]);
-  const restartFromApplied = () => { setApplied(false); setOutput(''); setPreview(null); setPreviewCapability(null); setStatus('idle'); };
+  const restartFromApplied = () => { setApplied(false); setOutput(''); setPreview(null); setPreviewCapability(null); setStatus('idle'); setQuestion(''); window.requestAnimationFrame(() => questionRef.current?.focus()); };
 
   const panel = <Paper id="fossbot-buddy-panel" role="dialog" aria-label={t('aiAssistant.title')} elevation={8} sx={{ width: '100%', boxSizing: 'border-box', maxHeight: 'calc(100vh - 104px)', overflowY: 'auto', overflowX: 'hidden', borderRadius: 2, '& .MuiButton-root': { minHeight: 44 }, '& .MuiChip-clickable': { minHeight: 40 } }}>
     <Stack direction="row" alignItems="center" spacing={1.25} sx={{ minHeight: 64, px: 2, py: 1, borderBottom: 1, borderColor: 'divider' }}>
@@ -707,7 +736,7 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
         {view === 'ask' && <Stack spacing={rhythm.blockGap}>
           {contextControls}
           <Typography component="h3" variant="h5">{t('aiAssistant.question')}</Typography>
-          <Stack direction="row" gap={1} flexWrap="wrap">{surfacePrompts.map((prompt) => <PromptChip key={prompt} label={prompt} onClick={() => { setQuestion(prompt); questionRef.current?.focus(); }} />)}</Stack>
+          <Stack direction="row" gap={1} flexWrap="wrap">{surfacePrompts.map((prompt) => <PromptChip key={prompt.key} label={prompt.label} onClick={() => usePrompt(prompt)} />)}</Stack>
           <TextField
             inputRef={questionRef}
             label={t('aiAssistant.message')}
@@ -764,7 +793,7 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
           })}
           <Stack spacing={rhythm.actionGap}>
             <Stack direction="row" gap={1} flexWrap="wrap">
-              {surfacePrompts.map((prompt) => <PromptChip key={prompt} label={prompt} onClick={() => askAgain(prompt)} />)}
+              {surfacePrompts.map((prompt) => <PromptChip key={prompt.key} label={prompt.label} onClick={() => usePrompt(prompt)} />)}
               {canSuggest && <PromptChip label={t('aiAssistant.actions.change')} onClick={() => void run(lastRequest?.question || question, 'suggest')} />}
             </Stack>
             <Button fullWidth variant="contained" endIcon={<IconArrowRight size={18} />} onClick={() => askAgain()} sx={{ minHeight: 48 }}>{t('aiAssistant.followUp')}</Button>
