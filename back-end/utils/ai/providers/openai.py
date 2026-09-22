@@ -73,18 +73,27 @@ class OpenAIProvider(HostedProvider):
         return {"Authorization": f"Bearer {self.secret}", "Content-Type": "application/json", "Accept": "text/event-stream"}
 
     async def stream(self, request: ProviderStreamRequest) -> AsyncIterator[ProviderEvent]:
+        input_messages = [turn.model_dump() for turn in request.messages]
         payload = {
             "model": request.model,
             "instructions": request.system,
-            "input": [turn.model_dump() for turn in request.messages],
+            "input": input_messages,
             "stream": True,
             "store": False,
             "max_output_tokens": request.max_output_tokens,
         }
         if request.response_schema:
+            output_format = _openai_text_format(request.response_schema)
             payload["text"] = {
-                "format": _openai_text_format(request.response_schema),
+                "format": output_format,
             }
+            # Responses validates JSON mode against input messages, not the
+            # separate instructions field that contains our full contract.
+            if output_format.get("type") == "json_object":
+                payload["input"] = [
+                    {"role": "developer", "content": "Return exactly one JSON object."},
+                    *input_messages,
+                ]
         try:
             async with self.client() as client:
                 async with client.stream("POST", f"{OPENAI_API}/responses", headers=self.headers(), json=payload) as response:

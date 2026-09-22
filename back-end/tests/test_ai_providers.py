@@ -5,12 +5,13 @@ import socket
 import httpx
 import pytest
 
-from utils.ai.providers.base import MAX_PROVIDER_RESPONSE_BYTES, ProviderError, validate_endpoint
+from utils.ai.providers.base import MAX_PROVIDER_RESPONSE_BYTES, HostedProvider, ProviderError, validate_endpoint
 from utils.ai.providers.google import GoogleProvider
 from utils.ai.providers.openai import OpenAIProvider, _openai_text_format
 from utils.ai.providers.openai_compatible import OpenAICompatibleProvider
 from utils.ai.providers.compatibility_profiles import PROFILES, resolve_compatibility_profile
 from utils.ai.schemas import ConversationTurn, ProviderStreamRequest
+from utils.ai.suggestion_contracts import suggestion_json_schema
 
 
 def provider_request():
@@ -98,6 +99,46 @@ def test_openai_provider_uses_responses_structured_output_without_storage(monkey
     assert output_format["name"] == "fossbot_assistant_suggestion"
     assert output_format["strict"] is True
     assert output_format["schema"]["required"] == ["version"]
+
+
+def test_openai_json_mode_marks_input_as_json_for_responses_validation(monkeypatch):
+    monkeypatch.setattr(socket, "getaddrinfo", lambda *args, **kwargs: [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 443))])
+    requests = []
+    body = f"data: {json.dumps({'type': 'response.completed', 'response': {'usage': {'input_tokens': 3, 'output_tokens': 1}}})}\n\n"
+
+    def transport(request):
+        requests.append(json.loads(request.content))
+        return httpx.Response(200, headers={"content-type": "text/event-stream"}, text=body)
+
+    provider = OpenAIProvider(secret="secret", base_url=None, settings={}, transport=httpx.MockTransport(transport))
+    request = provider_request().model_copy(update={"response_schema": suggestion_json_schema("stage.create")})
+    asyncio.run(collect_request(provider, request))
+
+    assert requests[0]["text"]["format"] == {"type": "json_object"}
+    assert requests[0]["input"][0] == {"role": "developer", "content": "Return exactly one JSON object."}
+    assert requests[0]["input"][1] == {"role": "user", "content": "Hello"}
+
+
+def test_provider_rejection_keeps_bounded_structured_details_for_admin_debug():
+    response = httpx.Response(400, json={
+        "error": {
+            "message": "Unsupported parameter for this model." + ("x" * 600),
+            "type": "invalid_request_error",
+            "param": "text.format",
+            "code": "unsupported_parameter",
+        },
+    })
+
+    with pytest.raises(ProviderError) as error:
+        asyncio.run(HostedProvider.checked(response))
+
+    assert error.value.code == "provider_rejected"
+    assert error.value.details == {
+        "upstreamCode": "unsupported_parameter",
+        "upstreamType": "invalid_request_error",
+        "upstreamParam": "text.format",
+        "upstreamMessage": ("Unsupported parameter for this model." + ("x" * 600))[:500],
+    }
 
 
 def test_openai_structured_output_wraps_root_unions_and_falls_back_for_free_form_objects():
