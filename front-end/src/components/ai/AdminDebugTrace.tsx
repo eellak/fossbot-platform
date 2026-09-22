@@ -15,7 +15,7 @@ const compactSteps = new Set([
   'request.started', 'provider.selected', 'context.assembled', 'prompt.built',
   'event.metadata', 'event.finish',
   'suggestion.raw', 'suggestion.json_repaired', 'suggestion.normalized', 'suggestion.rejected', 'suggestion.repair_requested',
-  'suggestion.validated', 'suggestion.parse_failed', 'preview.rejected', 'preview.validated',
+  'response.validated', 'suggestion.validated', 'suggestion.parse_failed', 'preview.rejected', 'preview.validated',
   'request.completed', 'request.failed', 'request.cancelled', 'stream.error',
 ]);
 
@@ -83,12 +83,26 @@ function compactSummary(entry: AIDebugTraceEntry): CompactTraceEntry {
       break;
     case 'suggestion.validated': {
       const suggestion = record(data.suggestion);
-      summary = `Attempt ${data.attempt || '?'} passed backend validation · ${Array.isArray(suggestion.operations) ? suggestion.operations.length : 0} operations`;
+      const detail = Array.isArray(suggestion.edits)
+        ? `${suggestion.edits.length} line edits`
+        : Array.isArray(suggestion.operations)
+          ? `${suggestion.operations.length} operations`
+          : suggestion.type === 'python_replace'
+            ? 'whole-file replacement'
+            : 'validated';
+      const checkLabel = suggestion.type === 'python_replace' || suggestion.type === 'python_edits'
+        ? 'passed backend schema and syntax checks'
+        : 'passed backend schema and domain checks';
+      summary = `Attempt ${data.attempt || '?'} ${checkLabel} · ${detail}`;
       severity = 'success';
       break;
     }
+    case 'response.validated':
+      summary = `Attempt ${data.attempt || '?'} selected a conversational answer`;
+      severity = 'success';
+      break;
     case 'preview.validated':
-      summary = 'Proposal passed client preview validation';
+      summary = 'Proposal rendered and passed client structural checks';
       severity = 'success';
       break;
     case 'request.completed':

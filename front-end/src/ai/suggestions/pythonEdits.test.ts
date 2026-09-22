@@ -1,4 +1,4 @@
-import { applyPythonEdits } from './pythonEdits';
+import { applyPythonEdits, previewPythonEdits } from './pythonEdits';
 
 declare const describe: any;
 declare const expect: any;
@@ -27,5 +27,25 @@ describe('applyPythonEdits', () => {
     expect(() => applyPythonEdits(source, [{ startLine: 3, endLine: 4, replacement: 'x' }, { startLine: 4, endLine: 4, replacement: 'y' }])).toThrow('invalid_suggestion');
     expect(() => applyPythonEdits(source, [{ startLine: 3, endLine: 2, replacement: 'x' }])).toThrow('invalid_suggestion');
     expect(() => applyPythonEdits(source, [{ startLine: 5, endLine: 5, replacement: 'x' }])).toThrow('invalid_suggestion');
+  });
+});
+
+describe('previewPythonEdits', () => {
+  const source = 'alpha\nbeta\ngamma\ndelta';
+
+  it('keeps each edit range separate with its own before/after lines', () => {
+    expect(previewPythonEdits(source, [
+      { startLine: 1, endLine: 1, replacement: 'ALPHA' },
+      { startLine: 3, endLine: 4, replacement: 'one\ntwo' },
+    ])).toEqual([
+      { startLine: 1, endLine: 1, before: ['alpha'], after: ['ALPHA'] },
+      { startLine: 3, endLine: 4, before: ['gamma', 'delta'], after: ['one', 'two'] },
+    ]);
+  });
+
+  it('marks a deletion with an empty after list', () => {
+    expect(previewPythonEdits(source, [{ startLine: 2, endLine: 3, replacement: '' }])).toEqual([
+      { startLine: 2, endLine: 3, before: ['beta', 'gamma'], after: [] },
+    ]);
   });
 });

@@ -1,9 +1,27 @@
 import type { PythonEdit } from '../types';
 
-const pythonEditLines = (replacement: string): string[] => {
+export const pythonEditLines = (replacement: string): string[] => {
   if (replacement === '') return [];
   return (replacement.endsWith('\n') ? replacement.slice(0, -1) : replacement).split('\n');
 };
+
+export type PythonEditPreview = {
+  startLine: number;
+  endLine: number;
+  before: string[];
+  after: string[];
+};
+
+/** Per-edit before/after lines for a review view, so each change stays independent. */
+export function previewPythonEdits(source: string, edits: PythonEdit[]): PythonEditPreview[] {
+  const lines = source.split('\n');
+  return edits.map((edit) => ({
+    startLine: edit.startLine,
+    endLine: edit.endLine,
+    before: lines.slice(edit.startLine - 1, edit.endLine),
+    after: pythonEditLines(edit.replacement),
+  }));
+}
 
 /**
  * Merge 1-based inclusive line-range edits into the current source.

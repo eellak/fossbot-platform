@@ -106,6 +106,9 @@ const MonacoPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppearan
   const stopScriptRef = useRef<() => void>();
   const editorRef = useRef<MonacoEditorHandle | null>(null);
   const [runtimeContext, setRuntimeContext] = useState({ output: [] as string[], error: '' });
+  // The source that produced the current terminal output; used to drop stale runtime context.
+  const runSourceRef = useRef('');
+  const runTargetRef = useRef<'simulation' | 'robot'>('simulation');
   const auth = useAuth();
   const { token } = auth;
   const authRef = useRef(auth);
@@ -233,14 +236,14 @@ const MonacoPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppearan
   }, []);
 
   const handleExecutionEvent = useCallback((event: { type: 'start' | 'stdout' | 'stderr' | 'complete' | 'stopped'; text?: string }) => {
-    if (event.type === 'start') { setRuntimeContext({ output: [], error: '' }); return; }
+    if (event.type === 'start') { runSourceRef.current = editorRef.current?.getSource() ?? ''; runTargetRef.current = target; setRuntimeContext({ output: [], error: '' }); return; }
     if (event.type === 'stdout') setRuntimeContext((current) => ({ ...current, output: [...current.output, event.text || ''].slice(-24) }));
     if (event.type === 'stderr') setRuntimeContext((current) => ({ output: [...current.output, event.text || ''].slice(-24), error: event.text || 'Runtime error' }));
     if (event.type === 'complete' || event.type === 'stopped') {
       setIsRunning(false);
       notify(t(event.type === 'complete' ? 'alertMessages.runCompleted' : 'alertMessages.codeStopped'), { severity: 'info' });
     }
-  }, [notify, t]);
+  }, [notify, t, target]);
 
   useEffect(() => {
     const newSessionId = uuidv4();
@@ -397,12 +400,18 @@ const MonacoPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppearan
     getContext: async () => {
       const source = editorRef.current?.getSource() ?? editorValue;
       const selection = editorRef.current?.getSelection();
+      const sourceFingerprint = await fingerprintText(source);
+      const diagnosticsAreCurrent = runSourceRef.current !== '' && runSourceRef.current === source && runTargetRef.current === target;
       return {
         source,
-        sourceFingerprint: await fingerprintText(source),
+        sourceFingerprint,
         selection: selection?.text || '',
-        runtimeOutput: runtimeContext.output.join('\n').slice(-2000),
-        runtimeError: runtimeContext.error.slice(-2000),
+        runtimeOutput: diagnosticsAreCurrent ? runtimeContext.output.join('\n').slice(-2000) : '',
+        runtimeError: diagnosticsAreCurrent ? runtimeContext.error.slice(-2000) : '',
+        ...(diagnosticsAreCurrent && (runtimeContext.output.length || runtimeContext.error)
+          ? { runtimeSourceFingerprint: sourceFingerprint }
+          : {}),
+        executionTarget: target,
         editorType: 'python',
         ...(projectId ? { projectId: Number(projectId) } : {}),
         stageSummary: selectedStage ? { title: selectedStageLabel, sourceType: selectedStage.sourceType } : {},
@@ -451,6 +460,9 @@ const MonacoPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppearan
     <PhysicalRobotTerminal />
   );
 
+  const terminalSource = editorRef.current?.getSource() ?? editorValue;
+  const runtimeStale = runSourceRef.current !== '' && (runSourceRef.current !== terminalSource || runTargetRef.current !== target);
+
   const terminalPanel = (
     <Box
       height="35vh"
@@ -465,6 +477,7 @@ const MonacoPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppearan
       }}
     >
       <p>{t('monaco-page.fossbot-terminal')} 🐍</p>
+      {runtimeStale && <p style={{ color: '#FA896B' }}>{t('monaco-page.terminalStale')}</p>}
       {executorContent}
     </Box>
   );
@@ -491,6 +504,7 @@ const MonacoPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppearan
         <Box sx={{ mx: -1.5, mt: -1.5, mb: 1.25, px: 1.5, py: 1, bgcolor: 'grey.800' }}>
           <Typography component="p" sx={{ color: '#7C8FAC', fontStyle: 'italic' }}>{t('education.workspace.terminalReady')}</Typography>
         </Box>
+        {runtimeStale && <Typography component="p" sx={{ color: '#FA896B', mb: 1 }}>{t('monaco-page.terminalStale')}</Typography>}
         {executorContent}
       </Box>
     </Box>

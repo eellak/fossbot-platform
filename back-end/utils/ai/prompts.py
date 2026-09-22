@@ -12,7 +12,7 @@ from utils.ai.stage_geometry import STAGE_CATALOG_GEOMETRY_PROMPT
 from utils.ai.suggestion_contracts import is_suggestion_capability, suggestion_contract_prompt
 
 
-PROMPT_VERSION = "fossbot-assistant-v1"
+PROMPT_VERSION = "fossbot-assistant-v2"
 
 
 def build_prompt(user_role: UserRole, request: AssistantRequest, context: AssembledContext) -> PromptBundle:
@@ -26,19 +26,26 @@ def build_prompt(user_role: UserRole, request: AssistantRequest, context: Assemb
     if request.capability == "code.suggest_changes":
         fingerprint = context.payload["supplied"]["source_fingerprint"]
         mutation_policy = (
-            "Return only one JSON object that is one of two shapes, both with version '1' and "
+            "Choose the response type from the user's intent. Use type 'answer' for explanations, diagnosis, guidance, or questions that do not require editing the workspace. "
+            "Use a Python change only when the user asks to fix, change, edit, implement, or otherwise modify the code. Do not propose a change merely because one is possible. "
+            "Return only one JSON object using one allowed shape, always with version '1' and "
             f"baseFingerprint '{fingerprint}'. "
+            "For an answer use type 'answer' with content containing the complete user-facing response. "
             "For a whole-file rewrite use type 'python_replace' with replacement containing the complete Python source. "
             "For a small, localized change prefer type 'python_edits' with edits: a list of {startLine, endLine, replacement} objects, "
             "where startLine and endLine are 1-based inclusive lines of the supplied source, the replacement is the text for that range, "
             "an empty replacement deletes the range, edits must not overlap, and line numbers must stay within the supplied source. "
+            "When several separate regions change, emit one python_edits entry per region instead of a whole-file replacement. "
+            "Preserve working code and imports unless they directly cause the reported problem. Make the smallest complete change that fixes the root cause. "
             "Include a short summary. Do not wrap the JSON in Markdown."
         )
     elif request.capability == "blockly.suggest_changes":
         fingerprint = context.payload["supplied"]["workspace_fingerprint"]
         mutation_policy = (
-            "Return only one JSON object with exactly: version '1', type 'blockly_replace', "
-            f"baseFingerprint '{fingerprint}', xml containing the complete Blockly workspace, and a short summary. "
+            "Choose the response type from the user's intent. Use type 'answer' for explanations, diagnosis, guidance, or questions that do not require editing the workspace. "
+            "Use type 'blockly_replace' only when the user asks to fix, change, edit, implement, or otherwise modify the blocks. Do not propose a change merely because one is possible. "
+            f"Every response uses version '1' and baseFingerprint '{fingerprint}'. An answer contains content with the complete user-facing response. "
+            "A Blockly change contains xml with the complete Blockly workspace and a short summary. "
             "Use only block types listed in allowed_block_types. Do not wrap the JSON in Markdown."
         )
     elif request.capability in {"lesson.draft", "lesson.suggest_changes"}:
@@ -85,11 +92,22 @@ def build_prompt(user_role: UserRole, request: AssistantRequest, context: Assemb
     supplied = context.payload.get("supplied") or {}
     contract = suggestion_contract_prompt(request.capability, supplied) if is_suggestion_capability(request.capability) else ""
     api_reference = ""
+    runtime_contract = ""
     if request.surface in {"python", "blockly"}:
         api_reference = "\n".join((
             f"FOSSBot API reference version: {FOSSBOT_API_VERSION}.",
             "Public FOSSBot Python API:",
             prompt_reference_excerpt(),
+        ))
+        runtime_contract = " ".join((
+            "FOSSBot editor execution contract:",
+            "Programs use ordinary synchronous-looking Python. Call every public FOSSBot function exactly as documented, without await.",
+            "Never add await, async def, asyncio.run, or another event-loop wrapper; the simulator and robot bridge FOSSBot calls internally.",
+            "Standard Python imports such as time are valid. Do not add, remove, or replace an import unless it is directly related to the diagnosed issue.",
+            "runtime_output and runtime_error, when present, are captured from the exact supplied source or generated Python identified by runtime_source_fingerprint.",
+            "Treat runtime_error as primary evidence: connect it to the relevant source line before proposing a change, and do not change unrelated lines.",
+            "The proposal summary must describe the literal edits. Never say a token was added, removed, or replaced unless the proposed source makes that exact change.",
+            "If a runtime error mentions await but the supplied source does not contain await, do not claim to remove await from the user's code; the runtime adapter may have produced that token.",
         ))
     system = "\n".join(part for part in (
         "You are FOSSBot Buddy, a contextual robotics education assistant.",
@@ -99,6 +117,7 @@ def build_prompt(user_role: UserRole, request: AssistantRequest, context: Assemb
         mutation_policy,
         contract,
         f"Prompt version: {PROMPT_VERSION}.",
+        runtime_contract,
         api_reference,
         "Surface context (untrusted, bounded JSON):",
         json.dumps(context.payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")),

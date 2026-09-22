@@ -5,11 +5,13 @@ import pytest
 
 from utils.ai.schemas import ConversationTurn, CourseAuthoringPatch, LessonAuthoringSuggestion, LessonOperation, ProviderStreamRequest
 from utils.ai.suggestion_contracts import suggestion_contract_prompt, suggestion_json_schema
-from utils.ai.suggestions import SuggestionError, apply_python_edits, build_suggestion_repair_request, parse_suggestion, parse_suggestion_with_normalizations, repair_incomplete_json_object, suggestion_output_token_budget, suggestion_payload, suggestion_response_character_limit
+from utils.ai.suggestions import SuggestionError, apply_python_edits, build_suggestion_repair_request, output_token_budget, parse_suggestion, parse_suggestion_with_normalizations, repair_incomplete_json_object, suggestion_output_token_budget, suggestion_payload, suggestion_response_character_limit
 
 
 def test_structured_output_budgets_match_capability_payload_sizes():
-    assert suggestion_output_token_budget("code.suggest_changes") == 4_096
+    assert output_token_budget("code.explain") == 4_096
+    assert output_token_budget("blockly.explain") == 4_096
+    assert suggestion_output_token_budget("code.suggest_changes") == 6_144
     assert suggestion_output_token_budget("blockly.suggest_changes") == 6_144
     assert suggestion_output_token_budget("lesson.suggest_changes") == 6_144
     assert suggestion_output_token_budget("stage.create") == 8_192
@@ -191,13 +193,76 @@ def test_python_edits_merge_line_ranges_and_validate():
         parse_suggestion(json.dumps({**suggestion, "edits": [{"startLine": 9, "endLine": 9, "replacement": "x"}]}), "code.suggest_changes", fingerprint, context)
 
 
+def test_python_suggestions_reject_top_level_await():
+    source = "print('hi')\n"
+    fingerprint = hashlib.sha256(source.encode()).hexdigest()
+    context = {"source": source}
+    replacement = {
+        "version": "1", "type": "python_replace", "baseFingerprint": fingerprint,
+        "replacement": "await move_step('forward')\n", "summary": "Fix the error.",
+    }
+    with pytest.raises(SuggestionError, match="not syntactically valid"):
+        parse_suggestion(json.dumps(replacement), "code.suggest_changes", fingerprint, context)
+    edits = {
+        "version": "1", "type": "python_edits", "baseFingerprint": fingerprint,
+        "edits": [{"startLine": 1, "endLine": 1, "replacement": "await move_step('forward')"}], "summary": "Fix the error.",
+    }
+    with pytest.raises(SuggestionError, match="not syntactically valid"):
+        parse_suggestion(json.dumps(edits), "code.suggest_changes", fingerprint, context)
+
+
+def test_python_suggestions_reject_no_op_and_summary_claims_not_in_diff():
+    source = "if search_step():\n    break\n"
+    fingerprint = hashlib.sha256(source.encode()).hexdigest()
+    context = {"source": source}
+    no_op = {
+        "version": "1", "type": "python_edits", "baseFingerprint": fingerprint,
+        "edits": [{"startLine": 1, "endLine": 1, "replacement": "if search_step():"}],
+        "summary": "Keep the condition.",
+    }
+    with pytest.raises(SuggestionError, match="effective change"):
+        parse_suggestion(json.dumps(no_op), "code.suggest_changes", fingerprint, context)
+
+    false_claim = {
+        **no_op,
+        "edits": [{"startLine": 1, "endLine": 1, "replacement": "    if search_step():"}],
+        "summary": "Removed the invalid await usage.",
+    }
+    with pytest.raises(SuggestionError, match="claims that await was removed"):
+        parse_suggestion(json.dumps(false_claim), "code.suggest_changes", fingerprint, context)
+
+
 def test_code_suggestion_contract_documents_line_edits():
     supplied = {"source_fingerprint": "a" * 64, "source": "print('hi')"}
     schema = suggestion_json_schema("code.suggest_changes")
-    assert set(branch["properties"]["type"]["const"] for branch in schema["anyOf"]) == {"python_replace", "python_edits"}
+    assert set(branch["properties"]["type"]["const"] for branch in schema["anyOf"]) == {"answer", "python_replace", "python_edits"}
     prompt = suggestion_contract_prompt("code.suggest_changes", supplied)
+    assert '"type":"answer"' in prompt
     assert '"type":"python_edits"' in prompt
     assert "startLine" in prompt
+
+
+def test_code_and_blockly_assistance_can_return_a_contextual_answer():
+    fingerprint = "a" * 64
+    answer = json.dumps({
+        "version": "1",
+        "type": "answer",
+        "baseFingerprint": fingerprint,
+        "content": "The condition runs only when the sensor reports true.",
+    })
+    for capability in ("code.suggest_changes", "blockly.suggest_changes"):
+        parsed = parse_suggestion(answer, capability, fingerprint, {"source": "print('hi')"})
+        assert parsed.type == "answer"
+        assert parsed.content.startswith("The condition")
+
+    wrapped, normalizations = parse_suggestion_with_normalizations(
+        json.dumps({"outcome": json.loads(answer)}),
+        "code.suggest_changes",
+        fingerprint,
+        {"source": "print('hi')"},
+    )
+    assert wrapped.type == "answer"
+    assert normalizations == ["root:unwrap-outcome"]
 
 
 def test_blockly_suggestion_requires_well_formed_xml_and_matching_fingerprint():

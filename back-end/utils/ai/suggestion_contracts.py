@@ -6,7 +6,7 @@ from typing import Any, Type
 
 from pydantic import BaseModel
 
-from utils.ai.schemas import BlocklyReplaceSuggestion, LessonAuthoringSuggestion, PythonEditsSuggestion, PythonReplaceSuggestion, StageAuthoringSuggestion
+from utils.ai.schemas import AssistantAnswer, BlocklyReplaceSuggestion, LessonAuthoringSuggestion, PythonEditsSuggestion, PythonReplaceSuggestion, StageAuthoringSuggestion
 
 
 SUGGESTION_CAPABILITIES = {
@@ -60,8 +60,9 @@ def _model_schema(model: Type[BaseModel]) -> dict[str, Any]:
 
 def suggestion_json_schema(capability: str) -> dict[str, Any]:
     if capability == "code.suggest_changes":
-        # Whole-file replacement or a targeted set of line edits.
-        return {"anyOf": [_model_schema(PythonReplaceSuggestion), _model_schema(PythonEditsSuggestion)]}
+        return {"anyOf": [_model_schema(AssistantAnswer), _model_schema(PythonReplaceSuggestion), _model_schema(PythonEditsSuggestion)]}
+    if capability == "blockly.suggest_changes":
+        return {"anyOf": [_model_schema(AssistantAnswer), _model_schema(BlocklyReplaceSuggestion)]}
     return _model_schema(_suggestion_model(capability))
 
 
@@ -128,6 +129,16 @@ def _python_edits_example(supplied: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _answer_example(supplied: dict[str, Any], capability: str) -> dict[str, Any]:
+    fingerprint_key = "source_fingerprint" if capability == "code.suggest_changes" else "workspace_fingerprint"
+    return {
+        "version": "1",
+        "type": "answer",
+        "baseFingerprint": supplied[fingerprint_key],
+        "content": "A concise explanation grounded in the current workspace.",
+    }
+
+
 def suggestion_example(capability: str, supplied: dict[str, Any]) -> dict[str, Any]:
     if capability == "code.suggest_changes":
         return {
@@ -160,8 +171,15 @@ def suggestion_contract_prompt(capability: str, supplied: dict[str, Any]) -> str
             "never wrap fields inside an object named set_floor, add_object, update_lesson, or another operation name."
         )
     alternate = ""
+    if capability in {"code.suggest_changes", "blockly.suggest_changes"}:
+        alternate += (
+            "Use this shape when the user needs an explanation, diagnosis, guidance, or an answer without a workspace change:\n"
+            f"{json.dumps(_answer_example(supplied, capability), ensure_ascii=False, separators=(',', ':'))}\n"
+        )
     if capability == "code.suggest_changes":
         alternate = (
+            alternate
+            +
             "Alternative valid shape for small, localized changes (prefer python_edits when only a few lines change; "
             "startLine and endLine are 1-based inclusive lines of the current source and an empty replacement deletes them):\n"
             f"{json.dumps(_python_edits_example(supplied), ensure_ascii=False, separators=(',', ':'))}\n"

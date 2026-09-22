@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import ast
 import asyncio
 import datetime
 import json
@@ -30,10 +29,10 @@ from utils.ai.policy import PolicyRuleInput, ProviderInventoryItem, resolve_capa
 from utils.ai.prompts import build_prompt
 from utils.ai.providers import hosted_provider
 from utils.ai.providers.base import ProviderError
-from utils.ai.schemas import AssistantRequest, CodeValidationRequest, LocalUsageReport, ProviderStreamRequest
+from utils.ai.schemas import AssistantAnswer, AssistantRequest, CodeValidationRequest, LocalUsageReport, ProviderStreamRequest
 from utils.ai.secrets import decrypt_ai_secret
 from utils.ai.suggestion_contracts import is_suggestion_capability, suggestion_json_schema
-from utils.ai.suggestions import MAX_SUGGESTION_REPAIR_ATTEMPTS, SuggestionError, build_suggestion_repair_request, parse_suggestion_with_normalizations, repair_incomplete_json_object, suggestion_output_token_budget, suggestion_payload, suggestion_response_character_limit
+from utils.ai.suggestions import MAX_SUGGESTION_REPAIR_ATTEMPTS, SuggestionError, build_suggestion_repair_request, output_token_budget, parse_suggestion_with_normalizations, repair_incomplete_json_object, suggestion_payload, suggestion_response_character_limit
 from utils.ai.usage import QuotaError, ensure_quota, record_usage
 
 
@@ -59,6 +58,8 @@ def test_provider_stream(payload: dict = Body(...)):
 
     messages = payload.get("messages") or []
     prompt = "\n".join(str(item.get("content") or "") for item in messages if isinstance(item, dict))
+    # Current-request markers must not leak in from conversation history.
+    last_user = next((str(item.get("content") or "") for item in reversed(messages) if isinstance(item, dict) and item.get("role") == "user"), "")
     if "[mock:rate-limit]" in prompt:
         raise HTTPException(status_code=429, detail="Deterministic test-only rate limit")
     if not payload.get("stream"):
@@ -86,14 +87,40 @@ def test_provider_stream(payload: dict = Body(...)):
             response = "{malformed suggestion"
         elif "Capability: code.suggest_changes" in prompt:
             fingerprint = prompt.split("baseFingerprint '", 1)[1].split("'", 1)[0]
-            if "[mock:edits]" in prompt:
-                response = json.dumps({"version": "1", "type": "python_edits", "baseFingerprint": fingerprint, "edits": [{"startLine": 1, "endLine": 1, "replacement": "# FOSSBot Buddy one-line edit"}], "summary": "Replace the first line only."})
+            if "[mock:answer]" in last_user:
+                response = json.dumps({
+                    "version": "1",
+                    "type": "answer",
+                    "baseFingerprint": fingerprint,
+                    "content": "Deterministic test-only answer: the program moves the robot one step forward, then stops.",
+                })
+            elif "[mock:edits]" in prompt:
+                response = json.dumps({
+                    "version": "1",
+                    "type": "python_edits",
+                    "baseFingerprint": fingerprint,
+                    "summary": "Four small edits: name the search, tighten the thresholds, extend the celebration, and take a longer step.",
+                    "edits": [
+                        {"startLine": 1, "endLine": 1, "replacement": "# Search for the gem, then celebrate."},
+                        {"startLine": 4, "endLine": 5, "replacement": "OBSTACLE_THRESHOLD = 0.25\nSEARCH_STEPS = 120"},
+                        {"startLine": 20, "endLine": 21, "replacement": "            rgb_set_color(\"green\")\n            buzzer_beep(880, 150)\n            buzzer_beep(1320, 250)"},
+                        {"startLine": 23, "endLine": 23, "replacement": "        move_forward_distance(0.5)"},
+                    ],
+                })
             else:
                 response = json.dumps({"version": "1", "type": "python_replace", "baseFingerprint": fingerprint, "replacement": "# FOSSBot Buddy suggestion\nprint('Hello, FOSSBot!')\n", "summary": "Replace the program with a small, reviewable greeting."})
         elif "Capability: blockly.suggest_changes" in prompt:
             fingerprint = prompt.split("baseFingerprint '", 1)[1].split("'", 1)[0]
-            xml = '<xml xmlns="https://developers.google.com/blockly/xml"><block type="text_print" id="ai-suggestion"><value name="TEXT"><shadow type="text" id="ai-text"><field name="TEXT">Hello, FOSSBot!</field></shadow></value></block></xml>'
-            response = json.dumps({"version": "1", "type": "blockly_replace", "baseFingerprint": fingerprint, "xml": xml, "summary": "Add one print block as a reviewable example."})
+            if "[mock:answer]" in last_user:
+                response = json.dumps({
+                    "version": "1",
+                    "type": "answer",
+                    "baseFingerprint": fingerprint,
+                    "content": "Deterministic test-only answer: these blocks run in workspace order and generate Python in the same order.",
+                })
+            else:
+                xml = '<xml xmlns="https://developers.google.com/blockly/xml"><block type="text_print" id="ai-suggestion"><value name="TEXT"><shadow type="text" id="ai-text"><field name="TEXT">Hello, FOSSBot!</field></shadow></value></block></xml>'
+                response = json.dumps({"version": "1", "type": "blockly_replace", "baseFingerprint": fingerprint, "xml": xml, "summary": "Add one print block as a reviewable example."})
         elif "Capability: lesson.draft" in prompt or "Capability: lesson.suggest_changes" in prompt:
             revision = prompt.split("baseRevision '", 1)[1].split("'", 1)[0]
             target = prompt_value("Authoring target")
@@ -361,7 +388,8 @@ def validate_artifact(
         raise HTTPException(status_code=403, detail={"code": decision.reason_code, "message": "Assistant access is not available."})
     if payload.surface == "python":
         try:
-            ast.parse(payload.content)
+            # Match the executor: ast.parse tolerates top-level await, compile does not.
+            compile(payload.content, "<validation>", "exec")
         except SyntaxError as error:
             line = f"line {error.lineno}: " if error.lineno else ""
             return {"valid": False, "message": f"{line}{error.msg}"}
@@ -488,7 +516,7 @@ async def stream_assistance(
         model=provider.model,
         system=prompt.system,
         messages=prompt.messages,
-        max_output_tokens=suggestion_output_token_budget(payload.capability) if suggestion_capability else 1_024,
+        max_output_tokens=output_token_budget(payload.capability),
         response_schema=suggestion_json_schema(payload.capability) if suggestion_capability else None,
         deterministic=payload.benchmark,
     )
@@ -666,13 +694,18 @@ async def stream_assistance(
                     if entry:
                         yield sse_event("debug", entry)
 
-                entry = trace.entry("backend", "suggestion.validated", {
+                response_step = "response.validated" if isinstance(suggestion, AssistantAnswer) else "suggestion.validated"
+                entry = trace.entry("backend", response_step, {
                     "attempt": repair_attempts + 1,
-                    "suggestion": suggestion,
+                    "response": suggestion,
+                    **({"suggestion": suggestion} if not isinstance(suggestion, AssistantAnswer) else {}),
                 })
                 if entry:
                     yield sse_event("debug", entry)
-                yield sse_event("suggestion", suggestion_payload(suggestion))
+                if isinstance(suggestion, AssistantAnswer):
+                    yield sse_event("answer", {"text": suggestion.content})
+                else:
+                    yield sse_event("suggestion", suggestion_payload(suggestion))
                 break
 
             if outcome == "completed":

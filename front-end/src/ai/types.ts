@@ -117,7 +117,7 @@ export interface AIProviderInput {
   secretAction?: 'preserve' | 'rotate' | 'clear';
 }
 
-export type AIStreamEventType = 'start' | 'text_delta' | 'suggestion' | 'usage' | 'done' | 'error' | 'debug';
+export type AIStreamEventType = 'start' | 'text_delta' | 'answer' | 'suggestion' | 'usage' | 'done' | 'error' | 'debug';
 export interface AIStreamEvent { type: AIStreamEventType; data: Record<string, unknown> }
 
 export interface AIDebugTraceEntry {
@@ -156,6 +156,13 @@ export interface PythonReplaceSuggestion {
   baseFingerprint: string;
   replacement: string;
   summary: string;
+}
+
+export interface AIAssistantAnswer {
+  version: '1';
+  type: 'answer';
+  baseFingerprint: string;
+  content: string;
 }
 
 export interface PythonEdit {
@@ -227,3 +234,4 @@ export interface StageAuthoringSuggestion {
 
 export type AICodeSuggestion = PythonReplaceSuggestion | PythonEditsSuggestion | BlocklyReplaceSuggestion;
 export type AIAssistantSuggestion = AICodeSuggestion | LessonAuthoringSuggestion | StageAuthoringSuggestion;
+export type AIAssistantOutcome = AIAssistantAnswer | AIAssistantSuggestion;

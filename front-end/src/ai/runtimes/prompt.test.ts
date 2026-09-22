@@ -1,4 +1,5 @@
 import { buildClientRuntimeMessages, parseClientSuggestionText } from './prompt';
+import { parseAssistantOutcome } from '../suggestions/parseSuggestion';
 
 declare const describe: any;
 declare const expect: any;
@@ -26,5 +27,21 @@ describe('parseClientSuggestionText', () => {
     } as any);
     expect(messages[0].content).toContain('wall: cube dimensions [1,0.5,0.08]');
     expect(messages[0].content).toContain('use its tempId as objectId');
+  });
+
+  it('lets a code-capable model choose a plain answer outcome', () => {
+    const fingerprint = 'a'.repeat(64);
+    const messages = buildClientRuntimeMessages({
+      capability: 'code.suggest_changes',
+      surface: 'python',
+      question: 'What does this do?',
+      history: [],
+      context: { sourceFingerprint: fingerprint, source: 'print("hi")' },
+      maxOutputTokens: 6144,
+    });
+    expect(messages[0].content).toContain('return type "answer"');
+    expect(parseAssistantOutcome({ version: '1', type: 'answer', baseFingerprint: fingerprint, content: 'It prints hi.' })).toEqual({
+      version: '1', type: 'answer', baseFingerprint: fingerprint, content: 'It prints hi.',
+    });
   });
 });

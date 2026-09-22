@@ -1229,7 +1229,7 @@ def seed_dev_simple_courses(db: Session, admin_username: str) -> list[Course]:
 
 
 def simple_project_definitions() -> list[dict]:
-    """Five tiny starter projects, two visual and three Python."""
+    """Six tiny starter projects, two visual and four Python."""
     return [
         {
             "name": "Hello Robot",
@@ -1250,6 +1250,42 @@ def simple_project_definitions() -> list[dict]:
             "code": "set_led('blue')\nbeep(660, 250)\nset_led('off')\n",
         },
         {
+            # The [mock:edits] marker makes the deterministic test provider return four premade
+            # python_edits, so the review UX can be exercised without spending provider tokens.
+            "name": "Buddy review sample",
+            "description": "A search program paired with four premade line edits.",
+            "project_type": "python",
+            "code": (
+                "# [mock:edits] Search for the gem, then celebrate.\n"
+                "import time\n"
+                "\n"
+                "OBSTACLE_THRESHOLD = 0.3\n"
+                "SEARCH_STEPS = 200\n"
+                "\n"
+                "def read_distance():\n"
+                "    return get_obstacle_distance()\n"
+                "\n"
+                "def found_gem():\n"
+                "    distance = read_distance()\n"
+                "    if distance < OBSTACLE_THRESHOLD:\n"
+                "        print(\"Gem nearby\")\n"
+                "        return True\n"
+                "    return False\n"
+                "\n"
+                "def search():\n"
+                "    for _ in range(SEARCH_STEPS):\n"
+                "        if found_gem():\n"
+                "            rgb_set_color(\"green\")\n"
+                "            buzzer_beep(880, 200)\n"
+                "            return True\n"
+                "        move_step(\"forward\")\n"
+                "        time.sleep(0.05)\n"
+                "    return False\n"
+                "\n"
+                "search()\n"
+            ),
+        },
+        {
             "name": "Blockly Dance",
             "description": "A short visual movement program.",
             "project_type": "blockly",
@@ -1265,7 +1301,7 @@ def simple_project_definitions() -> list[dict]:
 
 
 def seed_dev_simple_projects(db: Session, admin_username: str) -> list[Projects]:
-    """Create five small sample projects owned by the development administrator."""
+    """Create the small sample projects owned by the development administrator."""
     admin = db.query(User).filter(User.username == admin_username).first()
     if admin is None:
         raise RuntimeError(f"Simple project seed requires user {admin_username!r}")

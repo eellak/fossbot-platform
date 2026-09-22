@@ -29,7 +29,7 @@ export class AIRequestError extends Error {
 export function parseAIStreamFrame(frame: string): AIStreamEvent {
   const eventType = frame.split('\n').find((line) => line.startsWith('event:'))?.slice(6).trim();
   const data = frame.split('\n').filter((line) => line.startsWith('data:')).map((line) => line.slice(5).trim()).join('\n');
-  if (!eventType || !data || !['start', 'text_delta', 'suggestion', 'usage', 'done', 'error', 'debug'].includes(eventType)) throw new AIRequestError('Malformed assistant stream', 502, 'malformed_response');
+  if (!eventType || !data || !['start', 'text_delta', 'answer', 'suggestion', 'usage', 'done', 'error', 'debug'].includes(eventType)) throw new AIRequestError('Malformed assistant stream', 502, 'malformed_response');
   let payload: unknown;
   try { payload = JSON.parse(data); }
   catch { throw new AIRequestError('Malformed assistant stream', 502, 'malformed_response'); }
@@ -45,10 +45,15 @@ async function parse<T>(response: Response): Promise<T> {
   const payload = await response.json().catch(() => null);
   if (!response.ok) {
     const detail = payload?.detail;
+    const message = typeof detail === 'string'
+      ? detail
+      : Array.isArray(detail)
+        ? detail.map((item) => (item && typeof item === 'object' && typeof item.msg === 'string' ? item.msg : '')).filter(Boolean).join('; ') || 'AI request failed'
+        : detail?.message || 'AI request failed';
     throw new AIRequestError(
-      typeof detail === 'string' ? detail : detail?.message || 'AI request failed',
+      message,
       response.status,
-      typeof detail === 'object' && typeof detail?.code === 'string' ? detail.code : 'provider_error',
+      typeof detail === 'object' && !Array.isArray(detail) && typeof detail?.code === 'string' ? detail.code : 'provider_error',
     );
   }
   return payload as T;

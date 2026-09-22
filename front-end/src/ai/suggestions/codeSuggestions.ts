@@ -3,7 +3,8 @@ import { pythonGenerator } from 'blockly/python';
 import TOOLBOX_JSON_EN from 'src/utils/toolboxBlockly/toolbox_en';
 import 'src/utils/blocksBlockly/customBlocks';
 import type { AIAssistantSuggestion, AICodeSuggestion, BlocklyReplaceSuggestion, PythonEditsSuggestion, PythonReplaceSuggestion } from '../types';
-import { applyPythonEdits } from './pythonEdits';
+import { applyPythonEdits, previewPythonEdits } from './pythonEdits';
+import type { PythonEditPreview } from './pythonEdits';
 
 export { applyPythonEdits };
 
@@ -23,6 +24,8 @@ export type SuggestionPreview = {
   before: string;
   after: string;
   detail: string;
+  /** Per-line-range changes for a python_edits suggestion, so the review can show each one. */
+  edits?: PythonEditPreview[];
   changes?: string[];
   lesson?: {
     studentVisible: LessonPreviewItem[];
@@ -74,7 +77,10 @@ export function parseCodeSuggestion(value: Record<string, unknown>): AICodeSugge
 
 export function previewPythonSuggestion(suggestion: PythonReplaceSuggestion | PythonEditsSuggestion, currentSource: string): SuggestionPreview {
   const after = suggestion.type === 'python_edits' ? applyPythonEdits(currentSource, suggestion.edits) : suggestion.replacement;
-  return { suggestion, summary: suggestion.summary, kind: 'python', before: currentSource, after, detail: '' };
+  const edits = suggestion.type === 'python_edits'
+    ? previewPythonEdits(currentSource, suggestion.edits)
+    : undefined;
+  return { suggestion, summary: suggestion.summary, kind: 'python', before: currentSource, after, detail: '', edits };
 }
 
 export function validateBlocklySuggestion(suggestion: BlocklyReplaceSuggestion, currentXml: string): SuggestionPreview {

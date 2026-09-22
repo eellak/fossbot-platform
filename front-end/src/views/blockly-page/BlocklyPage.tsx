@@ -102,6 +102,8 @@ const BlocklyPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppeara
   const runScriptRef = useRef<() => Promise<void>>();
   const editorRef = useRef<BlocklyEditorHandle | null>(null);
   const [runtimeContext, setRuntimeContext] = useState({ output: [] as string[], error: '' });
+  const runSourceRef = useRef('');
+  const runTargetRef = useRef<'simulation' | 'robot'>('simulation');
   const auth = useAuth();
   const { token } = auth;
   const authRef = useRef(auth);
@@ -217,14 +219,14 @@ const BlocklyPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppeara
   }, []);
 
   const handleExecutionEvent = useCallback((event: { type: 'start' | 'stdout' | 'stderr' | 'complete' | 'stopped'; text?: string }) => {
-    if (event.type === 'start') { setRuntimeContext({ output: [], error: '' }); return; }
+    if (event.type === 'start') { runSourceRef.current = editorRef.current?.getGeneratedPython() ?? editorPythonValue; runTargetRef.current = target; setRuntimeContext({ output: [], error: '' }); return; }
     if (event.type === 'stdout') setRuntimeContext((current) => ({ ...current, output: [...current.output, event.text || ''].slice(-24) }));
     if (event.type === 'stderr') setRuntimeContext((current) => ({ output: [...current.output, event.text || ''].slice(-24), error: event.text || 'Runtime error' }));
     if (event.type === 'complete' || event.type === 'stopped') {
       setIsRunning(false);
       notify(t(event.type === 'complete' ? 'alertMessages.runCompleted' : 'alertMessages.codeStopped'), { severity: 'info' });
     }
-  }, [notify, t]);
+  }, [editorPythonValue, notify, t, target]);
 
   useEffect(() => {
     // Generate a new session ID when the component mounts
@@ -404,15 +406,23 @@ const BlocklyPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppeara
     getContext: async () => {
       const xml = editorRef.current?.getXml() ?? editorValue;
       const selection = editorRef.current?.getSelection() || { ids: [], types: [] };
+      const fullGeneratedPython = editorRef.current?.getGeneratedPython() ?? editorPythonValue;
+      const generatedPython = fullGeneratedPython.slice(0, 8000);
+      const diagnosticsAreCurrent = fullGeneratedPython.length <= 8000 && runSourceRef.current !== '' && runSourceRef.current === fullGeneratedPython && runTargetRef.current === target;
+      const runtimeSourceFingerprint = diagnosticsAreCurrent ? await fingerprintText(generatedPython) : '';
       return {
         xml,
         workspaceFingerprint: await fingerprintText(xml),
-        generatedPython: (editorRef.current?.getGeneratedPython() ?? editorPythonValue).slice(0, 8000),
+        generatedPython,
         selectedBlockIds: selection.ids,
         selectedBlockTypes: selection.types,
         allowedBlockTypes: allowedBlocklyBlockTypes(),
-        runtimeOutput: runtimeContext.output.join('\n').slice(-2000),
-        runtimeError: runtimeContext.error.slice(-2000),
+        runtimeOutput: diagnosticsAreCurrent ? runtimeContext.output.join('\n').slice(-2000) : '',
+        runtimeError: diagnosticsAreCurrent ? runtimeContext.error.slice(-2000) : '',
+        ...(runtimeSourceFingerprint && (runtimeContext.output.length || runtimeContext.error)
+          ? { runtimeSourceFingerprint }
+          : {}),
+        executionTarget: target,
         editorType: 'blockly',
         ...(projectId ? { projectId: Number(projectId) } : {}),
         stageSummary: selectedStage ? { title: selectedStageLabel, sourceType: selectedStage.sourceType } : {},

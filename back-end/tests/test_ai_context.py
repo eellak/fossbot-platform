@@ -54,6 +54,28 @@ def test_mutation_context_requires_matching_fingerprint(db, users):
     assert assembled.payload["supplied"]["source_fingerprint"] == hashlib.sha256(source.encode()).hexdigest()
 
 
+def test_runtime_diagnostics_are_tied_to_the_executed_source(db, users):
+    student = users[2]
+    source = "move_step('forward')\n"
+    fingerprint = hashlib.sha256(source.encode()).hexdigest()
+    assembled = assemble_context(db, student, request("python", "code.explain", {
+        "source": source,
+        "runtimeError": "RuntimeError: motor stopped",
+        "runtimeSourceFingerprint": fingerprint,
+        "executionTarget": "simulation",
+    }))
+    supplied = assembled.payload["supplied"]
+    assert supplied["runtime_source_fingerprint"] == fingerprint
+    assert supplied["execution_target"] == "simulation"
+
+    with pytest.raises(ContextError, match="runtime diagnostics"):
+        assemble_context(db, student, request("python", "code.explain", {
+            "source": source,
+            "runtimeError": "SyntaxError: stale",
+            "runtimeSourceFingerprint": "0" * 64,
+        }))
+
+
 def test_context_removes_data_urls_and_is_deterministic(db, users):
     student = users[2]
     unsafe = {"title": "Stage", "description": "", "floor": {"name": "Floor", "dimensions": [10, 10], "color": "#fff"}, "objects": [], "metadata": {}, "summary": {"preview": "data:image/png;base64,secret", "objectCount": 0}}
@@ -166,6 +188,8 @@ def test_student_prompt_is_hint_first_and_versioned(db, users):
     assert "hint-first" in prompt.system
     assert prompt.prompt_version == PROMPT_VERSION
     assert "student@example.test" not in prompt.system
+    assert "without await" in prompt.system
+    assert "runtime_error as primary evidence" in prompt.system
 
 
 def test_lesson_prompt_documents_activity_contract(db, users):

@@ -98,11 +98,13 @@ export default function LessonWorkspacePage({ previewAppearance = true, courseId
   const monacoRef = useRef<MonacoEditorHandle | null>(null);
   const blocklyRef = useRef<BlocklyEditorHandle | null>(null);
   const [runtimeContext, setRuntimeContext] = useState({ output: [] as string[], error: '' });
+  const runSourceRef = useRef('');
+  const currentExecutionSourceRef = useRef('');
   const [isRunning, setIsRunning] = useState(false);
   const executionRef = useRef<LessonExecutionHandle | null>(null);
 
   const handleExecutionEvent = useCallback((event: { type: 'start' | 'stdout' | 'stderr' | 'complete' | 'stopped'; text?: string }) => {
-    if (event.type === 'start') { setRuntimeContext({ output: [], error: '' }); setIsRunning(true); return; }
+    if (event.type === 'start') { runSourceRef.current = currentExecutionSourceRef.current; setRuntimeContext({ output: [], error: '' }); setIsRunning(true); return; }
     if (event.type === 'stdout') setRuntimeContext((current) => ({ ...current, output: [...current.output, event.text || ''].slice(-24) }));
     if (event.type === 'stderr') setRuntimeContext((current) => ({ output: [...current.output, event.text || ''].slice(-24), error: event.text || 'Runtime error' }));
     if (event.type === 'complete' || event.type === 'stopped') setIsRunning(false);
@@ -320,17 +322,24 @@ export default function LessonWorkspacePage({ previewAppearance = true, courseId
   const hasMission = lesson.activities.some((activity) => activity.type === 'mission');
   const stageRevision = stage?.commitSha || stage?.url || 'built-in:none';
   const code = lesson.editorType === 'python' ? (typeof content === 'string' ? content : '') : generatedPython;
+  currentExecutionSourceRef.current = code;
   const assistantAdapter: AssistantSurfaceAdapter | null = lesson.editorType === 'python' ? {
     surface: 'python',
     getFingerprint: async () => fingerprintText(monacoRef.current?.getSource() ?? code),
     getContext: async () => {
       const source = monacoRef.current?.getSource() ?? code;
+      const sourceFingerprint = await fingerprintText(source);
+      const diagnosticsAreCurrent = runSourceRef.current !== '' && runSourceRef.current === source;
       return {
         source,
-        sourceFingerprint: await fingerprintText(source),
+        sourceFingerprint,
         selection: monacoRef.current?.getSelection()?.text || '',
-        runtimeOutput: runtimeContext.output.join('\n').slice(-2000),
-        runtimeError: runtimeContext.error.slice(-2000),
+        runtimeOutput: diagnosticsAreCurrent ? runtimeContext.output.join('\n').slice(-2000) : '',
+        runtimeError: diagnosticsAreCurrent ? runtimeContext.error.slice(-2000) : '',
+        ...(diagnosticsAreCurrent && (runtimeContext.output.length || runtimeContext.error)
+          ? { runtimeSourceFingerprint: sourceFingerprint }
+          : {}),
+        executionTarget: 'simulation',
         editorType: 'python',
         releaseId: workspace.release_id,
         lessonKey,
@@ -361,15 +370,23 @@ export default function LessonWorkspacePage({ previewAppearance = true, courseId
     getContext: async () => {
       const xml = blocklyRef.current?.getXml() ?? (typeof content === 'object' && content && typeof content.xml === 'string' ? content.xml : '');
       const selection = blocklyRef.current?.getSelection() || { ids: [], types: [] };
+      const fullGeneratedPython = blocklyRef.current?.getGeneratedPython() ?? generatedPython;
+      const currentGeneratedPython = fullGeneratedPython.slice(0, 8000);
+      const diagnosticsAreCurrent = fullGeneratedPython.length <= 8000 && runSourceRef.current !== '' && runSourceRef.current === fullGeneratedPython;
+      const runtimeSourceFingerprint = diagnosticsAreCurrent ? await fingerprintText(currentGeneratedPython) : '';
       return {
         xml,
         workspaceFingerprint: await fingerprintText(xml),
-        generatedPython: (blocklyRef.current?.getGeneratedPython() ?? generatedPython).slice(0, 8000),
+        generatedPython: currentGeneratedPython,
         selectedBlockIds: selection.ids,
         selectedBlockTypes: selection.types,
         allowedBlockTypes: allowedBlocklyBlockTypes(),
-        runtimeOutput: runtimeContext.output.join('\n').slice(-2000),
-        runtimeError: runtimeContext.error.slice(-2000),
+        runtimeOutput: diagnosticsAreCurrent ? runtimeContext.output.join('\n').slice(-2000) : '',
+        runtimeError: diagnosticsAreCurrent ? runtimeContext.error.slice(-2000) : '',
+        ...(runtimeSourceFingerprint && (runtimeContext.output.length || runtimeContext.error)
+          ? { runtimeSourceFingerprint }
+          : {}),
+        executionTarget: 'simulation',
         editorType: 'blockly',
         releaseId: workspace.release_id,
         lessonKey,

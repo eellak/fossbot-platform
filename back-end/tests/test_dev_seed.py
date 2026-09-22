@@ -222,7 +222,7 @@ def test_seed_dev_data_is_a_no_op_without_explicit_opt_in(db, monkeypatch):
     assert db.query(User).filter(User.username.in_([item["username"] for item in DEV_TEST_USERS])).count() == 0
 
 
-def test_simple_dev_content_seeds_five_of_each_and_is_idempotent(db, users):
+def test_simple_dev_content_seeds_are_idempotent(db, users):
     *_, admin = users
 
     courses = seed_dev_simple_courses(db, admin.username)
@@ -230,17 +230,18 @@ def test_simple_dev_content_seeds_five_of_each_and_is_idempotent(db, users):
     stages = seed_dev_simple_stages(db, admin.username)
 
     assert len(simple_course_definitions()) == 5
-    assert len(simple_project_definitions()) == 5
+    assert len(simple_project_definitions()) == 6
     assert len(simple_stage_definitions()) == 5
     assert len(courses) == 5
-    assert len(projects) == 5
+    assert len(projects) == 6
     assert len(stages) == 5
     assert db.query(Course).filter(Course.author_id == admin.id, Course.status == "published").count() == 5
-    assert db.query(Projects).filter(Projects.user_id == admin.id).count() == 5
+    assert db.query(Projects).filter(Projects.user_id == admin.id).count() == 6
     assert db.query(LocalStage).filter(LocalStage.user_id == admin.id).count() == 5
     assert all(DEV_SIMPLE_COURSE_TAG in course.tags for course in courses)
     assert all(lesson.course_id in {course.id for course in courses} for lesson in db.query(Lesson).all())
     assert all(stage.record.get("config") for stage in stages)
+    assert any(project.name == "Buddy review sample" and "[mock:edits]" in (project.code or "") for project in projects)
 
     again = (
         seed_dev_simple_courses(db, admin.username),
@@ -251,5 +252,5 @@ def test_simple_dev_content_seeds_five_of_each_and_is_idempotent(db, users):
     assert [project.id for project in again[1]] == [project.id for project in projects]
     assert [stage.id for stage in again[2]] == [stage.id for stage in stages]
     assert db.query(Course).filter(Course.author_id == admin.id, Course.status == "published").count() == 5
-    assert db.query(Projects).filter(Projects.user_id == admin.id).count() == 5
+    assert db.query(Projects).filter(Projects.user_id == admin.id).count() == 6
     assert db.query(LocalStage).filter(LocalStage.user_id == admin.id).count() == 5

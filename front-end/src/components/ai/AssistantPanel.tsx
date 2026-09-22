@@ -1,10 +1,10 @@
-import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import {
   Alert, alpha, Box, Button, Chip, CircularProgress, Collapse, Dialog, DialogActions, DialogContent,
   DialogTitle, Fab, IconButton, LinearProgress, MenuItem, Paper, Portal, Stack, TextField, Tooltip, Typography,
 } from '@mui/material';
 import {
-  IconArrowLeft, IconArrowRight, IconCheck, IconChevronDown, IconCode, IconMinus, IconRefresh,
+  IconArrowLeft, IconArrowRight, IconCheck, IconChevronDown, IconCode, IconMinus, IconPlayerStop, IconRefresh,
   IconRobot, IconSettings, IconShieldCheck, IconTrash, IconWand, IconX,
 } from '@tabler/icons-react';
 import { keyframes } from '@emotion/react';
@@ -12,11 +12,11 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from 'src/authentication/AuthProvider';
-import { AIRequestError, reportAILocalUsage, validateAIArtifact } from 'src/ai/AssistantApi';
+import { AIRequestError, reportAILocalUsage } from 'src/ai/AssistantApi';
 import { useAssistantAccess } from 'src/ai/AssistantProvider';
 import type { SuggestionPreview } from 'src/ai/suggestions/codeSuggestions';
-import { parseAssistantSuggestion } from 'src/ai/suggestions/parseSuggestion';
-import { lineDiff, replaceSelectedLines } from 'src/ai/suggestions/selectionEdit';
+import { parseAssistantOutcome, parseAssistantSuggestion } from 'src/ai/suggestions/parseSuggestion';
+import { lineDiff } from 'src/ai/suggestions/selectionEdit';
 import type { AIAssistantSuggestion, AICapabilityId, AIAssistantSurface, AIDebugTraceEntry, AIPublicProvider, AIRuntimeStatus } from 'src/ai/types';
 import { parseClientSuggestionText } from 'src/ai/runtimes/prompt';
 import { randomId } from 'src/utils/platform';
@@ -25,12 +25,24 @@ import type { AIAssistantRuntime } from 'src/ai/runtimes/types';
 import { outputTokenBudget } from 'src/ai/outputBudgets';
 import { WebLLMRuntime, webLLMConsentKey, webLLMDownloadGuidance } from 'src/ai/runtimes/webllm';
 import AdminDebugTrace, { AdminDebugToggle } from './AdminDebugTrace';
+import PythonEditsPreview from './PythonEditsPreview';
 import StageSuggestionPreview from './StageSuggestionPreview';
 import LessonSuggestionPreview from './LessonSuggestionPreview';
+import { resolveBuddyView, type RequestMode } from './buddyView';
 
 type ConversationTurn = { role: 'user' | 'assistant'; content: string };
-type RequestMode = 'explain' | 'suggest';
-type BuddyView = 'ask' | 'working' | 'answer' | 'review' | 'failed' | 'applied';
+type ConversationStatus = 'pending' | 'answered' | 'proposed' | 'applied' | 'declined' | 'failed' | 'stopped';
+type ConversationEntry = {
+  id: string;
+  question: string;
+  status: ConversationStatus;
+  answer?: string;
+  detail?: string;
+  mode?: RequestMode;
+};
+
+// Matches the backend ConversationTurn.content limit so a long answer never poisons the next request.
+const historyTurnLimit = 2000;
 
 export type AssistantBenchmarkPrompt = {
   id: string;
@@ -110,19 +122,6 @@ const conversationProposal = (suggestion: AIAssistantSuggestion) => {
 const debugErrorData = (reason: unknown) => reason instanceof Error
   ? { type: reason.name, message: reason.message, stack: reason.stack || '' }
   : { type: typeof reason, message: String(reason) };
-
-// Fenced code blocks in a prose answer. The panel can turn one into a validated
-// replacement instead of only showing it as text.
-const codeBlocksFromMarkdown = (text: string) => {
-  const blocks: Array<{ language: string; code: string }> = [];
-  const pattern = /```([^\n`]*)\r?\n([\s\S]*?)```/g;
-  let match = pattern.exec(text);
-  while (match !== null) {
-    blocks.push({ language: match[1].trim().toLowerCase(), code: match[2].replace(/\n$/, '') });
-    match = pattern.exec(text);
-  }
-  return blocks;
-};
 
 const writeLine = keyframes`
   0%, 12% { clip-path: inset(0 82% 0 0); opacity: .35; }
@@ -206,6 +205,72 @@ function BuddyRobotTile({ size = 36 }: { size?: number }) {
   </Box>;
 }
 
+const noticeTone: Record<Exclude<ConversationStatus, 'pending' | 'answered'>, { bgcolor: string; color: string }> = {
+  proposed: { bgcolor: 'primary.light', color: 'primary.main' },
+  applied: { bgcolor: 'success.light', color: 'success.main' },
+  declined: { bgcolor: 'action.hover', color: 'text.secondary' },
+  failed: { bgcolor: 'error.light', color: 'error.main' },
+  stopped: { bgcolor: 'action.hover', color: 'text.secondary' },
+};
+
+function ConversationNotice({ entry, onRetry }: { entry: ConversationEntry; onRetry: (entry: ConversationEntry) => void }) {
+  const { t } = useTranslation();
+  const notice = entry.status === 'proposed'
+    ? { icon: <IconWand size={17} />, text: entry.detail || t('aiAssistant.proposalReady') }
+    : entry.status === 'applied'
+      ? { icon: <IconCheck size={17} />, text: entry.detail || t('aiAssistant.applied') }
+      : entry.status === 'declined'
+        ? { icon: <IconX size={17} />, text: entry.detail || t('aiAssistant.declined') }
+        : entry.status === 'failed'
+          ? { icon: <IconRefresh size={17} />, text: entry.detail || t('aiAssistant.compact.failedTitle') }
+          : { icon: <IconMinus size={17} />, text: entry.detail || t('aiAssistant.stopped') };
+  const tone = noticeTone[entry.status as Exclude<ConversationStatus, 'pending' | 'answered'>];
+  return <Stack direction="row" spacing={1.25} alignItems="flex-start">
+    <Box sx={{ width: 28, height: 28, flex: '0 0 auto', display: 'grid', placeItems: 'center', borderRadius: 1.25, bgcolor: tone.bgcolor, color: tone.color }}>{notice.icon}</Box>
+    <Box sx={{ flex: 1, minWidth: 0 }}>
+      <Typography variant="body2" color="text.secondary" sx={{ overflowWrap: 'anywhere' }}>{notice.text}</Typography>
+      {entry.status === 'failed' && <Button size="small" color="inherit" onClick={() => onRetry(entry)} sx={{ mt: 0.25, px: 0, minWidth: 0 }}>{t('aiAssistant.retry')}</Button>}
+    </Box>
+  </Stack>;
+}
+
+function ConversationView({ entries, userLabel, buddyLabel, pendingStage, onStop, onRetry }: {
+  entries: ConversationEntry[];
+  userLabel: string;
+  buddyLabel: string;
+  pendingStage: 'preparing' | 'connecting' | 'drafting' | 'validating';
+  onStop: () => void;
+  onRetry: (entry: ConversationEntry) => void;
+}) {
+  const { t } = useTranslation();
+  if (!entries.length) return null;
+  return <Stack spacing={2} aria-label={buddyLabel}>
+    {entries.map((entry) => <Stack key={entry.id} spacing={1.25}>
+      <Box sx={{ alignSelf: 'flex-end', maxWidth: '88%', px: 1.5, py: 1.1, bgcolor: 'action.hover', borderRadius: 1.5 }}>
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.25 }}>{userLabel}</Typography>
+        <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{entry.question}</Typography>
+      </Box>
+      {entry.status === 'pending' && <Stack direction="row" spacing={1.25} alignItems="center">
+        <DraftingMark />
+        <Typography variant="body2" color="text.secondary" sx={{ flex: 1, minWidth: 0 }}>{t(`aiAssistant.progress.${pendingStage}`)}</Typography>
+        <Tooltip title={t('aiAssistant.stop')}>
+          <IconButton size="small" aria-label={t('aiAssistant.stop')} onClick={onStop} sx={{ width: 28, height: 28, flex: '0 0 auto', color: 'text.secondary', '&:hover, &:focus-visible': { color: 'error.main', bgcolor: 'error.light' }, '@media (pointer: coarse)': { width: 44, height: 44 } }}>
+            <IconPlayerStop size={16} />
+          </IconButton>
+        </Tooltip>
+      </Stack>}
+      {entry.status === 'answered' && <Stack direction="row" spacing={1} alignItems="flex-start">
+        <BuddyRobotTile size={28} />
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.25 }}>{buddyLabel}</Typography>
+          <Box sx={markdownSx}><ReactMarkdown remarkPlugins={[remarkGfm]}>{entry.answer || ''}</ReactMarkdown></Box>
+        </Box>
+      </Stack>}
+      {entry.status !== 'pending' && entry.status !== 'answered' && <ConversationNotice entry={entry} onRetry={onRetry} />}
+    </Stack>)}
+  </Stack>;
+}
+
 export default function AssistantPanel({ adapter, explainCapability, suggestCapability, confirmationBody, appliedMessage, singleMode = false, contextControls, contextKey = '', onPreviewStageChange, benchmarkPrompts = [] }: Props) {
   const { t } = useTranslation();
   const { token, user } = useAuth();
@@ -215,6 +280,7 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
   const [mode, setMode] = useState<RequestMode>('explain');
   const [question, setQuestion] = useState('');
   const [history, setHistory] = useState<ConversationTurn[]>([]);
+  const [conversation, setConversation] = useState<ConversationEntry[]>([]);
   const [output, setOutput] = useState('');
   const [status, setStatus] = useState<'idle' | 'streaming' | 'done' | 'stopped' | 'error'>('idle');
   const [requestStage, setRequestStage] = useState<'preparing' | 'connecting' | 'drafting' | 'validating'>('preparing');
@@ -240,6 +306,7 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
   const runtimeRef = useRef<AIAssistantRuntime | null>(null);
   const contextKeyRef = useRef(contextKey);
   const outputRef = useRef<HTMLDivElement | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
   const questionRef = useRef<HTMLInputElement | null>(null);
   const debugSequenceRef = useRef(0);
   const isAdmin = user?.role === 'admin';
@@ -267,14 +334,15 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
     abortRef.current?.abort();
     runtimeRef.current?.cancel();
     contextKeyRef.current = contextKey;
-    setQuestion(''); setHistory([]); setOutput(''); setStatus('idle'); setRequestError(''); setRequestErrorDetail(''); setPreview(null); setPreviewCapability(null); setLastRequest(null); setRuntimeStatus({ readiness: 'idle' }); setCompose(false); setApplied(false); setShowWorkingSteps(false);
+    setQuestion(''); setHistory([]); setConversation([]); setOutput(''); setStatus('idle'); setRequestError(''); setRequestErrorDetail(''); setPreview(null); setPreviewCapability(null); setLastRequest(null); setRuntimeStatus({ readiness: 'idle' }); setCompose(false); setApplied(false); setShowWorkingSteps(false);
     clearDebug();
   }, [contextKey]);
 
   const explain = access?.capabilities.find((item) => item.capability === explainCapability);
   const suggest = access?.capabilities.find((item) => item.capability === suggestCapability);
-  const activeDecision = mode === 'explain' ? explain : suggest;
-  const activeCapability = mode === 'explain' ? explainCapability : suggestCapability;
+  const automaticEditorMode = !singleMode && (adapter.surface === 'python' || adapter.surface === 'blockly');
+  const resolvedMode: RequestMode = automaticEditorMode ? suggest?.allowed ? 'suggest' : 'explain' : mode;
+  const activeDecision = resolvedMode === 'explain' ? explain : suggest;
   const canSuggest = !singleMode && Boolean(suggest?.allowed);
   const unavailableReason = activeDecision && !activeDecision.allowed ? t(`aiAdmin.reasons.${activeDecision.reasonCode}`, activeDecision.detail) : '';
   const allowedProviders = access?.providers.filter((provider) => activeDecision?.providerIds.includes(provider.id)) || [];
@@ -288,11 +356,15 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
   }, [explain, mode, singleMode, suggest]);
 
   useEffect(() => {
-    const node = outputRef.current;
-    if (!node || !open) return undefined;
-    const frame = window.requestAnimationFrame(() => { node.scrollTop = node.scrollHeight; });
+    if (!open) return undefined;
+    const frame = window.requestAnimationFrame(() => {
+      const outputNode = outputRef.current;
+      if (outputNode) outputNode.scrollTop = outputNode.scrollHeight;
+      const panelNode = panelRef.current;
+      if (panelNode) panelNode.scrollTop = panelNode.scrollHeight;
+    });
     return () => window.cancelAnimationFrame(frame);
-  }, [open, output, status]);
+  }, [open, output, status, conversation]);
 
   useEffect(() => {
     if (status !== 'streaming') { setWaitingSeconds(0); return undefined; }
@@ -301,17 +373,21 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
     return () => window.clearInterval(timer);
   }, [status]);
 
-  const run = async (nextQuestion = question, nextMode = mode, consentGranted = false, providerOverrideId?: number, benchmark = false) => {
+  const run = async (nextQuestion = question, nextMode = resolvedMode, consentGranted = false, providerOverrideId?: number, benchmark = false) => {
     const trimmed = nextQuestion.trim();
     if (!trimmed) return;
     if (benchmark) { clearDebug(); setHistory([]); }
     setRequestError(''); setRequestErrorDetail(''); setOutput(''); setPreview(null); setPreviewCapability(null); setRequestStage('preparing'); setStatus('streaming');
     setQuestion(trimmed); setMode(nextMode); setLastRequest({ question: trimmed, mode: nextMode, benchmark });
     setCompose(false); setApplied(false); setShowWorkingSteps(false);
+    const followUp = automaticEditorMode && conversation.length > 0 && !benchmark;
+    const entryId = randomId();
+    if (followUp) setConversation((current) => [...current, { id: entryId, question: trimmed, status: 'pending' as const, mode: nextMode }].slice(-4));
     const controller = new AbortController();
     abortRef.current = controller;
     let streamed = '';
     let receivedSuggestion: AIAssistantSuggestion | null = null;
+    let receivedAnswer = false;
     let streamFailed = '';
     let streamErrorMessage = '';
     appendDebug('client', 'request.started', { mode: nextMode, question: trimmed, surface: adapter.surface, benchmark });
@@ -329,6 +405,7 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
       runtimeRef.current = runtime;
       if (!consentGranted && provider.runtime === 'user_local') {
         await runtime.prepare({ signal: controller.signal, onStatus: setRuntimeStatus });
+        if (followUp) setConversation((current) => current.filter((entry) => entry.id !== entryId));
         setConsent({ provider, question: trimmed, mode: nextMode, kind: 'local', benchmark });
         setStatus('idle');
         return;
@@ -339,11 +416,13 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
         const cached = await runtime.cached();
         setRuntimeStatus({ readiness: 'idle', cached });
         if (localStorage.getItem(webLLMConsentKey(provider)) !== 'accepted' && !cached) {
+          if (followUp) setConversation((current) => current.filter((entry) => entry.id !== entryId));
           setConsent({ provider, question: trimmed, mode: nextMode, kind: 'download', benchmark });
           setStatus('idle');
           return;
         }
       }
+      if (followUp) setQuestion('');
       const context = await adapter.getContext();
       appendDebug('client', 'context.prepared', context);
       setRequestStage('connecting');
@@ -378,6 +457,12 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
           streamed += String(event.data.text || '');
           setOutput(streamed);
         }
+        if (event.type === 'answer') {
+          receivedAnswer = true;
+          streamed = String(event.data.text || '');
+          setOutput(streamed);
+          appendDebug('client-validator', 'answer.parsed', { characters: streamed.length });
+        }
         if (event.type === 'suggestion') {
           try {
             receivedSuggestion = parseAssistantSuggestion(event.data);
@@ -410,12 +495,20 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
       appendDebug('client', 'stream.response_completed', { text: streamed, characters: streamed.length });
       if (streamFailed) throw new Error(streamFailed);
       setRequestStage('validating');
-      if (!receivedSuggestion && suggestionCapabilities.includes(capability)) {
+      if (!receivedSuggestion && !receivedAnswer && suggestionCapabilities.includes(capability)) {
         try {
           const parsedText = parseClientSuggestionText(streamed);
           appendDebug('client-validator', 'suggestion.raw_parsed', parsedText);
-          receivedSuggestion = parseAssistantSuggestion(parsedText);
-          appendDebug('client-validator', 'suggestion.parsed', receivedSuggestion);
+          const outcome = parseAssistantOutcome(parsedText);
+          if (outcome.type === 'answer') {
+            receivedAnswer = true;
+            streamed = outcome.content;
+            setOutput(streamed);
+            appendDebug('client-validator', 'answer.parsed', { characters: streamed.length });
+          } else {
+            receivedSuggestion = outcome;
+            appendDebug('client-validator', 'suggestion.parsed', receivedSuggestion);
+          }
         } catch (reason) {
           appendDebug('client-validator', 'suggestion.parse_failed', { error: debugErrorData(reason), raw: streamed });
           throw reason;
@@ -440,25 +533,42 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
       }
       if (!benchmark) setHistory((current) => ([
         ...current,
-        { role: 'user', content: trimmed },
-        { role: 'assistant', content: receivedSuggestion ? conversationProposal(receivedSuggestion) : streamed || t('aiAssistant.noResponse') },
+        { role: 'user', content: trimmed.slice(0, historyTurnLimit) },
+        { role: 'assistant', content: (receivedSuggestion ? conversationProposal(receivedSuggestion) : streamed || t('aiAssistant.noResponse')).slice(0, historyTurnLimit) },
       ] as ConversationTurn[]).slice(-8));
+      if (!benchmark) {
+        const entry: ConversationEntry = {
+          id: entryId,
+          question: trimmed,
+          status: receivedSuggestion ? 'proposed' : 'answered',
+          mode: nextMode,
+          ...(receivedSuggestion ? { detail: receivedSuggestion.summary } : { answer: streamed || t('aiAssistant.noResponse') }),
+        };
+        if (followUp) setConversation((current) => current.map((item) => item.id === entryId ? { ...item, ...entry } : item));
+        else if (automaticEditorMode || !receivedSuggestion) setConversation((current) => [...current, entry].slice(-4));
+      }
+      if (automaticEditorMode) setQuestion((current) => current.trim() === trimmed ? '' : current);
       setStatus('done');
     } catch (reason) {
       if (controller.signal.aborted || (reason instanceof DOMException && reason.name === 'AbortError')) {
         appendDebug('client', 'request.cancelled', debugErrorData(reason));
+        if (followUp) setConversation((current) => current.map((item) => item.id === entryId ? { ...item, status: 'stopped', detail: t('aiAssistant.stopped') } : item));
         setStatus('stopped');
       } else {
         appendDebug('client', 'request.failed', debugErrorData(reason));
         if (!benchmark) setHistory((current) => ([
           ...current,
-          { role: 'user', content: trimmed },
-          { role: 'assistant', content: (streamed.trim() || t('aiAssistant.failedTurn')).slice(0, 2000) },
+          { role: 'user', content: trimmed.slice(0, historyTurnLimit) },
+          { role: 'assistant', content: (streamed.trim() || t('aiAssistant.failedTurn')).slice(0, historyTurnLimit) },
         ] as ConversationTurn[]).slice(-8));
         const code = reason instanceof AIRequestError && reason.status === 429 ? 'quota' : reason instanceof AIRequestError ? reason.code : reason instanceof Error ? reason.message : 'provider_error';
         if (code.startsWith('webllm_') || code.startsWith('local_') || code === 'mixed_content') setRuntimeStatus({ readiness: 'error', message: code });
-        setRequestError(t(`aiAssistant.errors.${code}`, t('aiAssistant.errors.provider_error')));
-        setRequestErrorDetail(streamFailed === 'invalid_suggestion' && streamErrorMessage ? streamErrorMessage.slice(0, 400) : '');
+        if (followUp) {
+          setConversation((current) => current.map((item) => item.id === entryId ? { ...item, status: 'failed', detail: t(`aiAssistant.errors.${code}`, t('aiAssistant.errors.provider_error')) } : item));
+        } else {
+          setRequestError(t(`aiAssistant.errors.${code}`, t('aiAssistant.errors.provider_error')));
+          setRequestErrorDetail(streamFailed === 'invalid_suggestion' && streamErrorMessage ? streamErrorMessage.slice(0, 400) : '');
+        }
         setStatus('error');
       }
     } finally {
@@ -481,9 +591,15 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
       appendDebug('client-validator', 'apply.revalidated', preview.suggestion);
       await adapter.applySuggestion(preview.suggestion);
       appendDebug('client', 'apply.completed', { capability, suggestion: preview.suggestion });
-      setConfirmOpen(false); setPreview(null); setPreviewCapability(null); setOutput(appliedMessage || t('aiAssistant.applied')); setStatus('done'); setApplied(true);
+      setConfirmOpen(false); setPreview(null); setPreviewCapability(null);
       // Dismiss any live stage preview once the change is real, so the overlay cannot apply it twice.
       onPreviewStageChange?.(null);
+      if (automaticEditorMode) {
+        setConversation((current) => current.map((item, index) => index === current.length - 1 && item.status === 'proposed' ? { ...item, status: 'applied', detail: appliedMessage || t('aiAssistant.applied') } : item));
+        setOutput(''); setStatus('done'); setApplied(false);
+      } else {
+        setOutput(appliedMessage || t('aiAssistant.applied')); setStatus('done'); setApplied(true);
+      }
     } catch (reason) {
       appendDebug('client', 'apply.failed', debugErrorData(reason));
       const code = reason instanceof Error ? reason.message.split(':')[0] : 'invalid_suggestion';
@@ -504,66 +620,16 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
     return () => window.removeEventListener('fossbot:buddy-apply', handleApplyRequest);
   }, [adapter.surface]);
 
-  const codeSurface = adapter.surface === 'python' || adapter.surface === 'blockly' ? adapter.surface : null;
-
-  // Turn a code block from a prose answer into a validated replacement proposal.
-  const applyAnswerCode = async (block: { language: string; code: string }) => {
-    if (!codeSurface || !canSuggest) return;
-    setRequestError('');
-    try {
-      const fingerprint = await adapter.getFingerprint();
-      const suggestion: AIAssistantSuggestion = codeSurface === 'python'
-        ? { version: '1', type: 'python_replace', baseFingerprint: fingerprint, replacement: block.code, summary: t('aiAssistant.answerCodeSummary') }
-        : { version: '1', type: 'blockly_replace', baseFingerprint: fingerprint, xml: block.code, summary: t('aiAssistant.answerCodeSummary') };
-      const validated = await adapter.previewSuggestion(suggestion, lastRequest?.question || '');
-      setPreview(validated);
-      setPreviewCapability(codeSurface === 'python' ? 'code.suggest_changes' : 'blockly.suggest_changes');
-      setOutput(t('aiAssistant.answerCodeSummary'));
-      setStatus('done');
-    } catch (reason) {
-      appendDebug('client', 'answer_code.failed', debugErrorData(reason));
-      const code = reason instanceof Error ? reason.message.split(':')[0] : 'invalid_suggestion';
-      setRequestError(t(`aiAssistant.errors.${code}`, t('aiAssistant.errors.invalid_suggestion')));
-    }
-  };
-
-  // Replace only the lines the author selected, instead of the whole file.
-  const applyCodeToSelection = async (block: { language: string; code: string }) => {
-    if (codeSurface !== 'python' || !adapter.getSelection || !canSuggest) return;
-    setRequestError('');
-    try {
-      const selection = await adapter.getSelection();
-      if (!selection || !selection.text.trim()) {
-        setRequestError(t('aiAssistant.errors.select_lines'));
-        return;
-      }
-      const merged = replaceSelectedLines(selection.source, selection, block.code);
-      const codeLines = block.code.replace(/\n+$/, '').split('\n');
-      const validation = await validateAIArtifact(token, 'python', merged);
-      if (!validation.valid) {
-        setRequestError(t('aiAssistant.errors.code_invalid', { message: validation.message }));
-        return;
-      }
-      const fingerprint = await adapter.getFingerprint();
-      const summary = t('aiAssistant.answerCodeSelectionSummary', { count: codeLines.length });
-      const suggestion: AIAssistantSuggestion = { version: '1', type: 'python_replace', baseFingerprint: fingerprint, replacement: merged, summary };
-      const validated = await adapter.previewSuggestion(suggestion, lastRequest?.question || '');
-      setPreview(validated);
-      setPreviewCapability('code.suggest_changes');
-      setOutput(summary);
-      setStatus('done');
-    } catch (reason) {
-      appendDebug('client', 'answer_code_selection.failed', debugErrorData(reason));
-      const code = reason instanceof Error ? reason.message.split(':')[0] : 'invalid_suggestion';
-      setRequestError(t(`aiAssistant.errors.${code}`, t('aiAssistant.errors.invalid_suggestion')));
-    }
-  };
-
   const declinePreview = () => {
     setPreview(null);
     setPreviewCapability(null);
     onPreviewStageChange?.(null);
-    setOutput(t('aiAssistant.declined'));
+    if (automaticEditorMode) {
+      setConversation((current) => current.map((item, index) => index === current.length - 1 && item.status === 'proposed' ? { ...item, status: 'declined', detail: t('aiAssistant.declined') } : item));
+      setOutput('');
+    } else {
+      setOutput(t('aiAssistant.declined'));
+    }
   };
 
   const modifyPreview = () => {
@@ -572,7 +638,7 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
     setPreviewCapability(null);
     setMode('suggest');
     setQuestion(t('aiAssistant.modifyPrompt'));
-    setCompose(true);
+    if (!automaticEditorMode) setCompose(true);
     window.requestAnimationFrame(() => questionRef.current?.focus());
   };
 
@@ -580,6 +646,20 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
     setQuestion(prompt ?? '');
     setRequestError('');
     setCompose(true);
+    window.requestAnimationFrame(() => questionRef.current?.focus());
+  };
+
+  const clearConversation = () => {
+    setHistory([]);
+    setConversation([]);
+    setQuestion('');
+    setOutput('');
+    setStatus('idle');
+    setCompose(false);
+    setApplied(false);
+    setPreview(null);
+    setPreviewCapability(null);
+    setLastRequest(null);
     window.requestAnimationFrame(() => questionRef.current?.focus());
   };
 
@@ -591,26 +671,16 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
 
   const noCapability = !loading && !accessError && !explain?.allowed && !suggest?.allowed;
   const canAsk = Boolean(explain?.allowed || suggest?.allowed);
-  const primaryMode: RequestMode = explain?.allowed ? 'explain' : 'suggest';
+  const primaryMode: RequestMode = automaticEditorMode && suggest?.allowed ? 'suggest' : explain?.allowed ? 'explain' : 'suggest';
   // Lesson and stage have no explanation-only capability: their request always produces a
   // reviewable proposal, so the primary action names that instead of implying free-form chat.
   const proposalSurface = adapter.surface === 'lesson' || adapter.surface === 'stage';
-  const primaryLabel = proposalSurface ? t('aiAssistant.actions.change') : primaryMode === 'explain' ? t('aiAssistant.ask') : t('aiAssistant.actions.change');
+  const primaryLabel = automaticEditorMode ? t('aiAssistant.actions.send') : proposalSurface ? t('aiAssistant.actions.change') : t('aiAssistant.ask');
   const busy = status === 'streaming';
-  const view: BuddyView = busy
-    ? 'working'
-    : compose
-      ? 'ask'
-      : preview
-        ? 'review'
-        : status === 'error'
-          ? 'failed'
-          : applied
-            ? 'applied'
-            : output
-              ? 'answer'
-              : 'ask';
-  const viewLabel = view === 'ask' ? t('aiAssistant.states.ask') : view === 'working' ? t('aiAssistant.states.working') : view === 'answer' ? t('aiAssistant.states.answer') : view === 'review' ? t('aiAssistant.states.review') : '';
+  const chatConversation = automaticEditorMode && conversation.length > 0;
+  const view = resolveBuddyView({ busy, compose, preview: Boolean(preview), status, applied, output: Boolean(output), chatConversation });
+  const hasStoppedTurn = conversation.some((entry) => entry.status === 'stopped');
+  const viewLabel = view === 'ask' ? t('aiAssistant.states.ask') : view === 'working' ? t('aiAssistant.states.working') : view === 'conversation' ? busy ? t('aiAssistant.states.working') : '' : view === 'answer' ? t('aiAssistant.states.answer') : view === 'review' ? t('aiAssistant.states.review') : '';
   const promptKeys = adapter.surface === 'python'
     ? ['pythonError', 'pythonTrace', 'pythonApi']
     : adapter.surface === 'blockly'
@@ -634,7 +704,7 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
   };
   const workingIndex = Math.max(0, workingSteps.indexOf(requestStage));
   const previewLabel = preview?.kind === 'python'
-    ? t('aiAssistant.pythonDiff')
+    ? preview.edits?.length ? t('aiAssistant.edits.title') : t('aiAssistant.pythonDiff')
     : preview?.kind === 'blockly'
       ? t('aiAssistant.generatedPython')
       : preview?.kind === 'lesson'
@@ -643,33 +713,12 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
   const renderedOutput = output
     ? <Box ref={outputRef} tabIndex={0} aria-live="polite" sx={{ maxHeight: 320, overflowY: 'auto', overscrollBehavior: 'contain', ...markdownSx }}><ReactMarkdown remarkPlugins={[remarkGfm]}>{output}</ReactMarkdown></Box>
     : null;
-  const answerCodeBlocks = useMemo(() => {
-    if (!codeSurface || !canSuggest || !output) return [] as Array<{ language: string; code: string }>;
-    return codeBlocksFromMarkdown(output).filter((block) => block.code.trim() && (codeSurface === 'python'
-      ? !block.language || ['python', 'py'].includes(block.language)
-      : !block.language || ['xml', 'blockly', 'html'].includes(block.language)));
-  }, [canSuggest, codeSurface, output]);
-  const [codeChecks, setCodeChecks] = useState<Record<string, { valid: boolean; message: string }>>({});
-  const requestedCodeChecks = useRef<Set<string>>(new Set());
-
-  // Validate answer code blocks before offering them, so examples are not presented as applyable programs.
-  useEffect(() => {
-    if (!codeSurface || view !== 'answer' || !answerCodeBlocks.length) return undefined;
-    let cancelled = false;
-    answerCodeBlocks.forEach((block) => {
-      const key = `${block.language}:${block.code}`;
-      if (requestedCodeChecks.current.has(key)) return;
-      requestedCodeChecks.current.add(key);
-      void validateAIArtifact(token, codeSurface, block.code)
-        .then((result) => { if (!cancelled) setCodeChecks((current) => ({ ...current, [key]: result })); })
-        .catch(() => { if (!cancelled) setCodeChecks((current) => ({ ...current, [key]: { valid: false, message: '' } })); });
-    });
-    return () => { cancelled = true; };
-  }, [answerCodeBlocks, codeSurface, token, view]);
+  // One-line composer height, shared by the field and its Send action so they align.
+  const composerHeight = 56;
   const restartFromApplied = () => { setApplied(false); setOutput(''); setPreview(null); setPreviewCapability(null); setStatus('idle'); setQuestion(''); window.requestAnimationFrame(() => questionRef.current?.focus()); };
 
-  const panel = <Paper id="fossbot-buddy-panel" role="dialog" aria-label={t('aiAssistant.title')} elevation={8} sx={{ width: '100%', boxSizing: 'border-box', maxHeight: 'calc(100vh - 104px)', overflowY: 'auto', overflowX: 'hidden', borderRadius: 2, '& .MuiButton-root': { minHeight: 44 }, '& .MuiChip-clickable': { minHeight: 40 } }}>
-    <Stack direction="row" alignItems="center" spacing={1.25} sx={{ minHeight: 64, px: 2, py: 1, borderBottom: 1, borderColor: 'divider' }}>
+  const panel = <Paper ref={panelRef} id="fossbot-buddy-panel" role="dialog" aria-label={t('aiAssistant.title')} elevation={8} sx={{ width: '100%', boxSizing: 'border-box', maxHeight: { xs: 'calc(100vh - 104px)', lg: 'calc(100vh - 196px)' }, overflowY: 'auto', overflowX: 'hidden', borderRadius: 2, '& .MuiButton-root': { minHeight: 44 }, '& .MuiChip-clickable': { minHeight: 40 } }}>
+    <Stack direction="row" alignItems="center" spacing={1.25} sx={{ minHeight: 64, px: 2, py: 1, position: 'sticky', top: 0, zIndex: 2, bgcolor: 'background.paper', borderBottom: 1, borderColor: 'divider' }}>
       <BuddyRobotTile />
       <Box sx={{ flex: 1, minWidth: 0 }}>
         <Stack direction="row" alignItems="center" spacing={1} sx={{ minWidth: 0 }}>
@@ -704,7 +753,7 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
         {(runtimeStatus.readiness === 'error' || runtimeStatus.readiness === 'unavailable') && <Alert severity="warning">{t(`aiAssistant.errors.${runtimeStatus.message || 'provider_error'}`, t('aiAssistant.errors.provider_error'))}</Alert>}
         {unavailableReason && <Alert severity="info">{unavailableReason}</Alert>}
         {requestError && <Alert severity="error">{requestError}</Alert>}
-        {status === 'stopped' && <Alert severity="info">{t('aiAssistant.stopped')}</Alert>}
+        {status === 'stopped' && !hasStoppedTurn && <Alert severity="info">{t('aiAssistant.stopped')}</Alert>}
         {isAdmin && debugEnabled && <AdminDebugTrace entries={debugEntries} onClear={clearDebug} />}
 
         {view === 'working' && <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1.5}>
@@ -735,7 +784,14 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
 
         {view === 'ask' && <Stack spacing={rhythm.blockGap}>
           {contextControls}
-          <Typography component="h3" variant="h5">{t('aiAssistant.question')}</Typography>
+          {conversation.length > 0 && <>
+            <Stack direction={{ xs: 'column', sm: 'row' }} alignItems={{ xs: 'flex-start', sm: 'center' }} justifyContent="space-between" spacing={1}>
+              <Typography component="h3" variant="h5">{t('aiAssistant.conversation')}</Typography>
+              <Button size="small" color="inherit" onClick={clearConversation} disabled={busy} sx={{ flex: '0 0 auto', whiteSpace: 'nowrap' }}>{t('aiAssistant.newConversation')}</Button>
+            </Stack>
+            <ConversationView entries={conversation} userLabel={t('aiAssistant.you')} buddyLabel={t('aiAssistant.title')} pendingStage={requestStage} onStop={stopRun} onRetry={(entry) => { if (entry.mode) void run(entry.question, entry.mode); }} />
+          </>}
+          <Typography component="h3" variant="h5">{conversation.length ? t('aiAssistant.followUp') : t('aiAssistant.question')}</Typography>
           <Stack direction="row" gap={1} flexWrap="wrap">{surfacePrompts.map((prompt) => <PromptChip key={prompt.key} label={prompt.label} onClick={() => usePrompt(prompt)} />)}</Stack>
           <TextField
             inputRef={questionRef}
@@ -755,12 +811,24 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
           />
           <Stack spacing={rhythm.actionGap}>
             <Button fullWidth variant="contained" size="large" endIcon={<IconArrowRight size={19} />} disabled={!question.trim() || busy || !activeDecision?.allowed} onClick={() => void run(question, primaryMode)} sx={{ minHeight: 48 }}>{primaryLabel}</Button>
+            {!automaticEditorMode && canSuggest && primaryMode === 'explain' && <Button fullWidth variant="outlined" startIcon={<IconWand size={17} />} disabled={!question.trim() || busy || !suggest?.allowed} onClick={() => void run(question, 'suggest')} sx={{ minHeight: 44 }}>{t('aiAssistant.actions.change')}</Button>}
             <Stack direction="row" justifyContent="center" alignItems="center" spacing={0.75} sx={{ color: 'text.secondary' }}>
               <IconShieldCheck size={15} aria-hidden="true" />
-              <Typography variant="caption">{t('aiAssistant.askNote')}</Typography>
+              <Typography variant="caption">{automaticEditorMode && suggest?.allowed ? t('aiAssistant.autoNote') : t('aiAssistant.askNote')}</Typography>
             </Stack>
             {compose && output && <Button onClick={() => setCompose(false)} startIcon={<IconArrowLeft size={17} />} sx={{ alignSelf: 'center' }}>{t('aiAssistant.backToAnswer')}</Button>}
           </Stack>
+        </Stack>}
+
+        {view === 'conversation' && <Stack spacing={rhythm.blockGap}>
+          <Stack direction={{ xs: 'column', sm: 'row' }} alignItems={{ xs: 'flex-start', sm: 'center' }} justifyContent="space-between" spacing={1}>
+            <Stack direction="row" alignItems="center" spacing={1} sx={{ minWidth: 0 }}>
+              <Typography component="h3" variant="h5">{t('aiAssistant.conversation')}</Typography>
+              <Chip size="small" color="secondary" label={t('aiAssistant.generated')} />
+            </Stack>
+            <Button size="small" color="inherit" onClick={clearConversation} disabled={busy} sx={{ flex: '0 0 auto', whiteSpace: 'nowrap' }}>{t('aiAssistant.newConversation')}</Button>
+          </Stack>
+          <ConversationView entries={conversation} userLabel={t('aiAssistant.you')} buddyLabel={t('aiAssistant.title')} pendingStage={requestStage} onStop={stopRun} onRetry={(entry) => { if (entry.mode) void run(entry.question, entry.mode); }} />
         </Stack>}
 
         {view === 'answer' && <Stack spacing={rhythm.blockGap}>
@@ -768,33 +836,13 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
             <Typography component="h3" variant="h5">{t('aiAssistant.states.answer')}</Typography>
             <Chip size="small" color="secondary" label={t('aiAssistant.generated')} />
           </Stack>
-          {renderedOutput}
-          {answerCodeBlocks.map((block, index) => {
-            const check = codeChecks[`${block.language}:${block.code}`];
-            const canReplaceSelection = codeSurface === 'python' && Boolean(adapter.getSelection);
-            return <Paper key={`${index}-${block.code.slice(0, 24)}`} variant="outlined" sx={{ overflow: 'hidden', borderRadius: 1.5 }}>
-              <Stack direction="row" alignItems="center" spacing={1} sx={{ px: 1.5, py: 1, bgcolor: 'action.hover', borderBottom: 1, borderColor: 'divider' }}>
-                <IconCode size={17} aria-hidden="true" />
-                <Typography variant="caption" fontWeight={700}>{t('aiAssistant.answerCodeTitle')}</Typography>
-              </Stack>
-              <Box sx={{ p: 1.5 }}>
-                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1, fontFamily: 'monospace', overflowWrap: 'anywhere', whiteSpace: 'pre-wrap' }}>{block.code.split('\n').slice(0, 2).join('\n')}</Typography>
-                <Stack spacing={rhythm.actionStackGap}>
-                  {canReplaceSelection && <Button fullWidth variant="contained" startIcon={<IconWand size={17} />} onClick={() => void applyCodeToSelection(block)} sx={{ minHeight: 44 }}>{t('aiAssistant.actions.replaceSelection')}</Button>}
-                  {check?.valid && <Button fullWidth variant={canReplaceSelection ? 'outlined' : 'contained'} startIcon={<IconWand size={17} />} onClick={() => void applyAnswerCode(block)} sx={{ minHeight: 44 }}>{t('aiAssistant.actions.replaceFile')}</Button>}
-                  {check && !check.valid && <>
-                    <Typography variant="caption" color="text.secondary">{t('aiAssistant.answerCodeExampleBody')}</Typography>
-                    {check.message && <Typography variant="caption" color="text.secondary" sx={{ overflowWrap: 'anywhere' }}>{t('aiAssistant.failedReason', { reason: check.message })}</Typography>}
-                    <Button fullWidth variant="outlined" startIcon={<IconWand size={17} />} onClick={() => void run(lastRequest?.question || question, 'suggest')} sx={{ minHeight: 44 }}>{t('aiAssistant.actions.change')}</Button>
-                  </>}
-                </Stack>
-              </Box>
-            </Paper>;
-          })}
+          {conversation.length
+            ? <ConversationView entries={conversation} userLabel={t('aiAssistant.you')} buddyLabel={t('aiAssistant.title')} pendingStage={requestStage} onStop={stopRun} onRetry={(entry) => { if (entry.mode) void run(entry.question, entry.mode); }} />
+            : renderedOutput}
           <Stack spacing={rhythm.actionGap}>
             <Stack direction="row" gap={1} flexWrap="wrap">
               {surfacePrompts.map((prompt) => <PromptChip key={prompt.key} label={prompt.label} onClick={() => usePrompt(prompt)} />)}
-              {canSuggest && <PromptChip label={t('aiAssistant.actions.change')} onClick={() => void run(lastRequest?.question || question, 'suggest')} />}
+              {proposalSurface && canSuggest && <PromptChip label={t('aiAssistant.actions.change')} onClick={() => void run(lastRequest?.question || question, 'suggest')} />}
             </Stack>
             <Button fullWidth variant="contained" endIcon={<IconArrowRight size={18} />} onClick={() => askAgain()} sx={{ minHeight: 48 }}>{t('aiAssistant.followUp')}</Button>
           </Stack>
@@ -803,25 +851,30 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
         {view === 'review' && preview && <Stack spacing={rhythm.blockGap}>
           <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1.5}>
             <Typography component="h3" variant="h5">{t('aiAssistant.preview')}</Typography>
-            <Chip icon={<IconShieldCheck size={16} />} color="success" label={t('aiAssistant.validated')} size="small" sx={{ flex: '0 0 auto' }} />
+            <Tooltip title={preview.kind === 'python' ? t('aiAssistant.syntaxCheckedHelp') : t('aiAssistant.validatedHelp')}>
+              <Chip icon={<IconShieldCheck size={16} />} color="success" label={preview.kind === 'python' ? t('aiAssistant.syntaxChecked') : t('aiAssistant.validated')} size="small" sx={{ flex: '0 0 auto' }} />
+            </Tooltip>
           </Stack>
           {renderedOutput}
           <Paper variant="outlined" sx={{ overflow: 'hidden', borderRadius: 1.5 }}>
             <Stack direction="row" alignItems="center" spacing={1} sx={{ px: 1.5, py: 1, bgcolor: 'action.hover', borderBottom: 1, borderColor: 'divider' }}>
               {preview.kind === 'python' ? <IconCode size={17} aria-hidden="true" /> : <IconWand size={17} aria-hidden="true" />}
               <Typography variant="caption" fontWeight={700}>{previewLabel}</Typography>
+              {preview.kind === 'python' && preview.edits?.length ? <Chip size="small" label={t('aiAssistant.edits.count', { count: preview.edits.length })} sx={{ height: 20, ml: 'auto' }} /> : null}
             </Stack>
             <Box sx={{ p: 1.5 }}>
               {preview.kind === 'lesson' ? <>
                 <Box><Typography variant="caption" color="text.secondary">{t('aiAssistant.authoring.changes')}</Typography><Stack direction="row" gap={0.5} flexWrap="wrap" sx={{ mt: 0.5 }}>{preview.changes?.map((change, index) => <Chip key={`${change}-${index}`} size="small" label={t(`aiAssistant.authoring.operations.${change}`, change)} />)}</Stack></Box>
                 <LessonSuggestionPreview preview={preview} />
-              </> : preview.kind === 'stage' ? <StageSuggestionPreview preview={preview} onPreviewLiveToggle={onPreviewStageChange} /> : preview.kind === 'python' ? (() => {
-                const diff = lineDiff(preview.before, preview.after);
-                return <Box tabIndex={0} sx={{ maxHeight: 220, overflow: 'auto', fontFamily: 'monospace', fontSize: 12.5, lineHeight: 1.7 }}>
-                  {diff.removed.map((line, index) => <Box key={`removed-${index}`} sx={{ px: 1, color: 'error.main', bgcolor: (currentTheme) => alpha(currentTheme.palette.error.main, 0.08), whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>− {line || ' '}</Box>)}
-                  {diff.added.map((line, index) => <Box key={`added-${index}`} sx={{ px: 1, color: 'success.main', bgcolor: (currentTheme) => alpha(currentTheme.palette.success.main, 0.1), whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>+ {line || ' '}</Box>)}
-                </Box>;
-              })() : <Box component="pre" tabIndex={0} sx={{ m: 0, maxHeight: 180, overflow: 'auto', bgcolor: 'action.hover', p: 1, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{preview.detail}</Box>}
+              </> : preview.kind === 'stage' ? <StageSuggestionPreview preview={preview} onPreviewLiveToggle={onPreviewStageChange} /> : preview.kind === 'python' ? (preview.edits?.length
+                ? <PythonEditsPreview edits={preview.edits} />
+                : (() => {
+                  const diff = lineDiff(preview.before, preview.after);
+                  return <Box tabIndex={0} sx={{ maxHeight: 220, overflow: 'auto', fontFamily: 'monospace', fontSize: 12.5, lineHeight: 1.7 }}>
+                    {diff.removed.map((line, index) => <Box key={`removed-${index}`} sx={{ px: 1, color: 'error.main', bgcolor: (currentTheme) => alpha(currentTheme.palette.error.main, 0.08), whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>− {line || ' '}</Box>)}
+                    {diff.added.map((line, index) => <Box key={`added-${index}`} sx={{ px: 1, color: 'success.main', bgcolor: (currentTheme) => alpha(currentTheme.palette.success.main, 0.1), whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>+ {line || ' '}</Box>)}
+                  </Box>;
+                })()) : <Box component="pre" tabIndex={0} sx={{ m: 0, maxHeight: 180, overflow: 'auto', bgcolor: 'action.hover', p: 1, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{preview.detail}</Box>}
             </Box>
           </Paper>
           <Stack spacing={rhythm.actionStackGap}>
@@ -862,6 +915,29 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
         </Stack>}
       </>}
     </Box>
+    {view === 'conversation' && <Box sx={{ position: 'sticky', bottom: 0, zIndex: 2, borderTop: 1, borderColor: 'divider', bgcolor: 'background.paper', px: rhythm.inset, pt: 1.5, pb: 2 }}>
+      <Stack direction="row" spacing={1} alignItems="flex-end">
+        <TextField
+          inputRef={questionRef}
+          label={t('aiAssistant.message')}
+          value={question}
+          onChange={(event) => setQuestion(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key !== 'Enter' || event.shiftKey) return;
+            event.preventDefault();
+            if (!question.trim() || busy || !activeDecision?.allowed) return;
+            void run(question, primaryMode);
+          }}
+          multiline
+          minRows={1}
+          maxRows={4}
+          size="small"
+          inputProps={{ maxLength: 2000 }}
+          sx={{ flex: 1, minWidth: 0, '& .MuiOutlinedInput-root': { minHeight: composerHeight } }}
+        />
+        <Button variant="contained" endIcon={<IconArrowRight size={18} />} disabled={!question.trim() || busy || !activeDecision?.allowed} onClick={() => void run(question, primaryMode)} sx={{ flex: '0 0 auto', minHeight: composerHeight }}>{t('aiAssistant.send')}</Button>
+      </Stack>
+    </Box>}
   </Paper>;
 
   return <>

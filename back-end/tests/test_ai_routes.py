@@ -303,7 +303,7 @@ def test_admin_settings_update_enforces_usage_retention(db, users):
         completed_at=datetime.datetime.utcnow() - datetime.timedelta(days=8),
         outcome="completed",
         policy_version="1",
-        prompt_version="fossbot-assistant-v1",
+        prompt_version="fossbot-assistant-v2",
     )
     db.add_all([settings, old])
     db.commit()
@@ -338,6 +338,9 @@ def test_answer_code_validation_is_capability_gated_and_syntax_checked(db, users
         assert invalid.status_code == 200
         assert invalid.json()["valid"] is False
         assert invalid.json()["message"]
+        top_level_await = client.post("/api/ai/validate", json={"surface": "python", "content": "await move_step('forward')\n"})
+        assert top_level_await.status_code == 200
+        assert top_level_await.json()["valid"] is False
         blockly = client.post("/api/ai/validate", json={"surface": "blockly", "content": "<xml xmlns=\"https://developers.google.com/blockly/xml\"></xml>"})
         assert blockly.status_code == 200 and blockly.json()["valid"] is True
         malformed = client.post("/api/ai/validate", json={"surface": "blockly", "content": "<xml>"})
@@ -557,6 +560,33 @@ def test_python_suggestion_is_typed_and_never_streams_raw_json(db, users, monkey
     assert "event: suggestion" in response.text
     assert '"type":"python_replace"' in response.text
     assert "event: text_delta" not in response.text
+    assert "event: done" in response.text
+
+
+def test_python_assistance_can_choose_an_answer_without_exposing_structured_json(db, users, monkeypatch):
+    student, admin = users[2], users[3]
+    provider = enable_streaming(db, admin, student, capability="code.suggest_changes")
+    source = "print('hello')"
+    fingerprint = hashlib.sha256(source.encode()).hexdigest()
+    monkeypatch.setattr(ai, "hosted_provider", lambda *args, **kwargs: FakeSuggestionProvider({
+        "version": "1",
+        "type": "answer",
+        "baseFingerprint": fingerprint,
+        "content": "This prints hello once.",
+    }))
+    with client_for(db, student) as client:
+        response = client.post("/api/ai/assist/stream", json={
+            "capability": "code.suggest_changes",
+            "providerId": provider.id,
+            "surface": "python",
+            "question": "What does this program do?",
+            "context": {"source": source, "sourceFingerprint": fingerprint},
+        })
+    assert response.status_code == 200
+    assert "event: answer" in response.text
+    assert '"text":"This prints hello once."' in response.text
+    assert '"type":"answer"' not in response.text
+    assert "event: suggestion" not in response.text
     assert "event: done" in response.text
 
 
