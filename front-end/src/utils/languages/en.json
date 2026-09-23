@@ -100,7 +100,7 @@
   },
   "interactive": {
     "title": "Interactive Mode",
-    "instructions": "This mode allows you to interact with the robot using hand gestures. The closed fist (✊) gesture acts as the press action ontvirtual buttons."
+    "instructions": "This mode allows you to interact with the robot using hand gestures. The closed fist (✊) gesture acts as the press action on virtual buttons."
   },
   "rc": {
     "title": "RC Mode",
@@ -166,15 +166,16 @@
   },
   "banner-content": {
     "openTechnologies": "an open technologies robot for education.",
-    "democratizeEducation": "Let's democratize robotics education! ",
-    "tryItNow": "Try it now"
+    "democratizeEducation": "Code, simulate, and teach robotics—from first blocks to real robots.",
+    "tryItNow": "Try it now",
+    "exploreFeatures": "Explore the platform"
   },
   "c2a2": {
     "description": "Let's start your journey with us, build your own application using blocks or native Python code."
   },
   "general_landing": {
     "fossbot": "FOSSBot is an open source and open design DIY robot that has been developed by Greek Free and Open Source Software (GFOSS) and Harokopio University of Athens (HUA) for educational purposes. The robot does not come alone, but comprises multiple software and system solutions that provide a holistic approach for STEM education at all educational levels.",
-    "platform": "FOSSBot platform is a web-based platform that provides a set of tools for creating, editing, and running programs for the FOSSBot robot. The platform is designed to be user-friendly and to provide a seamless experience for users of all ages and backgrounds.",
+    "platform": "FOSSBot Platform brings programming, simulation, physical robots, custom 3D stages, complete courses, classroom progress, and reviewable AI assistance into one browser-based learning environment.",
     "whatis": "What is FOSSBot?",
     "whatis_platform": "What is FOSSBot Platform?",
     "github": "You can download the 3D print designs and instructions to create your own FOSSBot. Additionally, you can contribute to the development of the platform by submitting bug reports, feature requests, or code contributions.",
@@ -190,6 +191,67 @@
     "about_blockly": "You can create programs for the FOSSBot robot using the Blockly editor. Blockly is a visual programming language that allows users to create programs by dragging and dropping blocks that represent code.",
     "about_monaco": "The Monaco editor is a text-based editor that allows users to write programs for the FOSSBot robot using the Python programming language. The editor provides a real coding experience and is ideal for users who are familiar with text-based programming languages.",
     "about_simulator": "We have developed a simulator that allows users to test their programs for the FOSSBot robot without needing access to the physical robot. The simulator provides a virtual environment where users can run and debug their programs before deploying them to the robot."
+  },
+  "landing_features": {
+    "title": "From a first block to a real robot",
+    "intro": "Build a project, teach it as a course, and run it in simulation or on physical hardware—all from the browser.",
+    "stories": {
+      "programming": {
+        "title": "Code, simulate, and connect",
+        "description": "Choose how you work, then run the same idea in simulation or on a physical FOSSBot.",
+        "point1": "Save, search, and filter Python or Blockly projects, each with its own stage.",
+        "point2": "Work in Python, Blockly, Interactive, or keyboard and game-controller RC modes.",
+        "point3": "See live sensors, motion, battery data, and program output from the simulator or robot.",
+        "screenshot": "Python workspace with code and a live 3D stage"
+      },
+      "stages": {
+        "title": "Build the world around the robot",
+        "description": "Create 3D environments for experiments, lessons, and challenges, then reuse them across the platform.",
+        "point1": "Add terrain, obstacles, targets, lights, cameras, audio, labels, and imported 3D models.",
+        "point2": "Tune transforms, collisions, sensor helpers, spawn points, and previews visually.",
+        "point3": "Save locally or in GitHub, publish reviewable versions, and browse community stages.",
+        "screenshot": "Stage Builder with its object library, 3D canvas, and inspector"
+      },
+      "learning": {
+        "title": "Turn robotics projects into complete courses",
+        "description": "Keep instructions, code, simulation, evidence, and progress together for teachers and learners.",
+        "point1": "Build lessons with starter code, stages, questions, reflections, hints, and sensor observations.",
+        "point2": "Create missions with required objectives, optional scoring, retries, and clear feedback.",
+        "point3": "Version courses, organize class groups, follow progress, and enable optional private leaderboards.",
+        "screenshot": "Student lesson preview with instructions, code, and simulation"
+      },
+      "buddy": {
+        "title": "Get help while staying in control",
+        "description": "Keep a conversation going as Buddy answers questions or prepares changes for your review.",
+        "point1": "Ask follow-up questions about Python or Blockly without repeating your workspace context.",
+        "point2": "Preview, validate, apply, or undo code and stage suggestions; Buddy cannot publish, grade, or change progress.",
+        "point3": "Use approved hosted, on-device, or local models with visible attribution.",
+        "screenshot": "FOSSBot Buddy alongside the Python workspace"
+      }
+    },
+    "foundationsTitle": "Ready for a whole learning community",
+    "foundationsIntro": "Practical foundations for learners, teachers, and administrators.",
+    "foundations": {
+      "projects": {
+        "title": "Accounts and saved work",
+        "description": "Keep projects and course work with a platform account, or sign in with Google or GitHub when those providers are configured."
+      },
+      "access": {
+        "title": "Roles and administration",
+        "description": "Manage learner, teacher, and administrator roles, account access, beta enrollment, stage publishing permissions, and Buddy policies."
+      },
+      "language": {
+        "title": "English and Greek",
+        "description": "Use the platform in English or Greek and choose a light or dark theme for the learning environment."
+      },
+      "open": {
+        "title": "Open by design",
+        "description": "Study, adapt, and contribute to the open-source platform, robot software, and 3D-printable FOSSBot hardware."
+      }
+    },
+    "availability": "Stages, education features, FOSSBot Buddy, social sign-in, and publishing options depend on the access and services enabled by each platform administrator.",
+    "ctaTitle": "Start building with FOSSBot",
+    "ctaDescription": "Open the platform and create your first project, stage, or course in the browser."
   },
 
   "title-fossbot": {
@@ -301,7 +363,7 @@
   },
   "landing-title": {
     "title": "FOSSBot Platform",
-    "description": "This is the Landing page"
+    "description": "Code, simulate, and teach robotics in one open browser-based learning environment."
   },
   "welcome-home-page": {
     "welcome": "Welcome To FOSSBot Home Page",
