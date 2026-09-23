@@ -102,10 +102,6 @@ export function validateStageBuilderStage(stage: EditorStage): StageBuilderValid
       }
     }
 
-    if (object.semanticKind === 'target' || object.semanticKind === 'checkpoint') {
-      results.push(result(stage, `object:${object.id}:reachability-unverified`, 'warning', [object.id], `${labelFor(object)} reachability is not guaranteed.`, 'Reachability detection is approximate in this phase; test the stage and override this warning if it is intentional.'));
-    }
-
     if (object.kind === 'model' && !object.filename.trim()) {
       results.push(result(stage, `object:${object.id}:model-source`, 'error', [object.id], `${labelFor(object)} has no model file.`, 'Import or reference an OBJ, STL, or GLB file before exporting this object.', false));
     }

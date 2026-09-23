@@ -19,4 +19,13 @@ describe('stage builder required objects', () => {
 
     expect(blockingValidationResults(validateStageBuilderStage(stage)).map((item) => item.id)).toContain('stage:spawn-missing');
   });
+
+  it('does not report speculative reachability warnings for targets or checkpoints', () => {
+    const stage = createDemoEditorStage();
+    const target = stage.objects.find((object) => object.semanticKind === 'target');
+    if (!target) throw new Error('demo target missing');
+    stage.objects.push({ ...target, id: 'checkpoint', name: 'checkpoint', semanticKind: 'checkpoint' });
+
+    expect(validateStageBuilderStage(stage).map((item) => item.id)).not.toContainEqual(expect.stringContaining('reachability-unverified'));
+  });
 });

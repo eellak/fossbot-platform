@@ -155,7 +155,7 @@ Minimum valid stage currently requires:
 - visible robot spawn,
 - visible target.
 
-Other validation includes bounds, invalid dimensions, steep ramps, overlaps, blocked spawn, reachability warnings, object-count warnings, camera warnings, and audio warnings.
+Other validation includes bounds, invalid dimensions, steep ramps, overlaps, blocked spawn, object-count warnings, camera warnings, and audio warnings.
 
 ## Simulator integration
 
