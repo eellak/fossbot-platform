@@ -7,6 +7,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { sensorCatalog, sensorStatistics } from 'src/courses/activitySchema';
 import type { MissionActivity, MissionCondition, MissionObjective, MissionObjectiveRole, StageReference } from 'src/courses/types';
 import { loadStageFromProvider } from 'src/stages/StagesApi';
+import { loadLocalStage } from 'src/stages/LocalStagesApi';
 import { useConfirmDialog } from 'src/components/shared/ConfirmDialog';
 import ScoreConfigEditor from './ScoreConfigEditor';
 import { authoringAccordionSx, authoringControlButtonSx, authoringControlFieldSx, authoringIconButtonSx, authoringSummarySx, authoringTitleSx } from './authoringStyles';
@@ -23,6 +24,21 @@ const conditionTypes: MissionCondition['type'][] = [
 
 const templates = ['reach', 'checkpoints', 'avoid', 'collect', 'stop', 'sensor'] as const;
 
+export function loadMissionStageEntries(stageReference: StageReference, token?: string) {
+  if (stageReference.sourceType === 'local') {
+    if (!stageReference.localStageId || !token) return Promise.reject(new Error('Local stage is unavailable.'));
+    return loadLocalStage(token, stageReference.localStageId).then((result) => result.record.config);
+  }
+  if (stageReference.sourceType === 'github' && stageReference.visibility === 'private' && stageReference.repoOwner && stageReference.repoName && token) {
+    return loadStageFromProvider(token, stageReference.repoOwner, stageReference.repoName, stageReference.commitSha).then((result) => result.record.config);
+  }
+  return fetch(stageReference.url || '').then(async (response) => {
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const payload = await response.json();
+    return Array.isArray(payload) ? payload : payload.config;
+  });
+}
+
 export default function MissionActivityEditor({ activity, onChange, stageReference, token, t }: Props) {
   const confirmDialog = useConfirmDialog();
   const [markers, setMarkers] = useState<Marker[]>([]);
@@ -34,13 +50,7 @@ export default function MissionActivityEditor({ activity, onChange, stageReferen
     if (!stageReference) { setMarkers([]); setStageError(false); return; }
     let cancelled = false;
     setStageError(false);
-    const request = stageReference.sourceType === 'github' && stageReference.visibility === 'private' && stageReference.repoOwner && stageReference.repoName && token
-      ? loadStageFromProvider(token, stageReference.repoOwner, stageReference.repoName, stageReference.commitSha).then((result) => result.record.config)
-      : fetch(stageReference.url || '').then(async (response) => {
-          if (!response.ok) throw new Error(`HTTP ${response.status}`);
-          const payload = await response.json();
-          return Array.isArray(payload) ? payload : payload.config;
-        });
+    const request = loadMissionStageEntries(stageReference, token);
     request.then((entries) => { if (!cancelled) setMarkers(readMarkers(entries || [])); })
       .catch(() => { if (!cancelled) { setMarkers([]); setStageError(true); } });
     return () => { cancelled = true; };

@@ -10,10 +10,11 @@ from main import (
     delete_user,
     get_current_user,
     get_or_create_firebase_user,
+    register_user,
     update_activated_status,
     update_user_role,
 )
-from models.models import FirebaseTokenRequest, UpdateActiavtedRequest, UpdateUserRoleRequest, UserRole
+from models.models import FirebaseTokenRequest, RegisterRequest, UpdateActiavtedRequest, UpdateUserRoleRequest, UserRole
 
 
 def raises_http_status(status_code, action):
@@ -21,6 +22,16 @@ def raises_http_status(status_code, action):
         action()
     assert error.value.status_code == status_code
     return error.value
+
+
+def test_new_local_account_is_activated_on_registration(db, monkeypatch):
+    monkeypatch.setattr("main.get_hashed", lambda _password: "hashed-password")
+    result = asyncio.run(register_user(RegisterRequest(
+        username="new-student", password="test-password", firstname="New", lastname="Student", email="new@example.test",
+    ), db))
+
+    registered = db.query(User).filter(User.id == result["id"]).one()
+    assert registered.activated is True
 
 
 def test_inactive_local_account_cannot_authenticate(db, users):

@@ -3,13 +3,12 @@ import type { MarketplaceStageEntry } from './MarketplaceApi';
 
 import { backendUrl, resolveBackendAssetUrl } from '../utils/backendUrl';
 
-export interface LocalStage {
+export interface LocalStageSummary {
   id: number;
   slug: string;
   title: string;
   description: string;
   visibility: 'private';
-  record: LocalStageRecord;
   recordBytes: number;
   revision: number;
   checksum: string;
@@ -20,6 +19,10 @@ export interface LocalStage {
   publication?: { id: number; active: boolean; stageRevision: number; currentReleaseId?: number | null; publishedAt: string; updatedAt: string; unpublishedAt?: string | null } | null;
   submission?: LocalPublicationSubmissionSummary | null;
   unchanged?: boolean;
+}
+
+export interface LocalStage extends LocalStageSummary {
+  record: LocalStageRecord;
 }
 
 export interface LocalPublicationSubmissionSummary {
@@ -75,9 +78,9 @@ function authHeaders(token: string): HeadersInit {
   return { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
 }
 
-export async function listLocalStages(token: string): Promise<LocalStage[]> {
+export async function listLocalStages(token: string): Promise<LocalStageSummary[]> {
   const response = await fetch(`${backendUrl}/api/local-stages`, { headers: authHeaders(token) });
-  return (await parseJsonResponse<{ stages: LocalStage[] }>(response)).stages;
+  return (await parseJsonResponse<{ stages: LocalStageSummary[] }>(response)).stages;
 }
 
 export async function loadLocalStage(token: string, stageId: number): Promise<LocalStage> {

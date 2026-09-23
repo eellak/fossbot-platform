@@ -5,7 +5,7 @@ import PageContainer from 'src/components/container/PageContainer';
 import ActivityComposer from 'src/components/courses/activities/ActivityComposer';
 import type { Activity } from 'src/courses/types';
 import { LocalStageList } from 'src/stages/OpenLocalStageDialog';
-import type { LocalStage } from 'src/stages/LocalStagesApi';
+import type { LocalStageSummary } from 'src/stages/LocalStagesApi';
 
 const updatedJustNow = new Date().toISOString();
 const updatedEarlier = new Date(Date.now() - 42 * 60_000).toISOString();
@@ -59,14 +59,13 @@ const initialActivities: Activity[] = [
   },
 ];
 
-const previewStages: LocalStage[] = [
+const previewStages: LocalStageSummary[] = [
   {
     id: -101,
     slug: 'comparison-obstacle-course',
     title: 'Obstacle course',
     description: 'Synthetic comparison fixture',
     visibility: 'private',
-    record: { id: 'comparison-obstacle-course', title: 'Obstacle course', description: 'Synthetic comparison fixture', createdAt: updatedEarlier, updatedAt: updatedJustNow, config: [] },
     recordBytes: 18432,
     revision: 4,
     checksum: 'comparison-obstacle-course-r4',
@@ -79,7 +78,6 @@ const previewStages: LocalStage[] = [
     title: 'Line-following practice',
     description: 'Synthetic comparison fixture',
     visibility: 'private',
-    record: { id: 'comparison-line-following', title: 'Line-following practice', description: 'Synthetic comparison fixture', createdAt: updatedEarlier, updatedAt: updatedEarlier, config: [] },
     recordBytes: 9216,
     revision: 2,
     checksum: 'comparison-line-following-r2',
@@ -91,7 +89,7 @@ const previewStages: LocalStage[] = [
 export default function CourseAuthoringPreview({ proposed = false }: { proposed?: boolean }) {
   const { t } = useTranslation();
   const [activities, setActivities] = useState(initialActivities);
-  const [selectedStage, setSelectedStage] = useState<LocalStage | null>(null);
+  const [selectedStage, setSelectedStage] = useState<LocalStageSummary | null>(null);
 
   return <PageContainer title="Course authoring comparison" description="Development-only blocks and separators fixture">
     <Box data-preview-appearance={proposed ? 'proposed' : 'current'} sx={{ py: 3, maxWidth: 1180, mx: 'auto' }}>

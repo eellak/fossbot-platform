@@ -674,7 +674,8 @@ async def register_user(register_request: RegisterRequest, db: SessionLocal = De
                     hashed_password=hashed_password,
                     firstname=register_request.firstname,
                     lastname=register_request.lastname,
-                    email=email
+                    email=email,
+                    activated=True
                     )
 
     # Add new user to the database

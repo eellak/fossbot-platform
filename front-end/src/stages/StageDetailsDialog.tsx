@@ -1,6 +1,6 @@
-import React from 'react';
-import { Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, Stack, Typography } from '@mui/material';
-import type { LocalStage } from './LocalStagesApi';
+import React, { useEffect, useState } from 'react';
+import { Alert, Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, Skeleton, Stack, Typography } from '@mui/material';
+import { loadLocalStage, type LocalStage, type LocalStageSummary } from './LocalStagesApi';
 
 export type StageDetailRow = [label: string, value: string];
 
@@ -11,9 +11,11 @@ type StageDetailsDialogProps = {
   description?: string | null;
   previewUrl?: string | null;
   rows: StageDetailRow[];
+  loading?: boolean;
+  error?: string;
 };
 
-export function StageDetailsDialog({ open, onClose, title, description, previewUrl, rows }: StageDetailsDialogProps) {
+export function StageDetailsDialog({ open, onClose, title, description, previewUrl, rows, loading, error }: StageDetailsDialogProps) {
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
       <DialogTitle>Stage details</DialogTitle>
@@ -24,14 +26,16 @@ export function StageDetailsDialog({ open, onClose, title, description, previewU
             <Typography variant="subtitle2" fontWeight={700}>{title}</Typography>
             <Typography variant="body2" color="text.secondary">{description || 'No description'}</Typography>
           </Box>
-          <Box sx={{ display: 'grid', gridTemplateColumns: 'auto minmax(0, 1fr)', columnGap: 2, rowGap: 1 }}>
+          {loading && <Skeleton variant="rounded" height={160} />}
+          {error && <Alert severity="warning">{error}</Alert>}
+          {!loading && !error && <Box sx={{ display: 'grid', gridTemplateColumns: 'auto minmax(0, 1fr)', columnGap: 2, rowGap: 1 }}>
             {rows.map(([label, value]) => (
               <React.Fragment key={label}>
                 <Typography variant="caption" color="text.secondary">{label}</Typography>
                 <Typography variant="body2" sx={{ overflowWrap: 'anywhere' }}>{value}</Typography>
               </React.Fragment>
             ))}
-          </Box>
+          </Box>}
         </Stack>
       </DialogContent>
       <DialogActions>
@@ -41,12 +45,40 @@ export function StageDetailsDialog({ open, onClose, title, description, previewU
   );
 }
 
+export function LocalStageDetailsDialog({ stage, token, onClose, previewUrl }: {
+  stage: LocalStageSummary;
+  token: string;
+  onClose: () => void;
+  previewUrl?: string | null;
+}) {
+  const [loaded, setLoaded] = useState<LocalStage | null>(null);
+  const [error, setError] = useState('');
+  useEffect(() => {
+    let active = true;
+    setLoaded(null);
+    setError('');
+    loadLocalStage(token, stage.id)
+      .then((result) => { if (active) setLoaded(result); })
+      .catch(() => { if (active) setError('Could not load stage details. Close and try again.'); });
+    return () => { active = false; };
+  }, [token, stage.id, stage.revision]);
+  return <StageDetailsDialog
+    open
+    onClose={onClose}
+    title={stage.title}
+    description={stage.description}
+    previewUrl={previewUrl}
+    rows={loaded ? localStageDetailRows(loaded) : []}
+    loading={!loaded && !error}
+    error={error}
+  />;
+}
+
 const detailsCache = new Map<string, StageDetailRow[]>();
 
 /**
- * Shapes the local-stage payload the list already returned into details rows.
- * Cached by `id:revision` so reopening a stage is instant and a save that bumps
- * the revision recomputes.
+ * Shapes a full local-stage record fetched on demand into details rows.
+ * Cached by `id:revision` so a save that bumps the revision recomputes the rows.
  */
 export function localStageDetailRows(stage: LocalStage): StageDetailRow[] {
   const key = `${stage.id}:${stage.revision}`;

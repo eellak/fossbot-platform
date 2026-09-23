@@ -376,11 +376,12 @@ def _validate_lesson_operations(suggestion: LessonAuthoringSuggestion, context: 
                 raise SuggestionError("A new lesson cannot target an existing lesson")
             if not (operation.lesson_title or "").strip():
                 raise SuggestionError("A new lesson needs a title")
-            for activity_index, activity in enumerate(operation.activities or []):
-                try:
-                    validate_activities([activity])
-                except ValueError as error:
-                    raise SuggestionError(f"operations[{index}] new lesson activity {activity_index} is invalid: {error}") from error
+            activities = operation.activities or []
+            try:
+                validate_activities(activities)
+            except ValueError as error:
+                raise SuggestionError(f"operations[{index}] new lesson activities are invalid: {error}") from error
+            for activity in activities:
                 key = str(activity.get("key") or "")
                 if not key.startswith("ai-"):
                     raise SuggestionError("Generated activities need stable ai- keys")

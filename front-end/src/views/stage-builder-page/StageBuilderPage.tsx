@@ -42,7 +42,7 @@ import { OpenFromProviderDialog } from 'src/stages/OpenFromProviderDialog';
 import { getMarketplaceStageStatus, publishStageToMarketplace, MarketplaceRequestError, type MarketplaceStageStatusResponse, type PublishMarketplaceResponse } from 'src/stages/MarketplaceApi';
 import { PublishToMarketplaceDialog, type PublishMarketplaceValues } from 'src/stages/PublishToMarketplaceDialog';
 import { invalidateLocalStages, invalidateMarketplaceFirstPage, invalidateMyMarketplaceStages, invalidateUserStages, refreshMarketplaceFirstPage, refreshMyMarketplaceStages, refreshUserStages, stageListUserKey, subscribeUserStages, userStagesSnapshot } from 'src/stages/stageListCache';
-import { createLocalStage, listLocalStages, loadLocalStage, LocalStageRequestError, publishLocalStage, updateLocalStage, type LocalPublicationSubmissionSummary, type LocalStage } from 'src/stages/LocalStagesApi';
+import { createLocalStage, listLocalStages, loadLocalStage, LocalStageRequestError, publishLocalStage, updateLocalStage, type LocalPublicationSubmissionSummary, type LocalStage, type LocalStageSummary } from 'src/stages/LocalStagesApi';
 import { OpenLocalStageDialog } from 'src/stages/OpenLocalStageDialog';
 import { useFeatureFlags } from 'src/config/FeatureFlags';
 import StageAuthoringAssistant from 'src/components/ai/StageAuthoringAssistant';
@@ -429,7 +429,7 @@ const StageBuilderPage = () => {
   const [providerStatus, setProviderStatus] = useState<GitHubProviderStatus | null>(null);
   const [localStage, setLocalStage] = useState<LocalStage | null>(null);
   const [localStageSaving, setLocalStageSaving] = useState(false);
-  const [localStages, setLocalStages] = useState<LocalStage[]>([]);
+  const [localStages, setLocalStages] = useState<LocalStageSummary[]>([]);
   const [localStagesLoading, setLocalStagesLoading] = useState(false);
   const [localStagesError, setLocalStagesError] = useState('');
   const [openLocalStageOpen, setOpenLocalStageOpen] = useState(false);
@@ -1211,12 +1211,21 @@ const StageBuilderPage = () => {
     }
   };
 
-  const handleOpenLocalStage = async (item: LocalStage) => {
-    if (!(await confirmIfDirty('Open this saved stage and replace the current editor stage? Unsaved changes will remain only as a recovery draft.'))) return;
-    replaceStage(configToEditorStage(item.record), { undoable: true, clean: true, message: 'Opened stage from your account.' });
-    setLocalStage(item);
-    setRemoteStage(null);
-    setOpenLocalStageOpen(false);
+  const handleOpenLocalStage = async (item: LocalStageSummary) => {
+    if (!token || !(await confirmIfDirty('Open this saved stage and replace the current editor stage? Unsaved changes will remain only as a recovery draft.'))) return;
+    setLocalStagesLoading(true);
+    setLocalStagesError('');
+    try {
+      const loaded = await loadLocalStage(token, item.id);
+      replaceStage(configToEditorStage(loaded.record), { undoable: true, clean: true, message: 'Opened stage from your account.' });
+      setLocalStage(loaded);
+      setRemoteStage(null);
+      setOpenLocalStageOpen(false);
+    } catch (error) {
+      setLocalStagesError(error instanceof Error ? error.message : 'Could not open this stage.');
+    } finally {
+      setLocalStagesLoading(false);
+    }
   };
 
   const handleProviderSave = async ({ slug, commitMessage, visibility }: SaveToProviderValues) => {

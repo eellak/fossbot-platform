@@ -168,6 +168,28 @@ def test_create_lesson_is_validated_and_target_scoped():
         parse_suggestion(json.dumps(valid), "lesson.draft", revision, lesson_context)
 
 
+def test_create_lesson_accepts_hint_linked_to_another_new_activity():
+    revision = "a" * 64
+    context = {"target": "course", "target_payload": {"course": {}, "outline": []}}
+    activities = [
+        {"key": "ai-question", "type": "multiple_choice", "version": 1, "required": True,
+         "prompt": "Which way?", "options": [{"key": "left", "label": "Left"}, {"key": "right", "label": "Right"}],
+         "correctOptionKey": "left"},
+        {"key": "ai-hint", "type": "hint", "version": 1, "required": False,
+         "content": "Look at the arrow.", "forActivityKey": "ai-question"},
+    ]
+    suggestion = {
+        "version": "1", "type": "lesson_operations", "baseRevision": revision, "summary": "Create lesson with hint.",
+        "operations": [{"op": "create_lesson", "lessonTitle": "Directions", "activities": activities}],
+    }
+    parsed = parse_suggestion(json.dumps(suggestion), "lesson.draft", revision, context)
+    assert parsed.operations[0].activities == activities
+
+    activities[1]["forActivityKey"] = "missing"
+    with pytest.raises(SuggestionError, match="forActivityKey"):
+        parse_suggestion(json.dumps(suggestion), "lesson.draft", revision, context)
+
+
 def test_python_edits_merge_line_ranges_and_validate():
     source = "def greet():\n    print('hi')\n\nprint('bye')\n"
     fingerprint = hashlib.sha256(source.encode()).hexdigest()

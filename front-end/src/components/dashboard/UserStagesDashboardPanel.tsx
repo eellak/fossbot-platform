@@ -14,7 +14,7 @@ import { useConfirmDialog } from 'src/components/shared/ConfirmDialog';
 import { useNotifications } from 'src/components/notifications/NotificationProvider';
 import CardDialog, { type StageSelection } from 'src/components/stage-select-popup/CardDialog';
 import { useAuth } from 'src/authentication/AuthProvider';
-import { listLocalStages, unpublishLocalStage, type LocalStage } from 'src/stages/LocalStagesApi';
+import { listLocalStages, unpublishLocalStage, type LocalStageSummary } from 'src/stages/LocalStagesApi';
 import { getGitHubLoginUrl, getGitHubProviderStatus, type GitHubProviderStatus } from 'src/stages/ProviderAuthApi';
 import type { MyMarketplaceStage } from 'src/stages/MarketplaceApi';
 import type { ProviderStageListItem } from 'src/stages/StagesApi';
@@ -34,7 +34,7 @@ import {
 } from 'src/stages/stageListCache';
 import { formatStageRelativeTime } from 'src/stages/StageCard';
 import StageListCard from 'src/stages/StageListCard';
-import StageDetailsDialog, { localStageDetailRows } from 'src/stages/StageDetailsDialog';
+import { LocalStageDetailsDialog } from 'src/stages/StageDetailsDialog';
 import { useStagePreviews } from 'src/stages/useStagePreviews';
 import { MARKETPLACE_COPY } from 'src/stages/marketplaceCopy';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -47,7 +47,7 @@ type DashboardStage = {
   source: 'local' | 'github';
   detail: string;
   description?: string;
-  localStage?: LocalStage;
+  localStage?: LocalStageSummary;
   notice?: string;
   status?: string;
   statusKey: 'draft' | 'published' | 'pending' | 'rejected';
@@ -89,7 +89,7 @@ function publicationAsStage(publication: MyMarketplaceStage): ProviderStageListI
   };
 }
 
-function localStatus(stage: LocalStage): Pick<DashboardStage, 'status' | 'statusKey' | 'statusColor'> {
+function localStatus(stage: LocalStageSummary): Pick<DashboardStage, 'status' | 'statusKey' | 'statusColor'> {
   if (stage.submission?.status === 'pending') return { status: `v${stage.submission.stageRevision} awaiting review`, statusKey: 'pending', statusColor: 'warning' };
   if (stage.submission?.status === 'rejected') return { status: `v${stage.submission.stageRevision} rejected`, statusKey: 'rejected', statusColor: 'error' };
   if (stage.publication?.active) return { status: stage.publication.stageRevision === stage.revision ? 'Published' : `Published v${stage.publication.stageRevision}`, statusKey: 'published', statusColor: 'success' };
@@ -103,7 +103,7 @@ export default function UserStagesDashboardPanel({ showViewAll = true, appearanc
   const location = useLocation();
   const navigate = useNavigate();
   const userKey = stageListUserKey(user);
-  const [localStages, setLocalStages] = useState<LocalStage[]>([]);
+  const [localStages, setLocalStages] = useState<LocalStageSummary[]>([]);
   const [githubStages, setGitHubStages] = useState<ProviderStageListItem[]>([]);
   const [publications, setPublications] = useState<MyMarketplaceStage[]>([]);
   const [providerStatus, setProviderStatus] = useState<GitHubProviderStatus | null>(null);
@@ -237,7 +237,7 @@ export default function UserStagesDashboardPanel({ showViewAll = true, appearanc
     return () => { active = false; };
   }, [token, userKey]);
 
-  const updateLocalPublication = async (stage: LocalStage) => {
+  const updateLocalPublication = async (stage: LocalStageSummary) => {
     if (!token) return;
     const pending = stage.submission?.status === 'pending';
     const published = !!stage.publication?.active;
@@ -537,14 +537,12 @@ export default function UserStagesDashboardPanel({ showViewAll = true, appearanc
         {stageMenu.stage.localStage.publication?.active ? 'Unpublish' : 'Cancel request'}
       </MenuItem>}
     </Menu>
-    {detailsStage?.localStage && (
-      <StageDetailsDialog
-        open
+    {detailsStage?.localStage && token && (
+      <LocalStageDetailsDialog
+        stage={detailsStage.localStage}
+        token={token}
         onClose={() => setDetailsStage(null)}
-        title={detailsStage.title}
-        description={detailsStage.description}
         previewUrl={detailsStage.localStage.previewUrl ? previewObjectUrls[detailsStage.localStage.previewUrl] : undefined}
-        rows={localStageDetailRows(detailsStage.localStage)}
       />
     )}
     <CardDialog

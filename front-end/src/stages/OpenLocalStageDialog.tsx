@@ -1,13 +1,13 @@
 import React from 'react';
 import { Alert, Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, List, ListItemButton, ListItemText, Skeleton, Stack, Typography } from '@mui/material';
 import StorageIcon from '@mui/icons-material/Storage';
-import type { LocalStage } from './LocalStagesApi';
+import type { LocalStageSummary } from './LocalStagesApi';
 import { formatStageRelativeTime } from './StageCard';
 
 export function LocalStageList({ stages, busy, onOpenStage, selectedStageId }: {
-  stages: LocalStage[];
+  stages: LocalStageSummary[];
   busy: boolean;
-  onOpenStage: (stage: LocalStage) => void;
+  onOpenStage: (stage: LocalStageSummary) => void;
   selectedStageId?: number;
 }) {
   if (busy) {
@@ -23,12 +23,12 @@ export function LocalStageList({ stages, busy, onOpenStage, selectedStageId }: {
 
 export function OpenLocalStageDialog({ open, stages, busy, error, onClose, onRefresh, onOpenStage }: {
   open: boolean;
-  stages: LocalStage[];
+  stages: LocalStageSummary[];
   busy: boolean;
   error?: string | null;
   onClose: () => void;
   onRefresh: () => void;
-  onOpenStage: (stage: LocalStage) => void;
+  onOpenStage: (stage: LocalStageSummary) => void;
 }) {
   return <Dialog open={open} onClose={busy ? undefined : onClose} maxWidth="sm" fullWidth>
     <DialogTitle>Open my stage</DialogTitle>

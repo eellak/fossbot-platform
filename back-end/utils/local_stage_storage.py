@@ -137,15 +137,16 @@ def copy_provenance(source: dict[str, Any], inherited: Optional[dict[str, Any]] 
     return {**source, "copiedAt": utc_now_iso(), "ancestors": ancestors[:20]}
 
 
-def local_stage_payload(stage: Any) -> dict[str, Any]:
-    has_preview = bool(getattr(stage, "preview_image", None))
-    return {
+def local_stage_payload(stage: Any, *, include_record: bool = True) -> dict[str, Any]:
+    # Listing stages must not load full JSON records or preview blobs: an embedded
+    # STL can make a single record tens of MiB. Saved previews always have a MIME.
+    has_preview = bool(stage.preview_mime)
+    payload = {
         "id": stage.id,
         "slug": stage.slug,
         "title": stage.title,
         "description": stage.description,
         "visibility": stage.visibility,
-        "record": stage.record,
         "recordBytes": stage.record_bytes,
         "revision": stage.revision,
         "checksum": stage.checksum,
@@ -154,6 +155,9 @@ def local_stage_payload(stage: Any) -> dict[str, Any]:
         "createdAt": stage.created_at.isoformat() + "Z",
         "updatedAt": stage.updated_at.isoformat() + "Z",
     }
+    if include_record:
+        payload["record"] = stage.record
+    return payload
 
 
 def local_publication_entry(publication: Any, submission: Any = None) -> dict[str, Any]:

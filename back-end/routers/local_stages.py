@@ -7,8 +7,9 @@ from typing import Any, Literal, Optional
 from database.database import Lesson, LocalMarketplacePublication, LocalMarketplaceSubmission, LocalStage, MarketplaceModerationOverride, Projects, User
 from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, Field
+from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, defer, joinedload
 
 from routers.stage_sources import get_current_user, get_db, stage_error
 from utils.local_stage_storage import (
@@ -222,13 +223,33 @@ def _stage_payload(db: Session, stage: LocalStage) -> dict[str, Any]:
 
 @router.get("/api/local-stages")
 async def list_local_stages(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    stages = db.query(LocalStage).filter(LocalStage.user_id == current_user.id).order_by(LocalStage.updated_at.desc()).all()
+    stages = db.query(LocalStage).options(defer(LocalStage.record), defer(LocalStage.preview_image)).filter(LocalStage.user_id == current_user.id).order_by(LocalStage.updated_at.desc()).all()
     publications = {
         publication.stage_id: publication
-        for publication in db.query(LocalMarketplacePublication).filter(LocalMarketplacePublication.owner_user_id == current_user.id).all()
+        for publication in db.query(LocalMarketplacePublication).options(
+            defer(LocalMarketplacePublication.record_snapshot),
+            defer(LocalMarketplacePublication.preview_image),
+            joinedload(LocalMarketplacePublication.current_submission).defer(LocalMarketplaceSubmission.record_snapshot).defer(LocalMarketplaceSubmission.preview_image),
+        ).filter(LocalMarketplacePublication.owner_user_id == current_user.id).all()
     }
-    submissions = {stage.id: _latest_submission(db, stage.id) for stage in stages}
-    return {"stages": [local_stage_payload(stage) | {"publication": _publication_summary(publications.get(stage.id)), "submission": _submission_summary(submissions.get(stage.id))} for stage in stages]}
+    submissions = {}
+    if stages:
+        ranked = db.query(
+            LocalMarketplaceSubmission.id.label("submission_id"),
+            func.row_number().over(
+                partition_by=LocalMarketplaceSubmission.stage_id,
+                order_by=(LocalMarketplaceSubmission.requested_at.desc(), LocalMarketplaceSubmission.id.desc()),
+            ).label("position"),
+        ).filter(LocalMarketplaceSubmission.owner_user_id == current_user.id).subquery()
+        submissions = {
+            submission.stage_id: submission
+            for submission in db.query(LocalMarketplaceSubmission).join(
+                ranked, LocalMarketplaceSubmission.id == ranked.c.submission_id
+            ).options(
+                defer(LocalMarketplaceSubmission.record_snapshot), defer(LocalMarketplaceSubmission.preview_image)
+            ).filter(ranked.c.position == 1).all()
+        }
+    return {"stages": [local_stage_payload(stage, include_record=False) | {"publication": _publication_summary(publications.get(stage.id)), "submission": _submission_summary(submissions.get(stage.id))} for stage in stages]}
 
 
 @router.post("/api/local-stages")

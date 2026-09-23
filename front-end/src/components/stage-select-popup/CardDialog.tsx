@@ -25,11 +25,11 @@ import { loadStageFromProvider, type ProviderStageListItem } from 'src/stages/St
 import { marketplaceFirstPageSnapshot, refreshMarketplaceFirstPage, refreshUserStages, stageListUserKey, subscribeMarketplaceFirstPage, subscribeUserStages, userStagesSnapshot } from 'src/stages/stageListCache';
 import { GitHubIdentity } from 'src/stages/StageCard';
 import StageListCard, { StageListCardSkeleton } from 'src/stages/StageListCard';
-import StageDetailsDialog, { localStageDetailRows } from 'src/stages/StageDetailsDialog';
+import StageDetailsDialog, { LocalStageDetailsDialog } from 'src/stages/StageDetailsDialog';
 import { useStagePreviews } from 'src/stages/useStagePreviews';
 import { getGitHubLoginUrl, getGitHubProviderStatus, type GitHubProviderStatus } from 'src/stages/ProviderAuthApi';
 import { MARKETPLACE_COPY } from 'src/stages/marketplaceCopy';
-import { listLocalStages, loadLocalStage, type LocalStage } from 'src/stages/LocalStagesApi';
+import { listLocalStages, loadLocalStage, type LocalStageSummary } from 'src/stages/LocalStagesApi';
 import { useFeatureFlags } from 'src/config/FeatureFlags';
 
 export type StageSelectionSource = 'default' | 'local' | 'github' | 'marketplace';
@@ -159,10 +159,10 @@ const CardDialog: React.FC<CardDialogProps> = ({ open, onClose, onSelect, onSele
   const userKey = stageListUserKey(user);
   const [tab, setTab] = useState<StageSelectionSource>('default');
   const [userStages, setUserStages] = useState<ProviderStageListItem[]>([]);
-  const [localStages, setLocalStages] = useState<LocalStage[]>([]);
+  const [localStages, setLocalStages] = useState<LocalStageSummary[]>([]);
   const [marketplaceStages, setMarketplaceStages] = useState<MarketplaceStageEntry[]>([]);
   const localPreviews = useStagePreviews(token, localStages.map((stage) => stage.previewUrl));
-  const [detailsStage, setDetailsStage] = useState<LocalStage | null>(null);
+  const [detailsStage, setDetailsStage] = useState<LocalStageSummary | null>(null);
   const [detailsBuiltin, setDetailsBuiltin] = useState<DefaultStageOption | null>(null);
   const [userLoading, setUserLoading] = useState(false);
   const [localLoading, setLocalLoading] = useState(false);
@@ -252,7 +252,7 @@ const CardDialog: React.FC<CardDialogProps> = ({ open, onClose, onSelect, onSele
     marketplace: marketplaceStages.length,
   }), [localStages.length, marketplaceStages.length, userStages.length]);
 
-  const handleLocalSelect = async (stage: LocalStage) => {
+  const handleLocalSelect = async (stage: LocalStageSummary) => {
     const selection = {
       sourceType: 'local' as const,
       localStageId: stage.id,
@@ -455,14 +455,12 @@ const CardDialog: React.FC<CardDialogProps> = ({ open, onClose, onSelect, onSele
         <Button variant="contained" onClick={onCreateStage}>Create blank stage</Button>
       </DialogActions>}
     </Dialog>
-    {detailsStage && (
-      <StageDetailsDialog
-        open
+    {detailsStage && token && (
+      <LocalStageDetailsDialog
+        stage={detailsStage}
+        token={token}
         onClose={() => setDetailsStage(null)}
-        title={detailsStage.title}
-        description={detailsStage.description}
         previewUrl={detailsStage.previewUrl ? localPreviews[detailsStage.previewUrl] : undefined}
-        rows={localStageDetailRows(detailsStage)}
       />
     )}
     {detailsBuiltin && (
