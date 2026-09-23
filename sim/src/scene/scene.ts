@@ -28,6 +28,14 @@ const LEGACY_CANVAS_FALLBACK_SIZE = 1
 const LEGACY_AMBIENT_INTENSITY = 0.5
 const LEGACY_DIRECTIONAL_INTENSITY = 2
 
+export interface InitSceneOptions {
+  gizmo?: boolean
+  preserveDrawingBuffer?: boolean
+  maxPixelRatio?: number
+  powerPreference?: WebGLPowerPreference
+  onResize?: () => void
+}
+
 function getContainerSize(container: HTMLElement): { width: number; height: number } {
   return {
     width: Math.max(LEGACY_CANVAS_FALLBACK_SIZE, container.clientWidth),
@@ -35,11 +43,15 @@ function getContainerSize(container: HTMLElement): { width: number; height: numb
   }
 }
 
-export function initScene(container: HTMLElement, opts?: { gizmo?: boolean; preserveDrawingBuffer?: boolean }): SceneHandle {
+export function initScene(container: HTMLElement, opts?: InitSceneOptions): SceneHandle {
   const useGizmo = opts?.gizmo ?? true
   const initialSize = getContainerSize(container)
-  const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: opts?.preserveDrawingBuffer ?? false })
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+  const renderer = new THREE.WebGLRenderer({
+    antialias: true,
+    preserveDrawingBuffer: opts?.preserveDrawingBuffer ?? false,
+    powerPreference: opts?.powerPreference,
+  })
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, opts?.maxPixelRatio ?? 2))
   renderer.outputColorSpace = THREE.SRGBColorSpace
   renderer.setSize(initialSize.width, initialSize.height, false)
   renderer.domElement.style.display = 'block'
@@ -130,6 +142,7 @@ export function initScene(container: HTMLElement, opts?: { gizmo?: boolean; pres
       renderer.setSize(w, h, false)
       camera.aspect = w / h
       camera.updateProjectionMatrix()
+      opts?.onResize?.()
     })
   }
   window.addEventListener('resize', resizeListener)

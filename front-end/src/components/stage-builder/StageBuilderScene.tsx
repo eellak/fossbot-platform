@@ -21,6 +21,7 @@ import { cloneStage, objectBounds, stageHalfExtents, cameraLookDirection } from 
 import { getEditorColors, getEditorTones } from './stageBuilderEditorTheme';
 import { normalizeStageBuilderSkybox } from './stageBuilderSkybox';
 import { CUSTOM_OBJECT_MIN_SCALE } from './stageBuilderCustomObjects';
+import { createStageBuilderRenderScheduler } from './stageBuilderRenderScheduler';
 
 export type StageBuilderTransformMode = 'select' | 'translate' | 'rotate' | 'scale';
 export type StageBuilderCameraView = 'perspective' | 'top' | 'bottom' | 'front' | 'back' | 'left' | 'right' | 'camera';
@@ -536,7 +537,7 @@ function makeCollisionEdgesLocal(root: THREE.Object3D, anchor: THREE.Object3D, c
   return line;
 }
 
-function makeImportedModelRoot(object: Extract<EditorStageObject, { kind: 'model' }>, options: ObjectVisualOptions, colors: ReturnType<typeof getEditorColors>, pickables: THREE.Object3D[], resolveAssetUrl?: (url: string) => string): THREE.Group {
+function makeImportedModelRoot(object: Extract<EditorStageObject, { kind: 'model' }>, options: ObjectVisualOptions, colors: ReturnType<typeof getEditorColors>, pickables: THREE.Object3D[], resolveAssetUrl?: (url: string) => string, onVisualReady?: () => void): THREE.Group {
   const group = new THREE.Group();
   applyImportedModelTransform(group, object);
 
@@ -586,6 +587,7 @@ function makeImportedModelRoot(object: Extract<EditorStageObject, { kind: 'model
       const edgeWire = makeCollisionEdgesLocal(loaded, group, colors);
       if (edgeWire) group.add(edgeWire);
     }
+    onVisualReady?.();
   }).catch(() => {
     // Keep the placeholder selectable when the imported model cannot be loaded.
   });
@@ -989,11 +991,11 @@ function applyRobotSpawnTint(root: THREE.Object3D, accentValue: string, colors: 
   });
 }
 
-function animateRobotSpawnVisual(root: THREE.Object3D, elapsed: number, active: boolean): void {
+function applyRobotSpawnSelectionState(root: THREE.Object3D, active: boolean): void {
   if (root.userData.stageBuilderVisualKind !== 'robotSpawn') return;
   if (!active) {
-    if (!root.userData.spawnAnimationActive) return;
-    root.userData.spawnAnimationActive = false;
+    if (!root.userData.spawnSelectionActive) return;
+    root.userData.spawnSelectionActive = false;
     root.traverse((child) => {
       const role = child.userData.robotSpawnAnimationRole as string | undefined;
       if (!role) return;
@@ -1009,14 +1011,13 @@ function animateRobotSpawnVisual(root: THREE.Object3D, elapsed: number, active: 
     });
     return;
   }
-  root.userData.spawnAnimationActive = true;
-  const phase = Number(root.userData.spawnAnimationPhase || 0);
-  const breath = (Math.sin(elapsed * 1.35 + phase) + 1) / 2;
+  if (root.userData.spawnSelectionActive) return;
+  root.userData.spawnSelectionActive = true;
   root.traverse((child) => {
     const role = child.userData.robotSpawnAnimationRole as string | undefined;
     if (!role) return;
     if (role === 'pulseRing') {
-      const scale = 1 + breath * 0.045;
+      const scale = 1.025;
       child.scale.set(scale, scale, scale);
     }
     const material = (child as THREE.Mesh).material as THREE.Material | THREE.Material[] | undefined;
@@ -1025,7 +1026,7 @@ function animateRobotSpawnVisual(root: THREE.Object3D, elapsed: number, active: 
     for (const mat of materials) {
       const base = mat.userData.robotSpawnBaseOpacity;
       if (typeof base !== 'number') continue;
-      mat.opacity = Math.min(0.92, base + breath * opacityLift);
+      mat.opacity = Math.min(0.92, base + opacityLift * 0.5);
       mat.needsUpdate = true;
     }
   });
@@ -1126,7 +1127,7 @@ function makeRobotSpawnChevronGeometry(): THREE.ShapeGeometry {
   return new THREE.ShapeGeometry(shape);
 }
 
-function attachRobotSpawnModel(host: THREE.Group, pickables: THREE.Object3D[], options: ObjectVisualOptions, accentValue: string, colors: ReturnType<typeof getEditorColors>): void {
+function attachRobotSpawnModel(host: THREE.Group, pickables: THREE.Object3D[], options: ObjectVisualOptions, accentValue: string, colors: ReturnType<typeof getEditorColors>, onVisualReady?: () => void): void {
   loadRobotSpawnModelTemplate()
     .then((template) => {
       if (host.userData.stageBuilderDisposed) return;
@@ -1147,18 +1148,18 @@ function attachRobotSpawnModel(host: THREE.Group, pickables: THREE.Object3D[], o
       host.add(rim, model);
       collectMeshPickables(rim, pickables);
       collectMeshPickables(model, pickables);
+      onVisualReady?.();
     })
     .catch((error) => console.warn('[stage-builder] failed to load Fossbot spawn model', error));
 }
 
-function makeRobotSpawnVisual(object: Extract<EditorStageObject, { kind: 'fossbot' }>, options: ObjectVisualOptions = {}, context: { colors?: ReturnType<typeof getEditorColors> } = {}): { root: THREE.Group; pickables: THREE.Object3D[] } {
+function makeRobotSpawnVisual(object: Extract<EditorStageObject, { kind: 'fossbot' }>, options: ObjectVisualOptions = {}, context: { colors?: ReturnType<typeof getEditorColors>; onVisualReady?: () => void } = {}): { root: THREE.Group; pickables: THREE.Object3D[] } {
   const colors = context.colors ?? getEditorColors('studio');
   const group = new THREE.Group();
   const pickables: THREE.Object3D[] = [];
   const accent = robotSpawnAccent(options, colors);
   group.userData.stageBuilderVisualKind = 'robotSpawn';
   group.userData.robotSpawnAccent = accent;
-  group.userData.spawnAnimationPhase = object.id.split('').reduce((sum, letter) => sum + letter.charCodeAt(0), 0) * 0.031;
 
   const field = new THREE.Mesh(
     new THREE.CircleGeometry(0.42, 48),
@@ -1199,14 +1200,14 @@ function makeRobotSpawnVisual(object: Extract<EditorStageObject, { kind: 'fossbo
   group.add(field, halo, outerHalo, directionArrow);
   if (options.sensorHelpersVisible) group.add(makeSensorHelpersVisual(colors));
   pickables.push(halo, outerHalo, directionArrow);
-  attachRobotSpawnModel(group, pickables, options, accent, colors);
+  attachRobotSpawnModel(group, pickables, options, accent, colors, context.onVisualReady);
   group.position.set(...object.position);
   group.rotation.y = object.rotationY;
   applyRobotSpawnTint(group, accent, colors);
   return { root: group, pickables };
 }
 
-export function makeObjectRoot(object: EditorStageObject, options: ObjectVisualOptions = {}, context: { objects?: EditorStageObject[]; colors?: ReturnType<typeof getEditorColors>; resolveAssetUrl?: (url: string) => string } = {}): MeshRecord {
+export function makeObjectRoot(object: EditorStageObject, options: ObjectVisualOptions = {}, context: { objects?: EditorStageObject[]; colors?: ReturnType<typeof getEditorColors>; resolveAssetUrl?: (url: string) => string; onVisualReady?: () => void } = {}): MeshRecord {
   const colors = context.colors ?? getEditorColors('studio');
   let pickables: THREE.Object3D[] = [];
   let root: THREE.Object3D;
@@ -1307,7 +1308,7 @@ export function makeObjectRoot(object: EditorStageObject, options: ObjectVisualO
     }
     root = group;
   } else if (object.kind === 'model') {
-    root = makeImportedModelRoot(object, options, colors, pickables, context.resolveAssetUrl);
+    root = makeImportedModelRoot(object, options, colors, pickables, context.resolveAssetUrl, context.onVisualReady);
   } else if (object.kind === 'text') {
     const parent = object.attachment?.parentId ? context.objects?.find((item) => item.id === object.attachment?.parentId) : null;
     if (object.attachment && parent) {
@@ -1439,7 +1440,7 @@ export function makeObjectRoot(object: EditorStageObject, options: ObjectVisualO
     root = group;
     group.position.set(...object.position);
   } else {
-    const spawn = makeRobotSpawnVisual(object, options, { colors });
+    const spawn = makeRobotSpawnVisual(object, options, { colors, onVisualReady: context.onVisualReady });
     root = spawn.root;
     pickables = spawn.pickables;
   }
@@ -1817,6 +1818,7 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
 }: StageBuilderSceneProps, ref) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const sceneRef = useRef<SceneHandle | null>(null);
+  const requestRenderRef = useRef<() => void>(() => undefined);
   const transformRef = useRef<TransformControls | null>(null);
   const selectionHelperRef = useRef<CornerBoundsHelper | null>(null);
   const groupSelectionHelperRef = useRef<CornerBoundsHelper | null>(null);
@@ -1880,6 +1882,12 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
     fov: 50,
     hasSnapshot: false,
   });
+
+  const invalidateScene = React.useCallback((shadows = false) => {
+    const handle = sceneRef.current;
+    if (shadows && handle) handle.renderer.shadowMap.needsUpdate = true;
+    requestRenderRef.current();
+  }, []);
 
   useEffect(() => { transformModeRef.current = transformMode; }, [transformMode]);
   useEffect(() => { lookThroughCameraIdRef.current = lookThroughCameraId; }, [lookThroughCameraId]);
@@ -2079,8 +2087,15 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
   useEffect(() => {
     if (!containerRef.current) return;
 
-    const sceneHandle = initScene(containerRef.current, { gizmo: false, preserveDrawingBuffer: true });
+    const sceneHandle = initScene(containerRef.current, {
+      gizmo: false,
+      maxPixelRatio: 1.5,
+      powerPreference: 'low-power',
+      onResize: () => requestRenderRef.current(),
+    });
     sceneRef.current = sceneHandle;
+    sceneHandle.renderer.shadowMap.autoUpdate = false;
+    sceneHandle.renderer.shadowMap.needsUpdate = true;
     // Override the simulator's hardcoded dark scene background with the active
     // variant's viewport color so the editor's 3D viewport matches the chrome
     // (Studio keeps the dark bg; FossBot flips to a light grey).
@@ -2145,7 +2160,10 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
     const initialSnap = snapSettingsRef.current;
     transform.setTranslationSnap(initialSnap.move || null);
     transform.setRotationSnap(initialSnap.rotate || null);
-    transform.addEventListener('change', () => applyTransformGuideColors(transform));
+    transform.addEventListener('change', () => {
+      applyTransformGuideColors(transform);
+      invalidateScene();
+    });
     applyTransformGuideColors(transform);
     transform.addEventListener('dragging-changed', (event) => {
       sceneHandle.controls.enabled = !event.value;
@@ -2167,6 +2185,7 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
       if (selected) parentIds.add(selected.id);
       groupTransformRef.current?.rootStartMatrices.forEach((_, id) => parentIds.add(id));
       updateAttachedLabelVisuals(parentIds);
+      invalidateScene(true);
     });
     sceneHandle.scene.add(transform as unknown as THREE.Object3D);
     transformRef.current = transform;
@@ -2221,7 +2240,7 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
           if (scene) {
             scene.remove(ghost.root);
             disposeObject(ghost.root);
-            const nextGhost = makeObjectRoot(preview, { ghost: true, ghostValid: valid }, { colors: styleColorsRef.current });
+            const nextGhost = makeObjectRoot(preview, { ghost: true, ghostValid: valid }, { colors: styleColorsRef.current, onVisualReady: () => invalidateScene(true) });
             ghostRef.current = nextGhost;
             scene.add(nextGhost.root);
           }
@@ -2230,6 +2249,7 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
           if (preview.kind === 'base') ghost.root.position.y = 0.006;
         }
       }
+      invalidateScene();
       return status;
     };
 
@@ -2401,6 +2421,7 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
         selectedRoot.scale.set(factor, selected.kind === 'base' ? 1 : factor, factor);
       }
       updateAttachedLabelVisuals(new Set([selected.id]));
+      invalidateScene(true);
     };
 
     const handlePointerUp = (event: PointerEvent) => {
@@ -2467,9 +2488,7 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
 
-    let raf = 0;
     const frame = () => {
-      const elapsed = performance.now() / 1000;
       // Fat-line widths are in pixels; keep their resolution uniform in sync with
       // the canvas so they stay crisp through resizes/dolly.
       const gridMaterials = gridMaterialsRef.current;
@@ -2482,8 +2501,8 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
       if (selectedRef.current) animatedObjectIds.add(selectedRef.current);
       const animatedGroupId = selectedGroupRef.current;
       if (animatedGroupId) groupMemberObjects(animatedGroupId).forEach((object) => animatedObjectIds.add(object.id));
-      for (const record of objectMapRef.current.values()) animateRobotSpawnVisual(record.root, elapsed, animatedObjectIds.has(record.objectId));
-      if (ghostRef.current) animateRobotSpawnVisual(ghostRef.current.root, elapsed, false);
+      for (const record of objectMapRef.current.values()) applyRobotSpawnSelectionState(record.root, animatedObjectIds.has(record.objectId));
+      if (ghostRef.current) applyRobotSpawnSelectionState(ghostRef.current.root, false);
 
       const helper = selectionHelperRef.current;
       const selectedRoot = selectedRef.current ? objectMapRef.current.get(selectedRef.current)?.root : null;
@@ -2518,12 +2537,17 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
         handles.visible = false;
       }
       renderScene(sceneHandle);
-      raf = requestAnimationFrame(frame);
     };
-    frame();
+    const scheduler = createStageBuilderRenderScheduler(frame);
+    requestRenderRef.current = scheduler.request;
+    const handleControlsChange = () => scheduler.request();
+    sceneHandle.controls.addEventListener('change', handleControlsChange);
+    scheduler.request();
 
     return () => {
-      cancelAnimationFrame(raf);
+      requestRenderRef.current = () => undefined;
+      scheduler.cancel();
+      sceneHandle.controls.removeEventListener('change', handleControlsChange);
       sceneHandle.renderer.domElement.removeEventListener('pointerdown', handlePointerDown);
       window.removeEventListener('pointermove', handlePointerMove);
       window.removeEventListener('pointerup', handlePointerUp);
@@ -2573,7 +2597,7 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
       boundaryRef.current = null;
       groupTransformRef.current = null;
     };
-  }, []);
+  }, [invalidateScene]);
 
   useEffect(() => {
     const sceneHandle = sceneRef.current;
@@ -2646,7 +2670,7 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
         ? objectVisualKey(object, { severity, sensorHelpersVisible, collisionWireVisible, styleVariant, resolvedAssetUrl })
         : null;
       const reusable = key && previousKeys.get(object.id) === key ? previous.get(object.id) : null;
-      const record = reusable || makeObjectRoot(object, { validationSeverity: severity, sensorHelpersVisible, collisionWireVisible, resolvedAssetUrl }, { objects, colors: styleColorsRef.current, resolveAssetUrl });
+      const record = reusable || makeObjectRoot(object, { validationSeverity: severity, sensorHelpersVisible, collisionWireVisible, resolvedAssetUrl }, { objects, colors: styleColorsRef.current, resolveAssetUrl, onVisualReady: () => invalidateScene(true) });
       if (reusable) {
         // The root may have been hidden by look-through mode on a previous pass.
         record.root.visible = true;
@@ -2667,7 +2691,7 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
     visualKeysRef.current = nextKeys;
 
     syncTransformAttachment();
-  }, [objects, validationResults, lookThroughCameraId, sensorHelpersVisible, collisionWireVisible, resolveAssetUrl, styleVariant]);
+  }, [objects, validationResults, lookThroughCameraId, sensorHelpersVisible, collisionWireVisible, resolveAssetUrl, styleVariant, invalidateScene]);
 
   useEffect(() => {
     const scene = sceneRef.current?.scene;
@@ -2678,12 +2702,12 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
       ghostRef.current = null;
     }
     if (placementObject && builderMode === 'place') {
-      const ghost = makeObjectRoot(placementObject, { ghost: true, ghostValid: true }, { colors: styleColorsRef.current, resolveAssetUrl });
+      const ghost = makeObjectRoot(placementObject, { ghost: true, ghostValid: true }, { colors: styleColorsRef.current, resolveAssetUrl, onVisualReady: () => invalidateScene(true) });
       ghostRef.current = ghost;
       scene.add(ghost.root);
     }
     if (!placementObject || builderMode !== 'place') onPlacementStatusChange?.(null);
-  }, [placementObject, builderMode, onPlacementStatusChange, resolveAssetUrl]);
+  }, [placementObject, builderMode, onPlacementStatusChange, resolveAssetUrl, invalidateScene]);
 
   useEffect(() => {
     syncTransformAttachment();
@@ -2782,6 +2806,36 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
     }
     syncTransformAttachment();
   }, [lookThroughCameraId, objects]);
+
+  useEffect(() => {
+    invalidateScene(true);
+  }, [objects, stageDimensions, invalidateScene]);
+
+  useEffect(() => {
+    invalidateScene();
+  }, [
+    groups,
+    selectedId,
+    selectedIds,
+    selectedGroupId,
+    transformMode,
+    builderMode,
+    placementObject,
+    floorColor,
+    skybox,
+    gridVisible,
+    gridSize,
+    transformSpace,
+    controlScheme,
+    styleVariant,
+    validationResults,
+    focusRequestNonce,
+    cameraViewRequest,
+    lookThroughCameraId,
+    sensorHelpersVisible,
+    collisionWireVisible,
+    invalidateScene,
+  ]);
 
   const captureStagePreview = React.useCallback((width = 480, height = 360): string | null => {
     const sceneHandle = sceneRef.current;
