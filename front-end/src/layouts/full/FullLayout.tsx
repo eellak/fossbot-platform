@@ -21,6 +21,10 @@ const PageWrapper = styled('div')(({theme}) => ({
   flexDirection: 'column',
   zIndex: 1,
   width: '100%',
+  // Without this the flex item keeps its content's min-content width, so long
+  // unbreakable text inside a page pushes the whole layout past the viewport
+  // and the app grows a horizontal scrollbar.
+  minWidth: 0,
   backgroundColor: 'transparent'
 }));
 

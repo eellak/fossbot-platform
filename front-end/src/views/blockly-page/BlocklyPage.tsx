@@ -67,6 +67,8 @@ import type { AppState } from 'src/store/Store';
 import { isExistingProject, isRobotProgramActive } from '../monaco-page/monacoWorkspaceState';
 import { useNotifications } from 'src/components/notifications/NotificationProvider';
 import SimulatorEditorControls from 'src/components/editors/SimulatorEditorControls';
+import ExpandableDescription from 'src/components/shared/ExpandableDescription';
+import DescriptionField from 'src/components/shared/DescriptionField';
 
 function stageNeedsAuthenticatedLoad(stage: ProjectStageReference | null): boolean {
   return (stage?.sourceType === 'local' && !!stage.localStageId)
@@ -376,16 +378,12 @@ const BlocklyPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppeara
     if (isExistingProject(projectId)) setIsEditingTitle(true);
   };
 
-  const handleDescriptionClick = () => {
+  const handleDescriptionEdit = () => {
     if (isExistingProject(projectId)) setIsEditingDescription(true);
   };
 
   const handleTitleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     setProjectTitle(event.target.value);
-  };
-
-  const handleDescriptionChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    setProjectDescription(event.target.value);
   };
 
   const hideVideoPlayer = () => {
@@ -549,9 +547,14 @@ const BlocklyPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppeara
                     <Typography component="h1" variant="h3" sx={{ cursor: projectId ? 'text' : 'default', overflowWrap: 'anywhere' }} onClick={handleTitleClick}>{projectTitle}</Typography>
                   )}
                   {isEditingDescription ? (
-                    <TextField size="small" fullWidth value={projectDescription} onChange={handleDescriptionChange} onBlur={() => setIsEditingDescription(false)} autoFocus />
+                    <DescriptionField size="small" fullWidth value={projectDescription} onValueChange={setProjectDescription} onBlur={() => setIsEditingDescription(false)} autoFocus />
                   ) : (
-                    <Typography variant="caption" color="text.secondary" sx={{ cursor: projectId ? 'text' : 'default', display: 'block', maxWidth: 480 }} onClick={handleDescriptionClick}>{projectDescription}</Typography>
+                    <ExpandableDescription
+                      text={projectDescription}
+                      onEdit={isExistingProject(projectId) ? handleDescriptionEdit : undefined}
+                      expandLabel={t('showFullDescription')}
+                      collapseLabel={t('collapseDescription')}
+                    />
                   )}
                   <ProjectStageIndicator stage={selectedStage} />
                 </Box>
@@ -651,9 +654,13 @@ const BlocklyPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppeara
               <Typography variant="h1" mt={0} color={'primary'}>
                 <FontAwesomeIcon icon={faPuzzlePiece} size="1x" /> {projectTitle}{' '}
               </Typography>
-              <Typography mt={1} ml={0} color={'grey'}>
-                {projectDescription}
-              </Typography>
+              <ExpandableDescription
+                text={projectDescription}
+                onEdit={isExistingProject(projectId) ? handleDescriptionEdit : undefined}
+                expandLabel={t('showFullDescription')}
+                collapseLabel={t('collapseDescription')}
+                sx={{ mt: 1, ml: 0 }}
+              />
               <ProjectStageIndicator stage={selectedStage} />
             </Box>
           </Grid>

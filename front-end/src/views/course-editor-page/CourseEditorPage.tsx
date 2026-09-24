@@ -23,6 +23,7 @@ import StageSelector from 'src/components/courses/StageSelector';
 import StarterCodeWorkspace from 'src/components/courses/StarterCodeWorkspace';
 import ActivityComposer from 'src/components/courses/activities/ActivityComposer';
 import { useConfirmDialog } from 'src/components/shared/ConfirmDialog';
+import DescriptionField from 'src/components/shared/DescriptionField';
 import AuthoringAssistant from 'src/components/ai/AuthoringAssistant';
 import type { AuthoringTarget } from 'src/ai/suggestions/lessonSuggestions';
 import { authoringAccordionSx, authoringTargetOutlineSx, authoringTitleSx } from 'src/components/courses/activities/authoringStyles';
@@ -703,7 +704,7 @@ function SettingsPanel({ course, lesson, courseChanged, publishedVersion, userLa
     {tab === 'course' && <Stack spacing={2.5}>
       <Stack spacing={2}>
         <TextField required size="small" label={t('education.fields.title')} value={course.title} error={!course.title.trim()} helperText={!course.title.trim() ? t('education.validation.titleRequired') : undefined} onChange={(event) => onCourse({ title: event.target.value })} />
-        <TextField required multiline minRows={3} size="small" label={t('education.fields.description')} value={course.description} error={!course.description.trim()} helperText={!course.description.trim() ? t('education.validation.descriptionRequired') : undefined} onChange={(event) => onCourse({ description: event.target.value })} />
+        <DescriptionField required multiline minRows={3} size="small" label={t('education.fields.description')} value={course.description} error={!course.description.trim()} helperText={!course.description.trim() ? t('education.validation.descriptionRequired') : undefined} onValueChange={(description) => onCourse({ description })} />
         <TextField select size="small" label={t('education.fields.visibility')} value={course.visibility} onChange={(event) => onCourse({ visibility: event.target.value })}><MenuItem value="public">{t('education.visibility.public')}</MenuItem><MenuItem value="unlisted">{t('education.visibility.unlisted')}</MenuItem></TextField>
         <Stack direction="row" spacing={0.75} alignItems="baseline" sx={{ minWidth: 0 }}>
           <Typography variant="caption" color="text.secondary" fontWeight={600} sx={{ flexShrink: 0 }}>{t('education.fields.author')}</Typography>

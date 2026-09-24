@@ -68,6 +68,8 @@ import { workspaceLayout, workspacePaneDefaults } from 'src/components/workspace
 import { isExistingProject, isRobotProgramActive } from './monacoWorkspaceState';
 import { useNotifications } from 'src/components/notifications/NotificationProvider';
 import SimulatorEditorControls from 'src/components/editors/SimulatorEditorControls';
+import ExpandableDescription from 'src/components/shared/ExpandableDescription';
+import DescriptionField from 'src/components/shared/DescriptionField';
 
 const textart = `
 # __   __   __   __   __   __  ___     __      ___       __
@@ -369,7 +371,7 @@ const MonacoPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppearan
     }
   };
 
-  const handleDescriptionClick = () => {
+  const handleDescriptionEdit = () => {
     if (projectId != '' && projectId != undefined) {
       setIsEditingDescription(true);
     }
@@ -377,10 +379,6 @@ const MonacoPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppearan
 
   const handleTitleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     setProjectTitle(event.target.value);
-  };
-
-  const handleDescriptionChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    setProjectDescription(event.target.value);
   };
 
   const hideVideoPlayer = () => {
@@ -554,9 +552,14 @@ const MonacoPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppearan
                     <Typography component="h1" variant="h3" sx={{ cursor: projectId ? 'text' : 'default', overflowWrap: 'anywhere' }} onClick={handleTitleClick}>{projectTitle}</Typography>
                   )}
                   {isEditingDescription ? (
-                    <TextField size="small" fullWidth value={projectDescription} onChange={handleDescriptionChange} onBlur={() => setIsEditingDescription(false)} autoFocus />
+                    <DescriptionField size="small" fullWidth value={projectDescription} onValueChange={setProjectDescription} onBlur={() => setIsEditingDescription(false)} autoFocus />
                   ) : (
-                    <Typography variant="caption" color="text.secondary" sx={{ cursor: projectId ? 'text' : 'default', display: 'block', maxWidth: 480 }} onClick={handleDescriptionClick}>{projectDescription}</Typography>
+                    <ExpandableDescription
+                      text={projectDescription}
+                      onEdit={projectId ? handleDescriptionEdit : undefined}
+                      expandLabel={t('showFullDescription')}
+                      collapseLabel={t('collapseDescription')}
+                    />
                   )}
                   <ProjectStageIndicator stage={selectedStage} />
                 </Box>
@@ -663,18 +666,22 @@ const MonacoPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppearan
                 </Typography>
               )}
               {isEditingDescription ? (
-                <TextField
+                <DescriptionField
                   value={projectDescription}
-                  onChange={handleDescriptionChange}
+                  onValueChange={setProjectDescription}
                   onBlur={() => setIsEditingDescription(false)}
                   autoFocus
                   fullWidth
                   multiline
                 />
               ) : (
-                <Typography mt={1} ml={0} color={'grey'} onClick={handleDescriptionClick}>
-                  {projectDescription}
-                </Typography>
+                <ExpandableDescription
+                  text={projectDescription}
+                  onEdit={projectId ? handleDescriptionEdit : undefined}
+                  expandLabel={t('showFullDescription')}
+                  collapseLabel={t('collapseDescription')}
+                  sx={{ mt: 1, ml: 0 }}
+                />
               )}
               <ProjectStageIndicator stage={selectedStage} />
             </Box>

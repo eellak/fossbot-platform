@@ -6,6 +6,7 @@ import Select from '@mui/material/Select';
 import MenuItem from '@mui/material/MenuItem';
 import CustomOutlinedInput from 'src/components/forms/theme-elements/CustomOutlinedInput';
 import CustomFormLabel from 'src/components/forms/theme-elements/CustomFormLabel';
+import DescriptionField from 'src/components/shared/DescriptionField';
 
 import { Grid, InputAdornment, Button } from '@mui/material';
 import {
@@ -46,9 +47,9 @@ const NewProjectForm = ({ isDescriptionDisabled, editorInitialValue, code, stage
     }
   };
 
-  const handleDescriptionChange = (event: any) => {
-    setDescription(event.target.value);
-    if (event.target.value.trim() !== '') {
+  const handleDescriptionChange = (value: string) => {
+    setDescription(value);
+    if (value.trim() !== '') {
       setDescriptionError(false);
     }
   };
@@ -136,16 +137,19 @@ const NewProjectForm = ({ isDescriptionDisabled, editorInitialValue, code, stage
                 </CustomFormLabel>
               </Grid>
               <Grid item xs={12} sm={9}>
-                <CustomOutlinedInput
-                  startAdornment={
-                    <InputAdornment position="start">
-                      <IconFileDescription size="20" />
-                    </InputAdornment>
-                  }
+                <DescriptionField
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <IconFileDescription size="20" />
+                      </InputAdornment>
+                    ),
+                  }}
                   placeholder={t('project-form.describeYourProject')}
                   fullWidth
                   error={descriptionError}
-                  onChange={handleDescriptionChange}
+                  value={description}
+                  onValueChange={handleDescriptionChange}
                 />
               </Grid>
               {/* 4 */}

@@ -10,6 +10,7 @@ import ClassGroupsTeacherPage from '../class-groups-teacher-page/ClassGroupsTeac
 import { pageTabsSx, TabbedPageHeader } from 'src/components/shared/PageHeader';
 import { useConfirmDialog } from 'src/components/shared/ConfirmDialog';
 import ListCard from 'src/components/shared/ListCard';
+import DescriptionField from 'src/components/shared/DescriptionField';
 
 export default function TeacherCoursesPage() {
   const { t } = useTranslation();
@@ -142,7 +143,7 @@ export default function TeacherCoursesPage() {
         <DialogTitle>{t('education.create.title')}</DialogTitle>
         <DialogContent><Stack spacing={2} sx={{ pt: 1 }}>
           <TextField autoFocus required label={t('education.fields.title')} value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} />
-          <TextField required multiline minRows={3} label={t('education.fields.description')} value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} />
+          <DescriptionField required multiline minRows={3} label={t('education.fields.description')} value={form.description} onValueChange={(description) => setForm({ ...form, description })} />
           <TextField required label={t('education.fields.firstObjective')} value={form.objective} onChange={(event) => setForm({ ...form, objective: event.target.value })} helperText={t('education.create.requiredHelp')} />
         </Stack></DialogContent>
         <DialogActions><Button onClick={() => setCreateOpen(false)} disabled={creating}>{t('cancel')}</Button><Button variant="contained" onClick={submitCreate} disabled={creating || !form.title.trim() || !form.description.trim() || !form.objective.trim()}>{t('education.courseList.create')}</Button></DialogActions>

@@ -8,6 +8,7 @@ import type { EditorStage, EditorStageObject } from './types';
 import { ColorPickerField, StageInspector } from './StageInspector';
 import { StageValidationPanel } from './StageValidationPanel';
 import { StageBuilderNumberField } from './StageBuilderNumberField';
+import DescriptionField from 'src/components/shared/DescriptionField';
 import type { StageBuilderValidationResult } from './stageBuilderValidation';
 import type { StageBuilderPreferences } from './stageBuilderPreferences';
 import { defaultStageBuilderPreferences, type StageBuilderRotationSnapPreset, type StageBuilderSnapPreset } from './stageBuilderPreferences';
@@ -134,7 +135,7 @@ function StageContext({ stage, prefs, onStageChange, onPrefsChange }: Pick<Edito
           <TextField {...commonFieldProps} value={stage.title} inputProps={{ 'aria-label': 'Stage name' }} onChange={(event) => onStageChange({ ...stage, title: event.target.value })} />
         </FieldRow>
         <FieldRow label="Description" align="start">
-          <TextField {...commonFieldProps} multiline minRows={3} value={stage.description} inputProps={{ 'aria-label': 'Stage description' }} onChange={(event) => onStageChange({ ...stage, description: event.target.value })} />
+          <DescriptionField {...commonFieldProps} multiline minRows={3} value={stage.description} inputProps={{ 'aria-label': 'Stage description' }} onValueChange={(description) => onStageChange({ ...stage, description })} />
         </FieldRow>
       </Section>
 

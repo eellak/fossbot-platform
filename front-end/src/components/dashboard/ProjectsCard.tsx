@@ -418,10 +418,21 @@ const ProjectsCard = ({ previewAppearance = true }: { previewAppearance?: boolea
                         </Box>
 
                         <Box sx={{ minWidth: 0, flex: 1 }}>
-                          <Typography className="project-title" variant="body2" color="primary.main" fontWeight={600} sx={{ overflowWrap: 'anywhere' }}>
+                          <Typography className="project-title" variant="body2" color="primary.main" fontWeight={600} noWrap title={project.name} sx={{ minWidth: 0 }}>
                             {project.name}
                           </Typography>
-                          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25, overflowWrap: 'anywhere' }}>
+                          <Typography
+                            variant="body2"
+                            color="text.secondary"
+                            sx={{
+                              mt: 0.25,
+                              display: '-webkit-box',
+                              WebkitBoxOrient: 'vertical',
+                              WebkitLineClamp: 2,
+                              overflow: 'hidden',
+                              overflowWrap: 'anywhere',
+                            }}
+                          >
                             {project.description || '—'}
                           </Typography>
                           <Stack direction="row" alignItems="center" gap={{ xs: 1, sm: 1.5 }} flexWrap="wrap" sx={{ mt: 0.5 }}>

@@ -20,6 +20,7 @@ import type { ProviderStageRef } from './StagesApi';
 import type { LocalPublicationSubmissionSummary, LocalStage } from './LocalStagesApi';
 import type { MarketplaceLifecycle, PublishMarketplaceResponse } from './MarketplaceApi';
 import { MARKETPLACE_COPY } from './marketplaceCopy';
+import DescriptionField from 'src/components/shared/DescriptionField';
 
 export interface PublishMarketplaceValues {
   title: string;
@@ -199,7 +200,7 @@ export function PublishToMarketplaceDialog({
           {localRequest && <Alert severity="success"><Typography variant="body2" fontWeight={800}>Publication request queued.</Typography><Typography variant="body2">Local revision v{localRequest.stageRevision} will appear after a reviewer approves it.</Typography></Alert>}
 
           <TextField label="Stage library title" size="small" value={title} onChange={(event) => setTitle(event.target.value)} disabled={busy || !hasSource} error={hasSource && !title.trim()} helperText={hasSource && !title.trim() ? 'Add a title before publishing.' : undefined} required fullWidth />
-          <TextField label="Description" size="small" value={description} onChange={(event) => setDescription(event.target.value)} disabled={busy || !hasSource} multiline minRows={3} fullWidth />
+          <DescriptionField label="Description" size="small" value={description} onValueChange={setDescription} disabled={busy || !hasSource} multiline minRows={3} fullWidth />
           <TextField
             label="Tags"
             size="small"

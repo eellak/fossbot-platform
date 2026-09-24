@@ -113,7 +113,7 @@ export function ListCard({
         )}
         <Box minWidth={0} sx={{ flex: 1 }}>
           <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
-            <Typography className="list-title" variant="body2" color="primary.main" fontWeight={600} noWrap>{title}</Typography>
+            <Typography className="list-title" variant="body2" color="primary.main" fontWeight={600} noWrap sx={{ minWidth: 0 }}>{title}</Typography>
             {status}
           </Stack>
           <Typography
