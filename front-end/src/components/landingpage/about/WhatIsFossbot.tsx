@@ -29,32 +29,28 @@ const WhatIsFossbot = () => {
       }}
     >
       <Container maxWidth="lg">
-        <Grid container spacing={{ xs: 2, md: 6 }} alignItems="start" sx={{ mb: { xs: 6, md: 8 } }}>
-          <Grid item xs={12} md={7}>
-            <Typography
-              component="h2"
-              sx={{
-                fontSize: { xs: '2rem', sm: '2.75rem', md: '3.25rem' },
-                fontWeight: 600,
-                letterSpacing: '-0.03em',
-                lineHeight: 1.05,
-                maxWidth: '18ch',
-                textWrap: 'balance',
-              }}
-            >
-              {t('landing_about.title')}
-            </Typography>
-          </Grid>
-          <Grid item xs={12} md={5}>
-            <Typography
-              variant="body1"
-              color="text.secondary"
-              sx={{ fontSize: '1.125rem', lineHeight: 1.6, maxWidth: '52ch' }}
-            >
-              {t('landing_about.intro')}
-            </Typography>
-          </Grid>
-        </Grid>
+        <Box sx={{ mb: { xs: 6, md: 8 } }}>
+          <Typography
+            component="h2"
+            sx={{
+              fontSize: { xs: '2rem', sm: '2.75rem', md: '3.25rem' },
+              fontWeight: 600,
+              letterSpacing: '-0.03em',
+              lineHeight: 1.05,
+              maxWidth: '18ch',
+              textWrap: 'balance',
+            }}
+          >
+            {t('landing_about.title')}
+          </Typography>
+          <Typography
+            variant="body1"
+            color="text.secondary"
+            sx={{ fontSize: '1.125rem', lineHeight: 1.6, maxWidth: '62ch', mt: 3 }}
+          >
+            {t('landing_about.intro')}
+          </Typography>
+        </Box>
 
         <Grid container spacing={{ xs: 3, md: 6 }} alignItems="start" sx={{ mb: { xs: 7, md: 9 } }}>
           <Grid item xs={12} md={7}>
