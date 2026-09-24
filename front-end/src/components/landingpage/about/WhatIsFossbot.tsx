@@ -4,12 +4,15 @@ import { IconBrandGithub } from '@tabler/icons-react';
 import { useTranslation } from 'react-i18next';
 import fossbotImg from 'src/assets/images/landingpage/background/fossbot.png';
 
-const robotFacts = ['fact1', 'fact2', 'fact3', 'fact4', 'fact5'] as const;
+const robotFacts = ['fact2', 'fact3', 'fact4', 'fact5'] as const;
 const platformModes = ['mode1', 'mode2', 'mode3', 'mode4'] as const;
 
 /**
  * Explains what the FOSSBot robot and platform are, so the homepage still
  * introduces the project instead of jumping straight into the feature tour.
+ *
+ * The section is one editorial grid: primary copy sits in the left column and
+ * the summary, product render, and way-to-work list support it from the right.
  */
 const WhatIsFossbot = () => {
   const { t } = useTranslation();
@@ -26,7 +29,7 @@ const WhatIsFossbot = () => {
       }}
     >
       <Container maxWidth="lg">
-        <Grid container spacing={{ xs: 2, md: 6 }} alignItems="end" sx={{ mb: { xs: 6, md: 8 } }}>
+        <Grid container spacing={{ xs: 2, md: 6 }} alignItems="start" sx={{ mb: { xs: 6, md: 8 } }}>
           <Grid item xs={12} md={7}>
             <Typography
               component="h2"
@@ -53,25 +56,7 @@ const WhatIsFossbot = () => {
           </Grid>
         </Grid>
 
-        <Grid container spacing={{ xs: 4, md: 6 }} alignItems="center">
-          <Grid item xs={12} md={5}>
-            <Box
-              className="visual-language-supporting-panel"
-              sx={{
-                bgcolor: 'background.paper',
-                border: 1,
-                borderColor: 'divider',
-                p: { xs: 3, sm: 4 },
-              }}
-            >
-              <Box
-                component="img"
-                src={fossbotImg}
-                alt={t('landing_about.robotImageAlt')}
-                sx={{ display: 'block', height: 'auto', width: '100%' }}
-              />
-            </Box>
-          </Grid>
+        <Grid container spacing={{ xs: 3, md: 6 }} alignItems="start" sx={{ mb: { xs: 7, md: 9 } }}>
           <Grid item xs={12} md={7}>
             <Typography
               component="h3"
@@ -94,7 +79,32 @@ const WhatIsFossbot = () => {
                 <Chip key={fact} size="small" variant="outlined" label={t(`landing_about.${fact}`)} />
               ))}
             </Stack>
+          </Grid>
+          <Grid item xs={12} md={5}>
+            <Box
+              className="visual-language-supporting-panel"
+              sx={{
+                bgcolor: 'background.paper',
+                border: 1,
+                borderColor: 'divider',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                p: { xs: 2, sm: 3 },
+              }}
+            >
+              <Box
+                component="img"
+                src={fossbotImg}
+                alt={t('landing_about.robotImageAlt')}
+                sx={{ display: 'block', height: 'auto', width: '100%' }}
+              />
+            </Box>
+          </Grid>
+        </Grid>
 
+        <Grid container spacing={{ xs: 3, md: 6 }} alignItems="start">
+          <Grid item xs={12} md={7}>
             <Typography
               component="h3"
               sx={{
@@ -102,7 +112,6 @@ const WhatIsFossbot = () => {
                 fontWeight: 600,
                 letterSpacing: '-0.02em',
                 lineHeight: 1.25,
-                mt: { xs: 5, md: 6 },
               }}
             >
               {t('landing_about.platformTitle')}
@@ -110,13 +119,14 @@ const WhatIsFossbot = () => {
             <Typography variant="body1" color="text.secondary" sx={{ lineHeight: 1.6, maxWidth: '62ch', mt: 2 }}>
               {t('landing_about.platformBody')}
             </Typography>
+          </Grid>
+          <Grid item xs={12} md={5}>
             <Box
               component="ul"
               sx={{
                 display: 'grid',
                 gap: 1.25,
                 m: 0,
-                mt: 2.5,
                 pl: 2.5,
                 '& li': { pl: 0.5 },
                 '& li::marker': { color: 'primary.main' },
@@ -135,7 +145,7 @@ const WhatIsFossbot = () => {
           className="visual-language-supporting-panel"
           sx={{
             bgcolor: 'primary.light',
-            mt: { xs: 7, md: 9 },
+            mt: { xs: 8, md: 10 },
             p: { xs: 3, sm: 4, md: 5 },
             display: 'flex',
             flexWrap: 'wrap',
