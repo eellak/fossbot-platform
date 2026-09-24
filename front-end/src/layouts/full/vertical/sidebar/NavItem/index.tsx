@@ -40,9 +40,10 @@ interface ItemType {
   onClick: (event: React.MouseEvent<HTMLElement>) => void;
   level?: number | any;
   pathDirect: string;
+  previewAppearance?: boolean;
 }
 
-const NavItem = ({ item, level, pathDirect, hideMenu, onClick }: ItemType) => {
+const NavItem = ({ item, level, pathDirect, hideMenu, onClick, previewAppearance = true }: ItemType) => {
   const customizer = useSelector((state: AppState) => state.customizer);
   const Icon = item?.icon;
   const theme = useTheme();
@@ -75,7 +76,7 @@ const NavItem = ({ item, level, pathDirect, hideMenu, onClick }: ItemType) => {
         },
       },
     })),
-    [customizer.borderRadius, level, pathDirect, item?.href, hideMenu, theme]
+    [customizer.borderRadius, level, pathDirect, item?.href, hideMenu, previewAppearance, theme]
   );
 
   const itemSubtitle = item?.subtitle ? t(item?.subtitle) : '';
@@ -121,11 +122,11 @@ const NavItem = ({ item, level, pathDirect, hideMenu, onClick }: ItemType) => {
           sx={{ minWidth: 0, my: 0 }}
           primary={hideMenu ? '' : (
             <Stack direction="row" spacing={0.75} alignItems="center" sx={{ width: '100%', minWidth: 0 }}>
-              <Typography component="span" noWrap sx={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{t(`${item?.title}`)}</Typography>
-              {item?.betaFeature && <BetaBadge feature={item.betaFeature} />}
+              <Typography component="span" noWrap={!previewAppearance} sx={{ flex: 1, minWidth: 0, overflow: previewAppearance ? 'visible' : 'hidden', textOverflow: previewAppearance ? 'clip' : 'ellipsis' }}>{t(`${item?.title}`)}</Typography>
+              {!previewAppearance && item?.betaFeature && <BetaBadge feature={item.betaFeature} />}
             </Stack>
           )}
-          secondary={item?.subtitle && !hideMenu ? <Typography variant="caption" component="span">{itemSubtitle}</Typography> : null}
+          secondary={item?.subtitle && !hideMenu && !previewAppearance ? <Typography variant="caption" component="span">{itemSubtitle}</Typography> : null}
         >
         </ListItemText>
 

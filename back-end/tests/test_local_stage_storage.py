@@ -8,8 +8,8 @@ from database.database import Base, LocalMarketplacePublication, LocalMarketplac
 from fastapi import HTTPException
 from models.models import UserRole
 from routers.courses import StageReference, marketplace_reference
-from routers.local_stages import LocalMarketplacePublishRequest, LocalMarketplaceReviewRequest, copy_installed_github_stage, delete_local_stage, get_local_release_record, github_stage_provenance, publish_local_stage, review_local_publication, unpublish_local_stage
-from sqlalchemy import create_engine
+from routers.local_stages import LocalMarketplacePublishRequest, LocalMarketplaceReviewRequest, LocalStageSaveRequest, copy_installed_github_stage, create_local_stage, delete_local_stage, get_local_release_record, get_local_stage, get_local_stage_preview, github_stage_provenance, list_local_stages, publish_local_stage, review_local_publication, unpublish_local_stage
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 from utils.local_stage_storage import (
     MAX_STAGE_RECORD_BYTES,
@@ -28,9 +28,24 @@ class LocalStageStorageTests(unittest.TestCase):
         self.assertGreater(size, 0)
         self.assertEqual(len(checksum), 64)
 
-    def test_rejects_custom_model(self):
-        with self.assertRaisesRegex(LocalStageValidationError, "Custom OBJ"):
+    def test_accepts_embedded_stl_round_trip(self):
+        data_url = "data:model/stl;base64," + base64.b64encode(b"solid test\n" + b" " * (300 * 1024) + b"\nendsolid test\n").decode()
+        record = {"config": [{"type": "model", "format": "stl", "filename": data_url}], "editor": {"objects": [{"kind": "model", "format": "stl", "filename": data_url}]}}
+        size, checksum = validate_local_stage_record(record)
+        self.assertGreater(size, MAX_STAGE_RECORD_BYTES)
+        self.assertEqual(len(checksum), 64)
+
+    def test_rejects_non_embedded_model(self):
+        with self.assertRaisesRegex(LocalStageValidationError, "embedded STL"):
             validate_local_stage_record({"config": [{"type": "model", "filename": "asset.stl"}]})
+
+    def test_rejects_invalid_stl_data(self):
+        with self.assertRaisesRegex(LocalStageValidationError, "invalid base64"):
+            validate_local_stage_record({"config": [{"type": "model", "format": "stl", "filename": "data:model/stl;base64,%%%"}]})
+
+    def test_rejects_other_embedded_models(self):
+        with self.assertRaisesRegex(LocalStageValidationError, "embedded STL"):
+            validate_local_stage_record({"config": [{"type": "model", "format": "glb", "filename": "data:model/gltf-binary;base64,AAAA"}]})
 
     def test_rejects_embedded_assets(self):
         with self.assertRaisesRegex(LocalStageValidationError, "Embedded"):
@@ -244,6 +259,60 @@ class LocalPublicationLifecycleTests(unittest.TestCase):
         with self.assertRaises(HTTPException) as raised:
             asyncio.run(delete_local_stage(self.stage.id, self.owner, self.db))
         self.assertEqual(raised.exception.status_code, 409)
+
+    def test_stage_list_excludes_large_records_and_preview_blobs(self):
+        record = {"config": [{"type": "text", "text": "x" * (256 * 1024)}]}
+        self.stage.record = record
+        self.stage.record_bytes, self.stage.checksum = validate_local_stage_record(record)
+        self.stage.preview_image = b"image bytes"
+        self.stage.preview_mime = "image/png"
+        self.db.commit()
+        submission = asyncio.run(publish_local_stage(self.stage.id, self.request(), self.owner, self.db))
+        self.approve(submission["submission"]["id"])
+        self.stage.revision = 2
+        self.db.commit()
+        pending = asyncio.run(publish_local_stage(self.stage.id, self.request(), self.owner, self.db))
+        owner_id, stage_id = self.owner.id, self.stage.id
+        self.db.expunge_all()
+        statements = []
+
+        def collect_sql(_connection, _cursor, statement, _parameters, _context, _many):
+            statements.append(statement)
+
+        event.listen(self.db.get_bind(), "before_cursor_execute", collect_sql)
+        try:
+            stages = asyncio.run(list_local_stages(SimpleNamespace(id=owner_id), self.db))["stages"]
+        finally:
+            event.remove(self.db.get_bind(), "before_cursor_execute", collect_sql)
+        self.assertEqual(len(stages), 1)
+        self.assertNotIn("record", stages[0])
+        self.assertGreater(stages[0]["recordBytes"], 0)
+        self.assertIn(f"/api/local-stages/{stage_id}/preview", stages[0]["previewUrl"])
+        list_query = next(statement for statement in statements if "FROM local_stages" in statement)
+        self.assertNotIn("local_stages.record ", list_query)
+        self.assertNotIn("local_stages.preview_image", list_query)
+        self.assertTrue(stages[0]["publication"]["active"])
+        self.assertEqual(stages[0]["submission"]["id"], pending["submission"]["id"])
+        self.assertEqual(stages[0]["submission"]["status"], "pending")
+        for statement in statements:
+            self.assertNotIn("local_marketplace_submissions.record_snapshot", statement)
+            self.assertNotIn("local_marketplace_submissions.preview_image", statement)
+            self.assertNotIn("local_marketplace_publications.record_snapshot", statement)
+            self.assertNotIn("local_marketplace_publications.preview_image", statement)
+        full = asyncio.run(get_local_stage(stage_id, SimpleNamespace(id=owner_id), self.db))
+        self.assertEqual(full["record"], record)
+
+    def test_local_stage_preview_round_trip(self):
+        png = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==")
+        data_url = "data:image/png;base64," + base64.b64encode(png).decode()
+        record = {"title": "Previewed", "config": [{"type": "floor", "dimensions": [10, 10]}]}
+
+        created = asyncio.run(create_local_stage(LocalStageSaveRequest(record=record, previewDataUrl=data_url), self.owner, self.db))
+        self.assertIn(f"/api/local-stages/{created['id']}/preview", created["previewUrl"])
+
+        response = asyncio.run(get_local_stage_preview(created["id"], self.owner, self.db))
+        self.assertEqual(response.body, png)
+        self.assertEqual(response.media_type, "image/png")
 
 
 if __name__ == "__main__":

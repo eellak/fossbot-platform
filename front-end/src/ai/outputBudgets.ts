@@ -1,9 +1,9 @@
 import type { AICapabilityId } from './types';
 
 const OUTPUT_TOKEN_BUDGETS: Record<AICapabilityId, number> = {
-  'code.explain': 1024,
-  'code.suggest_changes': 4096,
-  'blockly.explain': 1024,
+  'code.explain': 4096,
+  'code.suggest_changes': 6144,
+  'blockly.explain': 4096,
   'blockly.suggest_changes': 6144,
   'lesson.draft': 6144,
   'lesson.suggest_changes': 6144,

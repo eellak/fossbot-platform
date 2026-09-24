@@ -157,6 +157,21 @@ export function stageListUserKey(user: User | null): string | null {
   return `platform:${user.id}:${user.username}`;
 }
 
+// Editable local stages are fetched directly by the panel rather than cached,
+// so a save that finishes after the panel mounted needs an explicit signal to
+// refetch. Without it, going back to /stages mid-save can render the previous
+// revision and preview.
+const localStagesListeners = new Set<Listener>();
+
+export function subscribeLocalStages(listener: Listener): () => void {
+  localStagesListeners.add(listener);
+  return () => { localStagesListeners.delete(listener); };
+}
+
+export function invalidateLocalStages(): void {
+  localStagesListeners.forEach((listener) => listener());
+}
+
 export function marketplaceFirstPageSnapshot(): StageListSnapshot<MarketplaceIndexResponse> {
   return marketplaceRecord().snapshot;
 }

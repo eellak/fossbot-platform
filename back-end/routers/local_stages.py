@@ -7,8 +7,9 @@ from typing import Any, Literal, Optional
 from database.database import Lesson, LocalMarketplacePublication, LocalMarketplaceSubmission, LocalStage, MarketplaceModerationOverride, Projects, User
 from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, Field
+from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, defer, joinedload
 
 from routers.stage_sources import get_current_user, get_db, stage_error
 from utils.local_stage_storage import (
@@ -37,6 +38,7 @@ class LocalStageSaveRequest(BaseModel):
     description: Optional[str] = Field(default=None, max_length=4000)
     visibility: Literal["private"] = "private"
     expectedRevision: Optional[int] = Field(default=None, ge=1)
+    previewDataUrl: Optional[str] = Field(default=None, max_length=750_000)
 
 
 class LocalStageCopyRequest(BaseModel):
@@ -101,6 +103,8 @@ def _create_stage(
     slug: Optional[str],
     visibility: str = "private",
     provenance: Optional[dict[str, Any]] = None,
+    preview_image: Optional[bytes] = None,
+    preview_mime: Optional[str] = None,
 ) -> LocalStage:
     record_bytes, checksum = validate_local_stage_record(record)
     clean_title = str(title or record.get("title") or "Untitled Stage").strip()[:160] or "Untitled Stage"
@@ -115,6 +119,8 @@ def _create_stage(
         record_bytes=record_bytes,
         checksum=checksum,
         provenance=provenance,
+        preview_image=preview_image,
+        preview_mime=preview_mime,
     )
     db.add(stage)
     try:
@@ -217,18 +223,39 @@ def _stage_payload(db: Session, stage: LocalStage) -> dict[str, Any]:
 
 @router.get("/api/local-stages")
 async def list_local_stages(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    stages = db.query(LocalStage).filter(LocalStage.user_id == current_user.id).order_by(LocalStage.updated_at.desc()).all()
+    stages = db.query(LocalStage).options(defer(LocalStage.record), defer(LocalStage.preview_image)).filter(LocalStage.user_id == current_user.id).order_by(LocalStage.updated_at.desc()).all()
     publications = {
         publication.stage_id: publication
-        for publication in db.query(LocalMarketplacePublication).filter(LocalMarketplacePublication.owner_user_id == current_user.id).all()
+        for publication in db.query(LocalMarketplacePublication).options(
+            defer(LocalMarketplacePublication.record_snapshot),
+            defer(LocalMarketplacePublication.preview_image),
+            joinedload(LocalMarketplacePublication.current_submission).defer(LocalMarketplaceSubmission.record_snapshot).defer(LocalMarketplaceSubmission.preview_image),
+        ).filter(LocalMarketplacePublication.owner_user_id == current_user.id).all()
     }
-    submissions = {stage.id: _latest_submission(db, stage.id) for stage in stages}
-    return {"stages": [local_stage_payload(stage) | {"publication": _publication_summary(publications.get(stage.id)), "submission": _submission_summary(submissions.get(stage.id))} for stage in stages]}
+    submissions = {}
+    if stages:
+        ranked = db.query(
+            LocalMarketplaceSubmission.id.label("submission_id"),
+            func.row_number().over(
+                partition_by=LocalMarketplaceSubmission.stage_id,
+                order_by=(LocalMarketplaceSubmission.requested_at.desc(), LocalMarketplaceSubmission.id.desc()),
+            ).label("position"),
+        ).filter(LocalMarketplaceSubmission.owner_user_id == current_user.id).subquery()
+        submissions = {
+            submission.stage_id: submission
+            for submission in db.query(LocalMarketplaceSubmission).join(
+                ranked, LocalMarketplaceSubmission.id == ranked.c.submission_id
+            ).options(
+                defer(LocalMarketplaceSubmission.record_snapshot), defer(LocalMarketplaceSubmission.preview_image)
+            ).filter(ranked.c.position == 1).all()
+        }
+    return {"stages": [local_stage_payload(stage, include_record=False) | {"publication": _publication_summary(publications.get(stage.id)), "submission": _submission_summary(submissions.get(stage.id))} for stage in stages]}
 
 
 @router.post("/api/local-stages")
 async def create_local_stage(request: LocalStageSaveRequest, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     try:
+        preview_image, preview_mime = decode_preview(request.previewDataUrl)
         stage = _create_stage(
             db,
             current_user,
@@ -237,6 +264,8 @@ async def create_local_stage(request: LocalStageSaveRequest, current_user: User 
             description=request.description,
             slug=request.slug,
             visibility=request.visibility,
+            preview_image=preview_image,
+            preview_mime=preview_mime,
         )
         return local_stage_payload(stage)
     except LocalStageValidationError as error:
@@ -250,7 +279,7 @@ async def local_stage_storage(current_user: User = Depends(get_current_user), db
     submissions = db.query(LocalMarketplaceSubmission).filter(LocalMarketplaceSubmission.owner_user_id == current_user.id).all()
     editable_json_bytes = sum(stage.record_bytes for stage in stages)
     published_json_bytes = sum(submission.record_bytes for submission in submissions) + sum(publication.record_bytes for publication in publications if not publication.current_submission_id)
-    preview_bytes = sum(len(submission.preview_image or b"") for submission in submissions) + sum(len(publication.preview_image or b"") for publication in publications if not publication.current_submission_id)
+    preview_bytes = sum(len(stage.preview_image or b"") for stage in stages) + sum(len(submission.preview_image or b"") for submission in submissions) + sum(len(publication.preview_image or b"") for publication in publications if not publication.current_submission_id)
     provenance_bytes = sum(len(json.dumps(stage.provenance, ensure_ascii=False, separators=(",", ":")).encode("utf-8")) for stage in stages if stage.provenance)
     provenance_bytes += sum(len(json.dumps(submission.provenance_snapshot, ensure_ascii=False, separators=(",", ":")).encode("utf-8")) for submission in submissions if submission.provenance_snapshot)
     provenance_bytes += sum(len(json.dumps(publication.provenance_snapshot, ensure_ascii=False, separators=(",", ":")).encode("utf-8")) for publication in publications if not publication.current_submission_id and publication.provenance_snapshot)
@@ -271,6 +300,14 @@ async def get_local_stage(stage_id: int, current_user: User = Depends(get_curren
     return _stage_payload(db, _owned_stage(db, current_user, stage_id))
 
 
+@router.get("/api/local-stages/{stage_id}/preview")
+async def get_local_stage_preview(stage_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    stage = _owned_stage(db, current_user, stage_id)
+    if not stage.preview_image:
+        raise stage_error(404, "preview_not_found", "This local stage does not have a preview yet.")
+    return Response(content=stage.preview_image, media_type=stage.preview_mime or "image/png", headers={"Cache-Control": "private, max-age=31536000, immutable"})
+
+
 @router.put("/api/local-stages/{stage_id}")
 async def update_local_stage(stage_id: int, request: LocalStageSaveRequest, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     stage = _owned_stage(db, current_user, stage_id)
@@ -280,6 +317,7 @@ async def update_local_stage(stage_id: int, request: LocalStageSaveRequest, curr
         raise stage_error(409, "revision_conflict", "This local stage changed after it was opened. Reload it before saving again.", extra={"currentRevision": stage.revision})
     try:
         record_bytes, checksum = validate_local_stage_record(request.record)
+        preview_image, preview_mime = decode_preview(request.previewDataUrl)
     except LocalStageValidationError as error:
         raise stage_error(400, "validation_failed", str(error)) from error
     clean_title = str(request.title or request.record.get("title") or stage.title).strip()[:160] or stage.title
@@ -293,6 +331,7 @@ async def update_local_stage(stage_id: int, request: LocalStageSaveRequest, curr
         and clean_description == stage.description
         and request.visibility == stage.visibility
         and requested_slug == stage.slug
+        and preview_image is None
     ):
         return _stage_payload(db, stage) | {"unchanged": True}
     if requested_slug != stage.slug:
@@ -306,6 +345,9 @@ async def update_local_stage(stage_id: int, request: LocalStageSaveRequest, curr
     stage.record = request.record
     stage.record_bytes = record_bytes
     stage.checksum = checksum
+    if preview_image is not None:
+        stage.preview_image = preview_image
+        stage.preview_mime = preview_mime
     stage.revision += 1
     stage.updated_at = datetime.datetime.utcnow()
     try:

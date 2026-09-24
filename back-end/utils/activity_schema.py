@@ -39,8 +39,14 @@ MISSION_CONDITION_TYPES = {
 MISSION_OPERATORS = {"lt", "lte", "eq", "gte", "gt"}
 MISSION_INCIDENTS = {"collision", "fall", "runtime_error"}
 FORBIDDEN_EXECUTABLE_FIELDS = {"code", "script", "expression", "javascript", "python", "regex"}
-RICH_TEXT_NODES = {"doc", "paragraph", "heading", "bulletList", "orderedList", "listItem", "text", "hardBreak"}
-RICH_TEXT_MARKS = {"bold", "italic"}
+RICH_TEXT_NODES = {
+    "doc", "paragraph", "heading", "bulletList", "orderedList", "listItem",
+    "blockquote", "codeBlock", "horizontalRule", "text", "hardBreak",
+}
+RICH_TEXT_MARKS = {"bold", "italic", "code", "strike", "underline", "link"}
+RICH_TEXT_LEVELS = {1, 2, 3, 4, 5, 6}
+SAFE_LINK_PREFIXES = ("http://", "https://", "mailto:", "tel:")
+LINK_MARK_FIELDS = {"href", "target", "rel", "class", "title"}
 
 # Stable student-facing channels. Teachers select these IDs; getter names are
 # deliberately not part of the authored activity schema.
@@ -73,11 +79,51 @@ HIDDEN_STUDENT_FIELDS = {
     "feedbackIncorrect",
 }
 
+# Compact, model-facing description of the authored activity contract. It is
+# embedded in assistant prompts so generated activities satisfy the same
+# validator used by the editor instead of being rejected field by field.
+ACTIVITY_CONTRACT_PROMPT = " ".join((
+    "Every activity object must match the platform activity schema exactly.",
+    "Shared fields are key (string; generated keys start with 'ai-'), type, version 1, and required (boolean).",
+    "rich_text: content is a Tiptap document object or a non-empty text string.",
+    "hint: content is a Tiptap document object or a non-empty text string, forActivityKey is a string or null, and a hint cannot be required.",
+    "multiple_choice: prompt (non-empty), options is a list of at least two {key,label} objects with unique keys, and correctOptionKey references one configured option key.",
+    "multiple_select: prompt (non-empty), options is a list of at least two {key,label} objects with unique keys, and correctOptionKeys is a non-empty unique subset of those keys.",
+    "numeric_answer: prompt (non-empty), expectedValue is a finite number, unit is a non-empty string, tolerance is {mode:'absolute'|'percentage', value: number >= 0}, and validRange is null or {minimum,maximum}.",
+    "short_reflection: prompt (non-empty) and collectResponse (boolean); a private reflection (collectResponse false) cannot be required.",
+    "simulator_observation: prompt (non-empty), allowedSensors is a non-empty unique subset of platform sensor IDs, sensorHelperMode is 'hidden'|'student_toggle'|'always_visible', presentations is a non-empty subset of 'live'|'chart'|'summary', and capturedStatistics plus visibleStatistics are subsets of 'minimum'|'maximum'|'average'|'finalValue' where visibleStatistics is a subset of capturedStatistics.",
+    "mission: assistant suggestions cannot create or change executable mission rules; keep completionMode, objectives, retryLimit, feedbackMode, and scoreConfig exactly as supplied.",
+))
+
 
 def _required_text(value: Any, field: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{field} must not be blank")
     return value.strip()
+
+
+def _safe_link_href(href: Any) -> bool:
+    if not isinstance(href, str):
+        return False
+    value = href.strip()
+    if not value or value.startswith("//"):
+        return False
+    if value.startswith(("#", "/")):
+        return True
+    return value.lower().startswith(SAFE_LINK_PREFIXES)
+
+
+def _valid_rich_mark(mark: Any) -> bool:
+    if not isinstance(mark, dict) or mark.get("type") not in RICH_TEXT_MARKS:
+        return False
+    if mark["type"] != "link":
+        return set(mark) == {"type"}
+    if set(mark) != {"type", "attrs"}:
+        return False
+    attrs = mark.get("attrs")
+    if not isinstance(attrs, dict) or set(attrs) - LINK_MARK_FIELDS:
+        return False
+    return _safe_link_href(attrs.get("href"))
 
 
 def _validate_rich_content(content: Any, field: str = "content") -> None:
@@ -108,12 +154,34 @@ def _validate_rich_content(content: Any, field: str = "content") -> None:
                 raise ValueError(f"{field} text nodes must contain text")
             text_length += len(node.get("text", ""))
             marks = node.get("marks", [])
-            if not isinstance(marks, list) or any(not isinstance(mark, dict) or mark.get("type") not in RICH_TEXT_MARKS or set(mark) != {"type"} for mark in marks):
+            if not isinstance(marks, list) or any(not _valid_rich_mark(mark) for mark in marks):
                 raise ValueError(f"{field} contains unsupported formatting")
         elif node_type == "heading":
             allowed_fields.add("attrs")
-            if node.get("attrs") not in ({"level": 2}, {"level": 3}):
+            attrs = node.get("attrs")
+            if not isinstance(attrs, dict) or set(attrs) != {"level"} or attrs.get("level") not in RICH_TEXT_LEVELS:
                 raise ValueError(f"{field} contains an unsupported heading")
+        elif node_type == "codeBlock":
+            allowed_fields.add("attrs")
+            attrs = node.get("attrs") or {}
+            if not isinstance(attrs, dict) or set(attrs) - {"language"}:
+                raise ValueError(f"{field} contains unsupported rich text fields")
+            language = attrs.get("language")
+            if language is not None and not isinstance(language, str):
+                raise ValueError(f"{field} code block language must be text")
+        elif node_type == "orderedList":
+            allowed_fields.add("attrs")
+            attrs = node.get("attrs") or {}
+            if not isinstance(attrs, dict) or set(attrs) - {"start", "type"}:
+                raise ValueError(f"{field} contains unsupported rich text fields")
+            start = attrs.get("start")
+            if start is not None and (not isinstance(start, int) or isinstance(start, bool) or start < 1):
+                raise ValueError(f"{field} ordered list start must be a positive integer")
+            list_type = attrs.get("type")
+            if list_type is not None and not isinstance(list_type, str):
+                raise ValueError(f"{field} ordered list type must be text")
+        elif node_type == "horizontalRule":
+            allowed_fields = {"type"}
         if set(node) - allowed_fields:
             raise ValueError(f"{field} contains unsupported rich text fields")
         children = node.get("content", [])
@@ -345,6 +413,56 @@ def validate_activities(activities: Optional[list[dict[str, Any]]]) -> None:
             _validate_observation(activity)
         elif activity_type == "mission":
             _validate_mission(activity)
+
+    linkable_keys = {
+        activity["key"] for activity in activities
+        if activity.get("type") not in {"rich_text", "hint"}
+    }
+    for activity in activities:
+        if activity.get("type") != "hint":
+            continue
+        target = activity.get("forActivityKey")
+        if target is not None and target not in linkable_keys:
+            raise ValueError("hint forActivityKey must reference a question or activity in the same lesson")
+
+
+def validate_activities_draft(activities: Optional[list[dict[str, Any]]]) -> None:
+    """Draft-tolerant validation for saved work in progress.
+
+    Authors must be able to save incomplete lessons, so completeness checks
+    (required prompts, option sets, mission objectives, numeric ranges) are
+    deferred to publication. Structure and safety still apply: a stored draft
+    can never contain unsupported node types or formatting, an executable
+    mission rule, or a required hint.
+    """
+    if activities is None:
+        return
+    if not isinstance(activities, list):
+        raise ValueError("activities must be a list")
+    keys: set[str] = set()
+    for activity in activities:
+        if not isinstance(activity, dict):
+            raise ValueError("activities must be objects")
+        activity_type = activity.get("type")
+        if activity_type not in ACTIVITY_TYPES:
+            raise ValueError("activity type is not supported")
+        if activity.get("version", ACTIVITY_SCHEMA_VERSION) != ACTIVITY_SCHEMA_VERSION:
+            raise ValueError(f"activity version must be {ACTIVITY_SCHEMA_VERSION}")
+        key = _required_text(activity.get("key"), "activity key")
+        if key in keys:
+            raise ValueError("activities need unique stable keys")
+        if not isinstance(activity.get("required", False), bool):
+            raise ValueError("activity required must be true or false")
+        keys.add(key)
+
+        if activity_type == "rich_text":
+            _validate_rich_content(activity.get("content", ""))
+        elif activity_type == "hint":
+            _validate_rich_content(activity.get("content", ""), "hint content")
+            if activity.get("required", False):
+                raise ValueError("a hint cannot be required")
+        elif activity_type == "mission":
+            _reject_executable_fields(activity)
 
     linkable_keys = {
         activity["key"] for activity in activities

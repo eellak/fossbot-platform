@@ -12,7 +12,7 @@ import { useTranslation } from 'react-i18next';
 import { useAuth } from 'src/authentication/AuthProvider'; // Ensure this import path is correct
 import { UserRole } from 'src/authentication/AuthInterfaces';
 
-const SidebarItems = () => {
+const SidebarItems = ({ previewAppearance = true }: { previewAppearance?: boolean }) => {
   const { t } = useTranslation();
   const { pathname } = useLocation();
 
@@ -27,7 +27,26 @@ const SidebarItems = () => {
   const hasBetaAccess = user?.beta_tester || user?.role === UserRole.ADMIN;
   const visibleItems = Menuitems.filter((item) => !item.allowedRoles || (user && item.allowedRoles.includes(user.role))).filter((item) => !item.betaOnly || hasBetaAccess);
   const hasEducationItems = visibleItems.some((item) => item.href === '/courses' || item.href === '/teach/courses');
-  const modifiedMenuItems = visibleItems.filter((item) => item.subheader !== 'menu.educationalMaterial' || hasEducationItems);
+  let modifiedMenuItems = visibleItems.filter((item) => item.subheader !== 'menu.educationalMaterial' || hasEducationItems);
+  if (previewAppearance) {
+    const approvedItems = visibleItems.map((item) => item.href === '/monaco-page' ? { ...item, title: 'menu.pythonEditor' } : item);
+    const courses = approvedItems
+      .filter((item) => item.href === '/courses' || item.href === '/teach/courses')
+      .map((item) => ({ ...item, title: 'menu.studentCourses' }));
+    const stages = approvedItems.filter((item) => item.href === '/stages');
+    modifiedMenuItems = approvedItems.filter((item) =>
+      item.subheader !== 'menu.educationalMaterial'
+      && item.subheader !== 'menu.editors'
+      && item.href !== '/courses'
+      && item.href !== '/teach/courses'
+      && item.href !== '/stages'
+      && item.href !== '/stage-builder'
+    );
+    const dashboardIndex = modifiedMenuItems.findIndex((item) => item.href === '/dashboard');
+    modifiedMenuItems.splice(dashboardIndex + 1, 0, ...courses);
+    const blocklyIndex = modifiedMenuItems.findIndex((item) => item.href === '/blockly-page');
+    modifiedMenuItems.splice(blocklyIndex + 1, 0, ...stages);
+  }
 
   return (
     <Box sx={{ px: 3 }}>
@@ -59,6 +78,7 @@ const SidebarItems = () => {
                 key={item.id}
                 pathDirect={pathDirect}
                 hideMenu={hideMenu}
+                previewAppearance={previewAppearance}
                 onClick={() => dispatch(toggleMobileSidebar())}
               />
             );

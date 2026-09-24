@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useEffect, useImperativeHandle, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
@@ -11,15 +11,17 @@ import { disposeScene, initScene, renderScene, type SceneHandle } from 'src/simu
 import { loadRobotV2 } from 'src/simulator/robot/v2';
 import { SENSOR_LAYOUT } from 'src/simulator/sensors/layout';
 import { createStageAssetResolver } from 'src/simulator/stages/assets';
+import { objectVisualKey } from './stageBuilderVisualKey';
 import type { EditorStageObject, StageBuilderGroup, StageBuilderMode, StageBuilderSkyboxSettings, StageBuilderTransformSpace, StageLabelAttachment, StageLabelFace, StageTextStyle, Vec3 } from './types';
 import type { StageBuilderControlScheme, StageBuilderLockMode, StageBuilderStyleVariant } from './stageBuilderPreferences';
 import type { StageBuilderSnapSettings } from './stageBuilderSnapping';
 import { getSnapSettings, snapAngle, snapDimensions, snapPosition } from './stageBuilderSnapping';
 import type { StageBuilderValidationResult } from './stageBuilderValidation';
-import { objectBounds, stageHalfExtents, cameraLookDirection } from './stageBuilderGeometry';
+import { cloneStage, objectBounds, stageHalfExtents, cameraLookDirection } from './stageBuilderGeometry';
 import { getEditorColors, getEditorTones } from './stageBuilderEditorTheme';
 import { normalizeStageBuilderSkybox } from './stageBuilderSkybox';
 import { CUSTOM_OBJECT_MIN_SCALE } from './stageBuilderCustomObjects';
+import { createStageBuilderRenderScheduler } from './stageBuilderRenderScheduler';
 
 export type StageBuilderTransformMode = 'select' | 'translate' | 'rotate' | 'scale';
 export type StageBuilderCameraView = 'perspective' | 'top' | 'bottom' | 'front' | 'back' | 'left' | 'right' | 'camera';
@@ -67,6 +69,11 @@ export interface StageBuilderSceneProps {
   onLockedSelectionAttempt?: () => void;
 }
 
+export type StageBuilderSceneHandle = {
+  /** Renders the current stage from the default preview camera and returns a small PNG data URL. */
+  captureStagePreview: (width?: number, height?: number) => string | null;
+};
+
 export type MeshRecord = {
   objectId: string;
   root: THREE.Object3D;
@@ -106,6 +113,8 @@ export type ObjectVisualOptions = {
   validationSeverity?: 'error' | 'warning' | 'info';
   sensorHelpersVisible?: boolean;
   collisionWireVisible?: boolean;
+  /** Pre-resolved model asset URL, so callers that already resolved it avoid a second call. */
+  resolvedAssetUrl?: string;
 };
 
 type ColorableMaterial = THREE.Material & { color?: THREE.Color; _color?: THREE.Color };
@@ -116,6 +125,10 @@ const transformAxisGuideColors = {
   Y: 0x00ff00,
   Z: 0x0000ff,
 };
+
+// Named so `applyObjectVisualTransform` can re-anchor the range ring when an audio
+// source is moved without rebuilding its TubeGeometry.
+const AUDIO_RANGE_RING_NAME = 'audio range ring';
 const transformGuideNeutralColor = 0xffffff;
 
 const stageBuilderObjLoader = new OBJLoader();
@@ -134,7 +147,7 @@ const dragStartPosition = new THREE.Vector3();
 const robotSpawnForward = new THREE.Vector3();
 
 function cloneObjectForTransform(object: EditorStageObject): EditorStageObject {
-  return JSON.parse(JSON.stringify(object));
+  return cloneStage(object);
 }
 
 function loadStageBuilderOBJ(url: string): Promise<THREE.Group> {
@@ -192,9 +205,9 @@ function loadStageBuilderGLB(url: string): Promise<THREE.Group> {
   return pending.then(cloneGltfScene);
 }
 
-async function loadStageBuilderModel(object: Extract<EditorStageObject, { kind: 'model' }>, resolveAssetUrl: (url: string) => string = (url) => url): Promise<THREE.Object3D> {
+async function loadStageBuilderModel(object: Extract<EditorStageObject, { kind: 'model' }>, resolveAssetUrl: (url: string) => string = (url) => url, resolvedUrl?: string): Promise<THREE.Object3D> {
   const name = (object.originalFileName || object.filename).toLowerCase();
-  const modelUrl = resolveAssetUrl(object.filename);
+  const modelUrl = resolvedUrl ?? resolveAssetUrl(object.filename);
   if (object.format === 'stl' || (!object.format && name.endsWith('.stl'))) {
     const geometry = await loadStageBuilderSTL(modelUrl);
     const group = new THREE.Group();
@@ -524,12 +537,9 @@ function makeCollisionEdgesLocal(root: THREE.Object3D, anchor: THREE.Object3D, c
   return line;
 }
 
-function makeImportedModelRoot(object: Extract<EditorStageObject, { kind: 'model' }>, options: ObjectVisualOptions, colors: ReturnType<typeof getEditorColors>, pickables: THREE.Object3D[], resolveAssetUrl?: (url: string) => string): THREE.Group {
+function makeImportedModelRoot(object: Extract<EditorStageObject, { kind: 'model' }>, options: ObjectVisualOptions, colors: ReturnType<typeof getEditorColors>, pickables: THREE.Object3D[], resolveAssetUrl?: (url: string) => string, onVisualReady?: () => void): THREE.Group {
   const group = new THREE.Group();
-  group.position.set(...object.position);
-  group.scale.setScalar(object.scale);
-  if (object.orientation) group.rotation.set(object.orientation[0], object.orientation[1], object.orientation[2]);
-  else group.rotation.y = object.rotationY;
+  applyImportedModelTransform(group, object);
 
   const placeholder = new THREE.Mesh(
     new THREE.BoxGeometry(0.4, 0.4, 0.4),
@@ -549,8 +559,11 @@ function makeImportedModelRoot(object: Extract<EditorStageObject, { kind: 'model
     group.add(initialWire);
   }
 
-  loadStageBuilderModel(object, resolveAssetUrl).then((loaded) => {
-    if (group.userData.stageBuilderDisposed) return;
+  loadStageBuilderModel(object, resolveAssetUrl, options.resolvedAssetUrl).then((loaded) => {
+    if (group.userData.stageBuilderDisposed) {
+      disposeObject(loaded);
+      return;
+    }
     group.remove(placeholder);
     placeholder.geometry.dispose();
     (placeholder.material as THREE.Material).dispose();
@@ -574,11 +587,78 @@ function makeImportedModelRoot(object: Extract<EditorStageObject, { kind: 'model
       const edgeWire = makeCollisionEdgesLocal(loaded, group, colors);
       if (edgeWire) group.add(edgeWire);
     }
+    onVisualReady?.();
   }).catch(() => {
     // Keep the placeholder selectable when the imported model cannot be loaded.
   });
 
   return group;
+}
+
+function applyImportedModelTransform(root: THREE.Object3D, object: Extract<EditorStageObject, { kind: 'model' }>): void {
+  root.position.set(...object.position);
+  root.scale.setScalar(object.scale);
+  if (object.orientation) root.rotation.set(...object.orientation);
+  else root.rotation.set(0, object.rotationY, 0);
+}
+
+/**
+ * Re-applies an object's transform to a reused root. Must mirror exactly how
+ * `makeObjectRoot` positions each kind at construction time; the matching visual
+ * key excludes these fields. Line and text visuals bake their transform into
+ * geometry/textures and are never reused, so they are intentionally absent.
+ */
+function applyObjectVisualTransform(root: THREE.Object3D, object: EditorStageObject): void {
+  // A friendly resize previews by scaling the live root; clear that unless the model
+  // branch below sets the object's own scale.
+  if (object.kind !== 'model') root.scale.setScalar(1);
+  switch (object.kind) {
+    case 'base':
+      root.position.set(object.position[0], 0.006, object.position[2]);
+      return;
+    case 'camera':
+      root.position.set(...object.position);
+      root.rotation.order = 'YXZ';
+      root.rotation.set(-object.pitch, object.rotationY, 0);
+      return;
+    case 'light':
+      root.position.set(...object.position);
+      root.rotation.y = object.rotationY;
+      return;
+    case 'audio': {
+      root.position.set(...object.position);
+      const ring = root.getObjectByName(AUDIO_RANGE_RING_NAME);
+      if (ring) ring.position.y = -object.position[1] + 0.04;
+      return;
+    }
+    case 'model':
+      applyImportedModelTransform(root, object);
+      return;
+    case 'fossbot':
+      root.position.set(...object.position);
+      root.rotation.y = object.rotationY;
+      return;
+    case 'cylinder':
+    case 'sphere':
+      root.position.set(...object.position);
+      return;
+    case 'cube':
+    case 'wedge':
+    case 'arrow':
+      root.position.set(...object.position);
+      if (object.orientation) root.rotation.set(...object.orientation);
+      else root.rotation.set(0, object.rotationY, 0);
+      return;
+    case 'text':
+      // Attached labels are never reused (their pose follows the parent); unattached
+      // labels bake scale into geometry, so only position and floor rotation move.
+      if (object.attachment?.parentId) return;
+      root.rotation.set(object.onFloor ? -Math.PI / 2 : 0, 0, 0);
+      root.position.set(...object.position);
+      return;
+    default:
+      return;
+  }
 }
 
 function yawFromObject(root: THREE.Object3D, fallback = 0): number {
@@ -760,16 +840,16 @@ function makeAudioWave(radius: number, colorValue: THREE.Color, options: ObjectV
   );
 }
 
-function makeAudioRangeRing(range: number, colorValue: THREE.Color, options: ObjectVisualOptions): THREE.LineLoop {
+function makeAudioRangeRing(range: number, colorValue: THREE.Color, options: ObjectVisualOptions): THREE.Mesh {
   const points: THREE.Vector3[] = [];
   const radius = Math.max(0.1, range);
   for (let i = 0; i < 96; i++) {
     const angle = (Math.PI * 2 * i) / 96;
     points.push(new THREE.Vector3(Math.cos(angle) * radius, 0, Math.sin(angle) * radius));
   }
-  return new THREE.LineLoop(
-    new THREE.BufferGeometry().setFromPoints(points),
-    new THREE.LineBasicMaterial({ color: colorValue, transparent: true, opacity: options.ghost ? 0.18 : 0.28, depthWrite: false }),
+  return new THREE.Mesh(
+    new THREE.TubeGeometry(new THREE.CatmullRomCurve3(points, true), 96, 0.025, 6, true),
+    new THREE.MeshBasicMaterial({ color: colorValue, transparent: true, opacity: options.ghost ? 0.45 : 0.9, depthWrite: false }),
   );
 }
 
@@ -911,11 +991,11 @@ function applyRobotSpawnTint(root: THREE.Object3D, accentValue: string, colors: 
   });
 }
 
-function animateRobotSpawnVisual(root: THREE.Object3D, elapsed: number, active: boolean): void {
+function applyRobotSpawnSelectionState(root: THREE.Object3D, active: boolean): void {
   if (root.userData.stageBuilderVisualKind !== 'robotSpawn') return;
   if (!active) {
-    if (!root.userData.spawnAnimationActive) return;
-    root.userData.spawnAnimationActive = false;
+    if (!root.userData.spawnSelectionActive) return;
+    root.userData.spawnSelectionActive = false;
     root.traverse((child) => {
       const role = child.userData.robotSpawnAnimationRole as string | undefined;
       if (!role) return;
@@ -931,14 +1011,13 @@ function animateRobotSpawnVisual(root: THREE.Object3D, elapsed: number, active: 
     });
     return;
   }
-  root.userData.spawnAnimationActive = true;
-  const phase = Number(root.userData.spawnAnimationPhase || 0);
-  const breath = (Math.sin(elapsed * 1.35 + phase) + 1) / 2;
+  if (root.userData.spawnSelectionActive) return;
+  root.userData.spawnSelectionActive = true;
   root.traverse((child) => {
     const role = child.userData.robotSpawnAnimationRole as string | undefined;
     if (!role) return;
     if (role === 'pulseRing') {
-      const scale = 1 + breath * 0.045;
+      const scale = 1.025;
       child.scale.set(scale, scale, scale);
     }
     const material = (child as THREE.Mesh).material as THREE.Material | THREE.Material[] | undefined;
@@ -947,7 +1026,7 @@ function animateRobotSpawnVisual(root: THREE.Object3D, elapsed: number, active: 
     for (const mat of materials) {
       const base = mat.userData.robotSpawnBaseOpacity;
       if (typeof base !== 'number') continue;
-      mat.opacity = Math.min(0.92, base + breath * opacityLift);
+      mat.opacity = Math.min(0.92, base + opacityLift * 0.5);
       mat.needsUpdate = true;
     }
   });
@@ -1048,7 +1127,7 @@ function makeRobotSpawnChevronGeometry(): THREE.ShapeGeometry {
   return new THREE.ShapeGeometry(shape);
 }
 
-function attachRobotSpawnModel(host: THREE.Group, pickables: THREE.Object3D[], options: ObjectVisualOptions, accentValue: string, colors: ReturnType<typeof getEditorColors>): void {
+function attachRobotSpawnModel(host: THREE.Group, pickables: THREE.Object3D[], options: ObjectVisualOptions, accentValue: string, colors: ReturnType<typeof getEditorColors>, onVisualReady?: () => void): void {
   loadRobotSpawnModelTemplate()
     .then((template) => {
       if (host.userData.stageBuilderDisposed) return;
@@ -1069,18 +1148,18 @@ function attachRobotSpawnModel(host: THREE.Group, pickables: THREE.Object3D[], o
       host.add(rim, model);
       collectMeshPickables(rim, pickables);
       collectMeshPickables(model, pickables);
+      onVisualReady?.();
     })
     .catch((error) => console.warn('[stage-builder] failed to load Fossbot spawn model', error));
 }
 
-function makeRobotSpawnVisual(object: Extract<EditorStageObject, { kind: 'fossbot' }>, options: ObjectVisualOptions = {}, context: { colors?: ReturnType<typeof getEditorColors> } = {}): { root: THREE.Group; pickables: THREE.Object3D[] } {
+function makeRobotSpawnVisual(object: Extract<EditorStageObject, { kind: 'fossbot' }>, options: ObjectVisualOptions = {}, context: { colors?: ReturnType<typeof getEditorColors>; onVisualReady?: () => void } = {}): { root: THREE.Group; pickables: THREE.Object3D[] } {
   const colors = context.colors ?? getEditorColors('studio');
   const group = new THREE.Group();
   const pickables: THREE.Object3D[] = [];
   const accent = robotSpawnAccent(options, colors);
   group.userData.stageBuilderVisualKind = 'robotSpawn';
   group.userData.robotSpawnAccent = accent;
-  group.userData.spawnAnimationPhase = object.id.split('').reduce((sum, letter) => sum + letter.charCodeAt(0), 0) * 0.031;
 
   const field = new THREE.Mesh(
     new THREE.CircleGeometry(0.42, 48),
@@ -1121,14 +1200,14 @@ function makeRobotSpawnVisual(object: Extract<EditorStageObject, { kind: 'fossbo
   group.add(field, halo, outerHalo, directionArrow);
   if (options.sensorHelpersVisible) group.add(makeSensorHelpersVisual(colors));
   pickables.push(halo, outerHalo, directionArrow);
-  attachRobotSpawnModel(group, pickables, options, accent, colors);
+  attachRobotSpawnModel(group, pickables, options, accent, colors, context.onVisualReady);
   group.position.set(...object.position);
   group.rotation.y = object.rotationY;
   applyRobotSpawnTint(group, accent, colors);
   return { root: group, pickables };
 }
 
-export function makeObjectRoot(object: EditorStageObject, options: ObjectVisualOptions = {}, context: { objects?: EditorStageObject[]; colors?: ReturnType<typeof getEditorColors>; resolveAssetUrl?: (url: string) => string } = {}): MeshRecord {
+export function makeObjectRoot(object: EditorStageObject, options: ObjectVisualOptions = {}, context: { objects?: EditorStageObject[]; colors?: ReturnType<typeof getEditorColors>; resolveAssetUrl?: (url: string) => string; onVisualReady?: () => void } = {}): MeshRecord {
   const colors = context.colors ?? getEditorColors('studio');
   let pickables: THREE.Object3D[] = [];
   let root: THREE.Object3D;
@@ -1229,7 +1308,7 @@ export function makeObjectRoot(object: EditorStageObject, options: ObjectVisualO
     }
     root = group;
   } else if (object.kind === 'model') {
-    root = makeImportedModelRoot(object, options, colors, pickables, context.resolveAssetUrl);
+    root = makeImportedModelRoot(object, options, colors, pickables, context.resolveAssetUrl, context.onVisualReady);
   } else if (object.kind === 'text') {
     const parent = object.attachment?.parentId ? context.objects?.find((item) => item.id === object.attachment?.parentId) : null;
     if (object.attachment && parent) {
@@ -1352,7 +1431,8 @@ export function makeObjectRoot(object: EditorStageObject, options: ObjectVisualO
 
     if (object.spatial) {
       const ring = makeAudioRangeRing(object.range, iconColor, options);
-      ring.position.y = -object.position[1] + 0.014;
+      ring.name = AUDIO_RANGE_RING_NAME;
+      ring.position.y = -object.position[1] + 0.04;
       ring.renderOrder = 6;
       group.add(ring);
     }
@@ -1360,7 +1440,7 @@ export function makeObjectRoot(object: EditorStageObject, options: ObjectVisualO
     root = group;
     group.position.set(...object.position);
   } else {
-    const spawn = makeRobotSpawnVisual(object, options, { colors });
+    const spawn = makeRobotSpawnVisual(object, options, { colors, onVisualReady: context.onVisualReady });
     root = spawn.root;
     pickables = spawn.pickables;
   }
@@ -1589,12 +1669,24 @@ function tintGhost(root: THREE.Object3D, valid: boolean, colors: ReturnType<type
   });
 }
 
-function validationSeverityFor(objectId: string, results: StageBuilderValidationResult[]): 'error' | 'warning' | 'info' | undefined {
-  const active = results.filter((item) => item.objectIds.includes(objectId) && !(item.overridable && item.overridden));
-  if (active.some((item) => item.severity === 'error')) return 'error';
-  if (active.some((item) => item.severity === 'warning')) return 'warning';
-  if (active.some((item) => item.severity === 'info')) return 'info';
-  return undefined;
+const validationSeverityRank = { info: 1, warning: 2, error: 3 } as const;
+
+/**
+ * Flattens validation results into one severity per object so the object-map effect
+ * does not rescan every result for every object (previously O(objects x results)).
+ */
+function validationSeverityMap(results: StageBuilderValidationResult[]): Map<string, 'error' | 'warning' | 'info'> {
+  const severities = new Map<string, 'error' | 'warning' | 'info'>();
+  for (const item of results) {
+    if (item.overridable && item.overridden) continue;
+    for (const objectId of item.objectIds) {
+      const current = severities.get(objectId);
+      if (!current || validationSeverityRank[item.severity] > validationSeverityRank[current]) {
+        severities.set(objectId, item.severity);
+      }
+    }
+  }
+  return severities;
 }
 
 type CornerBoundsHelper = THREE.LineSegments<THREE.BufferGeometry, THREE.LineBasicMaterial>;
@@ -1690,7 +1782,7 @@ function applyStageBuilderCameraView(sceneHandle: SceneHandle, view: StageBuilde
   sceneHandle.controls.update();
 }
 
-export function StageBuilderScene({
+export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, StageBuilderSceneProps>(function StageBuilderScene({
   objects,
   groups = [],
   selectedId,
@@ -1723,15 +1815,17 @@ export function StageBuilderScene({
   onPlaceAt,
   onPlacementStatusChange,
   onLockedSelectionAttempt,
-}: StageBuilderSceneProps) {
+}: StageBuilderSceneProps, ref) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const sceneRef = useRef<SceneHandle | null>(null);
+  const requestRenderRef = useRef<() => void>(() => undefined);
   const transformRef = useRef<TransformControls | null>(null);
   const selectionHelperRef = useRef<CornerBoundsHelper | null>(null);
   const groupSelectionHelperRef = useRef<CornerBoundsHelper | null>(null);
   const friendlyHandlesRef = useRef<FriendlyHandleRecord | null>(null);
   const groupPivotRef = useRef<THREE.Group | null>(null);
   const objectMapRef = useRef<Map<string, MeshRecord>>(new Map());
+  const visualKeysRef = useRef<Map<string, string>>(new Map());
   const ghostRef = useRef<MeshRecord | null>(null);
   const floorMeshRef = useRef<THREE.Mesh | null>(null);
   const gridGroupRef = useRef<THREE.Group | null>(null);
@@ -1788,6 +1882,12 @@ export function StageBuilderScene({
     fov: 50,
     hasSnapshot: false,
   });
+
+  const invalidateScene = React.useCallback((shadows = false) => {
+    const handle = sceneRef.current;
+    if (shadows && handle) handle.renderer.shadowMap.needsUpdate = true;
+    requestRenderRef.current();
+  }, []);
 
   useEffect(() => { transformModeRef.current = transformMode; }, [transformMode]);
   useEffect(() => { lookThroughCameraIdRef.current = lookThroughCameraId; }, [lookThroughCameraId]);
@@ -1987,8 +2087,15 @@ export function StageBuilderScene({
   useEffect(() => {
     if (!containerRef.current) return;
 
-    const sceneHandle = initScene(containerRef.current, { gizmo: false });
+    const sceneHandle = initScene(containerRef.current, {
+      gizmo: false,
+      maxPixelRatio: 1.5,
+      powerPreference: 'low-power',
+      onResize: () => requestRenderRef.current(),
+    });
     sceneRef.current = sceneHandle;
+    sceneHandle.renderer.shadowMap.autoUpdate = false;
+    sceneHandle.renderer.shadowMap.needsUpdate = true;
     // Override the simulator's hardcoded dark scene background with the active
     // variant's viewport color so the editor's 3D viewport matches the chrome
     // (Studio keeps the dark bg; FossBot flips to a light grey).
@@ -2053,7 +2160,10 @@ export function StageBuilderScene({
     const initialSnap = snapSettingsRef.current;
     transform.setTranslationSnap(initialSnap.move || null);
     transform.setRotationSnap(initialSnap.rotate || null);
-    transform.addEventListener('change', () => applyTransformGuideColors(transform));
+    transform.addEventListener('change', () => {
+      applyTransformGuideColors(transform);
+      invalidateScene();
+    });
     applyTransformGuideColors(transform);
     transform.addEventListener('dragging-changed', (event) => {
       sceneHandle.controls.enabled = !event.value;
@@ -2075,6 +2185,7 @@ export function StageBuilderScene({
       if (selected) parentIds.add(selected.id);
       groupTransformRef.current?.rootStartMatrices.forEach((_, id) => parentIds.add(id));
       updateAttachedLabelVisuals(parentIds);
+      invalidateScene(true);
     });
     sceneHandle.scene.add(transform as unknown as THREE.Object3D);
     transformRef.current = transform;
@@ -2129,7 +2240,7 @@ export function StageBuilderScene({
           if (scene) {
             scene.remove(ghost.root);
             disposeObject(ghost.root);
-            const nextGhost = makeObjectRoot(preview, { ghost: true, ghostValid: valid }, { colors: styleColorsRef.current });
+            const nextGhost = makeObjectRoot(preview, { ghost: true, ghostValid: valid }, { colors: styleColorsRef.current, onVisualReady: () => invalidateScene(true) });
             ghostRef.current = nextGhost;
             scene.add(nextGhost.root);
           }
@@ -2138,6 +2249,7 @@ export function StageBuilderScene({
           if (preview.kind === 'base') ghost.root.position.y = 0.006;
         }
       }
+      invalidateScene();
       return status;
     };
 
@@ -2309,6 +2421,7 @@ export function StageBuilderScene({
         selectedRoot.scale.set(factor, selected.kind === 'base' ? 1 : factor, factor);
       }
       updateAttachedLabelVisuals(new Set([selected.id]));
+      invalidateScene(true);
     };
 
     const handlePointerUp = (event: PointerEvent) => {
@@ -2375,9 +2488,7 @@ export function StageBuilderScene({
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
 
-    let raf = 0;
     const frame = () => {
-      const elapsed = performance.now() / 1000;
       // Fat-line widths are in pixels; keep their resolution uniform in sync with
       // the canvas so they stay crisp through resizes/dolly.
       const gridMaterials = gridMaterialsRef.current;
@@ -2390,8 +2501,8 @@ export function StageBuilderScene({
       if (selectedRef.current) animatedObjectIds.add(selectedRef.current);
       const animatedGroupId = selectedGroupRef.current;
       if (animatedGroupId) groupMemberObjects(animatedGroupId).forEach((object) => animatedObjectIds.add(object.id));
-      for (const record of objectMapRef.current.values()) animateRobotSpawnVisual(record.root, elapsed, animatedObjectIds.has(record.objectId));
-      if (ghostRef.current) animateRobotSpawnVisual(ghostRef.current.root, elapsed, false);
+      for (const record of objectMapRef.current.values()) applyRobotSpawnSelectionState(record.root, animatedObjectIds.has(record.objectId));
+      if (ghostRef.current) applyRobotSpawnSelectionState(ghostRef.current.root, false);
 
       const helper = selectionHelperRef.current;
       const selectedRoot = selectedRef.current ? objectMapRef.current.get(selectedRef.current)?.root : null;
@@ -2426,12 +2537,17 @@ export function StageBuilderScene({
         handles.visible = false;
       }
       renderScene(sceneHandle);
-      raf = requestAnimationFrame(frame);
     };
-    frame();
+    const scheduler = createStageBuilderRenderScheduler(frame);
+    requestRenderRef.current = scheduler.request;
+    const handleControlsChange = () => scheduler.request();
+    sceneHandle.controls.addEventListener('change', handleControlsChange);
+    scheduler.request();
 
     return () => {
-      cancelAnimationFrame(raf);
+      requestRenderRef.current = () => undefined;
+      scheduler.cancel();
+      sceneHandle.controls.removeEventListener('change', handleControlsChange);
       sceneHandle.renderer.domElement.removeEventListener('pointerdown', handlePointerDown);
       window.removeEventListener('pointermove', handlePointerMove);
       window.removeEventListener('pointerup', handlePointerUp);
@@ -2481,7 +2597,7 @@ export function StageBuilderScene({
       boundaryRef.current = null;
       groupTransformRef.current = null;
     };
-  }, []);
+  }, [invalidateScene]);
 
   useEffect(() => {
     const sceneHandle = sceneRef.current;
@@ -2535,24 +2651,47 @@ export function StageBuilderScene({
     if (!scene) return;
 
     transformRef.current?.detach();
-
-    for (const record of objectMapRef.current.values()) {
-      scene.remove(record.root);
-      disposeObject(record.root);
-    }
-    objectMapRef.current.clear();
+    const previous = objectMapRef.current;
+    const previousKeys = visualKeysRef.current;
+    const next = new Map<string, MeshRecord>();
+    const nextKeys = new Map<string, string>();
+    const severities = validationSeverityMap(validationResultsRef.current);
+    const objectsById = new Map(objects.map((item) => [item.id, item]));
 
     for (const object of objects) {
       if (object.hidden) continue;
-      if (object.kind === 'text' && object.attachment?.parentId && objects.find((item) => item.id === object.attachment?.parentId)?.hidden) continue;
-      const record = makeObjectRoot(object, { validationSeverity: validationSeverityFor(object.id, validationResultsRef.current), sensorHelpersVisible, collisionWireVisible }, { objects, colors: styleColorsRef.current, resolveAssetUrl });
+      if (object.kind === 'text' && object.attachment?.parentId && objectsById.get(object.attachment.parentId)?.hidden) continue;
+      const severity = severities.get(object.id);
+      // Attached labels follow their parent's transform, so they always rebuild. Everything
+      // else (including unattached labels) can be reused when its visual key is stable.
+      const reusableKind = !(object.kind === 'text' && object.attachment?.parentId);
+      const resolvedAssetUrl = object.kind === 'model' ? resolveAssetUrl(object.filename) : undefined;
+      const key = reusableKind
+        ? objectVisualKey(object, { severity, sensorHelpersVisible, collisionWireVisible, styleVariant, resolvedAssetUrl })
+        : null;
+      const reusable = key && previousKeys.get(object.id) === key ? previous.get(object.id) : null;
+      const record = reusable || makeObjectRoot(object, { validationSeverity: severity, sensorHelpersVisible, collisionWireVisible, resolvedAssetUrl }, { objects, colors: styleColorsRef.current, resolveAssetUrl, onVisualReady: () => invalidateScene(true) });
+      if (reusable) {
+        // The root may have been hidden by look-through mode on a previous pass.
+        record.root.visible = true;
+        applyObjectVisualTransform(record.root, object);
+      }
+      if (key) nextKeys.set(object.id, key);
       if (object.id === lookThroughCameraId) record.root.visible = false;
-      objectMapRef.current.set(object.id, record);
-      scene.add(record.root);
+      next.set(object.id, record);
+      if (!reusable) scene.add(record.root);
     }
 
+    for (const [id, record] of previous) {
+      if (next.get(id) === record) continue;
+      scene.remove(record.root);
+      disposeObject(record.root);
+    }
+    objectMapRef.current = next;
+    visualKeysRef.current = nextKeys;
+
     syncTransformAttachment();
-  }, [objects, validationResults, lookThroughCameraId, sensorHelpersVisible, collisionWireVisible, resolveAssetUrl]);
+  }, [objects, validationResults, lookThroughCameraId, sensorHelpersVisible, collisionWireVisible, resolveAssetUrl, styleVariant, invalidateScene]);
 
   useEffect(() => {
     const scene = sceneRef.current?.scene;
@@ -2563,12 +2702,12 @@ export function StageBuilderScene({
       ghostRef.current = null;
     }
     if (placementObject && builderMode === 'place') {
-      const ghost = makeObjectRoot(placementObject, { ghost: true, ghostValid: true }, { colors: styleColorsRef.current, resolveAssetUrl });
+      const ghost = makeObjectRoot(placementObject, { ghost: true, ghostValid: true }, { colors: styleColorsRef.current, resolveAssetUrl, onVisualReady: () => invalidateScene(true) });
       ghostRef.current = ghost;
       scene.add(ghost.root);
     }
     if (!placementObject || builderMode !== 'place') onPlacementStatusChange?.(null);
-  }, [placementObject, builderMode, onPlacementStatusChange, resolveAssetUrl]);
+  }, [placementObject, builderMode, onPlacementStatusChange, resolveAssetUrl, invalidateScene]);
 
   useEffect(() => {
     syncTransformAttachment();
@@ -2668,5 +2807,142 @@ export function StageBuilderScene({
     syncTransformAttachment();
   }, [lookThroughCameraId, objects]);
 
+  useEffect(() => {
+    invalidateScene(true);
+  }, [objects, stageDimensions, invalidateScene]);
+
+  useEffect(() => {
+    invalidateScene();
+  }, [
+    groups,
+    selectedId,
+    selectedIds,
+    selectedGroupId,
+    transformMode,
+    builderMode,
+    placementObject,
+    floorColor,
+    skybox,
+    gridVisible,
+    gridSize,
+    transformSpace,
+    controlScheme,
+    styleVariant,
+    validationResults,
+    focusRequestNonce,
+    cameraViewRequest,
+    lookThroughCameraId,
+    sensorHelpersVisible,
+    collisionWireVisible,
+    invalidateScene,
+  ]);
+
+  const captureStagePreview = React.useCallback((width = 480, height = 360): string | null => {
+    const sceneHandle = sceneRef.current;
+    if (!sceneHandle) return null;
+    const source = sceneHandle.renderer.domElement;
+    if (!source.clientWidth || !source.clientHeight) return null;
+
+    // Hide the editor-only chrome for the capture, then put it back so the
+    // viewport returns to exactly the state the user left it in.
+    const gridGroup = gridGroupRef.current;
+    const boundary = boundaryRef.current;
+    const transform = transformRef.current;
+    const selectionHelper = selectionHelperRef.current;
+    const groupSelectionHelper = groupSelectionHelperRef.current;
+    const friendlyHandles = friendlyHandlesRef.current;
+    const ghost = ghostRef.current;
+    const previousVisibility = {
+      grid: gridGroup?.visible,
+      boundary: boundary?.visible,
+      transform: transform?.visible,
+      selection: selectionHelper?.visible,
+      groupSelection: groupSelectionHelper?.visible,
+      friendly: friendlyHandles?.root.visible,
+      ghost: ghost?.root.visible,
+    };
+    const camera = sceneHandle.camera;
+    const previousCamera = {
+      position: camera.position.clone(),
+      quaternion: camera.quaternion.clone(),
+      up: camera.up.clone(),
+      fov: camera.fov,
+      target: sceneHandle.controls.target.clone(),
+    };
+
+    if (gridGroup) gridGroup.visible = false;
+    if (boundary) boundary.visible = false;
+    if (transform) transform.visible = false;
+    if (selectionHelper) selectionHelper.visible = false;
+    if (groupSelectionHelper) groupSelectionHelper.visible = false;
+    if (friendlyHandles) friendlyHandles.root.visible = false;
+    if (ghost) ghost.root.visible = false;
+
+    camera.up.set(0, 1, 0);
+    applyStageBuilderCameraView(sceneHandle, 'perspective', stageDimensionsRef.current);
+    // Pull back from the editor's tight perspective fit so the stage keeps a
+    // margin; the panel shows the preview with `object-fit: cover`, which
+    // crops that margin instead of the stage.
+    const framingTarget = sceneHandle.controls.target.clone();
+    const pullbackOffset = camera.position.clone().sub(framingTarget).multiplyScalar(1.4);
+    camera.position.copy(framingTarget).add(pullbackOffset);
+    camera.lookAt(framingTarget);
+    camera.updateProjectionMatrix();
+    sceneHandle.controls.enabled = false;
+
+    // Render a true 4:3 frame at the requested resolution. Drawing the
+    // near-square editor viewport straight into a 4:3 canvas stretched the
+    // stage, which then read as "cropped" inside the narrow preview strip.
+    const renderer = sceneHandle.renderer;
+    const previousPixelRatio = renderer.getPixelRatio();
+    const previousSize = renderer.getSize(new THREE.Vector2());
+    const previousAspect = camera.aspect;
+    renderer.setPixelRatio(1);
+    renderer.setSize(width, height, false);
+    renderer.setViewport(0, 0, width, height);
+    camera.aspect = width / height;
+    camera.updateProjectionMatrix();
+    renderer.clear();
+    renderer.render(sceneHandle.scene, camera);
+    let dataUrl: string | null = renderer.domElement.toDataURL('image/png');
+    // Keep the stored preview clear of the backend's 512 KiB cap for noisy stages.
+    if (dataUrl.length > 480 * 1024) {
+      const smallerWidth = Math.round(width / 2);
+      const smallerHeight = Math.round(height / 2);
+      renderer.setSize(smallerWidth, smallerHeight, false);
+      renderer.setViewport(0, 0, smallerWidth, smallerHeight);
+      camera.aspect = smallerWidth / smallerHeight;
+      camera.updateProjectionMatrix();
+      renderer.clear();
+      renderer.render(sceneHandle.scene, camera);
+      dataUrl = renderer.domElement.toDataURL('image/png');
+    }
+    renderer.setPixelRatio(previousPixelRatio);
+    renderer.setSize(previousSize.x, previousSize.y, false);
+    camera.aspect = previousAspect;
+    camera.updateProjectionMatrix();
+
+    camera.position.copy(previousCamera.position);
+    camera.quaternion.copy(previousCamera.quaternion);
+    camera.up.copy(previousCamera.up);
+    camera.fov = previousCamera.fov;
+    camera.updateProjectionMatrix();
+    sceneHandle.controls.target.copy(previousCamera.target);
+    sceneHandle.controls.enabled = true;
+    sceneHandle.controls.update();
+    if (gridGroup) gridGroup.visible = previousVisibility.grid ?? true;
+    if (boundary) boundary.visible = previousVisibility.boundary ?? true;
+    if (transform) transform.visible = previousVisibility.transform ?? true;
+    if (selectionHelper) selectionHelper.visible = previousVisibility.selection ?? true;
+    if (groupSelectionHelper) groupSelectionHelper.visible = previousVisibility.groupSelection ?? true;
+    if (friendlyHandles) friendlyHandles.root.visible = previousVisibility.friendly ?? true;
+    if (ghost) ghost.root.visible = previousVisibility.ghost ?? true;
+    renderScene(sceneHandle);
+
+    return dataUrl;
+  }, []);
+
+  useImperativeHandle(ref, () => ({ captureStagePreview }), [captureStagePreview]);
+
   return <div ref={containerRef} style={{ width: '100%', height: '100%', minHeight: 420, position: 'relative' }} />;
-}
+});

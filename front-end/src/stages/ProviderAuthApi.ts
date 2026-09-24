@@ -1,4 +1,4 @@
-const backendUrl: string = process.env.REACT_APP_BACKEND_URL;
+import { backendUrl } from '../utils/backendUrl';
 
 export interface GitHubProviderStatus {
   connected: boolean;

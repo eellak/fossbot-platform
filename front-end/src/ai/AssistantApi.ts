@@ -13,7 +13,7 @@ import type {
   AIStreamEvent,
 } from './types';
 
-const backendUrl: string = process.env.REACT_APP_BACKEND_URL;
+import { backendUrl } from '../utils/backendUrl';
 
 export class AIRequestError extends Error {
   status: number;
@@ -29,7 +29,7 @@ export class AIRequestError extends Error {
 export function parseAIStreamFrame(frame: string): AIStreamEvent {
   const eventType = frame.split('\n').find((line) => line.startsWith('event:'))?.slice(6).trim();
   const data = frame.split('\n').filter((line) => line.startsWith('data:')).map((line) => line.slice(5).trim()).join('\n');
-  if (!eventType || !data || !['start', 'text_delta', 'suggestion', 'usage', 'done', 'error', 'debug'].includes(eventType)) throw new AIRequestError('Malformed assistant stream', 502, 'malformed_response');
+  if (!eventType || !data || !['start', 'text_delta', 'answer', 'suggestion', 'usage', 'done', 'error', 'debug'].includes(eventType)) throw new AIRequestError('Malformed assistant stream', 502, 'malformed_response');
   let payload: unknown;
   try { payload = JSON.parse(data); }
   catch { throw new AIRequestError('Malformed assistant stream', 502, 'malformed_response'); }
@@ -45,10 +45,15 @@ async function parse<T>(response: Response): Promise<T> {
   const payload = await response.json().catch(() => null);
   if (!response.ok) {
     const detail = payload?.detail;
+    const message = typeof detail === 'string'
+      ? detail
+      : Array.isArray(detail)
+        ? detail.map((item) => (item && typeof item === 'object' && typeof item.msg === 'string' ? item.msg : '')).filter(Boolean).join('; ') || 'AI request failed'
+        : detail?.message || 'AI request failed';
     throw new AIRequestError(
-      typeof detail === 'string' ? detail : detail?.message || 'AI request failed',
+      message,
       response.status,
-      typeof detail === 'object' && typeof detail?.code === 'string' ? detail.code : 'provider_error',
+      typeof detail === 'object' && !Array.isArray(detail) && typeof detail?.code === 'string' ? detail.code : 'provider_error',
     );
   }
   return payload as T;
@@ -68,6 +73,11 @@ export function createAIProvider(token: string, input: AIProviderInput): Promise
 
 export function updateAIProvider(token: string, providerId: number, input: Partial<AIProviderInput>): Promise<AIProviderConfig> {
   return fetch(`${backendUrl}/api/admin/ai/providers/${providerId}`, { method: 'PUT', headers: headers(token), body: JSON.stringify(input) }).then(parse<AIProviderConfig>);
+}
+
+export async function deleteAIProvider(token: string, providerId: number): Promise<void> {
+  const response = await fetch(`${backendUrl}/api/admin/ai/providers/${providerId}`, { method: 'DELETE', headers: headers(token) });
+  if (!response.ok) await parse(response);
 }
 
 export function updateAISettings(token: string, settings: Pick<AIInstanceSettings, 'enabled' | 'defaultProviderId' | 'requestLimit' | 'tokenLimit' | 'reportLocalUsage' | 'usageRetentionDays'>): Promise<AIInstanceSettings> {
@@ -111,6 +121,10 @@ export function resolveAIAccess(token: string, userId: number, capability: AICap
 
 export function testAIProvider(token: string, providerId: number): Promise<{ ok: boolean; modelFound?: boolean | null }> {
   return fetch(`${backendUrl}/api/admin/ai/providers/${providerId}/test`, { method: 'POST', headers: headers(token) }).then(parse<{ ok: boolean; modelFound?: boolean | null }>);
+}
+
+export function validateAIArtifact(token: string, surface: 'python' | 'blockly', content: string): Promise<{ valid: boolean; message: string }> {
+  return fetch(`${backendUrl}/api/ai/validate`, { method: 'POST', headers: headers(token), body: JSON.stringify({ surface, content }) }).then(parse<{ valid: boolean; message: string }>);
 }
 
 export async function streamAIAssist(

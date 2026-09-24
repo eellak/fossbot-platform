@@ -1,91 +1,75 @@
 import React from 'react';
-import { Grid, Box, Container, useMediaQuery, styled, Stack, Theme } from '@mui/material';
+import { Box, Container, Grid, styled } from '@mui/material';
 import BannerContent from './BannerContent';
 import bot from 'src/assets/images/fossbot/logos-main/bot.png';
 import gfoss from 'src/assets/images/fossbot/logos-main/gfoss.png';
 import hua from 'src/assets/images/fossbot/logos-main/hua.png';
 
-const Banner = () => {
-  const lgUp = useMediaQuery((theme: Theme) => theme.breakpoints.up('lg'));
+const logoWallFade = 'linear-gradient(to bottom, transparent 0%, #000 14%, #000 86%, transparent 100%)';
 
-  const SliderContainer = styled(Box)(({ theme }) => ({
-    display: 'flex',
-    flexWrap: 'wrap',
-    height: '200%',
-    '@keyframes slideup': {
-      '0%': {
-        transform: 'translateY(0)',
-      },
-      '100%': {
-        transform: 'translateY(-50%)',
-      },
-    },
-    animation: 'slideup 20s linear infinite',
-  }));
+const LogoWallTrack = styled(Box)(() => ({
+  display: 'grid',
+  gap: 10,
+  gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+  width: '100%',
+  '@keyframes logoWallSlide': {
+    '0%': { transform: 'translateY(0)' },
+    '100%': { transform: 'translateY(-50%)' },
+  },
+  animation: 'logoWallSlide 20s linear infinite',
+  '@media (prefers-reduced-motion: reduce)': {
+    animation: 'none',
+  },
+}));
 
-  const SliderBox = styled(Box)(({ theme }) => ({
-    img: {
-      width: '100%',
-      height: 'auto',
-      objectFit: 'contain',
-    },
-  }));
+const logoSet = Array.from({ length: 10 }, () => [hua, bot, gfoss]).flat();
+const logoWall = [...logoSet, ...logoSet];
 
-  const images = [
-    { src: hua, alt: 'banner' },
-    { src: bot, alt: 'banner' },
-    { src: gfoss, alt: 'banner' },
-    // Add more objects as needed
-  ];
-
-  let repeatedData = [];
-  for (let i = 0; i < 10; i++) {
-    repeatedData = repeatedData.concat(images);
-  }
-
-  return (
-    <Box mb={10} sx={{ overflow: 'hidden' }}>
-      <Container maxWidth="lg">
-        <Grid container spacing={3} alignItems="center">
-          <Grid item xs={12} lg={6} sm={8}>
-            <BannerContent />
-          </Grid>
-          {lgUp ? (
-            <Grid item xs={12} lg={6}>
-              <Box
-                p={3.2}
-                sx={{
-                  backgroundColor: (theme) => theme.palette.primary.light,
-                  minWidth: '70%',
-                  height: 'calc(100vh - 100px)',
-                  maxHeight: '790px',
-                  overflow: 'hidden',
-                  position: 'relative',
-                }}
-              >
-                <SliderContainer>
-                  {repeatedData.map((repeatedData, index) => (
-                    <Grid item xs={3} key={index} sx={{ padding: '8px' }}>
-                      <SliderBox width={"100px"}>
-                        <img src={repeatedData.src} alt={repeatedData.alt} />
-                      </SliderBox>
-                    </Grid>
-                  ))}
-                  {repeatedData.map((repeatedData, index) => (
-                    <Grid item xs={3} key={`repeat-${index}`} sx={{ padding: '8px' }}>
-                      <SliderBox width={"100px"}>
-                        <img src={repeatedData.src} alt={repeatedData.alt} />
-                      </SliderBox>
-                    </Grid>
-                  ))}
-                </SliderContainer>
-              </Box>
-            </Grid>
-          ) : null}
+const Banner = () => (
+  <Box component="section" sx={{ overflow: 'hidden', pb: { xs: 6, md: 8 }, pt: { xs: 4, md: 6 } }}>
+    <Container maxWidth="xl">
+      <Grid container spacing={{ xs: 5, lg: 6 }} alignItems="center">
+        <Grid item xs={12} lg={6}>
+          <BannerContent />
         </Grid>
-      </Container>
-    </Box>
-  );
-};
+        <Grid item xs={12} lg={6} sx={{ display: { xs: 'none', lg: 'block' } }}>
+          <Box
+            aria-hidden="true"
+            sx={{
+              bgcolor: 'primary.light',
+              borderRadius: 1,
+              height: 440,
+              overflow: 'hidden',
+              position: 'relative',
+            }}
+          >
+            <Box
+              sx={{
+                inset: 0,
+                maskImage: logoWallFade,
+                overflow: 'hidden',
+                p: 3,
+                position: 'absolute',
+                WebkitMaskImage: logoWallFade,
+              }}
+            >
+              <LogoWallTrack>
+                {logoWall.map((logo, index) => (
+                  <Box
+                    component="img"
+                    src={logo}
+                    alt=""
+                    key={`${logo}-${index}`}
+                    sx={{ height: 72, objectFit: 'contain', p: 0.5, width: '100%' }}
+                  />
+                ))}
+              </LogoWallTrack>
+            </Box>
+          </Box>
+        </Grid>
+      </Grid>
+    </Container>
+  </Box>
+);
 
 export default Banner;

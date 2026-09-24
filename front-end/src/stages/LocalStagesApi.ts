@@ -1,24 +1,28 @@
 import type { LocalStageRecord } from 'src/components/stage-builder/types';
 import type { MarketplaceStageEntry } from './MarketplaceApi';
 
-const backendUrl: string = process.env.REACT_APP_BACKEND_URL;
+import { backendUrl, resolveBackendAssetUrl } from '../utils/backendUrl';
 
-export interface LocalStage {
+export interface LocalStageSummary {
   id: number;
   slug: string;
   title: string;
   description: string;
   visibility: 'private';
-  record: LocalStageRecord;
   recordBytes: number;
   revision: number;
   checksum: string;
+  previewUrl?: string | null;
   provenance?: Record<string, unknown> | null;
   createdAt: string;
   updatedAt: string;
   publication?: { id: number; active: boolean; stageRevision: number; currentReleaseId?: number | null; publishedAt: string; updatedAt: string; unpublishedAt?: string | null } | null;
   submission?: LocalPublicationSubmissionSummary | null;
   unchanged?: boolean;
+}
+
+export interface LocalStage extends LocalStageSummary {
+  record: LocalStageRecord;
 }
 
 export interface LocalPublicationSubmissionSummary {
@@ -74,24 +78,24 @@ function authHeaders(token: string): HeadersInit {
   return { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
 }
 
-export async function listLocalStages(token: string): Promise<LocalStage[]> {
+export async function listLocalStages(token: string): Promise<LocalStageSummary[]> {
   const response = await fetch(`${backendUrl}/api/local-stages`, { headers: authHeaders(token) });
-  return (await parseJsonResponse<{ stages: LocalStage[] }>(response)).stages;
+  return (await parseJsonResponse<{ stages: LocalStageSummary[] }>(response)).stages;
 }
 
 export async function loadLocalStage(token: string, stageId: number): Promise<LocalStage> {
   return parseJsonResponse(await fetch(`${backendUrl}/api/local-stages/${stageId}`, { headers: authHeaders(token) }));
 }
 
-export async function createLocalStage(token: string, record: LocalStageRecord): Promise<LocalStage> {
+export async function createLocalStage(token: string, record: LocalStageRecord, previewDataUrl?: string | null): Promise<LocalStage> {
   return parseJsonResponse(await fetch(`${backendUrl}/api/local-stages`, {
     method: 'POST',
     headers: authHeaders(token),
-    body: JSON.stringify({ record, title: record.title, description: record.description }),
+    body: JSON.stringify({ record, title: record.title, description: record.description, previewDataUrl: previewDataUrl ?? undefined }),
   }));
 }
 
-export async function updateLocalStage(token: string, stage: LocalStage, record: LocalStageRecord): Promise<LocalStage> {
+export async function updateLocalStage(token: string, stage: LocalStage, record: LocalStageRecord, previewDataUrl?: string | null): Promise<LocalStage> {
   return parseJsonResponse(await fetch(`${backendUrl}/api/local-stages/${stage.id}`, {
     method: 'PUT',
     headers: authHeaders(token),
@@ -101,8 +105,20 @@ export async function updateLocalStage(token: string, stage: LocalStage, record:
       description: record.description,
       visibility: stage.visibility,
       expectedRevision: stage.revision,
+      previewDataUrl: previewDataUrl ?? undefined,
     }),
   }));
+}
+
+/**
+ * Loads a private local-stage preview. The endpoint needs the bearer token, so
+ * the panel fetches the bytes and hands back an object URL instead of pointing
+ * an `<img>` at the protected URL.
+ */
+export async function fetchLocalStagePreview(token: string, previewUrl: string): Promise<string> {
+  const response = await fetch(resolveBackendAssetUrl(previewUrl), { headers: { Authorization: `Bearer ${token}` } });
+  if (!response.ok) throw new LocalStageRequestError('Could not load the stage preview.', response.status);
+  return URL.createObjectURL(await response.blob());
 }
 
 export async function publishLocalStage(

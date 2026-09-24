@@ -1,15 +1,19 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, InputAdornment, Menu, MenuItem, Paper, Skeleton, Stack, Tab, Tabs, TextField, Typography } from '@mui/material';
-import { IconDotsVertical, IconPlus, IconSearch } from '@tabler/icons-react';
+import { Alert, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, Divider, IconButton, InputAdornment, Menu, MenuItem, Paper, Skeleton, Stack, Tab, Tabs, TextField, Typography } from '@mui/material';
+import { IconDotsVertical, IconPlus, IconSchool, IconSearch } from '@tabler/icons-react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from 'src/authentication/AuthProvider';
-import { addLesson, archiveCourse, createCourse, listAuthoredCourses, readCourseDraft } from 'src/courses/CoursesApi';
+import { addLesson, archiveCourse, CourseRequestError, createCourse, deleteCourse, listAuthoredCourses, readCourseDraft } from 'src/courses/CoursesApi';
 import type { CourseSummary } from 'src/courses/types';
 import ClassGroupsTeacherPage from '../class-groups-teacher-page/ClassGroupsTeacherPage';
+import { pageTabsSx, TabbedPageHeader } from 'src/components/shared/PageHeader';
+import { useConfirmDialog } from 'src/components/shared/ConfirmDialog';
+import ListCard from 'src/components/shared/ListCard';
 
 export default function TeacherCoursesPage() {
   const { t } = useTranslation();
+  const confirmDialog = useConfirmDialog();
   const { token } = useAuth();
   const navigate = useNavigate();
   const [courses, setCourses] = useState<CourseSummary[]>([]);
@@ -24,7 +28,7 @@ export default function TeacherCoursesPage() {
 
   const load = async () => {
     setLoading(true); setError('');
-    try { setCourses(await listAuthoredCourses(token)); } catch (err) { setError(err instanceof Error ? err.message : t('education.errors.load')); }
+    try { setCourses(await listAuthoredCourses(token)); } catch { setError(t('education.errors.load')); }
     finally { setLoading(false); }
   };
   useEffect(() => { load(); }, [token]);
@@ -39,7 +43,7 @@ export default function TeacherCoursesPage() {
     try {
       const course = await createCourse(token, { title: form.title, description: form.description, learning_objectives: [form.objective] });
       navigate(`/teach/courses/${course.id}`);
-    } catch (err) { setError(err instanceof Error ? err.message : t('education.errors.create')); setCreating(false); }
+    } catch { setError(t('education.errors.create')); setCreating(false); }
   };
 
   const duplicate = async (source: CourseSummary) => {
@@ -53,52 +57,86 @@ export default function TeacherCoursesPage() {
       });
       for (const lesson of draft.lessons) {
         await addLesson(token, copy.id, {
-          title: lesson.title, activities: lesson.activities, completion_policy: lesson.completion_policy, start_mode: lesson.position === 1 ? 'fresh' : lesson.start_mode,
+          title: lesson.title, activities: lesson.activities, completion_policy: lesson.completion_policy, start_mode: 'fresh',
           editor_type: lesson.editor_type, starter_content: lesson.starter_content, simulator_settings: lesson.simulator_settings, stageReference: lesson.stageReference,
         });
       }
       navigate(`/teach/courses/${copy.id}`);
-    } catch (err) { setError(err instanceof Error ? err.message : t('education.errors.duplicate')); }
+    } catch { setError(t('education.errors.duplicate')); }
   };
 
   const archive = async (course: CourseSummary) => {
     setMenu(null);
-    if (!window.confirm(t('education.courseList.archiveConfirm', { title: course.title }))) return;
-    try { await archiveCourse(token, course.id); await load(); } catch (err) { setError(err instanceof Error ? err.message : t('education.errors.archive')); }
+    const confirmed = await confirmDialog.confirm({
+      title: t('education.courseList.archive'),
+      message: t('education.courseList.archiveConfirm', { title: course.title }),
+      confirmLabel: t('education.courseList.archive'),
+      cancelLabel: t('cancel'),
+      danger: true,
+    });
+    if (!confirmed) return;
+    try { await archiveCourse(token, course.id); await load(); } catch { setError(t('education.errors.archive')); }
+  };
+
+  const remove = async (course: CourseSummary) => {
+    setMenu(null);
+    setError('');
+    const confirmed = await confirmDialog.confirm({
+      title: t('education.courseList.deleteTitle'),
+      message: t('education.courseList.deleteConfirm', { title: course.title }),
+      confirmLabel: t('delete'),
+      cancelLabel: t('cancel'),
+      danger: true,
+    });
+    if (!confirmed) return;
+    try {
+      await deleteCourse(token, course.id);
+      await load();
+    } catch (reason) {
+      if (reason instanceof CourseRequestError && reason.code === 'course_has_enrollments') setError(t('education.errors.deleteEnrolled'));
+      else if (reason instanceof CourseRequestError && reason.code === 'course_has_assignments') setError(t('education.errors.deleteAssigned'));
+      else setError(t('education.errors.delete'));
+    }
   };
 
   return (
-    <Box sx={{ maxWidth: 1160, mx: 'auto', p: { xs: 2, md: 3 } }}>
-      <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ sm: 'center' }} gap={2} mb={3}>
-        <Box><Typography variant="h3" component="h1">{pageTitle}</Typography><Typography color="text.secondary">{pageSubtitle}</Typography></Box>
-        {tab === 0 && <Button variant="contained" startIcon={<IconPlus size={18} />} onClick={() => setCreateOpen(true)}>{t('education.courseList.create')}</Button>}
-      </Stack>
-      <Tabs value={tab} onChange={(_, value) => setTab(value)} aria-label={t('education.courseList.title')} variant="scrollable" scrollButtons="auto" allowScrollButtonsMobile sx={{ mb: 2 }}>
-        <Tab label={t('education.courseList.title')} />
-        <Tab label={t('education.classrooms.teacherTitle')} />
-      </Tabs>
-      {tab === 0 && <><TextField fullWidth value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t('education.courseList.search')} inputProps={{ 'aria-label': t('education.courseList.search') }} InputProps={{ startAdornment: <InputAdornment position="start"><IconSearch size={18} /></InputAdornment> }} sx={{ mb: 2 }} />
+    <Stack spacing={3}>
+      <TabbedPageHeader
+        title={pageTitle}
+        description={pageSubtitle}
+        action={tab === 0 ? <Button variant="contained" startIcon={<IconPlus size={18} />} onClick={() => setCreateOpen(true)}>{t('education.courseList.create')}</Button> : undefined}
+        tabs={<Tabs value={tab} onChange={(_, value) => setTab(value)} aria-label={t('education.courseList.title')} variant="scrollable" scrollButtons="auto" allowScrollButtonsMobile sx={pageTabsSx}>
+          <Tab label={t('education.courseList.title')} />
+          <Tab label={t('education.classrooms.teacherTitle')} />
+        </Tabs>}
+      />
+      {tab === 0 && <Box><TextField fullWidth value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t('education.courseList.search')} inputProps={{ 'aria-label': t('education.courseList.search') }} InputProps={{ startAdornment: <InputAdornment position="start"><IconSearch size={18} /></InputAdornment> }} sx={{ mb: 2 }} />
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
       {loading ? <Stack spacing={1}>{[1, 2, 3].map((item) => <Skeleton key={item} variant="rounded" height={92} />)}</Stack> : filtered.length === 0 ? (
         <Paper variant="outlined" sx={{ py: 7, px: 3, textAlign: 'center' }}><Typography variant="h5">{search ? t('education.courseList.noResults') : t('education.courseList.empty')}</Typography><Typography color="text.secondary" sx={{ mt: 1 }}>{t('education.courseList.emptyHelp')}</Typography></Paper>
-      ) : <Stack spacing={1}>
-        {filtered.map((course) => <Paper variant="outlined" key={course.id} sx={{ p: 2 }}>
-          <Stack direction="row" alignItems="center" gap={2}>
-            <Box sx={{ minWidth: 0, flex: 1, cursor: 'pointer' }} onClick={() => navigate(`/teach/courses/${course.id}`)}>
-              <Stack direction="row" gap={1} alignItems="center" flexWrap="wrap"><Typography variant="h6" noWrap>{course.title}</Typography><Chip size="small" color={course.status === 'published' ? 'success' : course.status === 'archived' ? 'default' : 'warning'} label={t(`education.status.${course.status}`)} /></Stack>
-              <Typography color="text.secondary" noWrap>{course.description}</Typography>
-              <Typography variant="caption" color="text.secondary">{course.latest_published_release_version ? t('education.courseList.latestRelease', { version: course.latest_published_release_version }) : t('education.courseList.noRelease')}</Typography>
-            </Box>
-            <IconButton aria-label={t('education.courseList.actions')} onClick={(event) => setMenu({ anchor: event.currentTarget, course })}><IconDotsVertical size={20} /></IconButton>
-          </Stack>
-        </Paper>)}
-      </Stack>}</>}
+      ) : <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden' }}>
+        {filtered.map((course, index) => <ListCard
+          key={course.id}
+          surface="row"
+          divided={index > 0}
+          title={course.title}
+          description={course.description}
+          fallbackIcon={<IconSchool size={20} />}
+          status={<Chip size="small" color={course.status === 'published' ? 'success' : course.status === 'archived' ? 'default' : 'warning'} label={t(`education.status.${course.status}`)} />}
+          meta={course.latest_published_release_version ? t('education.courseList.latestRelease', { version: course.latest_published_release_version }) : t('education.courseList.noRelease')}
+          openLabel={t('education.courseList.edit')}
+          onOpen={() => navigate(`/teach/courses/${course.id}`)}
+          action={<IconButton aria-label={t('education.courseList.actions')} onClick={(event) => setMenu({ anchor: event.currentTarget, course })}><IconDotsVertical size={20} /></IconButton>}
+        />)}
+      </Box>}</Box>}
       {tab === 1 && <ClassGroupsTeacherPage embedded />}
       <Menu anchorEl={menu?.anchor} open={!!menu} onClose={() => setMenu(null)}>
         <MenuItem onClick={() => menu && navigate(`/teach/courses/${menu.course.id}`)}>{t('education.courseList.edit')}</MenuItem>
         <MenuItem onClick={() => menu && navigate(`/teach/courses/${menu.course.id}/progress`)}>{t('education.analytics.title')}</MenuItem>
         <MenuItem onClick={() => menu && duplicate(menu.course)}>{t('education.courseList.duplicate')}</MenuItem>
         <MenuItem onClick={() => menu && archive(menu.course)}>{t('education.courseList.archive')}</MenuItem>
+        <Divider sx={{ my: 0.5 }} />
+        <MenuItem onClick={() => menu && remove(menu.course)} sx={{ color: 'error.main' }}>{t('education.courseList.delete')}</MenuItem>
       </Menu>
       <Dialog open={createOpen} onClose={() => !creating && setCreateOpen(false)} fullWidth maxWidth="sm">
         <DialogTitle>{t('education.create.title')}</DialogTitle>
@@ -109,6 +147,6 @@ export default function TeacherCoursesPage() {
         </Stack></DialogContent>
         <DialogActions><Button onClick={() => setCreateOpen(false)} disabled={creating}>{t('cancel')}</Button><Button variant="contained" onClick={submitCreate} disabled={creating || !form.title.trim() || !form.description.trim() || !form.objective.trim()}>{t('education.courseList.create')}</Button></DialogActions>
       </Dialog>
-    </Box>
+    </Stack>
   );
 }

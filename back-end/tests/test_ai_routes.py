@@ -303,7 +303,7 @@ def test_admin_settings_update_enforces_usage_retention(db, users):
         completed_at=datetime.datetime.utcnow() - datetime.timedelta(days=8),
         outcome="completed",
         policy_version="1",
-        prompt_version="fossbot-assistant-v1",
+        prompt_version="fossbot-assistant-v2",
     )
     db.add_all([settings, old])
     db.commit()
@@ -319,6 +319,32 @@ def test_admin_settings_update_enforces_usage_retention(db, users):
     assert response.status_code == 200
     assert response.json()["usageRetentionDays"] == 7
     assert db.query(AIUsageEvent).filter(AIUsageEvent.request_id == old_request_id).first() is None
+
+
+def test_answer_code_validation_is_capability_gated_and_syntax_checked(db, users):
+    tutor, _, _, admin = users
+    with client_for(db, tutor) as client:
+        assert client.post("/api/ai/validate", json={"surface": "python", "content": "x = 1"}).status_code == 403
+    db.add(AIInstanceSettings(id=1, enabled=True, registry_version="1", updated_by_id=admin.id))
+    seed_provider(db, admin)
+    for capability in ("code.suggest_changes", "blockly.suggest_changes"):
+        db.add(AIPolicyRule(scope_type="role", scope_key=tutor.role.value, capability=capability, effect="allow", created_by_id=admin.id, updated_by_id=admin.id))
+    db.commit()
+    with client_for(db, tutor) as client:
+        valid = client.post("/api/ai/validate", json={"surface": "python", "content": "for i in range(3):\n    print(i)\n"})
+        assert valid.status_code == 200
+        assert valid.json() == {"valid": True, "message": ""}
+        invalid = client.post("/api/ai/validate", json={"surface": "python", "content": "def broken(:\n"})
+        assert invalid.status_code == 200
+        assert invalid.json()["valid"] is False
+        assert invalid.json()["message"]
+        top_level_await = client.post("/api/ai/validate", json={"surface": "python", "content": "await move_step('forward')\n"})
+        assert top_level_await.status_code == 200
+        assert top_level_await.json()["valid"] is False
+        blockly = client.post("/api/ai/validate", json={"surface": "blockly", "content": "<xml xmlns=\"https://developers.google.com/blockly/xml\"></xml>"})
+        assert blockly.status_code == 200 and blockly.json()["valid"] is True
+        malformed = client.post("/api/ai/validate", json={"surface": "blockly", "content": "<xml>"})
+        assert malformed.status_code == 200 and malformed.json()["valid"] is False
 
 
 def test_provider_secret_create_preserve_rotate_and_clear(db, users, monkeypatch):
@@ -351,6 +377,43 @@ def test_provider_secret_create_preserve_rotate_and_clear(db, users, monkeypatch
         assert client.put(f"/api/admin/ai/providers/{provider_id}", json={"secretAction": "clear"}).status_code == 200
         db.refresh(row)
         assert row.encrypted_secret is None
+
+
+def test_provider_removal_cleans_up_references(db, users):
+    tutor, _, _, admin = users
+    provider = seed_provider(db, admin)
+    other = AIProviderConfig(
+        name="Second hosted",
+        provider_type="openai",
+        runtime="hosted",
+        enabled=True,
+        model="second-model",
+        settings={"version": "1"},
+        created_by_id=admin.id,
+        updated_by_id=admin.id,
+    )
+    db.add(other)
+    db.flush()
+    settings = AIInstanceSettings(id=1, enabled=True, default_provider_id=provider.id, registry_version="1", updated_by_id=admin.id)
+    explicit_rule = AIPolicyRule(scope_type="instance", scope_key="*", capability="code.explain", effect="allow", provider_ids=[provider.id], runtimes=["hosted"], created_by_id=admin.id, updated_by_id=admin.id)
+    shared_rule = AIPolicyRule(scope_type="instance", scope_key="*", capability="code.suggest_changes", effect="allow", provider_ids=[provider.id, other.id], runtimes=["hosted"], created_by_id=admin.id, updated_by_id=admin.id)
+    event = AIUsageEvent(user_id=admin.id, provider_id=provider.id, capability="code.explain", provider_name="Deterministic hosted", model="test-model", runtime="hosted", request_id="req-delete-1", started_at=datetime.datetime.utcnow(), outcome="completed", policy_version="1")
+    db.add_all([settings, explicit_rule, shared_rule, event])
+    db.commit()
+    with client_for(db, tutor) as client:
+        assert client.delete(f"/api/admin/ai/providers/{provider.id}").status_code == 403
+    with client_for(db, admin) as client:
+        assert client.delete(f"/api/admin/ai/providers/{provider.id}").status_code == 204
+        assert client.delete(f"/api/admin/ai/providers/{provider.id}").status_code == 404
+    db.expire_all()
+    assert db.query(AIProviderConfig).filter(AIProviderConfig.id == provider.id).first() is None
+    assert db.query(AIInstanceSettings).filter(AIInstanceSettings.id == 1).one().default_provider_id is None
+    # An allow rule left with no providers is dropped; one with a remaining provider keeps it.
+    assert db.query(AIPolicyRule).filter(AIPolicyRule.capability == "code.explain").first() is None
+    assert db.query(AIPolicyRule).filter(AIPolicyRule.capability == "code.suggest_changes").one().provider_ids == [other.id]
+    usage = db.query(AIUsageEvent).filter(AIUsageEvent.request_id == "req-delete-1").one()
+    assert usage.provider_id is None
+    assert usage.provider_name == "Deterministic hosted"
 
 
 class FakeHostedProvider:
@@ -497,6 +560,33 @@ def test_python_suggestion_is_typed_and_never_streams_raw_json(db, users, monkey
     assert "event: suggestion" in response.text
     assert '"type":"python_replace"' in response.text
     assert "event: text_delta" not in response.text
+    assert "event: done" in response.text
+
+
+def test_python_assistance_can_choose_an_answer_without_exposing_structured_json(db, users, monkeypatch):
+    student, admin = users[2], users[3]
+    provider = enable_streaming(db, admin, student, capability="code.suggest_changes")
+    source = "print('hello')"
+    fingerprint = hashlib.sha256(source.encode()).hexdigest()
+    monkeypatch.setattr(ai, "hosted_provider", lambda *args, **kwargs: FakeSuggestionProvider({
+        "version": "1",
+        "type": "answer",
+        "baseFingerprint": fingerprint,
+        "content": "This prints hello once.",
+    }))
+    with client_for(db, student) as client:
+        response = client.post("/api/ai/assist/stream", json={
+            "capability": "code.suggest_changes",
+            "providerId": provider.id,
+            "surface": "python",
+            "question": "What does this program do?",
+            "context": {"source": source, "sourceFingerprint": fingerprint},
+        })
+    assert response.status_code == 200
+    assert "event: answer" in response.text
+    assert '"text":"This prints hello once."' in response.text
+    assert '"type":"answer"' not in response.text
+    assert "event: suggestion" not in response.text
     assert "event: done" in response.text
 
 

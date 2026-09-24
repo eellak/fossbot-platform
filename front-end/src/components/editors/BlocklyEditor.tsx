@@ -38,6 +38,7 @@ const BlocklyEditorComponent = forwardRef<BlocklyEditorHandle, BlocklyEditorProp
 }: BlocklyEditorProps, ref) => {
   const { i18n } = useTranslation();
   const workspaceRef = useRef<WorkspaceSvg | null>(null);
+  const resizeObserverRef = useRef<ResizeObserver | null>(null);
 
   const customizer = useSelector((state: AppState) => state.customizer);
   const currentLang =
@@ -105,12 +106,21 @@ const BlocklyEditorComponent = forwardRef<BlocklyEditorHandle, BlocklyEditorProp
     (workspace: WorkspaceSvg) => {
       workspaceRef.current = workspace;
       workspace.setTheme(theme);
+      resizeObserverRef.current?.disconnect();
+      const injectionDiv = workspace.getInjectionDiv();
+      const host = injectionDiv.parentElement;
+      if (host) {
+        resizeObserverRef.current = new ResizeObserver(() => Blockly.svgResize(workspace));
+        resizeObserverRef.current.observe(host);
+      }
       Blockly.svgResize(workspace);
     },
     [theme],
   );
 
   const handleDispose = useCallback((workspace: WorkspaceSvg) => {
+    resizeObserverRef.current?.disconnect();
+    resizeObserverRef.current = null;
     if (workspaceRef.current === workspace) workspaceRef.current = null;
   }, []);
 

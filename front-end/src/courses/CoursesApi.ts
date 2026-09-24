@@ -29,7 +29,7 @@ import type {
   LeaderboardType,
 } from './types';
 
-const backendUrl: string = process.env.REACT_APP_BACKEND_URL;
+import { backendUrl } from '../utils/backendUrl';
 
 export class CourseRequestError extends Error {
   status: number;
@@ -61,6 +61,7 @@ async function parse<T>(response: Response): Promise<T> {
       typeof detail === 'object' ? detail.currentUpdatedAt : undefined,
     );
   }
+  if (payload === null) throw new CourseRequestError('Course response was empty', response.status, 'empty_response');
   return payload as T;
 }
 
@@ -82,6 +83,11 @@ export async function updateCourse(token: string, courseId: number, request: Cou
 
 export async function archiveCourse(token: string, courseId: number): Promise<void> {
   const response = await fetch(`${backendUrl}/courses/${courseId}`, { method: 'DELETE', headers: headers(token) });
+  if (!response.ok) await parse(response);
+}
+
+export async function deleteCourse(token: string, courseId: number): Promise<void> {
+  const response = await fetch(`${backendUrl}/courses/${courseId}/permanent`, { method: 'DELETE', headers: headers(token) });
   if (!response.ok) await parse(response);
 }
 

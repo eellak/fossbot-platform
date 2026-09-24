@@ -66,7 +66,7 @@ export default function CoursePage() {
   const lessons = enrollment?.active_release.lessons || course.latest_release.lessons;
   return (
     <PageContainer title={course.title} description={course.description}>
-      <Stack spacing={3} sx={{ '& .MuiButton-containedPrimary': { color: theme.palette.getContrastText(theme.palette.primary.main) }, '& .MuiButtonBase-root:focus-visible': { outline: '2px solid', outlineColor: 'text.primary', outlineOffset: 2 }, '@media (pointer: coarse), (max-width: 768px)': { '& .MuiButtonBase-root': { minHeight: 44 } } }}>
+      <Stack spacing={3} sx={{ '& .MuiButton-containedPrimary': { color: theme.palette.getContrastText(theme.palette.primary.main) }, '& .MuiButtonBase-root:focus-visible': { outline: '2px solid', outlineColor: 'text.primary', outlineOffset: 2 }, '@media (pointer: coarse), (max-width: 768px)': { '& .MuiButtonBase-root': { minHeight: 44 }, '& .MuiSwitch-switchBase, & .MuiCheckbox-root, & .MuiRadio-root': { minHeight: 0 } } }}>
         <Button sx={{ alignSelf: 'flex-start' }} onClick={() => navigate('/courses')}>{t('education.student.backToCourses')}</Button>
         {error ? <Alert severity="error">{error}</Alert> : null}
         {update?.available ? <Alert severity="info" action={<Stack direction={{ xs: 'column', sm: 'row' }}><Button color="inherit" onClick={() => setUpdate(null)} disabled={working}>{t('education.student.continueCurrent')}</Button><Button color="inherit" onClick={() => setReviewOpen(true)} disabled={working}>{t('education.student.reviewChanges')}</Button></Stack>}>
@@ -93,7 +93,7 @@ export default function CoursePage() {
                 {user?.role === 'user' ? <Button variant="contained" size="large" disabled={working} onClick={start} sx={{ alignSelf: 'flex-start' }}>{working ? t('education.student.saving') : enrollment?.completed_at ? t('education.student.reviewCourse') : enrollment ? t('education.student.continueCourse') : t('education.student.startCourse')}</Button> : null}
               </Stack>
             </Grid>
-            <Grid item xs={12} md={4}><StudentCourseOutline lessons={lessons} progress={enrollment?.progress} title={t('education.student.outline')} completedLabel={t('education.student.completed')} onSelect={enrollment ? (key) => navigate(`/courses/${course.id}/learn/${key}`) : undefined} /></Grid>
+            <Grid item xs={12} md={4}><StudentCourseOutline collapsible defaultOpen={false} lessons={lessons} progress={enrollment?.progress} title={t('education.student.outline')} completedLabel={t('education.student.completed')} onSelect={enrollment ? (key) => navigate(`/courses/${course.id}/learn/${key}`) : undefined} /></Grid>
           </Grid>
         </Paper>
       </Stack>

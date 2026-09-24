@@ -13,6 +13,9 @@ services:
       - ADMIN_USERNAME=${ADMIN_USERNAME}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD}
       - DATABASE=${DATABASE}
+      # Browser-reachable base for backend-generated public URLs (local-stage
+      # previews/records). Includes the /api gateway prefix nginx expects.
+      - FOSSBOT_BACKEND_URL=${FOSSBOT_BACKEND_URL:-https://fossbot.gr/api}
     ports:
       - "8000:8000"
     volumes:

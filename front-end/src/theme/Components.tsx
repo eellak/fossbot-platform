@@ -1,13 +1,55 @@
 // project imports
 import './DefaultColors';
-import { Theme } from '@mui/material/styles';
+import { alpha, Theme } from '@mui/material/styles';
 
-const components: any = (theme: Theme) => {
-  return {
+const components: any = (theme: Theme, approved = false) => {
+  // One scrollbar treatment for the whole app: a thin, low-contrast thumb over a
+  // transparent track. The standard properties win in Chromium and Firefox; the
+  // WebKit pseudo-elements are the fallback for Safari.
+  const scrollbarSize = 10;
+  const scrollThumb = alpha(theme.palette.text.primary, theme.palette.mode === 'dark' ? 0.28 : 0.26);
+  const scrollThumbHover = alpha(theme.palette.text.primary, theme.palette.mode === 'dark' ? 0.5 : 0.45);
+  const result: any = {
     MuiCssBaseline: {
       styleOverrides: {
         '*': {
           boxSizing: 'border-box',
+          scrollbarWidth: 'thin',
+          scrollbarColor: `${scrollThumb} transparent`,
+        },
+        '*::-webkit-scrollbar': {
+          width: scrollbarSize,
+          height: scrollbarSize,
+        },
+        '*::-webkit-scrollbar-track, *::-webkit-scrollbar-corner': {
+          backgroundColor: 'transparent',
+        },
+        '*::-webkit-scrollbar-thumb': {
+          backgroundColor: scrollThumb,
+          borderRadius: 999,
+          border: '2px solid transparent',
+          backgroundClip: 'content-box',
+        },
+        '*::-webkit-scrollbar-thumb:hover': {
+          backgroundColor: scrollThumbHover,
+        },
+        // SimpleBar (the shared `custom-scroll/Scrollbar`) draws its own thumb, so match it
+        // to the native thin scrollbar above instead of its default 11px black bar.
+        '[data-simplebar] .simplebar-track.simplebar-vertical': {
+          width: scrollbarSize,
+        },
+        '[data-simplebar] .simplebar-track.simplebar-horizontal': {
+          height: scrollbarSize,
+        },
+        '.simplebar-track .simplebar-scrollbar:before': {
+          backgroundColor: scrollThumb,
+          borderRadius: 999,
+        },
+        '.simplebar-track .simplebar-scrollbar.simplebar-visible:before': {
+          opacity: 1,
+        },
+        '.simplebar-track .simplebar-scrollbar.simplebar-visible:hover:before': {
+          backgroundColor: scrollThumbHover,
         },
         html: {
           height: '100%',
@@ -398,5 +440,73 @@ const components: any = (theme: Theme) => {
       },
     },
   };
+
+  if (approved) {
+    result.MuiCssBaseline.styleOverrides['.MuiBox-root'] = { borderRadius: 0 };
+    result.MuiCssBaseline.styleOverrides['.visual-language-supporting-panel'] = { borderRadius: '8px' };
+    result.MuiButtonBase = {
+      styleOverrides: {
+        root: {
+          '&:focus-visible': { outline: `2px solid ${theme.palette.primary.main}`, outlineOffset: 3 },
+        },
+      },
+    };
+    result.MuiButton.styleOverrides = {
+      ...result.MuiButton.styleOverrides,
+      root: { minHeight: 40, borderRadius: 8, paddingLeft: 16, paddingRight: 16, fontWeight: 600, textTransform: 'none', boxShadow: 'none' },
+      // MUI re-adds elevation for contained buttons in these states; the approved button spec is no shadow.
+      contained: {
+        '&:hover, &:active, &.Mui-focusVisible': { boxShadow: 'none' },
+        '@media (hover: none)': { '&:hover': { boxShadow: 'none' } },
+      },
+      text: { backgroundColor: 'transparent', '&:hover': { backgroundColor: theme.palette.action.hover, color: theme.palette.primary.main } },
+      textPrimary: { backgroundColor: 'transparent', '&:hover': { backgroundColor: theme.palette.action.hover, color: theme.palette.primary.main } },
+      // Destructive text buttons keep the quiet red tint at rest and fill with error.main on hover.
+      // The foreground must be error.contrastText, not a hardcoded white: dark-mode error.main is a light
+      // red, so white-on-red would fall to ~1.7:1 in dark mode.
+      textError: { backgroundColor: theme.palette.error.light, '&:hover': { backgroundColor: theme.palette.error.main, color: theme.palette.error.contrastText } },
+      outlinedPrimary: { borderColor: theme.palette.divider, '&:hover': { backgroundColor: theme.palette.primary.light, color: theme.palette.primary.main, borderColor: theme.palette.primary.main } },
+      outlinedError: { borderColor: theme.palette.divider, '&:hover': { backgroundColor: theme.palette.error.light, color: theme.palette.error.main, borderColor: theme.palette.error.main } },
+    };
+    // Unselected toggle labels use the approved secondary text role; MUI's default palette.action.active
+    // (rgba(0,0,0,0.54)) falls short of 4.5:1 on the light page background.
+    result.MuiToggleButton = {
+      styleOverrides: {
+        root: { color: theme.palette.text.secondary },
+      },
+    };
+    // MUI's default checked switch leaves the track translucent behind a saturated
+    // thumb, so it reads as a ball hanging off a pill. Fill the track and use the
+    // contrasting thumb so the on/off state is unambiguous in both modes.
+    result.MuiSwitch = {
+      styleOverrides: {
+        switchBase: {
+          '&.Mui-checked': { color: theme.palette.primary.contrastText },
+          '&.Mui-checked + .MuiSwitch-track': { backgroundColor: theme.palette.primary.main, opacity: 1 },
+        },
+        track: { borderRadius: 7 },
+      },
+    };
+    result.MuiCard.styleOverrides.root = {
+      ...result.MuiCard.styleOverrides.root,
+      border: `1px solid ${theme.palette.divider}`,
+      borderRadius: 8,
+      boxShadow: 'none',
+    };
+    result.MuiCardContent.styleOverrides.root = { padding: 20, '&:last-child': { paddingBottom: 20 } };
+    result.MuiDrawer.styleOverrides.paper = { borderLeft: `1px solid ${theme.palette.divider}`, borderRight: `1px solid ${theme.palette.divider}` };
+    result.MuiAlert.styleOverrides.root = { borderRadius: 8, fontSize: '0.875rem' };
+    result.MuiIconButton = {
+      styleOverrides: {
+        colorError: { '&:hover': { backgroundColor: theme.palette.error.light, color: theme.palette.error.main } },
+      },
+    };
+    result.MuiOutlinedInput.styleOverrides.root = {
+      '&:not(.Mui-focused):not(.Mui-error):not(.Mui-disabled) .MuiOutlinedInput-notchedOutline': { borderColor: theme.palette.divider },
+      '&:hover:not(.Mui-focused):not(.Mui-error):not(.Mui-disabled) .MuiOutlinedInput-notchedOutline': { borderColor: theme.palette.text.secondary },
+    };
+  }
+
+  return result;
 };
 export default components;

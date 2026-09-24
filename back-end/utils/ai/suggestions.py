@@ -1,26 +1,35 @@
 from __future__ import annotations
 
-import ast
 import copy
 import json
+import re
 import xml.etree.ElementTree as ET
 from typing import Any, Optional, Union
 
 from pydantic import ValidationError
 
 from utils.activity_schema import validate_activities
-from utils.ai.schemas import BlocklyReplaceSuggestion, ConversationTurn, LessonAuthoringSuggestion, ProviderStreamRequest, PythonReplaceSuggestion, StageAuthoringSuggestion
+from utils.ai.schemas import AssistantAnswer, BlocklyReplaceSuggestion, ConversationTurn, LessonAuthoringSuggestion, ProviderStreamRequest, PythonEdit, PythonEditsSuggestion, PythonReplaceSuggestion, StageAuthoringSuggestion
 from utils.ai.stage_geometry import generated_wall_geometry, requires_wall_enclosure, wall_enclosure_status
 
 
 SUGGESTION_VERSION = "1"
-SUGGESTION_OUTPUT_TOKEN_BUDGETS = {
-    "code.suggest_changes": 4_096,
+# Output-token budgets per capability. Explain budgets must leave room for a whole-file answer;
+# a full Python replacement is roughly 1.5-2k tokens, so 4k is the floor.
+OUTPUT_TOKEN_BUDGETS = {
+    "code.explain": 4_096,
+    "blockly.explain": 4_096,
+    "code.suggest_changes": 6_144,
     "blockly.suggest_changes": 6_144,
     "lesson.draft": 6_144,
     "lesson.suggest_changes": 6_144,
     "stage.create": 8_192,
     "stage.suggest_changes": 8_192,
+}
+# The suggestion-repair path only asks for the structured authoring capabilities.
+SUGGESTION_OUTPUT_TOKEN_BUDGETS = {
+    capability: OUTPUT_TOKEN_BUDGETS[capability]
+    for capability in ("code.suggest_changes", "blockly.suggest_changes", "lesson.draft", "lesson.suggest_changes", "stage.create", "stage.suggest_changes")
 }
 SUGGESTION_RESPONSE_CHARACTER_LIMITS = {
     "code.suggest_changes": 20_000,
@@ -32,9 +41,13 @@ SUGGESTION_RESPONSE_CHARACTER_LIMITS = {
 }
 MAX_SUGGESTION_REPAIR_ATTEMPTS = 2
 MAX_REPAIR_TURN_CHARACTERS = 2_000
-Suggestion = Union[PythonReplaceSuggestion, BlocklyReplaceSuggestion, LessonAuthoringSuggestion, StageAuthoringSuggestion]
+Suggestion = Union[AssistantAnswer, PythonReplaceSuggestion, PythonEditsSuggestion, BlocklyReplaceSuggestion, LessonAuthoringSuggestion, StageAuthoringSuggestion]
 LESSON_OPERATION_NAMES = {"update_course", "update_lesson", "insert_activity", "replace_activity", "remove_activity", "reorder_activities"}
 STAGE_OPERATION_NAMES = {"set_metadata", "set_floor", "add_object", "update_object", "move_object", "rotate_object", "resize_object", "set_line_points", "remove_object", "group_objects", "ungroup_objects"}
+
+
+def output_token_budget(capability: str) -> int:
+    return OUTPUT_TOKEN_BUDGETS[capability]
 
 
 def suggestion_output_token_budget(capability: str) -> int:
@@ -124,13 +137,20 @@ def build_suggestion_repair_request(
         guidance.append('The top-level version is the JSON string "1", not the number 1.')
     if "selected target" in lowered:
         guidance.append("Use only operations allowed for the selected target stated in the original system prompt.")
+    if "invalid activity" in lowered:
+        guidance.append(
+            "The activity failed the platform activity schema. Re-read the activity contract in the original system prompt and correct the named field. "
+            "Common fixes: numeric_answer needs prompt, expectedValue, unit, and tolerance {mode, value}; "
+            "multiple_choice needs options plus correctOptionKey; simulator_observation needs allowedSensors and presentations."
+        )
     if "output budget" in lowered or "incomplete" in lowered or "too large" in lowered:
         guidance.append("Return fewer essential operations and reserve tokens for the complete closing JSON braces.")
     prescriptive_guidance = "\n".join(guidance)
     repair_instruction = _bounded_repair_turn(
         f"Suggestion repair attempt {repair_attempt} of {MAX_SUGGESTION_REPAIR_ATTEMPTS}.\n"
         "The previous proposal failed server-side validation. Correct it using the diagnostics below. "
-        "Keep the same requested task and workspace fingerprint. Return only one corrected JSON object and nothing else. "
+        "Keep the same requested task and workspace fingerprint. Re-check every edit against the original workspace context, "
+        "and rewrite the summary so it describes only the exact corrected edits. Return only one corrected JSON object and nothing else. "
         "If the previous output was incomplete or too large, return a smaller valid proposal containing only essential operations.\n"
         f"Validation diagnostics:\n{diagnostic_text}\n"
         f"Required correction:\n{prescriptive_guidance or 'Correct the exact field or operation named by the diagnostic without changing the contract.'}"
@@ -200,6 +220,9 @@ def normalize_suggestion_payload(payload: dict[str, Any], capability: str) -> tu
     """Repair only known, unambiguous JSON-shape mistakes from otherwise valid objects."""
     normalized = copy.deepcopy(payload)
     actions: list[str] = []
+    if set(normalized) == {"outcome"} and isinstance(normalized.get("outcome"), dict):
+        normalized = copy.deepcopy(normalized["outcome"])
+        actions.append("root:unwrap-outcome")
     if normalized.get("version") == 1:
         normalized["version"] = "1"
         actions.append("version:number-to-string")
@@ -230,18 +253,25 @@ def parse_suggestion_with_normalizations(raw: str, capability: str, expected_fin
     try:
         payload, normalizations = normalize_suggestion_payload(_load_json_object(raw), capability)
         if capability == "code.suggest_changes":
-            suggestion = PythonReplaceSuggestion.model_validate(payload)
+            suggestion = AssistantAnswer.model_validate(payload) if payload.get("type") == "answer" else PythonEditsSuggestion.model_validate(payload) if payload.get("type") == "python_edits" else PythonReplaceSuggestion.model_validate(payload)
         elif capability == "blockly.suggest_changes":
-            suggestion = BlocklyReplaceSuggestion.model_validate(payload)
+            suggestion = AssistantAnswer.model_validate(payload) if payload.get("type") == "answer" else BlocklyReplaceSuggestion.model_validate(payload)
         elif capability in {"lesson.draft", "lesson.suggest_changes"}:
             suggestion = LessonAuthoringSuggestion.model_validate(payload)
         else:
             suggestion = StageAuthoringSuggestion.model_validate(payload)
     except (json.JSONDecodeError, ValidationError, TypeError) as error:
         raise SuggestionError("The provider returned an invalid suggestion") from error
-    expected_type = "python_replace" if capability == "code.suggest_changes" else "blockly_replace" if capability == "blockly.suggest_changes" else "lesson_operations" if capability in {"lesson.draft", "lesson.suggest_changes"} else "stage_operations"
+    expected_types = {
+        "code.suggest_changes": {"answer", "python_replace", "python_edits"},
+        "blockly.suggest_changes": {"answer", "blockly_replace"},
+        "lesson.draft": {"lesson_operations"},
+        "lesson.suggest_changes": {"lesson_operations"},
+        "stage.create": {"stage_operations"},
+        "stage.suggest_changes": {"stage_operations"},
+    }.get(capability, set())
     suggestion_base = suggestion.base_revision if isinstance(suggestion, LessonAuthoringSuggestion) else suggestion.base_fingerprint
-    if suggestion.type != expected_type or suggestion_base != expected_fingerprint:
+    if suggestion.type not in expected_types or suggestion_base != expected_fingerprint:
         raise SuggestionError("The provider suggestion does not match the current workspace")
     validate_suggestion(suggestion, context)
     return suggestion, normalizations
@@ -252,12 +282,63 @@ def parse_suggestion(raw: str, capability: str, expected_fingerprint: str, conte
     return suggestion
 
 
+def python_edit_lines(replacement: str) -> list[str]:
+    """An empty replacement deletes the range; a trailing newline does not add a blank line."""
+    if replacement == "":
+        return []
+    if replacement.endswith("\n"):
+        replacement = replacement[:-1]
+    return replacement.split("\n")
+
+
+def apply_python_edits(source: str, edits: list[PythonEdit]) -> str:
+    lines = source.split("\n")
+    ordered = sorted(edits, key=lambda edit: (edit.start_line, edit.end_line))
+    previous_end = 0
+    for edit in ordered:
+        if edit.start_line > edit.end_line:
+            raise SuggestionError("A line replacement must end at or after its start line")
+        if edit.start_line <= previous_end or edit.end_line > len(lines):
+            raise SuggestionError("Line replacements must not overlap and must stay within the current source")
+        previous_end = edit.end_line
+    for edit in sorted(edits, key=lambda item: item.start_line, reverse=True):
+        lines[edit.start_line - 1:edit.end_line] = python_edit_lines(edit.replacement)
+    return "\n".join(lines)
+
+
+def _validate_python_change(source: str, merged: str, summary: str) -> None:
+    if merged == source:
+        raise SuggestionError("The suggested Python does not make an effective change")
+    lowered = summary.lower()
+    removal_claim = re.search(r"\b(?:remove|removed|removes|delete|deleted|eliminate|eliminated)\w*\b.{0,40}\bawait\b|\bawait\b.{0,40}\b(?:remove|removed|removes|delete|deleted|eliminate|eliminated)\w*\b", lowered)
+    if removal_claim and source.count("await") == merged.count("await"):
+        raise SuggestionError("The summary claims that await was removed, but the proposed code does not remove it")
+
+
 def validate_suggestion(suggestion: Suggestion, context: Optional[dict[str, Any]] = None) -> None:
+    if isinstance(suggestion, AssistantAnswer):
+        return
     if isinstance(suggestion, PythonReplaceSuggestion):
+        source = (context or {}).get("source")
+        if isinstance(source, str):
+            _validate_python_change(source, suggestion.replacement, suggestion.summary)
         try:
-            ast.parse(suggestion.replacement)
+            compile(suggestion.replacement, "<suggested program>", "exec")
         except SyntaxError as error:
-            raise SuggestionError("The suggested Python is not syntactically valid") from error
+            location = f" at line {error.lineno}" if error.lineno else ""
+            raise SuggestionError(f"The suggested Python is not syntactically valid{location}: {error.msg}") from error
+        return
+    if isinstance(suggestion, PythonEditsSuggestion):
+        source = (context or {}).get("source")
+        if not isinstance(source, str):
+            raise SuggestionError("The suggestion context is missing the current source")
+        merged = apply_python_edits(source, suggestion.edits)
+        _validate_python_change(source, merged, suggestion.summary)
+        try:
+            compile(merged, "<suggested program>", "exec")
+        except SyntaxError as error:
+            location = f" at line {error.lineno}" if error.lineno else ""
+            raise SuggestionError(f"The suggested Python is not syntactically valid{location}: {error.msg}") from error
         return
     if isinstance(suggestion, LessonAuthoringSuggestion):
         _validate_lesson_operations(suggestion, context or {})
@@ -279,10 +360,10 @@ def _validate_lesson_operations(suggestion: LessonAuthoringSuggestion, context: 
     lesson_id = (payload.get("lesson") or {}).get("id")
     activity_key = (payload.get("activity") or {}).get("key")
     allowed_by_target = {
-        "course": {"update_course"},
+        "course": {"update_course", "create_lesson"},
         "lesson": {"update_lesson", "insert_activity", "reorder_activities"},
         "activity": {"replace_activity", "remove_activity"},
-        "validation": {"update_course", "update_lesson", "insert_activity", "replace_activity", "remove_activity", "reorder_activities"},
+        "validation": {"update_course", "create_lesson", "update_lesson", "insert_activity", "replace_activity", "remove_activity", "reorder_activities"},
     }
     if target not in allowed_by_target:
         raise SuggestionError("The lesson suggestion target is invalid")
@@ -290,17 +371,39 @@ def _validate_lesson_operations(suggestion: LessonAuthoringSuggestion, context: 
     for index, operation in enumerate(suggestion.operations):
         if operation.op not in allowed_by_target[target]:
             raise SuggestionError(f"operations[{index}] op '{operation.op}' is not valid for selected target '{target}'")
+        if operation.op == "create_lesson":
+            if operation.lesson_id is not None:
+                raise SuggestionError("A new lesson cannot target an existing lesson")
+            if not (operation.lesson_title or "").strip():
+                raise SuggestionError("A new lesson needs a title")
+            activities = operation.activities or []
+            try:
+                validate_activities(activities)
+            except ValueError as error:
+                raise SuggestionError(f"operations[{index}] new lesson activities are invalid: {error}") from error
+            for activity in activities:
+                key = str(activity.get("key") or "")
+                if not key.startswith("ai-"):
+                    raise SuggestionError("Generated activities need stable ai- keys")
+                if key in generated_keys:
+                    raise SuggestionError("Generated activity keys must be unique")
+                generated_keys.add(key)
+                if activity.get("type") == "mission":
+                    raise SuggestionError("AI suggestions cannot create or change executable mission rules")
+            continue
         if operation.op == "update_course":
             if operation.course_patch is None:
                 raise SuggestionError("The course update is missing its patch")
             if operation.course_patch.learning_objectives and any(not item.strip() for item in operation.course_patch.learning_objectives):
                 raise SuggestionError("Learning objectives must not be blank")
+            if all(value is None for value in (operation.course_patch.title, operation.course_patch.description, operation.course_patch.learning_objectives)):
+                raise SuggestionError("The course update does not change any course field")
             continue
         if operation.lesson_id != lesson_id:
             raise SuggestionError("The lesson operation targets a different lesson")
         if operation.op == "update_lesson":
-            if operation.lesson_patch is None:
-                raise SuggestionError("The lesson update is missing its patch")
+            if operation.lesson_patch is None or not (operation.lesson_patch.title or "").strip():
+                raise SuggestionError("The lesson update is missing its title")
             continue
         if operation.op in {"insert_activity", "replace_activity"}:
             if operation.activity is None:
@@ -409,8 +512,8 @@ def _validate_stage_operations(suggestion: StageAuthoringSuggestion, context: di
             raise SuggestionError("The stage group is invalid")
     if target == "create":
         added = {operation.semantic_kind for operation in suggestion.operations if operation.op == "add_object"}
-        if not {"robotSpawn", "target"}.issubset(added):
-            raise SuggestionError("A generated stage needs a robot spawn and target")
+        if "robotSpawn" not in added:
+            raise SuggestionError("A generated stage needs a robot spawn")
         intent = " ".join((str(context.get("request_question") or ""), suggestion.rationale, suggestion.expected_validation))
         if requires_wall_enclosure(intent):
             connected, enclosed = wall_enclosure_status(generated_wall_geometry(suggestion.operations))
@@ -421,4 +524,6 @@ def _validate_stage_operations(suggestion: StageAuthoringSuggestion, context: di
 
 
 def suggestion_payload(suggestion: Suggestion) -> dict:
-    return suggestion.model_dump(by_alias=True)
+    # Optional fields must be omitted, not null: clients treat a null patch value as
+    # present and would call string methods on it.
+    return suggestion.model_dump(by_alias=True, exclude_none=True)

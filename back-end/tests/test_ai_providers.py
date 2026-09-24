@@ -5,12 +5,13 @@ import socket
 import httpx
 import pytest
 
-from utils.ai.providers.base import MAX_PROVIDER_RESPONSE_BYTES, ProviderError, validate_endpoint
+from utils.ai.providers.base import MAX_PROVIDER_RESPONSE_BYTES, HostedProvider, ProviderError, validate_endpoint
 from utils.ai.providers.google import GoogleProvider
-from utils.ai.providers.openai import OpenAIProvider
+from utils.ai.providers.openai import OpenAIProvider, _openai_text_format
 from utils.ai.providers.openai_compatible import OpenAICompatibleProvider
 from utils.ai.providers.compatibility_profiles import PROFILES, resolve_compatibility_profile
 from utils.ai.schemas import ConversationTurn, ProviderStreamRequest
+from utils.ai.suggestion_contracts import suggestion_json_schema
 
 
 def provider_request():
@@ -58,6 +59,121 @@ def test_all_hosted_adapters_emit_the_same_product_events(monkeypatch):
         assert public_events[0][1] == {"text": "Hi"}
         assert public_events[1][1]["inputTokens"] == 3
         assert public_events[1][1]["outputTokens"] == 1
+
+
+def test_openai_provider_delivers_a_response_truncated_by_the_output_budget(monkeypatch):
+    monkeypatch.setattr(socket, "getaddrinfo", lambda *args, **kwargs: [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 443))])
+    body = "".join((
+        f"data: {json.dumps({'type': 'response.output_text.delta', 'delta': 'Partial'})}\n\n",
+        f"data: {json.dumps({'type': 'response.incomplete', 'response': {'incomplete_details': {'reason': 'max_output_tokens'}, 'usage': {'input_tokens': 3, 'output_tokens': 1024}}})}\n\n",
+    ))
+    provider = OpenAIProvider(
+        secret="secret",
+        base_url=None,
+        settings={},
+        transport=httpx.MockTransport(lambda request: httpx.Response(200, headers={"content-type": "text/event-stream"}, text=body)),
+    )
+    events = asyncio.run(collect(provider))
+    assert ("text_delta", {"text": "Partial"}) in events
+    assert ("usage", {"inputTokens": 3, "outputTokens": 1024}) in events
+    assert ("finish", {"finishReason": "max_output_tokens"}) in events
+
+
+def test_openai_provider_uses_responses_structured_output_without_storage(monkeypatch):
+    monkeypatch.setattr(socket, "getaddrinfo", lambda *args, **kwargs: [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 443))])
+    requests = []
+    body = f"data: {json.dumps({'type': 'response.completed', 'response': {'usage': {'input_tokens': 3, 'output_tokens': 1}}})}\n\n"
+
+    def transport(request):
+        requests.append(json.loads(request.content))
+        return httpx.Response(200, headers={"content-type": "text/event-stream"}, text=body)
+
+    provider = OpenAIProvider(secret="secret", base_url=None, settings={}, transport=httpx.MockTransport(transport))
+    schema = {"type": "object", "properties": {"version": {"const": "1"}}, "required": ["version"], "additionalProperties": False}
+    request = provider_request().model_copy(update={"response_schema": schema})
+    asyncio.run(collect_request(provider, request))
+
+    assert requests[0]["store"] is False
+    output_format = requests[0]["text"]["format"]
+    assert output_format["type"] == "json_schema"
+    assert output_format["name"] == "fossbot_assistant_suggestion"
+    assert output_format["strict"] is True
+    assert output_format["schema"]["required"] == ["version"]
+
+
+def test_openai_json_mode_marks_input_as_json_for_responses_validation(monkeypatch):
+    monkeypatch.setattr(socket, "getaddrinfo", lambda *args, **kwargs: [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 443))])
+    requests = []
+    body = f"data: {json.dumps({'type': 'response.completed', 'response': {'usage': {'input_tokens': 3, 'output_tokens': 1}}})}\n\n"
+
+    def transport(request):
+        requests.append(json.loads(request.content))
+        return httpx.Response(200, headers={"content-type": "text/event-stream"}, text=body)
+
+    provider = OpenAIProvider(secret="secret", base_url=None, settings={}, transport=httpx.MockTransport(transport))
+    request = provider_request().model_copy(update={"response_schema": suggestion_json_schema("stage.create")})
+    asyncio.run(collect_request(provider, request))
+
+    assert requests[0]["text"]["format"] == {"type": "json_object"}
+    assert requests[0]["input"][0] == {"role": "developer", "content": "Return exactly one JSON object."}
+    assert requests[0]["input"][1] == {"role": "user", "content": "Hello"}
+
+
+def test_provider_rejection_keeps_bounded_structured_details_for_admin_debug():
+    response = httpx.Response(400, json={
+        "error": {
+            "message": "Unsupported parameter for this model." + ("x" * 600),
+            "type": "invalid_request_error",
+            "param": "text.format",
+            "code": "unsupported_parameter",
+        },
+    })
+
+    with pytest.raises(ProviderError) as error:
+        asyncio.run(HostedProvider.checked(response))
+
+    assert error.value.code == "provider_rejected"
+    assert error.value.details == {
+        "upstreamCode": "unsupported_parameter",
+        "upstreamType": "invalid_request_error",
+        "upstreamParam": "text.format",
+        "upstreamMessage": ("Unsupported parameter for this model." + ("x" * 600))[:500],
+    }
+
+
+def test_openai_structured_output_wraps_root_unions_and_falls_back_for_free_form_objects():
+    replace = {"type": "object", "properties": {"type": {"const": "python_replace"}}, "required": ["type"], "additionalProperties": False}
+    edits = {
+        "type": "object",
+        "properties": {"version": {"const": "1"}, "type": {"const": "python_edits"}, "edits": {"type": "array", "items": {"type": "string"}}},
+        "required": ["type", "edits"],
+        "additionalProperties": False,
+    }
+    output_format = _openai_text_format({"anyOf": [replace, edits]})
+    assert output_format["type"] == "json_schema"
+    assert output_format["schema"]["required"] == ["outcome"]
+    branches = output_format["schema"]["properties"]["outcome"]["anyOf"]
+    assert {branch["properties"]["type"]["enum"][0] for branch in branches} == {"python_replace", "python_edits"}
+
+    answer = {"type": "object", "properties": {"type": {"const": "answer"}}, "required": ["type"], "additionalProperties": False}
+    answer_format = _openai_text_format({"anyOf": [answer, replace, edits]})
+    assert answer_format["type"] == "json_schema"
+    assert {branch["properties"]["type"]["enum"][0] for branch in answer_format["schema"]["properties"]["outcome"]["anyOf"]} == {"answer", "python_replace", "python_edits"}
+    assert _openai_text_format({"type": "object", "additionalProperties": True}) == {"type": "json_object"}
+
+
+def test_openai_provider_still_rejects_a_stream_without_a_terminal_event(monkeypatch):
+    monkeypatch.setattr(socket, "getaddrinfo", lambda *args, **kwargs: [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 443))])
+    body = f"data: {json.dumps({'type': 'response.output_text.delta', 'delta': 'Partial'})}\n\n"
+    provider = OpenAIProvider(
+        secret="secret",
+        base_url=None,
+        settings={},
+        transport=httpx.MockTransport(lambda request: httpx.Response(200, headers={"content-type": "text/event-stream"}, text=body)),
+    )
+    with pytest.raises(ProviderError) as error:
+        asyncio.run(collect(provider))
+    assert error.value.code == "provider_incomplete_stream"
 
 
 def test_compatible_profiles_build_provider_specific_structured_requests():

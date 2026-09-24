@@ -375,14 +375,17 @@ export function ColorPickerField({
 export function StageInspector({ object, selectedCount = object ? 1 : 0, advancedOpen = false, onAdvancedOpenChange, onChange, objects = [], onLookThroughCamera }: StageInspectorProps) {
   const { colors: editorColors, type: editorType } = useEditorTheme();
   const audioPreviewRef = React.useRef<HTMLAudioElement | null>(null);
+  const [audioPreviewPlaying, setAudioPreviewPlaying] = React.useState(false);
   const [audioPreviewError, setAudioPreviewError] = React.useState<string | null>(null);
   const stopAudioPreview = React.useCallback(() => {
-    if (!audioPreviewRef.current) return;
-    audioPreviewRef.current.pause();
-    audioPreviewRef.current.currentTime = 0;
-    audioPreviewRef.current.onended = null;
-    audioPreviewRef.current.onerror = null;
+    if (audioPreviewRef.current) {
+      audioPreviewRef.current.pause();
+      audioPreviewRef.current.currentTime = 0;
+      audioPreviewRef.current.onended = null;
+      audioPreviewRef.current.onerror = null;
+    }
     audioPreviewRef.current = null;
+    setAudioPreviewPlaying(false);
   }, []);
   const testAudioPreview = React.useCallback((source: string, sourceType: StageAudioSourceType, volume: number) => {
     const url = resolveAudioPreviewUrl(source, sourceType);
@@ -395,20 +398,29 @@ export function StageInspector({ object, selectedCount = object ? 1 : 0, advance
     const preview = new Audio(url);
     preview.volume = clamp01(volume, 0.8);
     preview.onended = () => {
-      if (audioPreviewRef.current === preview) audioPreviewRef.current = null;
+      if (audioPreviewRef.current === preview) {
+        audioPreviewRef.current = null;
+        setAudioPreviewPlaying(false);
+      }
     };
     preview.onerror = () => {
-      if (audioPreviewRef.current === preview) audioPreviewRef.current = null;
+      if (audioPreviewRef.current !== preview) return;
+      audioPreviewRef.current = null;
+      setAudioPreviewPlaying(false);
       setAudioPreviewError('Could not load this audio source. Check the path, file type, or CORS settings.');
     };
     audioPreviewRef.current = preview;
+    setAudioPreviewPlaying(true);
     preview.play().catch((error) => {
+      if (audioPreviewRef.current !== preview) return;
       console.warn('[stage-builder] audio preview failed', error);
-      if (audioPreviewRef.current === preview) audioPreviewRef.current = null;
+      audioPreviewRef.current = null;
+      setAudioPreviewPlaying(false);
       setAudioPreviewError('Could not play this audio source. Check the path, file type, or browser audio permissions.');
     });
   }, [stopAudioPreview]);
   React.useEffect(() => stopAudioPreview, [stopAudioPreview]);
+  React.useEffect(() => { stopAudioPreview(); }, [object?.id, object?.kind === 'audio' ? object.source : null, object?.kind === 'audio' ? object.sourceType : null, stopAudioPreview]);
 
   if (!object) {
     return <FullRow><Alert severity="info">Select an object in the viewport or Scene hierarchy to inspect it.</Alert></FullRow>;
@@ -932,7 +944,7 @@ export function StageInspector({ object, selectedCount = object ? 1 : 0, advance
           </FieldRow>
           <FieldRow label="Playback">
             <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', rowGap: 0.25 }}>
-              <FormControlLabel control={<EnabledSwitch checked={object.autoplay} disabled={locked} onChange={(checked) => set({ autoplay: checked } as Partial<EditorStageObject>)} />} label="Start on run" />
+              {!object.spatial && <FormControlLabel control={<EnabledSwitch checked={object.autoplay} disabled={locked} onChange={(checked) => set({ autoplay: checked } as Partial<EditorStageObject>)} />} label="Start on run" />}
               <FormControlLabel control={<EnabledSwitch checked={object.loop} disabled={locked} onChange={(checked) => set({ loop: checked } as Partial<EditorStageObject>)} />} label="Loop" />
             </Stack>
           </FieldRow>
@@ -950,9 +962,13 @@ export function StageInspector({ object, selectedCount = object ? 1 : 0, advance
               />
             </FieldRow>
           )}
+          {object.spatial && <FullRow><Typography variant="caption" sx={editorType.caption}>Plays only while the robot is inside the range circle.</Typography></FullRow>}
           <FullRow>
             <Stack spacing={0.5}>
-              <Button fullWidth size="small" variant="outlined" disabled={!object.source.trim()} onClick={() => testAudioPreview(object.source, object.sourceType, object.volume)}>Test audio</Button>
+              <Stack direction="row" spacing={1}>
+                <Button size="small" variant="outlined" sx={{ flex: 1, minWidth: 0 }} disabled={!object.source.trim()} onClick={() => testAudioPreview(object.source, object.sourceType, object.volume)}>Test audio</Button>
+                <Button size="small" variant="outlined" sx={{ flex: 1, minWidth: 0 }} disabled={!audioPreviewPlaying} onClick={stopAudioPreview}>Stop audio</Button>
+              </Stack>
               <Typography variant="caption" sx={editorType.caption}>Plays this source once in the editor at the configured volume.</Typography>
               {audioPreviewError && <Alert severity="warning" sx={{ py: 0 }}>{audioPreviewError}</Alert>}
             </Stack>

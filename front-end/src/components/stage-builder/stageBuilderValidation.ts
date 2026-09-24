@@ -54,11 +54,6 @@ export function validateStageBuilderStage(stage: EditorStage): StageBuilderValid
     results.push(result(stage, 'stage:spawn-missing', 'error', [], 'Robot spawn is missing.', 'Place a Robot Spawn so the simulator knows where FOSSBot starts.', false));
   }
 
-  const target = stage.objects.find((object) => object.semanticKind === 'target' && !object.hidden);
-  if (!target) {
-    results.push(result(stage, 'stage:target-missing', 'error', [], 'Target is missing.', 'Place a Target marker to define the minimum valid challenge goal.', false));
-  }
-
   const challengeObjects = stage.objects.filter((object) => !object.hidden && object.challenge);
   const markerOwners = new Map<string, EditorStageObject[]>();
   for (const object of challengeObjects) {
@@ -105,10 +100,6 @@ export function validateStageBuilderStage(stage: EditorStage): StageBuilderValid
       if (angle > Math.PI / 7.2) {
         results.push(result(stage, `object:${object.id}:ramp-steep`, 'warning', [object.id], `${labelFor(object)} may be too steep.`, 'Ramps above about 25° can be difficult for the robot and may make the stage frustrating.'));
       }
-    }
-
-    if (object.semanticKind === 'target' || object.semanticKind === 'checkpoint') {
-      results.push(result(stage, `object:${object.id}:reachability-unverified`, 'warning', [object.id], `${labelFor(object)} reachability is not guaranteed.`, 'Reachability detection is approximate in this phase; test the stage and override this warning if it is intentional.'));
     }
 
     if (object.kind === 'model' && !object.filename.trim()) {

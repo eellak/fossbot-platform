@@ -1,18 +1,8 @@
 import React, { forwardRef, lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Box, Button, CircularProgress, Grid, Slider, Typography } from '@mui/material';
-import {
-  faMap,
-  faArrowUp,
-  faArrowDown,
-  faArrowLeft,
-  faArrowRight,
-  faBinoculars,
-  faLightbulb,
-  faRefresh,
-} from '@fortawesome/free-solid-svg-icons';
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { Box, CircularProgress, Typography } from '@mui/material';
 import {
   WebGLApp as LegacyWebGLApp,
+  type LegacySimulatorControlHandle,
   moveStep as legacyMoveStep,
   rotateStep as legacyRotateStep,
   stopMotion as legacyStopMotion,
@@ -32,6 +22,7 @@ import type { RawStageConfig } from 'src/simulator/stages';
 import type { FossbotSimulatorHandle } from 'src/simulator/FossbotSimulator';
 import type { SensorRunSummary, SensorTelemetryListener, SensorTelemetrySnapshot } from 'src/simulator/sensors/telemetry';
 import type { AttemptSummary, ChallengeMarker, MissionEventListener } from 'src/simulator/missions/types';
+import SimulatorControlsOverlay from 'src/components/js-simulator/SimulatorControlsOverlay';
 
 type SimulatorVersion = 'v1' | 'v2';
 
@@ -49,6 +40,12 @@ type WebGLAppProps = {
   sensorHelpersVisible?: boolean;
   sensorTelemetryAutoStart?: boolean;
   onTelemetry?: SensorTelemetryListener;
+};
+
+export type SimulatorControlHandle = {
+  resetStage: () => Promise<void> | void;
+  changeCamera: () => void;
+  openStageSelection: () => void;
 };
 
 const SIMULATOR_VERSION_KEY = 'fossbot.simulatorVersion';
@@ -139,15 +136,7 @@ function useV2Config() {
   );
 }
 
-function setForwardedRef<T>(ref: React.ForwardedRef<T>, value: T | null): void {
-  if (typeof ref === 'function') {
-    ref(value);
-  } else if (ref) {
-    ref.current = value;
-  }
-}
-
-const V2WebGLApp = forwardRef<unknown, WebGLAppProps>((props, ref) => {
+const V2WebGLApp = forwardRef<SimulatorControlHandle, WebGLAppProps>((props, ref) => {
   const v2Config = useV2Config();
   const effectiveV2Config = useMemo(
     () => ({
@@ -161,7 +150,6 @@ const V2WebGLApp = forwardRef<unknown, WebGLAppProps>((props, ref) => {
   const handleRef = useRef<FossbotSimulatorHandle | null>(null);
   const telemetryUnsubscribeRef = useRef<(() => void) | null>(null);
   const onTelemetryRef = useRef(props.onTelemetry);
-  const [lightIntensity, setLightIntensity] = useState(100);
   const [currentURL, setCurrentURL] = useState(DEFAULT_STAGE_URL);
   const [openDialog, setOpenDialog] = useState(false);
   const [initialStageConfig, setInitialStageConfig] = useState<RawStageConfig | null | undefined>(undefined);
@@ -220,9 +208,8 @@ const V2WebGLApp = forwardRef<unknown, WebGLAppProps>((props, ref) => {
         for (const listener of missionListeners) missionSubscriptions.set(listener, handle.subscribeMissionEvents(listener));
       }
       if (handle) telemetryUnsubscribeRef.current = handle.subscribeSensorTelemetry((snapshot) => onTelemetryRef.current?.(snapshot));
-      setForwardedRef(ref, handle);
     },
-    [ref],
+    [],
   );
 
   useEffect(() => {
@@ -286,11 +273,11 @@ const V2WebGLApp = forwardRef<unknown, WebGLAppProps>((props, ref) => {
     setOpenDialog(false);
   };
 
-  const handleLightIntensityChange = (_event: Event, newValue: number | number[]) => {
-    const intensity = Array.isArray(newValue) ? newValue[0] : newValue;
-    setLightIntensity(intensity);
-    handleRef.current?.setLightIntensity(intensity);
-  };
+  React.useImperativeHandle(ref, () => ({
+    resetStage: handleReload,
+    changeCamera: handleCamera,
+    openStageSelection: () => setOpenDialog(true),
+  }), [currentURL]);
 
   // While pre-fetching the stage, show a centered loading spinner
   if (initialStageConfig === undefined) {
@@ -319,6 +306,7 @@ const V2WebGLApp = forwardRef<unknown, WebGLAppProps>((props, ref) => {
       height="100%"
       width="100%"
       overflow="hidden"
+      position="relative"
     >
       <Box width="100%" flex="1 1 auto" minHeight={240}>
         <Suspense fallback={<div style={{ width: '100%', height: '100%' }} />}>
@@ -331,77 +319,22 @@ const V2WebGLApp = forwardRef<unknown, WebGLAppProps>((props, ref) => {
           />
         </Suspense>
       </Box>
-      {props.showControls !== false && <Box mt={1} width="100%" flex="0 0 auto">
-        <Grid container spacing={1} justifyContent="center">
-          <Grid item>
-            <Button variant="contained" color="primary" onClick={handleForward}>
-              <FontAwesomeIcon icon={faArrowUp} size="2x" />
-            </Button>
-          </Grid>
-          <Grid item>
-            <Button variant="contained" color="primary" onClick={handleBackward}>
-              <FontAwesomeIcon icon={faArrowDown} size="2x" />
-            </Button>
-          </Grid>
-          <Grid item>
-            <Button variant="contained" color="primary" onClick={handleRotateLeft}>
-              <FontAwesomeIcon icon={faArrowLeft} size="2x" />
-            </Button>
-          </Grid>
-          <Grid item>
-            <Button variant="contained" color="primary" onClick={handleRotateRight}>
-              <FontAwesomeIcon icon={faArrowRight} size="2x" />
-            </Button>
-          </Grid>
-          <Grid item>
-            <Button variant="contained" color="secondary" onClick={handleCamera}>
-              <FontAwesomeIcon icon={faBinoculars} size="2x" />
-            </Button>
-          </Grid>
-          <Grid item>
-            <Button variant="contained" color="warning" onClick={handleReload}>
-              <FontAwesomeIcon icon={faRefresh} size="2x" />
-            </Button>
-          </Grid>
-          {props.allowStageSelection !== false && <Grid item>
-            <Button variant="contained" color="success" onClick={() => setOpenDialog(true)}>
-              <FontAwesomeIcon icon={faMap} size="2x" />
-            </Button>
-          </Grid>}
-        </Grid>
-      </Box>}
-      {props.showControls !== false && <Box mt={0.5} mb={0.5} width="80%" flex="0 0 auto">
-        <Grid container spacing={1} alignItems="center" justifyContent="center">
-          <Grid item>
-            <FontAwesomeIcon icon={faLightbulb} size="2x" color="primary" />
-          </Grid>
-          <Grid item xs>
-            <Slider
-              value={lightIntensity}
-              onChange={handleLightIntensityChange}
-              aria-labelledby="directional-light-slider"
-              min={0}
-              max={100}
-              sx={{ width: '100%' }}
-            />
-          </Grid>
-        </Grid>
-      </Box>}
-      {props.showControls !== false && props.allowStageSelection !== false && <CardDialog open={openDialog} onClose={() => setOpenDialog(false)} onSelect={handleCardSelect} />}
+      {props.showControls !== false && <SimulatorControlsOverlay onForward={handleForward} onBackward={handleBackward} onTurnLeft={handleRotateLeft} onTurnRight={handleRotateRight} onChangeCamera={handleCamera} />}
+      {props.allowStageSelection !== false && <CardDialog open={openDialog} onClose={() => setOpenDialog(false)} onSelect={handleCardSelect} />}
     </Box>
   );
 });
 
 V2WebGLApp.displayName = 'V2SimulatorAdapter';
 
-const WebGLApp = forwardRef<unknown, WebGLAppProps>((props, ref) => {
+const WebGLApp = forwardRef<SimulatorControlHandle, WebGLAppProps>((props, ref) => {
   const version = getSimulatorVersion();
 
   if (version === 'v2') {
     return <V2WebGLApp {...props} ref={ref} />;
   }
 
-  return <LegacyWebGLApp {...props} ref={ref} />;
+  return <LegacyWebGLApp {...props} ref={ref as React.ForwardedRef<LegacySimulatorControlHandle>} />;
 });
 
 WebGLApp.displayName = 'SimulatorAdapter';

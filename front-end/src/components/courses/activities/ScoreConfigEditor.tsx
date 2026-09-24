@@ -5,6 +5,7 @@ import {
 import { IconChevronDown, IconPlus, IconTrash } from '@tabler/icons-react';
 import { v4 as uuidv4 } from 'uuid';
 import type { MissionActivity, ScoreComponent, ScoreComponentType, ScoreConfig } from 'src/courses/types';
+import { authoringAccordionSx, authoringControlButtonSx, authoringControlFieldSx, authoringIconButtonSx, authoringSummarySx, authoringTitleSx } from './authoringStyles';
 
 type Props = {
   activity: MissionActivity;
@@ -35,11 +36,11 @@ export default function ScoreConfigEditor({ activity, onChange, t }: Props) {
   const add = () => patch({ components: [...config.components, createComponent(newType, activity, t)] });
   const positiveMaximum = config.components.reduce((total, component) => total + componentMaximum(component, activity) * component.weight, 0);
 
-  return <Accordion variant="outlined" disableGutters>
+  return <Accordion variant="outlined" disableGutters sx={authoringAccordionSx}>
     <AccordionSummary expandIcon={<IconChevronDown size={18} />}>
-      <Box sx={{ flex: 1 }}>
-        <Typography fontWeight={700}>{t('education.scoring.title')}</Typography>
-        <Typography variant="caption" color="text.secondary">{config.enabled ? t('education.scoring.enabledSummary', { maximum: positiveMaximum }) : t('education.scoring.disabledSummary')}</Typography>
+      <Box sx={{ flex: 1, minWidth: 0 }}>
+        <Typography variant="subtitle1" sx={authoringTitleSx}>{t('education.scoring.title')}</Typography>
+        <Typography variant="body2" color="text.secondary" sx={authoringSummarySx}>{config.enabled ? t('education.scoring.enabledSummary', { maximum: positiveMaximum }) : t('education.scoring.disabledSummary')}</Typography>
       </Box>
       <Switch
         checked={config.enabled}
@@ -50,13 +51,13 @@ export default function ScoreConfigEditor({ activity, onChange, t }: Props) {
     </AccordionSummary>
     <AccordionDetails sx={{ borderTop: '1px solid', borderColor: 'divider' }}>
       <Stack spacing={2}>
-        <Alert severity="info">{t('education.scoring.separate')}</Alert>
+        <Typography variant="body2" color="text.secondary">{t('education.scoring.separate')}</Typography>
         {config.enabled && config.components.length === 0 && <Alert severity="warning">{t('education.scoring.addRequired')}</Alert>}
         {config.components.map((component) => <Paper key={component.key} variant="outlined" sx={{ p: 1.5 }}>
           <Stack spacing={1.5}>
             <Stack direction="row" alignItems="center" gap={1}>
-              <Typography fontWeight={650} sx={{ flex: 1 }}>{t(`education.scoring.types.${component.type}`)}</Typography>
-              <IconButton onClick={() => patch({ components: config.components.filter((item) => item.key !== component.key) })} aria-label={t('education.activities.delete')}><IconTrash size={17} /></IconButton>
+              <Typography variant="subtitle2" sx={{ ...authoringTitleSx, flex: 1 }}>{t(`education.scoring.types.${component.type}`)}</Typography>
+              <IconButton onClick={() => patch({ components: config.components.filter((item) => item.key !== component.key) })} aria-label={t('education.activities.delete')} sx={authoringIconButtonSx}><IconTrash size={17} /></IconButton>
             </Stack>
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
               <TextField fullWidth size="small" label={t('education.scoring.label')} value={component.label} onChange={(event) => update(component.key, { ...component, label: event.target.value })} />
@@ -67,13 +68,13 @@ export default function ScoreConfigEditor({ activity, onChange, t }: Props) {
           </Stack>
         </Paper>)}
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
-          <TextField select fullWidth size="small" label={t('education.scoring.component')} value={newType} onChange={(event) => setNewType(event.target.value as ScoreComponentType)}>
+          <TextField select fullWidth size="small" label={t('education.scoring.component')} value={newType} onChange={(event) => setNewType(event.target.value as ScoreComponentType)} sx={authoringControlFieldSx}>
             {componentTypes.map((type) => <MenuItem key={type} value={type} disabled={type === 'checkpoints' && !checkpointObjectives(activity).length}>{t(`education.scoring.types.${type}`)}</MenuItem>)}
           </TextField>
-          <Button startIcon={<IconPlus size={17} />} onClick={add}>{t('education.scoring.add')}</Button>
+          <Button startIcon={<IconPlus size={17} />} onClick={add} sx={authoringControlButtonSx}>{t('education.scoring.add')}</Button>
         </Stack>
         <Box>
-          <Typography variant="subtitle2">{t('education.scoring.stars')}</Typography>
+          <Typography variant="subtitle2" sx={authoringTitleSx}>{t('education.scoring.stars')}</Typography>
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ mt: 1 }}>
             {config.starThresholds.map((threshold, index) => <TextField
               key={index}
@@ -93,7 +94,7 @@ export default function ScoreConfigEditor({ activity, onChange, t }: Props) {
         <FormControlLabel control={<Switch checked={config.rankFailedAttempts} onChange={(event) => patch({ rankFailedAttempts: event.target.checked })} />} label={t('education.scoring.rankFailed')} />
         {config.rankFailedAttempts && <Alert severity="warning">{t('education.scoring.rankFailedWarning')}</Alert>}
         <Paper variant="outlined" sx={{ p: 1.5, bgcolor: 'action.hover' }}>
-          <Typography fontWeight={650}>{t('education.scoring.preview')}</Typography>
+          <Typography variant="subtitle2" sx={authoringTitleSx}>{t('education.scoring.preview')}</Typography>
           <Typography variant="body2">{t('education.scoring.previewMaximum', { maximum: Number(positiveMaximum.toFixed(2)) })}</Typography>
           <Typography variant="caption" color="text.secondary">{t('education.scoring.previewHelp')}</Typography>
         </Paper>

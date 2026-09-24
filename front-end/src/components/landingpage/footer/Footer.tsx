@@ -9,7 +9,7 @@ const Footer = () => {
   const { t } = useTranslation();
 
   return (
-    <Container maxWidth="lg">
+    <Container component="footer" maxWidth="xl">
       <Grid container spacing={3} justifyContent="center" mt={0}>
         <Grid item xs={12} sm={5} lg={4} textAlign="center">
           <img src={logoIcon} alt="icon" width={'50px'} className="rotate-on-hover" />
@@ -19,7 +19,7 @@ const Footer = () => {
               <Typography color="textSecondary" component="span" display="inline">
                 {' '}
                 {t('footer.fossbotTeam')}
-              </Typography>{' '}
+              </Typography>
             </Link>
             .
           </Typography>

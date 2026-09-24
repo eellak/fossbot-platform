@@ -8,14 +8,18 @@ const AdminRoute = () => {
   const token = auth.token;
   const user: User = auth.user;
 
+  // Auth is restored from the stored token on a hard load; redirecting during that
+  // window sent admin deep links to the login page and then on to the dashboard.
+  if (auth.authStatus === 'loading') {
+    return null;
+  }
+
   if (!token || auth.authStatus !== 'authenticated') {
     return <Navigate to="/auth/login" />;
   }
 
-  if (user != null) {
-    console.log(user)
-    if (user.role != "admin")
-      return <Navigate to="/dashboard" />;
+  if (user != null && user.role != "admin") {
+    return <Navigate to="/dashboard" />;
   }
 
   return <Outlet />;

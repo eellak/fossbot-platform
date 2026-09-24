@@ -7,8 +7,10 @@ import { useAuth } from 'src/authentication/AuthProvider';
 import { listMyEnrollments, listPublishedCourses } from 'src/courses/CoursesApi';
 import type { Enrollment, StudentCourse } from 'src/courses/types';
 import ClassGroupsStudentPage from '../class-groups-student-page/ClassGroupsStudentPage';
+import BetaBadge from 'src/components/shared/BetaBadge';
+import { pageTabsSx, TabbedPageHeader } from 'src/components/shared/PageHeader';
 
-export default function CoursesPage() {
+export default function CoursesPage({ previewAppearance = true }: { previewAppearance?: boolean }) {
   const { t } = useTranslation();
   const { token } = useAuth();
   const navigate = useNavigate();
@@ -37,23 +39,35 @@ export default function CoursesPage() {
   const enrolledIds = new Set(enrollments.map((item) => item.course_id));
   const pageTitle = tab === 2 ? t('education.classrooms.studentTitle') : t('education.student.coursesTitle');
   const pageSubtitle = tab === 2 ? t('education.classrooms.studentSubtitle') : t('education.student.coursesSubtitle');
+  const previewStateSx = previewAppearance ? { maxWidth: 640 } : undefined;
+  const previewGridSx = previewAppearance ? {
+    display: 'grid',
+    gridTemplateColumns: { xs: 'minmax(0, 1fr)', md: 'repeat(2, minmax(0, 1fr))', lg: 'repeat(3, minmax(0, 1fr))' },
+    gap: 2,
+    width: '100%',
+    m: 0,
+    '& > .MuiGrid-item': { flexBasis: 'auto', maxWidth: 'none', width: 'auto', p: '0 !important' },
+  } : undefined;
 
   return (
     <PageContainer title={pageTitle} description={pageSubtitle}>
       <Stack spacing={3}>
-        <Box>
-          <Typography variant="h3">{pageTitle}</Typography>
-          <Typography color="text.secondary">{pageSubtitle}</Typography>
-        </Box>
-        <Tabs value={tab} onChange={(_, value) => setTab(value)} aria-label={t('education.student.coursesTitle')} variant="scrollable" scrollButtons="auto" allowScrollButtonsMobile>
-          <Tab label={t('education.student.myCourses')} />
-          <Tab label={t('education.student.explore')} />
-          <Tab label={t('education.classrooms.studentTitle')} />
-        </Tabs>
-        {tab !== 2 && error ? <Alert severity="error" action={<Button color="inherit" onClick={() => window.location.reload()}>{t('education.student.retry')}</Button>}>{error}</Alert> : null}
-        {tab !== 2 && loading ? <Box sx={{ py: 8, textAlign: 'center' }}><CircularProgress /></Box> : null}
+        <TabbedPageHeader
+          title={pageTitle}
+          description={pageSubtitle}
+          titleAdornment={previewAppearance ? <BetaBadge feature="education" /> : undefined}
+          tabs={
+          <Tabs value={tab} onChange={(_, value) => setTab(value)} aria-label={t('education.student.coursesTitle')} variant="scrollable" scrollButtons="auto" allowScrollButtonsMobile sx={pageTabsSx}>
+            <Tab label={t('education.student.myCourses')} />
+            <Tab label={t('education.student.explore')} />
+            <Tab label={t('education.classrooms.studentTitle')} />
+          </Tabs>
+          }
+        />
+        {tab !== 2 && error ? <Alert severity="error" sx={previewStateSx} action={<Button color="inherit" onClick={() => window.location.reload()}>{t('education.student.retry')}</Button>}>{error}</Alert> : null}
+        {tab !== 2 && loading ? <Box sx={{ py: 8, textAlign: 'center', ...previewStateSx }}><CircularProgress /></Box> : null}
         {!loading && tab === 0 && (enrollments.length ? (
-          <Grid container spacing={2}>{enrollments.map((enrollment) => (
+          <Grid container spacing={2} sx={previewGridSx}>{enrollments.map((enrollment) => (
             <Grid item xs={12} md={6} lg={4} key={enrollment.id}>
               <Card variant="outlined" sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
                 <CardContent sx={{ flex: 1 }}>
@@ -65,17 +79,17 @@ export default function CoursesPage() {
                   <LinearProgress variant="determinate" value={enrollment.progress_percent} sx={{ mt: 3, mb: 1 }} />
                   <Typography variant="caption">{t('education.student.progress', { completed: enrollment.completed_count, total: enrollment.lesson_count })}</Typography>
                 </CardContent>
-                <CardActions><Button onClick={() => navigate(`/courses/${enrollment.course_id}`)}>{enrollment.completed_at ? t('education.student.reviewCourse') : t('education.student.continueCourse')}</Button></CardActions>
+                <CardActions sx={previewAppearance ? { px: 2.5, pb: 2.5, pt: 0 } : undefined}><Button variant={previewAppearance ? 'contained' : 'text'} onClick={() => navigate(`/courses/${enrollment.course_id}`)}>{enrollment.completed_at ? t('education.student.reviewCourse') : t('education.student.continueCourse')}</Button></CardActions>
               </Card>
             </Grid>
           ))}</Grid>
-        ) : <Alert severity="info" action={<Button color="inherit" onClick={() => setTab(1)}>{t('education.student.explore')}</Button>}>{t('education.student.noEnrollments')}</Alert>)}
+        ) : <Alert severity="info" sx={previewStateSx} action={<Button color="inherit" onClick={() => setTab(1)}>{t('education.student.explore')}</Button>}>{t('education.student.noEnrollments')}</Alert>)}
         {!loading && tab === 1 && <Stack spacing={2}>
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-            <TextField fullWidth size="small" label={t('education.student.search')} value={search} onChange={(event) => setSearch(event.target.value)} />
-            {difficulties.length ? <TextField select size="small" label={t('education.student.difficulty')} value={difficulty} onChange={(event) => setDifficulty(event.target.value)} sx={{ minWidth: 180 }}><MenuItem value="">{t('education.student.allDifficulties')}</MenuItem>{difficulties.map((value) => <MenuItem key={value} value={value}>{value}</MenuItem>)}</TextField> : null}
+            <TextField fullWidth size="small" label={t('education.student.search')} value={search} onChange={(event) => setSearch(event.target.value)} sx={previewAppearance ? { flex: 1, minWidth: 0 } : undefined} />
+            {difficulties.length ? <TextField select size="small" label={t('education.student.difficulty')} value={difficulty} onChange={(event) => setDifficulty(event.target.value)} sx={previewAppearance ? { width: { xs: '100%', sm: 220 }, flexShrink: 0 } : { minWidth: 180 }}><MenuItem value="">{t('education.student.allDifficulties')}</MenuItem>{difficulties.map((value) => <MenuItem key={value} value={value}>{value}</MenuItem>)}</TextField> : null}
           </Stack>
-          {filtered.length ? <Grid container spacing={2}>{filtered.map((course) => (
+          {filtered.length ? <Grid container spacing={2} sx={previewGridSx}>{filtered.map((course) => (
             <Grid item xs={12} md={6} lg={4} key={course.id}>
               <Card variant="outlined" sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
                 <CardContent sx={{ flex: 1 }}>
@@ -89,12 +103,12 @@ export default function CoursesPage() {
                     <Chip size="small" variant="outlined" label={t('education.lesson.count', { count: course.latest_release.lessons.length })} />
                   </Stack>
                 </CardContent>
-                <CardActions><Button onClick={() => navigate(`/courses/${course.id}`)}>{enrolledIds.has(course.id) ? t('education.student.continueCourse') : t('education.student.viewCourse')}</Button></CardActions>
+                <CardActions sx={previewAppearance ? { px: 2.5, pb: 2.5, pt: 0 } : undefined}><Button variant={previewAppearance ? 'contained' : 'text'} onClick={() => navigate(`/courses/${course.id}`)}>{enrolledIds.has(course.id) ? t('education.student.continueCourse') : t('education.student.viewCourse')}</Button></CardActions>
               </Card>
             </Grid>
-          ))}</Grid> : <Alert severity="info">{courses.length ? t('education.student.noResults') : t('education.student.noPublicCourses')}</Alert>}
+          ))}</Grid> : <Alert severity="info" sx={previewStateSx}>{courses.length ? t('education.student.noResults') : t('education.student.noPublicCourses')}</Alert>}
         </Stack>}
-        {tab === 2 && <ClassGroupsStudentPage embedded />}
+        {tab === 2 && <ClassGroupsStudentPage embedded previewAppearance={previewAppearance} />}
       </Stack>
     </PageContainer>
   );

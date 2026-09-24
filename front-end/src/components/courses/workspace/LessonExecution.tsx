@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { forwardRef, useImperativeHandle, useRef } from 'react';
 import { Alert, Box, Button, Stack, Typography } from '@mui/material';
 import { IconCamera, IconPlayerPlay, IconPlayerStop, IconRefresh, IconTerminal2 } from '@tabler/icons-react';
 import PythonExecutor from 'src/components/editors/PythonExecutor';
@@ -11,28 +11,45 @@ import {
 } from 'src/simulator-adapter/Simulator';
 import { useTranslation } from 'react-i18next';
 
-type Props = { code: string; sessionId: string; hasStage: boolean; hasMission?: boolean; showCommandHelper: boolean; onBeforeRun: (run: () => void) => void; onResetSimulation: () => void; onChangeCamera: () => void; onExecutionEvent?: (event: { type: 'start' | 'stdout' | 'stderr' | 'complete' | 'stopped'; text?: string }) => void };
+type Props = { code: string; sessionId: string; hasStage: boolean; hasMission?: boolean; showCommandHelper: boolean; showPrimaryControls?: boolean; showSecondaryControls?: boolean; useEditorControlLayout?: boolean; onBeforeRun: (run: () => void) => void; onResetSimulation: () => void; onChangeCamera: () => void; onExecutionEvent?: (event: { type: 'start' | 'stdout' | 'stderr' | 'complete' | 'stopped'; text?: string }) => void };
 
-export default function LessonExecution({ code, sessionId, hasStage, hasMission = false, showCommandHelper, onBeforeRun, onResetSimulation, onChangeCamera, onExecutionEvent }: Props) {
+export type LessonExecutionHandle = {
+  run: () => boolean;
+  stop: () => void;
+};
+
+const LessonExecution = forwardRef<LessonExecutionHandle, Props>(function LessonExecution({ code, sessionId, hasStage, hasMission = false, showCommandHelper, showPrimaryControls = true, showSecondaryControls = true, useEditorControlLayout = false, onBeforeRun, onResetSimulation, onChangeCamera, onExecutionEvent }, ref) {
   const { t } = useTranslation();
   const runRef = useRef<() => Promise<void>>();
   const stopRef = useRef<() => void>();
+  const run = () => {
+    if (!code.trim() || !runRef.current) return false;
+    onBeforeRun(() => { if (hasMission) startAttempt(); void runRef.current?.(); });
+    return true;
+  };
+  const stop = () => {
+    stopRef.current?.();
+    stopMotion();
+    if (hasMission) finishAttempt('stopped', 'stop');
+    endSensorRun();
+  };
+  useImperativeHandle(ref, () => ({ run, stop }));
   return (
     <Box aria-live="polite" sx={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column' }}>
       <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" sx={{ gap: 1 }}>
-        <Button variant="contained" startIcon={<IconPlayerPlay size={18} />} disabled={!code.trim()} onClick={() => onBeforeRun(() => { if (hasMission) startAttempt(); void runRef.current?.(); })}>{t('education.workspace.run')}</Button>
-        <Button startIcon={<IconPlayerStop size={18} />} onClick={() => { stopRef.current?.(); stopMotion(); if (hasMission) finishAttempt('stopped', 'stop'); endSensorRun(); }}>{t('education.workspace.stop')}</Button>
-        {hasStage && <Button startIcon={<IconRefresh size={18} />} onClick={onResetSimulation}>{t('education.workspace.resetSimulation')}</Button>}
-        {hasStage && <Button startIcon={<IconCamera size={18} />} onClick={onChangeCamera}>{t('education.workspace.changeCamera')}</Button>}
-        {showCommandHelper && <SearchBar />}
-        <Typography variant="caption" color="text.secondary">{t('education.workspace.runResetHelp')}</Typography>
+        {showPrimaryControls && <Button variant="contained" startIcon={<IconPlayerPlay size={18} />} disabled={!code.trim()} onClick={run}>{t('education.workspace.run')}</Button>}
+        {showPrimaryControls && <Button startIcon={<IconPlayerStop size={18} />} onClick={stop}>{t('education.workspace.stop')}</Button>}
+        {showSecondaryControls && hasStage && <Button variant={useEditorControlLayout ? 'outlined' : 'text'} startIcon={<IconRefresh size={18} />} onClick={onResetSimulation}>{t('education.workspace.resetSimulation')}</Button>}
+        {showSecondaryControls && hasStage && <Button variant={useEditorControlLayout ? 'outlined' : 'text'} startIcon={<IconCamera size={18} />} onClick={onChangeCamera}>{t('education.workspace.changeCamera')}</Button>}
+        {showCommandHelper && <SearchBar variant={useEditorControlLayout ? 'button' : 'fab'} />}
+        {showPrimaryControls && <Typography variant="caption" color="text.secondary">{t('education.workspace.runResetHelp')}</Typography>}
       </Stack>
-      {!code.trim() && <Alert severity="info" sx={{ mt: 1 }}>{t('education.workspace.emptyCode')}</Alert>}
-      <Box sx={{ mt: 2, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-        <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
+      {!code.trim() && !useEditorControlLayout && <Alert severity="info" sx={{ mt: 1 }}>{t('education.workspace.emptyCode')}</Alert>}
+      <Box sx={{ mt: useEditorControlLayout ? 0 : 2, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+        {!useEditorControlLayout && <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
           <IconTerminal2 size={17} />
           <Typography variant="subtitle2">{t('education.workspace.terminal')}</Typography>
-        </Stack>
+        </Stack>}
         <Box
           role="log"
           aria-label={t('education.workspace.terminal')}
@@ -58,4 +75,6 @@ export default function LessonExecution({ code, sessionId, hasStage, hasMission 
       </Box>
     </Box>
   );
-}
+});
+
+export default LessonExecution;

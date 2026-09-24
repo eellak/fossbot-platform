@@ -117,7 +117,7 @@ export interface AIProviderInput {
   secretAction?: 'preserve' | 'rotate' | 'clear';
 }
 
-export type AIStreamEventType = 'start' | 'text_delta' | 'suggestion' | 'usage' | 'done' | 'error' | 'debug';
+export type AIStreamEventType = 'start' | 'text_delta' | 'answer' | 'suggestion' | 'usage' | 'done' | 'error' | 'debug';
 export interface AIStreamEvent { type: AIStreamEventType; data: Record<string, unknown> }
 
 export interface AIDebugTraceEntry {
@@ -158,6 +158,27 @@ export interface PythonReplaceSuggestion {
   summary: string;
 }
 
+export interface AIAssistantAnswer {
+  version: '1';
+  type: 'answer';
+  baseFingerprint: string;
+  content: string;
+}
+
+export interface PythonEdit {
+  startLine: number;
+  endLine: number;
+  replacement: string;
+}
+
+export interface PythonEditsSuggestion {
+  version: '1';
+  type: 'python_edits';
+  baseFingerprint: string;
+  edits: PythonEdit[];
+  summary: string;
+}
+
 export interface BlocklyReplaceSuggestion {
   version: '1';
   type: 'blockly_replace';
@@ -167,13 +188,15 @@ export interface BlocklyReplaceSuggestion {
 }
 
 export type LessonOperation = {
-  op: 'update_course' | 'update_lesson' | 'insert_activity' | 'replace_activity' | 'remove_activity' | 'reorder_activities';
+  op: 'update_course' | 'update_lesson' | 'create_lesson' | 'insert_activity' | 'replace_activity' | 'remove_activity' | 'reorder_activities';
   lessonId?: number;
   activityKey?: string;
   index?: number;
   coursePatch?: { title?: string; description?: string; learningObjectives?: string[] };
   lessonPatch?: { title?: string };
+  lessonTitle?: string;
   activity?: Record<string, unknown>;
+  activities?: Record<string, unknown>[];
   activityKeys?: string[];
 };
 
@@ -209,5 +232,6 @@ export interface StageAuthoringSuggestion {
   summary: string;
 }
 
-export type AICodeSuggestion = PythonReplaceSuggestion | BlocklyReplaceSuggestion;
+export type AICodeSuggestion = PythonReplaceSuggestion | PythonEditsSuggestion | BlocklyReplaceSuggestion;
 export type AIAssistantSuggestion = AICodeSuggestion | LessonAuthoringSuggestion | StageAuthoringSuggestion;
+export type AIAssistantOutcome = AIAssistantAnswer | AIAssistantSuggestion;

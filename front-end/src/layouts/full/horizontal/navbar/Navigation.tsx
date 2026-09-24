@@ -7,7 +7,7 @@ import { useSelector, useDispatch } from 'src/store/Store';
 import { toggleMobileSidebar } from 'src/store/customizer/CustomizerSlice';
 import { AppState } from 'src/store/Store';
 
-const Navigation = () => {
+const Navigation = ({ previewAppearance = true }: { previewAppearance?: boolean }) => {
   const lgUp = useMediaQuery((theme: Theme) => theme.breakpoints.up('lg'));
   const customizer = useSelector((state: AppState) => state.customizer);
   const dispatch = useDispatch();
@@ -52,7 +52,7 @@ const Navigation = () => {
       {/* ------------------------------------------- */}
       {/* Sidebar For Mobile */}
       {/* ------------------------------------------- */}
-      <SidebarItems />
+      <SidebarItems previewAppearance={previewAppearance} />
     </Drawer>
   );
 };

@@ -75,7 +75,7 @@ const LpHeader = () => {
 
   return (
     <AppBarStyled position="sticky" elevation={y ? 8 : 0}>
-      <Container maxWidth="lg">
+      <Container maxWidth="xl">
         <ToolbarStyled>
           <Logo />
           <Box flexGrow={1} />

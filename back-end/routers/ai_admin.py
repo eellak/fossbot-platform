@@ -8,6 +8,7 @@ from database.database import (
     AIInstanceSettings,
     AIPolicyRule,
     AIProviderConfig,
+    AIUsageEvent,
     ClassGroup,
     User,
 )
@@ -443,13 +444,31 @@ async def test_provider(provider_id: int, current_user: User = Depends(get_curre
 
 
 @router.delete("/providers/{provider_id}", status_code=204)
-def disable_provider(provider_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def remove_provider(provider_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     require_admin(current_user)
     provider = db.query(AIProviderConfig).filter(AIProviderConfig.id == provider_id).first()
     if provider is None:
         raise HTTPException(status_code=404, detail="AI provider not found")
-    provider.enabled = False
-    provider.updated_by_id = current_user.id
+    # Usage history keeps the recorded provider name and model, so detach the live row.
+    db.query(AIUsageEvent).filter(AIUsageEvent.provider_id == provider_id).update(
+        {AIUsageEvent.provider_id: None},
+        synchronize_session=False,
+    )
+    settings = db.query(AIInstanceSettings).filter(AIInstanceSettings.id == 1).first()
+    if settings is not None and settings.default_provider_id == provider_id:
+        settings.default_provider_id = None
+    for rule in db.query(AIPolicyRule).all():
+        if not rule.provider_ids or provider_id not in rule.provider_ids:
+            continue
+        remaining = [item for item in rule.provider_ids if item != provider_id]
+        if remaining:
+            rule.provider_ids = remaining
+        elif rule.effect == "allow":
+            # An empty allow list means "every provider", so drop the rule instead of widening access.
+            db.delete(rule)
+        else:
+            rule.provider_ids = remaining
+    db.delete(provider)
     db.commit()
     return Response(status_code=204)
 

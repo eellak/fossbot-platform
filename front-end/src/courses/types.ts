@@ -5,7 +5,7 @@ export type CourseVisibility = 'public' | 'unlisted';
 export type LessonEditorType = 'none' | 'python' | 'blockly';
 export type LessonStartMode = 'fresh' | 'inherit_previous_code';
 export type CompletionPolicy = 'self' | 'activity' | 'teacher_review' | 'hybrid';
-export type StageSourceType = 'default' | 'github' | 'marketplace';
+export type StageSourceType = 'default' | 'github' | 'marketplace' | 'local';
 
 export type TiptapNode = JSONContent;
 
@@ -203,6 +203,8 @@ export interface ReleaseLesson {
   starterContent?: string | Record<string, unknown> | null;
   simulatorSettings?: Record<string, unknown> | null;
   stageReference?: StageReference | null;
+  /** Local stage config embedded in the release so students can open it. */
+  stageConfig?: Array<Record<string, unknown>> | null;
   definitionHash: string;
 }
 

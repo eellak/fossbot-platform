@@ -70,7 +70,7 @@ Rich text accepts plain text or a constrained Tiptap document containing paragra
 
 ## Example content
 
-Development startup creates three idempotent public examples through the canonical course/lesson/publication functions when `SEED_DEV_SAMPLE_COURSE=true`:
+Development startup creates three idempotent public examples through the canonical course/lesson/publication functions when `SEED_DEV_SAMPLE_COURSE=true` and `DEV_SEED_ALLOWED=true`. `DEV_SEED_ALLOWED` is a second, explicit opt-in so a stray `SEED_DEV_SAMPLE_COURSE` in a deployed environment cannot create the predictable local test accounts; the dev compose defaults both to `true`.
 
 - **Getting Started with FOSSBot** — three lessons;
 - **Obstacle Navigation** — three lessons;

@@ -28,6 +28,8 @@ class PythonContext(StrictModel):
     selection: str = Field(default="", max_length=4_000)
     runtime_output: str = Field(default="", max_length=2_000)
     runtime_error: str = Field(default="", max_length=2_000)
+    runtime_source_fingerprint: Optional[str] = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    execution_target: Literal["simulation", "robot"] = "simulation"
     editor_type: Literal["python"] = "python"
     project_id: Optional[int] = Field(default=None, ge=1)
     release_id: Optional[int] = Field(default=None, ge=1)
@@ -45,6 +47,8 @@ class BlocklyContext(StrictModel):
     allowed_block_types: list[str] = Field(default_factory=list, max_length=128)
     runtime_output: str = Field(default="", max_length=2_000)
     runtime_error: str = Field(default="", max_length=2_000)
+    runtime_source_fingerprint: Optional[str] = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    execution_target: Literal["simulation", "robot"] = "simulation"
     editor_type: Literal["blockly"] = "blockly"
     project_id: Optional[int] = Field(default=None, ge=1)
     release_id: Optional[int] = Field(default=None, ge=1)
@@ -96,6 +100,11 @@ class AssistantRequest(StrictModel):
             raise ValueError("Unknown AI capability")
 
 
+class CodeValidationRequest(StrictModel):
+    surface: Literal["python", "blockly"]
+    content: str = Field(min_length=1, max_length=64_000)
+
+
 class LocalUsageReport(StrictModel):
     provider_id: int = Field(ge=1)
     capability: str = Field(min_length=1, max_length=80)
@@ -130,13 +139,13 @@ class ProviderStreamRequest(StrictModel):
     model: str
     system: str
     messages: list[ConversationTurn]
-    max_output_tokens: int = Field(default=1_024, ge=1, le=8_192)
+    max_output_tokens: int = Field(default=4_096, ge=1, le=8_192)
     response_schema: Optional[dict[str, Any]] = None
     deterministic: bool = False
 
 
 class StreamEvent(StrictModel):
-    type: Literal["start", "text_delta", "suggestion", "usage", "done", "error", "debug"]
+    type: Literal["start", "text_delta", "answer", "suggestion", "usage", "done", "error", "debug"]
     data: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -146,6 +155,27 @@ class PythonReplaceSuggestion(StrictModel):
     base_fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
     replacement: str = Field(max_length=12_000)
     summary: str = Field(min_length=1, max_length=1_000)
+
+
+class PythonEdit(StrictModel):
+    start_line: int = Field(ge=1, le=100_000)
+    end_line: int = Field(ge=1, le=100_000)
+    replacement: str = Field(default="", max_length=12_000)
+
+
+class PythonEditsSuggestion(StrictModel):
+    version: Literal["1"] = "1"
+    type: Literal["python_edits"]
+    base_fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
+    edits: list[PythonEdit] = Field(min_length=1, max_length=32)
+    summary: str = Field(min_length=1, max_length=1_000)
+
+
+class AssistantAnswer(StrictModel):
+    version: Literal["1"] = "1"
+    type: Literal["answer"]
+    base_fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
+    content: str = Field(min_length=1, max_length=8_000)
 
 
 class BlocklyReplaceSuggestion(StrictModel):
@@ -170,6 +200,7 @@ class LessonOperation(StrictModel):
     op: Literal[
         "update_course",
         "update_lesson",
+        "create_lesson",
         "insert_activity",
         "replace_activity",
         "remove_activity",
@@ -180,7 +211,9 @@ class LessonOperation(StrictModel):
     index: Optional[int] = Field(default=None, ge=0, le=255)
     course_patch: Optional[CourseAuthoringPatch] = None
     lesson_patch: Optional[LessonAuthoringPatch] = None
+    lesson_title: Optional[str] = Field(default=None, min_length=1, max_length=200)
     activity: Optional[dict[str, Any]] = None
+    activities: Optional[list[dict[str, Any]]] = Field(default=None, max_length=24)
     activity_keys: list[str] = Field(default_factory=list, max_length=256)
 
 

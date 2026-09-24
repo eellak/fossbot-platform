@@ -411,6 +411,8 @@ class LocalStage(Base):
     record_bytes = Column(Integer, nullable=False)
     revision = Column(Integer, nullable=False, default=1)
     checksum = Column(String(64), nullable=False)
+    preview_image = Column(LargeBinary)
+    preview_mime = Column(String(64))
     provenance = Column(JSON_DOCUMENT)
     created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow, nullable=False)

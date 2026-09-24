@@ -269,10 +269,18 @@ def assemble_context(db: Session, user: User, request: AssistantRequest) -> Asse
         expected = hashlib.sha256(surface.source.encode("utf-8")).hexdigest()
         if surface.source_fingerprint != expected:
             raise ContextError("Python source fingerprint is missing or stale")
+    if isinstance(surface, PythonContext) and (surface.runtime_output or surface.runtime_error):
+        expected = hashlib.sha256(surface.source.encode("utf-8")).hexdigest()
+        if surface.runtime_source_fingerprint != expected:
+            raise ContextError("Python runtime diagnostics are missing or stale")
     if isinstance(surface, BlocklyContext) and request.capability == "blockly.suggest_changes":
         expected = hashlib.sha256(surface.xml.encode("utf-8")).hexdigest()
         if surface.workspace_fingerprint != expected:
             raise ContextError("Blockly workspace fingerprint is missing or stale")
+    if isinstance(surface, BlocklyContext) and (surface.runtime_output or surface.runtime_error):
+        expected = hashlib.sha256(surface.generated_python.encode("utf-8")).hexdigest()
+        if surface.runtime_source_fingerprint != expected:
+            raise ContextError("Blockly runtime diagnostics are missing or stale")
     authoritative: dict[str, Any] = {}
     if isinstance(surface, LessonContext):
         authoritative = _load_authoring_course(db, user, surface)

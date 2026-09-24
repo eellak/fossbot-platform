@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useNotifications } from 'src/components/notifications/NotificationProvider';
 
 type PythonTerminalProps = {
   pythonScript: string;
@@ -9,6 +10,8 @@ type PythonTerminalProps = {
 
   
 const PythonTerminal: React.FC<PythonTerminalProps> = ({ pythonScript, onRunScript, sessionId }) => {
+    const { notify } = useNotifications();
+    const { t } = useTranslation();
     const [results, setResults] = useState<string[]>([]);
     const localStorageName = 'fossbot-platform';
     const [session_token, setSessionToken] = useState<string>(localStorage.getItem(localStorageName) || '');
@@ -35,7 +38,7 @@ const PythonTerminal: React.FC<PythonTerminalProps> = ({ pythonScript, onRunScri
     
     const runPythonScript = useCallback(async () => {
       if (pythonScript == '') {
-        alert('Please write a command in the Editor!');
+        notify(t('errors.noCommandError'), { severity: 'warning' });
         return;
       }
        

@@ -95,6 +95,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 
 REVOKED_ACCESS_MESSAGE = "Your access to the platform has been revoked."
+INACTIVE_ACCOUNT_MESSAGE = "Your account has not been activated."
 MARKETPLACE_ROLES = {"verifier", "moderator"}
 
 
@@ -242,6 +243,12 @@ def authenticate_user(db, username: str, password: str):
             detail=REVOKED_ACCESS_MESSAGE,
             headers={"WWW-Authenticate": "Bearer"},
         )
+    if not user.activated:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=INACTIVE_ACCOUNT_MESSAGE,
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     if not provider_allows_local_login(user.provider):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -369,12 +376,16 @@ def get_or_create_firebase_user(db, decoded_token, firebase_request: FirebaseTok
     if user:
         if user.access_revoked:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=REVOKED_ACCESS_MESSAGE)
+        if not user.activated:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=INACTIVE_ACCOUNT_MESSAGE)
         return update_firebase_user_metadata(db, user, display_name, email, firebase_uid, provider, photo_url)
 
     user = db.query(User).filter(User.email == email).first()
     if user:
         if user.access_revoked:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=REVOKED_ACCESS_MESSAGE)
+        if not user.activated:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=INACTIVE_ACCOUNT_MESSAGE)
 
         if user.firebase_uid == firebase_uid:
             return update_firebase_user_metadata(db, user, display_name, email, firebase_uid, provider, photo_url)
@@ -428,6 +439,8 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: SessionLocal
         raise credentials_exception
     if user.access_revoked:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=REVOKED_ACCESS_MESSAGE)
+    if not user.activated:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=INACTIVE_ACCOUNT_MESSAGE)
     return user
 
 
@@ -487,6 +500,8 @@ async def read_users_me(token: str = Depends(oauth2_scheme), db: SessionLocal = 
         raise credentials_exception
     if user.access_revoked:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=REVOKED_ACCESS_MESSAGE)
+    if not user.activated:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=INACTIVE_ACCOUNT_MESSAGE)
     return user_payload(db, user)
 
 @app.put("/users/me")
@@ -547,13 +562,23 @@ async def update_beta_tester_status(user_id: int, beta_tester_update: UpdateBeta
     return db_user
 
 @app.put("/users/{user_id}/activated")
-async def update_beta_tester_status(user_id: int, activated_update: UpdateActiavtedRequest, current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):
+async def update_activated_status(user_id: int, activated_update: UpdateActiavtedRequest, current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):
     if current_user.role != UserRole.ADMIN:
-        raise HTTPException(status_code=403, detail="Not authorized for this action: UPDATE BETA TESTER STATUS")
+        raise HTTPException(status_code=403, detail="Not authorized for this action: UPDATE ACTIVATION STATUS")
 
     db_user = db.query(User).filter(User.id == user_id).first()
     if db_user is None:
         raise HTTPException(status_code=404, detail="User not found in database")
+
+    if current_user.id == user_id and not activated_update.activated:
+        raise HTTPException(status_code=400, detail="Administrators cannot deactivate their own account")
+    if (
+        db_user.role == UserRole.ADMIN
+        and db_user.activated
+        and not activated_update.activated
+        and active_admin_count(db, lock=True) <= 1
+    ):
+        raise HTTPException(status_code=400, detail="The last active administrator cannot be deactivated")
 
     db_user.activated = activated_update.activated
 
@@ -570,6 +595,16 @@ async def update_user_role(user_id: int, user_role_update: UpdateUserRoleRequest
     db_user = db.query(User).filter(User.id == user_id).first()
     if db_user is None:
         raise HTTPException(status_code=404, detail="User not found in database")
+
+    if current_user.id == user_id and user_role_update.role != UserRole.ADMIN:
+        raise HTTPException(status_code=400, detail="Administrators cannot change their own role")
+    if (
+        db_user.role == UserRole.ADMIN
+        and user_role_update.role != UserRole.ADMIN
+        and db_user.activated
+        and active_admin_count(db, lock=True) <= 1
+    ):
+        raise HTTPException(status_code=400, detail="The last active administrator cannot be demoted")
 
     db_user.role = user_role_update.role
     if db_user.role == UserRole.ADMIN:
@@ -639,7 +674,8 @@ async def register_user(register_request: RegisterRequest, db: SessionLocal = De
                     hashed_password=hashed_password,
                     firstname=register_request.firstname,
                     lastname=register_request.lastname,
-                    email=email
+                    email=email,
+                    activated=True
                     )
 
     # Add new user to the database
@@ -666,6 +702,17 @@ def is_local_user(db_user: User) -> bool:
     return not db_user.firebase_uid and provider_is_local_only(db_user.provider)
 
 
+def active_admin_count(db: SessionLocal, lock: bool = False) -> int:
+    query = db.query(User).filter(
+        User.role == UserRole.ADMIN,
+        User.activated.is_(True),
+        User.access_revoked.is_(False),
+    )
+    if lock:
+        return len(query.with_for_update().all())
+    return query.count()
+
+
 @app.delete("/users/{user_id}")
 async def delete_user(
     user_id: int,
@@ -685,19 +732,31 @@ async def delete_user(
     if db_user is None:
         raise HTTPException(status_code=404, detail="User not found in database")
 
+    if current_user.id == user_id:
+        raise HTTPException(status_code=400, detail="Administrators cannot delete their own account")
+    if db_user.role == UserRole.ADMIN and db_user.activated and active_admin_count(db, lock=True) <= 1:
+        raise HTTPException(status_code=400, detail="The last active administrator cannot be deleted")
+
     if not is_local_user(db_user):
         raise HTTPException(
             status_code=400,
             detail="Only local accounts can be deleted from the admin panel.",
         )
 
-    db.delete(db_user)
-    db.commit()
+    try:
+        db.delete(db_user)
+        db.commit()
+    except IntegrityError as error:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This user owns or is referenced by platform data and cannot be deleted",
+        ) from error
     return {"detail": "User deleted"}
 
 @app.get("/projects/")
 async def read_own_projects(current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):
-    projects = db.query(Projects).filter(Projects.user_id == current_user.id).all()
+    projects = db.query(Projects).filter(Projects.user_id == current_user.id).order_by(Projects.date_created.desc(), Projects.id.desc()).all()
     return [project_payload(project) for project in projects]
 
 @app.post("/projects/")

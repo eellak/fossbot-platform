@@ -13,10 +13,13 @@ from database.database import (
     AIProviderConfig,
     Course,
     Lesson,
+    LocalStage,
     MarketplaceRoleAssignment,
+    Projects,
     User,
 )
 from utils.ai.capabilities import CAPABILITIES, CAPABILITY_REGISTRY_VERSION
+from utils.local_stage_storage import validate_local_stage_record
 
 logger = logging.getLogger("uvicorn")
 DEV_SAMPLE_TAG = "dev-education-sample"
@@ -67,6 +70,7 @@ DEV_SAMPLE_LESSONS_TAG = "education-lessons-sample"
 DEV_SAMPLE_MISSIONS_TAG = "education-missions-sample"
 EDUCATION_EXAMPLE_TAG = "education-examples"
 DEV_AI_PROVIDER_NAME = "FOSSBot deterministic test provider"
+DEV_SIMPLE_COURSE_TAG = "dev-simple-course"
 
 
 def seed_dev_ai_data(db: Session, admin_username: str) -> AIProviderConfig | None:
@@ -1045,6 +1049,400 @@ def seed_education_example_courses(db: Session, teacher_username: str = "dev_tea
     return examples
 
 
+def simple_course_definitions() -> list[dict]:
+    """Five minimal, publishable courses for local UI and API smoke testing."""
+    return [
+        {
+            "course": {
+                "title": "Robot Basics",
+                "description": "A short introduction to moving the FOSSBot with single steps.",
+                "learning_objectives": ["Run a Python program", "Move the robot one step forward"],
+                "visibility": "public",
+                "tags": [DEV_SIMPLE_COURSE_TAG, "basics"],
+                "age_range": "8–12",
+                "difficulty": "Beginner",
+                "estimated_duration_minutes": 15,
+                "prerequisites": "None.",
+            },
+            "lessons": [
+                {
+                    "lessonKey": "simple-basics-forward",
+                    "title": "Move forward",
+                    "activities": rich_text_activity(
+                        "simple-basics-forward-intro",
+                        "Run the starter program and watch the robot move one step forward.",
+                    ),
+                    "completion_policy": "self",
+                    "editor_type": "python",
+                    "starter_content": "move_step('forward')\n",
+                    "simulator_settings": {"showSimulator": True},
+                    "stageReference": {"sourceType": "default", "title": "White field", "url": "/js-simulator/stages/stage_white_rect.json"},
+                }
+            ],
+        },
+        {
+            "course": {
+                "title": "Turns and Loops",
+                "description": "Combine turns and a loop to drive a square path.",
+                "learning_objectives": ["Turn the robot 90 degrees", "Repeat commands with a loop"],
+                "visibility": "public",
+                "tags": [DEV_SIMPLE_COURSE_TAG, "loops"],
+                "age_range": "9–13",
+                "difficulty": "Beginner",
+                "estimated_duration_minutes": 20,
+                "prerequisites": "Robot Basics.",
+            },
+            "lessons": [
+                {
+                    "lessonKey": "simple-loops-square",
+                    "title": "Drive a square",
+                    "activities": rich_text_activity(
+                        "simple-loops-square-intro",
+                        "Complete the loop so the robot returns to where it started.",
+                    ),
+                    "completion_policy": "self",
+                    "editor_type": "python",
+                    "starter_content": "for side in range(4):\n    move_step('forward')\n",
+                    "simulator_settings": {"showSimulator": True},
+                    "stageReference": {"sourceType": "default", "title": "White field", "url": "/js-simulator/stages/stage_white_rect.json"},
+                }
+            ],
+        },
+        {
+            "course": {
+                "title": "Blockly Starter",
+                "description": "A first visual program built from movement blocks.",
+                "learning_objectives": ["Drag and connect Blockly blocks", "Run a visual program"],
+                "visibility": "public",
+                "tags": [DEV_SIMPLE_COURSE_TAG, "blockly"],
+                "age_range": "8–12",
+                "difficulty": "Beginner",
+                "estimated_duration_minutes": 15,
+                "prerequisites": "None.",
+            },
+            "lessons": [
+                {
+                    "lessonKey": "simple-blockly-move",
+                    "title": "Build a movement program",
+                    "activities": rich_text_activity(
+                        "simple-blockly-move-intro",
+                        "Rearrange the starter blocks so the robot moves forward twice.",
+                    ),
+                    "completion_policy": "self",
+                    "editor_type": "blockly",
+                    "starter_content": {
+                        "xml": '<xml xmlns="https://developers.google.com/blockly/xml"><block type="move_step" x="48" y="48"><field name="option">\'forward\'</field></block></xml>',
+                    },
+                    "simulator_settings": {"showSimulator": True},
+                    "stageReference": {"sourceType": "default", "title": "White field", "url": "/js-simulator/stages/stage_white_rect.json"},
+                }
+            ],
+        },
+        {
+            "course": {
+                "title": "Light and Sound",
+                "description": "Use the LED and buzzer to give the robot feedback.",
+                "learning_objectives": ["Set the LED colour", "Play a short beep"],
+                "visibility": "public",
+                "tags": [DEV_SIMPLE_COURSE_TAG, "actuators"],
+                "age_range": "10–14",
+                "difficulty": "Beginner",
+                "estimated_duration_minutes": 20,
+                "prerequisites": "Robot Basics.",
+            },
+            "lessons": [
+                {
+                    "lessonKey": "simple-actuators-signal",
+                    "title": "Signal with light and sound",
+                    "activities": rich_text_activity(
+                        "simple-actuators-signal-intro",
+                        "Light the LED, beep once, and then turn the light off again.",
+                    ),
+                    "completion_policy": "self",
+                    "editor_type": "python",
+                    "starter_content": "set_led('green')\nbeep(440, 300)\nset_led('off')\n",
+                    "simulator_settings": {"showSimulator": True},
+                    "stageReference": {"sourceType": "default", "title": "White field", "url": "/js-simulator/stages/stage_white_rect.json"},
+                }
+            ],
+        },
+        {
+            "course": {
+                "title": "Mind the Wall",
+                "description": "Read the distance sensor and stop before the wall.",
+                "learning_objectives": ["Read the front distance", "Stop the robot in time"],
+                "visibility": "public",
+                "tags": [DEV_SIMPLE_COURSE_TAG, "sensors"],
+                "age_range": "10–14",
+                "difficulty": "Intermediate",
+                "estimated_duration_minutes": 25,
+                "prerequisites": "Turns and Loops.",
+            },
+            "lessons": [
+                {
+                    "lessonKey": "simple-sensors-distance",
+                    "title": "Stop at the wall",
+                    "activities": rich_text_activity(
+                        "simple-sensors-distance-intro",
+                        "Print the front distance, then stop the robot before it touches the wall.",
+                    ),
+                    "completion_policy": "self",
+                    "editor_type": "python",
+                    "starter_content": "print(get_distance())\n",
+                    "simulator_settings": {"showSimulator": True},
+                    "stageReference": {"sourceType": "default", "title": "Maze", "url": "/js-simulator/stages/stage_maze.json"},
+                }
+            ],
+        },
+    ]
+
+
+def seed_dev_simple_courses(db: Session, admin_username: str) -> list[Course]:
+    """Create and publish five minimal courses for development browsing."""
+    from routers.courses import CourseCreate, LessonCreate, add_lesson, create_course, publish_course
+
+    admin = db.query(User).filter(User.username == admin_username).first()
+    if admin is None:
+        raise RuntimeError(f"Simple course seed requires user {admin_username!r}")
+
+    created: list[Course] = []
+    for definition in simple_course_definitions():
+        title = definition["course"]["title"]
+        existing = next(
+            (
+                course
+                for course in db.query(Course).filter(Course.author_id == admin.id).all()
+                if DEV_SIMPLE_COURSE_TAG in (course.tags or []) and course.title == title
+            ),
+            None,
+        )
+        if existing:
+            created.append(existing)
+            continue
+        result = create_course(CourseCreate.model_validate(definition["course"]), admin, db)
+        for lesson in definition["lessons"]:
+            add_lesson(result["id"], LessonCreate.model_validate(lesson), admin, db)
+        publish_course(result["id"], admin, db)
+        created.append(db.query(Course).filter(Course.id == result["id"]).one())
+    logger.info("Simple dev courses ready: %s", ", ".join(str(course.id) for course in created))
+    return created
+
+
+def simple_project_definitions() -> list[dict]:
+    """Six tiny starter projects, two visual and four Python."""
+    return [
+        {
+            "name": "Hello Robot",
+            "description": "Move one step forward.",
+            "project_type": "python",
+            "code": "move_step('forward')\n",
+        },
+        {
+            "name": "Square Dance",
+            "description": "Drive a square with a loop.",
+            "project_type": "python",
+            "code": "for side in range(4):\n    move_step('forward')\n    turn_left(90)\n",
+        },
+        {
+            "name": "Blinky Lights",
+            "description": "Colour the LED and beep.",
+            "project_type": "python",
+            "code": "set_led('blue')\nbeep(660, 250)\nset_led('off')\n",
+        },
+        {
+            # The [mock:edits] marker makes the deterministic test provider return four premade
+            # python_edits, so the review UX can be exercised without spending provider tokens.
+            "name": "Buddy review sample",
+            "description": "A search program paired with four premade line edits.",
+            "project_type": "python",
+            "code": (
+                "# [mock:edits] Search for the gem, then celebrate.\n"
+                "import time\n"
+                "\n"
+                "OBSTACLE_THRESHOLD = 0.3\n"
+                "SEARCH_STEPS = 200\n"
+                "\n"
+                "def read_distance():\n"
+                "    return get_obstacle_distance()\n"
+                "\n"
+                "def found_gem():\n"
+                "    distance = read_distance()\n"
+                "    if distance < OBSTACLE_THRESHOLD:\n"
+                "        print(\"Gem nearby\")\n"
+                "        return True\n"
+                "    return False\n"
+                "\n"
+                "def search():\n"
+                "    for _ in range(SEARCH_STEPS):\n"
+                "        if found_gem():\n"
+                "            rgb_set_color(\"green\")\n"
+                "            buzzer_beep(880, 200)\n"
+                "            return True\n"
+                "        move_step(\"forward\")\n"
+                "        time.sleep(0.05)\n"
+                "    return False\n"
+                "\n"
+                "search()\n"
+            ),
+        },
+        {
+            "name": "Blockly Dance",
+            "description": "A short visual movement program.",
+            "project_type": "blockly",
+            "code": '<xml xmlns="https://developers.google.com/blockly/xml"><block type="move_step" x="48" y="48"><field name="option">\'forward\'</field></block></xml>',
+        },
+        {
+            "name": "Blockly Turns",
+            "description": "A visual program that turns in place.",
+            "project_type": "blockly",
+            "code": '<xml xmlns="https://developers.google.com/blockly/xml"><block type="turn_left" x="48" y="48"><field name="angle">90</field></block></xml>',
+        },
+    ]
+
+
+def seed_dev_simple_projects(db: Session, admin_username: str) -> list[Projects]:
+    """Create the small sample projects owned by the development administrator."""
+    admin = db.query(User).filter(User.username == admin_username).first()
+    if admin is None:
+        raise RuntimeError(f"Simple project seed requires user {admin_username!r}")
+
+    existing = {
+        project.name: project
+        for project in db.query(Projects).filter(Projects.user_id == admin.id).all()
+    }
+    created: list[Projects] = []
+    for definition in simple_project_definitions():
+        if definition["name"] in existing:
+            created.append(existing[definition["name"]])
+            continue
+        project = Projects(user_id=admin.id, **definition)
+        db.add(project)
+        created.append(project)
+    db.commit()
+    for project in created:
+        db.refresh(project)
+    logger.info("Simple dev projects ready: %s", ", ".join(str(project.id) for project in created))
+    return created
+
+
+def _simple_stage_record(title: str, description: str, entries: list[dict]) -> dict:
+    return {
+        "title": title,
+        "description": description,
+        "config": [
+            {
+                "type": "floor",
+                "dimensions": [10, 10],
+                "material": {"color": "dodgerblue"},
+                "name": "floor",
+            },
+            *entries,
+        ],
+    }
+
+
+def simple_stage_definitions() -> list[dict]:
+    """Five minimal local stages built from basic stage-builder primitives."""
+    def cube(name, position, color, dimensions=(1, 1, 1)):
+        return {
+            "type": "cube",
+            "name": name,
+            "position": position,
+            "dimensions": list(dimensions),
+            "material": {"color": color},
+            "castShadow": True,
+        }
+
+    def cylinder(name, position, color, dimensions=(0.15, 0.15, 0.3, 32)):
+        return {
+            "type": "cylinder",
+            "name": name,
+            "position": position,
+            "dimensions": list(dimensions),
+            "material": {"color": color},
+            "castShadow": True,
+        }
+
+    return [
+        {
+            "slug": "dev-simple-empty-field",
+            "title": "Empty field",
+            "description": "A plain floor with nothing to avoid.",
+            "entries": [],
+        },
+        {
+            "slug": "dev-simple-single-wall",
+            "title": "Single wall",
+            "description": "One wall for a stop-before-collision test.",
+            "entries": [cube("wall", [0, 0.5, -2], "#607d8b", [4, 1, 0.2])],
+        },
+        {
+            "slug": "dev-simple-two-pillars",
+            "title": "Two pillars",
+            "description": "Two round obstacles to drive between.",
+            "entries": [
+                cylinder("pillar-one", [-1.5, 0.15, 0], "#7e57c2"),
+                cylinder("pillar-two", [1.5, 0.15, 0], "#7e57c2"),
+            ],
+        },
+        {
+            "slug": "dev-simple-ramp-start",
+            "title": "Ramp start",
+            "description": "A gentle wedge ramp next to a marker tile.",
+            "entries": [
+                cube("ramp", [0, 0.15, -1.5], "#ffb020", [1.5, 0.3, 1.5]),
+                cube("marker", [2, 0.01, 0], "#43a047", [0.5, 0.02, 0.5]),
+            ],
+        },
+        {
+            "slug": "dev-simple-target-practice",
+            "title": "Target practice",
+            "description": "A green target area and a couple of blocks.",
+            "entries": [
+                cube("target", [2, 0.01, -2], "#43a047", [0.6, 0.02, 0.6]),
+                cube("block-one", [0.5, 0.15, 0.5], "#f57c00", [0.3, 0.3, 0.3]),
+                cube("block-two", [-0.5, 0.15, -0.5], "#f57c00", [0.3, 0.3, 0.3]),
+            ],
+        },
+    ]
+
+
+def seed_dev_simple_stages(db: Session, admin_username: str) -> list[LocalStage]:
+    """Create five small local stages owned by the development administrator."""
+    admin = db.query(User).filter(User.username == admin_username).first()
+    if admin is None:
+        raise RuntimeError(f"Simple stage seed requires user {admin_username!r}")
+
+    existing = {
+        stage.slug: stage
+        for stage in db.query(LocalStage).filter(LocalStage.user_id == admin.id).all()
+    }
+    created: list[LocalStage] = []
+    for definition in simple_stage_definitions():
+        if definition["slug"] in existing:
+            created.append(existing[definition["slug"]])
+            continue
+        record = _simple_stage_record(definition["title"], definition["description"], definition["entries"])
+        record_bytes, checksum = validate_local_stage_record(record)
+        stage = LocalStage(
+            user_id=admin.id,
+            slug=definition["slug"],
+            title=definition["title"],
+            description=definition["description"],
+            visibility="private",
+            record=record,
+            record_bytes=record_bytes,
+            checksum=checksum,
+        )
+        db.add(stage)
+        created.append(stage)
+    db.commit()
+    for stage in created:
+        db.refresh(stage)
+    logger.info("Simple dev stages ready: %s", ", ".join(str(stage.id) for stage in created))
+    return created
+
+
 def add_missing_activity_lessons(db: Session, course: Course) -> int:
     existing_lessons = db.query(Lesson).filter(Lesson.course_id == course.id).all()
     existing_keys = {lesson.lesson_key for lesson in existing_lessons}
@@ -1231,9 +1629,18 @@ def seed_dev_sample_course(db: Session, admin_username: str) -> Course:
     return course
 
 
-def seed_dev_data(db: Session, admin_username: str, test_user_password: str) -> Course:
+def seed_dev_data(db: Session, admin_username: str, test_user_password: str) -> Course | None:
+    # Defense in depth: the caller already gates this behind SEED_DEV_SAMPLE_COURSE,
+    # but the seed must never create predictable local accounts in a deployed
+    # environment. Require a second, explicit opt-in that production does not set.
+    if os.getenv("DEV_SEED_ALLOWED", "false").lower() not in {"1", "true", "yes"}:
+        logger.warning("Development seed skipped: set DEV_SEED_ALLOWED=true to enable it.")
+        return None
     seed_dev_test_users(db, test_user_password)
     seed_dev_ai_data(db, admin_username)
     sample = seed_dev_sample_course(db, admin_username)
     seed_education_example_courses(db)
+    seed_dev_simple_courses(db, admin_username)
+    seed_dev_simple_projects(db, admin_username)
+    seed_dev_simple_stages(db, admin_username)
     return sample

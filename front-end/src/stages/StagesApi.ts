@@ -1,6 +1,6 @@
 import type { LocalStageRecord } from 'src/components/stage-builder/types';
 
-const backendUrl: string = process.env.REACT_APP_BACKEND_URL;
+import { backendUrl } from '../utils/backendUrl';
 
 export type ProviderRepoVisibility = 'public' | 'private';
 

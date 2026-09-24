@@ -121,9 +121,28 @@ class HostedProvider(ABC):
             return
         retryable = response.status_code in {408, 409, 429} or response.status_code >= 500
         code = "provider_rate_limited" if response.status_code == 429 else "provider_rejected"
+        details: dict[str, Any] = {}
+        try:
+            body = await response.aread()
+            payload = json.loads(body)
+        except (ValueError, RuntimeError, httpx.HTTPError):
+            payload = None
+        if isinstance(payload, dict):
+            upstream = payload.get("error") if isinstance(payload.get("error"), dict) else payload
+            if isinstance(upstream, dict):
+                fields = {
+                    "upstreamCode": upstream.get("code"),
+                    "upstreamType": upstream.get("type"),
+                    "upstreamParam": upstream.get("param"),
+                }
+                details.update({key: value for key, value in fields.items() if isinstance(value, (str, int, float, bool))})
+                message = upstream.get("message")
+                if isinstance(message, str) and message.strip():
+                    details["upstreamMessage"] = message.strip()[:500]
         raise ProviderError(
             code,
             "The AI provider rejected the request.",
             retryable=retryable,
             status_code=response.status_code,
+            details=details,
         )

@@ -21,6 +21,13 @@ describe('parseAIStreamFrame', () => {
     });
   });
 
+  it('parses a model-selected answer event', () => {
+    expect(parseAIStreamFrame('event: answer\ndata: {"text":"This loop runs three times."}')).toEqual({
+      type: 'answer',
+      data: { text: 'This loop runs three times.' },
+    });
+  });
+
   it.each([
     'data: {"text":"missing event"}',
     'event: unknown\ndata: {}',

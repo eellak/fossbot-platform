@@ -15,6 +15,7 @@ import {
   Typography,
 } from '@mui/material';
 import GitHubIcon from '@mui/icons-material/GitHub';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import PublicIcon from '@mui/icons-material/Public';
 import StorageIcon from '@mui/icons-material/Storage';
 import { useAuth } from 'src/authentication/AuthProvider';
@@ -22,10 +23,13 @@ import { resolveStageAssetUrl, stageAssetBaseUrlFromStageUrl } from 'src/simulat
 import type { MarketplaceStageEntry } from 'src/stages/MarketplaceApi';
 import { loadStageFromProvider, type ProviderStageListItem } from 'src/stages/StagesApi';
 import { marketplaceFirstPageSnapshot, refreshMarketplaceFirstPage, refreshUserStages, stageListUserKey, subscribeMarketplaceFirstPage, subscribeUserStages, userStagesSnapshot } from 'src/stages/stageListCache';
-import { GitHubIdentity, StageCard, StageCardSkeleton } from 'src/stages/StageCard';
+import { GitHubIdentity } from 'src/stages/StageCard';
+import StageListCard, { StageListCardSkeleton } from 'src/stages/StageListCard';
+import StageDetailsDialog, { LocalStageDetailsDialog } from 'src/stages/StageDetailsDialog';
+import { useStagePreviews } from 'src/stages/useStagePreviews';
 import { getGitHubLoginUrl, getGitHubProviderStatus, type GitHubProviderStatus } from 'src/stages/ProviderAuthApi';
 import { MARKETPLACE_COPY } from 'src/stages/marketplaceCopy';
-import { listLocalStages, loadLocalStage, type LocalStage } from 'src/stages/LocalStagesApi';
+import { listLocalStages, loadLocalStage, type LocalStageSummary } from 'src/stages/LocalStagesApi';
 import { useFeatureFlags } from 'src/config/FeatureFlags';
 
 export type StageSelectionSource = 'default' | 'local' | 'github' | 'marketplace';
@@ -55,7 +59,6 @@ interface CardDialogProps {
   onSelect: (url: string) => void | Promise<void>;
   onSelectStage?: (stage: StageSelection) => void | Promise<void>;
   onCreateStage?: () => void;
-  stageActionLabel?: string;
 }
 
 const defaultStages: DefaultStageOption[] = [
@@ -150,14 +153,17 @@ function emitStageSelection(stage: StageSelection): void {
   window.dispatchEvent(new CustomEvent<StageSelection>('fossbot:stage-selected', { detail: stage }));
 }
 
-const CardDialog: React.FC<CardDialogProps> = ({ open, onClose, onSelect, onSelectStage, onCreateStage, stageActionLabel = 'Select' }) => {
+const CardDialog: React.FC<CardDialogProps> = ({ open, onClose, onSelect, onSelectStage, onCreateStage }) => {
   const { token, user } = useAuth();
   const { marketplace: marketplaceEnabled } = useFeatureFlags();
   const userKey = stageListUserKey(user);
   const [tab, setTab] = useState<StageSelectionSource>('default');
   const [userStages, setUserStages] = useState<ProviderStageListItem[]>([]);
-  const [localStages, setLocalStages] = useState<LocalStage[]>([]);
+  const [localStages, setLocalStages] = useState<LocalStageSummary[]>([]);
   const [marketplaceStages, setMarketplaceStages] = useState<MarketplaceStageEntry[]>([]);
+  const localPreviews = useStagePreviews(token, localStages.map((stage) => stage.previewUrl));
+  const [detailsStage, setDetailsStage] = useState<LocalStageSummary | null>(null);
+  const [detailsBuiltin, setDetailsBuiltin] = useState<DefaultStageOption | null>(null);
   const [userLoading, setUserLoading] = useState(false);
   const [localLoading, setLocalLoading] = useState(false);
   const [marketplaceLoading, setMarketplaceLoading] = useState(false);
@@ -246,7 +252,7 @@ const CardDialog: React.FC<CardDialogProps> = ({ open, onClose, onSelect, onSele
     marketplace: marketplaceStages.length,
   }), [localStages.length, marketplaceStages.length, userStages.length]);
 
-  const handleLocalSelect = async (stage: LocalStage) => {
+  const handleLocalSelect = async (stage: LocalStageSummary) => {
     const selection = {
       sourceType: 'local' as const,
       localStageId: stage.id,
@@ -336,6 +342,7 @@ const CardDialog: React.FC<CardDialogProps> = ({ open, onClose, onSelect, onSele
   };
 
   return (
+    <>
     <Dialog open={open} onClose={onClose} maxWidth="lg" fullWidth>
       <DialogTitle>Select a stage</DialogTitle>
       <DialogContent>
@@ -346,10 +353,16 @@ const CardDialog: React.FC<CardDialogProps> = ({ open, onClose, onSelect, onSele
         </Tabs>
 
         {tab === 'default' && (
-          <Grid container spacing={2}>
+          <Grid container spacing={1.25}>
             {defaultStages.map((stage) => (
-              <Grid key={stage.url} item xs={12} sm={6} md={3}>
-                <StageCard title={stage.title} description={stage.description} previewUrl={stage.image} actionLabel={stageActionLabel} onAction={() => handleDefaultSelect(stage)} />
+              <Grid key={stage.url} item xs={12} md={6}>
+                <StageListCard
+                  title={stage.title}
+                  description={stage.description}
+                  previewUrl={stage.image}
+                  onOpen={() => handleDefaultSelect(stage)}
+                  action={<Button size="small" variant="outlined" startIcon={<InfoOutlinedIcon fontSize="small" />} onClick={() => setDetailsBuiltin(stage)}>Details</Button>}
+                />
               </Grid>
             ))}
           </Grid>
@@ -361,18 +374,18 @@ const CardDialog: React.FC<CardDialogProps> = ({ open, onClose, onSelect, onSele
               <Typography variant="subtitle2" sx={{ mb: 1 }}>Local stages</Typography>
               {localError && <Alert severity={localStages.length ? "warning" : "error"}>{localError}</Alert>}
               {localLoading ? (
-                <Grid container spacing={2}>{Array.from({ length: 3 }).map((_, item) => <Grid key={item} item xs={12} sm={6} md={4}><StageCardSkeleton /></Grid>)}</Grid>
+                <Grid container spacing={1.25}>{Array.from({ length: 3 }).map((_, item) => <Grid key={item} item xs={12} md={6}><StageListCardSkeleton /></Grid>)}</Grid>
               ) : localStages.length ? (
-                <Grid container spacing={2}>
+                <Grid container spacing={1.25}>
                   {localStages.map((stage) => (
-                    <Grid key={`local:${stage.id}`} item xs={12} sm={6} md={4}>
-                      <StageCard
+                    <Grid key={`local:${stage.id}`} item xs={12} md={6}>
+                      <StageListCard
                         title={stage.title}
-                        description={stage.description || 'Saved to your FOSSBot account'}
-                        metadata={<Typography variant="caption" color="text.secondary">Revision {stage.revision} · {(stage.recordBytes / 1024).toFixed(1)} KiB</Typography>}
-                        badges={<Chip size="small" icon={<StorageIcon />} label="Local" variant="outlined" />}
-                        actionLabel={stageActionLabel}
-                        onAction={() => handleLocalSelect(stage)}
+                        description={stage.description}
+                        previewUrl={stage.previewUrl ? localPreviews[stage.previewUrl] : undefined}
+                        meta={`v${stage.revision}\u00A0\u00A0${(stage.recordBytes / 1024).toFixed(1)} KiB`}
+                        onOpen={() => handleLocalSelect(stage)}
+                        action={<Button size="small" variant="outlined" startIcon={<InfoOutlinedIcon fontSize="small" />} onClick={() => setDetailsStage(stage)}>Details</Button>}
                       />
                     </Grid>
                   ))}
@@ -389,24 +402,24 @@ const CardDialog: React.FC<CardDialogProps> = ({ open, onClose, onSelect, onSele
             )}
             {userError && <Alert severity={userStages.length ? "warning" : "error"}>{userError}</Alert>}
             {userLoading || providerLoading ? (
-              <Grid container spacing={2}>{Array.from({ length: 6 }).map((_, item) => <Grid key={item} item xs={12} sm={6} md={4}><StageCardSkeleton /></Grid>)}</Grid>
+              <Grid container spacing={1.25}>{Array.from({ length: 6 }).map((_, item) => <Grid key={item} item xs={12} md={6}><StageListCardSkeleton /></Grid>)}</Grid>
             ) : providerStatus?.connected && !providerStatus.needsReconnect && userStages.length ? (
-              <Grid container spacing={2}>
+              <Grid container spacing={1.25}>
                 {userStages.map((stage) => (
-                    <Grid key={`${stage.repoOwner}/${stage.repoName}`} item xs={12} sm={6} md={4}>
-                      <StageCard
+                    <Grid key={`${stage.repoOwner}/${stage.repoName}`} item xs={12} md={6}>
+                      <StageListCard
                         title={stage.title || stage.repoName}
-                        description={stage.description || `${stage.repoOwner}/${stage.repoName}`}
-                        metadata={<GitHubIdentity username={stage.repoOwner} />}
-                        badges={<Chip size="small" label={stage.private ? 'Private' : 'Public'} color={stage.private ? 'warning' : 'success'} variant="outlined" />}
-                        actionLabel={stageActionLabel}
-                        onAction={() => handleUserSelect(stage)}
+                        description={stage.description}
+                        fallbackIcon={<GitHubIcon fontSize="small" />}
+                        meta={<GitHubIdentity username={stage.repoOwner} />}
+                        status={<Chip size="small" label={stage.private ? 'Private' : 'Public'} color={stage.private ? 'warning' : 'success'} variant="outlined" />}
+                        onOpen={() => handleUserSelect(stage)}
                       />
                     </Grid>
                 ))}
               </Grid>
             ) : token && providerStatus?.connected && !providerStatus.needsReconnect ? (
-              <Box sx={{ py: 3, textAlign: 'center' }}><Typography variant="subtitle1" fontWeight={800}>No saved stages yet</Typography><Typography variant="body2" color="text.secondary">Create one in Stage Builder.</Typography></Box>
+              <Box sx={{ py: 3, textAlign: 'center' }}><Typography variant="subtitle1" fontWeight={600}>No saved stages yet</Typography><Typography variant="body2" color="text.secondary">Create one in Stage Builder.</Typography></Box>
             ) : null}
           </Stack>
         )}
@@ -415,25 +428,24 @@ const CardDialog: React.FC<CardDialogProps> = ({ open, onClose, onSelect, onSele
           <Stack spacing={2}>
             {marketplaceError && <Alert severity={marketplaceStages.length ? "warning" : "error"}>{marketplaceError}</Alert>}
             {marketplaceLoading ? (
-              <Grid container spacing={2}>{Array.from({ length: 6 }).map((_, item) => <Grid key={item} item xs={12} sm={6} md={4}><StageCardSkeleton /></Grid>)}</Grid>
+              <Grid container spacing={1.25}>{Array.from({ length: 6 }).map((_, item) => <Grid key={item} item xs={12} md={6}><StageListCardSkeleton /></Grid>)}</Grid>
             ) : marketplaceStages.length ? (
-              <Grid container spacing={2}>
+              <Grid container spacing={1.25}>
                 {marketplaceStages.map((stage) => (
-                  <Grid key={stage.entryId || `${stage.repoOwner}/${stage.repoName}`} item xs={12} sm={6} md={4}>
-                    <StageCard
+                  <Grid key={stage.entryId || `${stage.repoOwner}/${stage.repoName}`} item xs={12} md={6}>
+                    <StageListCard
                       title={stage.title}
-                      description={stage.description || `${stage.repoOwner}/${stage.repoName}`}
+                      description={stage.description}
                       previewUrl={stage.previewUrl}
-                      metadata={stage.author?.platformUsername ? <Typography variant="caption" color="text.secondary">@{stage.author.platformUsername}</Typography> : <GitHubIdentity username={stage.author?.githubUsername || stage.repoOwner} />}
-                      badges={<Stack direction="row" spacing={0.5}><Chip size="small" icon={stage.sourceType === 'local' ? <StorageIcon /> : <PublicIcon />} label={stage.sourceType === 'local' ? 'Local' : stage.badges?.verified ? 'Verified' : 'Published'} color={stage.badges?.verified ? 'primary' : 'default'} variant="outlined" />{stage.badges?.github && <Chip size="small" icon={<GitHubIcon />} label="GitHub source" variant="outlined" />}</Stack>}
-                      actionLabel={stageActionLabel}
-                      onAction={() => handleMarketplaceSelect(stage)}
+                      meta={stage.author?.platformUsername ? `@${stage.author.platformUsername}` : <GitHubIdentity username={stage.author?.githubUsername || stage.repoOwner} />}
+                      status={<Stack direction="row" spacing={0.5}><Chip size="small" icon={stage.sourceType === 'local' ? <StorageIcon /> : <PublicIcon />} label={stage.sourceType === 'local' ? 'Local' : stage.badges?.verified ? 'Verified' : 'Published'} color={stage.badges?.verified ? 'primary' : 'default'} variant="outlined" />{stage.badges?.github && <Chip size="small" icon={<GitHubIcon />} label="GitHub source" variant="outlined" />}</Stack>}
+                      onOpen={() => handleMarketplaceSelect(stage)}
                     />
                   </Grid>
                 ))}
               </Grid>
             ) : (
-              <Box sx={{ py: 3, textAlign: 'center' }}><Typography variant="subtitle1" fontWeight={800}>No marketplace stages yet</Typography><Typography variant="body2" color="text.secondary">Check again after stages have been published.</Typography></Box>
+              <Box sx={{ py: 3, textAlign: 'center' }}><Typography variant="subtitle1" fontWeight={600}>No marketplace stages yet</Typography><Typography variant="body2" color="text.secondary">Check again after stages have been published.</Typography></Box>
             )}
           </Stack>
         )}
@@ -443,6 +455,25 @@ const CardDialog: React.FC<CardDialogProps> = ({ open, onClose, onSelect, onSele
         <Button variant="contained" onClick={onCreateStage}>Create blank stage</Button>
       </DialogActions>}
     </Dialog>
+    {detailsStage && token && (
+      <LocalStageDetailsDialog
+        stage={detailsStage}
+        token={token}
+        onClose={() => setDetailsStage(null)}
+        previewUrl={detailsStage.previewUrl ? localPreviews[detailsStage.previewUrl] : undefined}
+      />
+    )}
+    {detailsBuiltin && (
+      <StageDetailsDialog
+        open
+        onClose={() => setDetailsBuiltin(null)}
+        title={detailsBuiltin.title}
+        description={detailsBuiltin.description}
+        previewUrl={detailsBuiltin.image}
+        rows={[['Source', 'Built-in stage'], ['Stage file', detailsBuiltin.url]]}
+      />
+    )}
+    </>
   );
 };
 

@@ -3,13 +3,13 @@ import * as THREE from 'three';
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { Alert, Box, Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Paper, Snackbar, Stack, Typography } from '@mui/material';
+import { Alert, Box, Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Drawer, Paper, Stack, Typography, useMediaQuery } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from 'src/authentication/AuthProvider';
 import type { EditorStage, EditorStageObject, StageBuilderMode, StageLabelAttachment, StageSemanticKind, Vec3 } from 'src/components/stage-builder/types';
 import { downloadStageJson, makeLocalStageId, stageRecordFromImportedJson } from 'src/components/stage-builder/localStages';
-import { StageBuilderScene, type StageBuilderCameraView, type StageBuilderTransformMode } from 'src/components/stage-builder/StageBuilderScene';
+import { StageBuilderScene, type StageBuilderCameraView, type StageBuilderSceneHandle, type StageBuilderTransformMode } from 'src/components/stage-builder/StageBuilderScene';
 import { configToEditorStage, createDemoEditorStage, DEFAULT_STAGE_FLOOR, DEFAULT_STAGE_METADATA, editorStageToRecord } from 'src/components/stage-builder/serialize';
 import {
   defaultStageBuilderPreferences,
@@ -41,11 +41,13 @@ import { SaveToProviderDialog, type SaveToProviderValues } from 'src/stages/Save
 import { OpenFromProviderDialog } from 'src/stages/OpenFromProviderDialog';
 import { getMarketplaceStageStatus, publishStageToMarketplace, MarketplaceRequestError, type MarketplaceStageStatusResponse, type PublishMarketplaceResponse } from 'src/stages/MarketplaceApi';
 import { PublishToMarketplaceDialog, type PublishMarketplaceValues } from 'src/stages/PublishToMarketplaceDialog';
-import { invalidateMarketplaceFirstPage, invalidateMyMarketplaceStages, invalidateUserStages, refreshMarketplaceFirstPage, refreshMyMarketplaceStages, refreshUserStages, stageListUserKey, subscribeUserStages, userStagesSnapshot } from 'src/stages/stageListCache';
-import { createLocalStage, listLocalStages, loadLocalStage, LocalStageRequestError, publishLocalStage, updateLocalStage, type LocalPublicationSubmissionSummary, type LocalStage } from 'src/stages/LocalStagesApi';
+import { invalidateLocalStages, invalidateMarketplaceFirstPage, invalidateMyMarketplaceStages, invalidateUserStages, refreshMarketplaceFirstPage, refreshMyMarketplaceStages, refreshUserStages, stageListUserKey, subscribeUserStages, userStagesSnapshot } from 'src/stages/stageListCache';
+import { createLocalStage, listLocalStages, loadLocalStage, LocalStageRequestError, publishLocalStage, updateLocalStage, type LocalPublicationSubmissionSummary, type LocalStage, type LocalStageSummary } from 'src/stages/LocalStagesApi';
 import { OpenLocalStageDialog } from 'src/stages/OpenLocalStageDialog';
 import { useFeatureFlags } from 'src/config/FeatureFlags';
 import StageAuthoringAssistant from 'src/components/ai/StageAuthoringAssistant';
+import { useNotifications } from 'src/components/notifications/NotificationProvider';
+import { useConfirmDialog } from 'src/components/shared/ConfirmDialog';
 import type { StageAuthoringTarget } from 'src/ai/suggestions/stageSuggestions';
 
 function userScope(user: ReturnType<typeof useAuth>['user']): string {
@@ -79,6 +81,9 @@ function isTypingTarget(target: EventTarget | null): boolean {
 
 const leaveMessage = 'You have unsaved changes. A local recovery draft will be kept, but you should save JSON when you are ready to keep a copy.';
 const DRAFT_SAVE_DELAY_MS = 2_000;
+const desktopPanelsInitiallyVisible = () => typeof window === 'undefined'
+  || typeof window.matchMedia !== 'function'
+  || window.matchMedia('(min-width:1200px)').matches;
 
 type GitHubDeepLinkTarget = {
   repoOwner: string;
@@ -368,7 +373,7 @@ function GitHubStageLoadScreen({ state, onRetry, onBack, onOpenPicker }: { state
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
             <Button variant="contained" onClick={onRetry}>Try again</Button>
             <Button variant="outlined" onClick={onOpenPicker}>Open from GitHub…</Button>
-            <Button variant="text" onClick={onBack}>Back to dashboard</Button>
+            <Button variant="text" onClick={onBack}>Back to stages</Button>
           </Stack>
         )}
       </Stack>
@@ -377,10 +382,13 @@ function GitHubStageLoadScreen({ state, onRetry, onBack, onOpenPicker }: { state
 }
 
 const StageBuilderPage = () => {
+  const { notify } = useNotifications();
+  const confirmDialog = useConfirmDialog();
   const { t } = useTranslation();
   const { user, token } = useAuth();
   const { marketplace: marketplaceEnabled, ready: featureFlagsReady } = useFeatureFlags();
   const navigate = useNavigate();
+  const desktopPanels = useMediaQuery((theme: any) => theme.breakpoints.up('lg'));
   const scope = useMemo(() => userScope(user), [user]);
   const [prefs, setPrefs] = useState<StageBuilderPreferences>(() => readStageBuilderPreferences(scope));
   const editorColors = useMemo(() => getEditorColors(prefs.styleVariant), [prefs.styleVariant]);
@@ -388,6 +396,7 @@ const StageBuilderPage = () => {
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const customObjectInputRef = useRef<HTMLInputElement | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const sceneHandleRef = useRef<StageBuilderSceneHandle | null>(null);
   const providerStatusCacheRef = useRef(0);
   const marketplaceStatusCacheRef = useRef<{ key: string; checkedAt: number }>({ key: '', checkedAt: 0 });
   const historyRef = useRef<StageBuilderHistory>(createStageBuilderHistory());
@@ -403,13 +412,16 @@ const StageBuilderPage = () => {
   const [lookThroughCameraId, setLookThroughCameraId] = useState<string | null>(null);
   const [sensorHelpersVisible, setSensorHelpersVisible] = useState(false);
   const [collisionWireVisible, setCollisionWireVisible] = useState(false);
-  const [leftPanelVisible, setLeftPanelVisible] = useState(true);
-  const [rightPanelVisible, setRightPanelVisible] = useState(true);
+  const [leftPanelVisible, setLeftPanelVisible] = useState(desktopPanelsInitiallyVisible);
+  const [rightPanelVisible, setRightPanelVisible] = useState(desktopPanelsInitiallyVisible);
+  const previousDesktopPanels = useRef(desktopPanels);
   const [leftPanelWidth, setLeftPanelWidth] = useState<number>(stageBuilderPanelSizing.leftDefaultWidth);
   const [rightPanelWidth, setRightPanelWidth] = useState<number>(stageBuilderPanelSizing.rightDefaultWidth);
   const [panelResize, setPanelResize] = useState<PanelResizeState | null>(null);
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>('empty');
-  const [message, setMessage] = useState<string>('');
+  const setMessage = useCallback((message: string) => {
+    if (message) notify(message, { severity: 'info', duration: 3600 });
+  }, [notify]);
   const [lastExportFingerprint, setLastExportFingerprint] = useState(() => stageFingerprint(emptyEditorStage()));
   const [exportedAt, setExportedAt] = useState<string | null>(null);
   const [pendingDraft, setPendingDraft] = useState<StageBuilderDraft | null>(null);
@@ -417,7 +429,7 @@ const StageBuilderPage = () => {
   const [providerStatus, setProviderStatus] = useState<GitHubProviderStatus | null>(null);
   const [localStage, setLocalStage] = useState<LocalStage | null>(null);
   const [localStageSaving, setLocalStageSaving] = useState(false);
-  const [localStages, setLocalStages] = useState<LocalStage[]>([]);
+  const [localStages, setLocalStages] = useState<LocalStageSummary[]>([]);
   const [localStagesLoading, setLocalStagesLoading] = useState(false);
   const [localStagesError, setLocalStagesError] = useState('');
   const [openLocalStageOpen, setOpenLocalStageOpen] = useState(false);
@@ -465,8 +477,10 @@ const StageBuilderPage = () => {
   const selectedGroupObjectIds = selectedGroup ? selectedGroup.objectIds.filter((id) => stage.objects.some((object) => object.id === id)) : [];
   const selectedCount = selectedGroup ? selectedGroupObjectIds.length : selectedIds.length || (selectedId ? 1 : 0);
   const assistantSelectedIds = selectedGroup ? selectedGroupObjectIds : selectedIds.length ? selectedIds : selectedId ? [selectedId] : [];
-  const dirty = useMemo(() => stageFingerprint(stage) !== lastExportFingerprint, [stage, lastExportFingerprint]);
-  const localStageHasChanges = useMemo(() => localStage ? stageFingerprint(stage) !== stageFingerprint(configToEditorStage(localStage.record)) : dirty, [dirty, localStage, stage]);
+  const currentFingerprint = useMemo(() => stageFingerprint(stage), [stage]);
+  const savedLocalFingerprint = useMemo(() => localStage ? stageFingerprint(configToEditorStage(localStage.record)) : null, [localStage]);
+  const dirty = currentFingerprint !== lastExportFingerprint;
+  const localStageHasChanges = savedLocalFingerprint === null ? dirty : currentFingerprint !== savedLocalFingerprint;
   const gridVisible = stage.metadata.gridVisible ?? true;
   const gridSize = stage.metadata.gridSize ?? 0.5;
   const selectedStatus = selectedGroup ? selectedGroup.name : selectedObject ? selectedObject.name : selectedCount ? `${selectedCount} objects` : inspectorTab === 'stage' ? 'Stage' : 'None';
@@ -488,6 +502,14 @@ const StageBuilderPage = () => {
   } : null) || marketplaceStatus?.pullRequest || null;
   const marketplacePublishLabel = marketplaceStatus?.lifecycle.state === 'changes_ready_to_publish' ? 'Publish changes' : 'Publish stage';
   const marketplacePublishReady = marketplaceStatus?.lifecycle.state === 'changes_ready_to_publish';
+
+  useEffect(() => {
+    if (previousDesktopPanels.current && !desktopPanels) {
+      setLeftPanelVisible(false);
+      setRightPanelVisible(false);
+    }
+    previousDesktopPanels.current = desktopPanels;
+  }, [desktopPanels]);
 
   const refreshProviderStatus = async ({ force = false }: RefreshCacheOptions = {}) => {
     if (!token) {
@@ -845,8 +867,8 @@ const StageBuilderPage = () => {
     if (options.message) setMessage(options.message);
   };
 
-  const applyAssistantStage = (next: EditorStage, target: StageAuthoringTarget): boolean => {
-    if (target === 'create' && !confirmIfDirty('Replace the current stage with this generated draft? Unsaved changes will remain in the existing recovery draft.')) return false;
+  const applyAssistantStage = async (next: EditorStage, target: StageAuthoringTarget): Promise<boolean> => {
+    if (target === 'create' && !(await confirmIfDirty('Replace the current stage with this generated draft? Unsaved changes will remain in the existing recovery draft.'))) return false;
     const now = new Date().toISOString();
     replaceStage({ ...next, createdAt: target === 'create' ? now : stage.createdAt, updatedAt: now }, { undoable: true, clean: false, message: 'Reviewed Buddy proposal applied as one undoable draft change. Nothing was saved, exported, published, or run.' });
     if (target === 'create') {
@@ -860,10 +882,17 @@ const StageBuilderPage = () => {
     return true;
   };
 
-  const confirmIfDirty = (messageText = leaveMessage): boolean => {
+  const confirmIfDirty = async (messageText = leaveMessage): Promise<boolean> => {
     if (!dirty) return true;
     writeStageBuilderDraft(stage, scope);
-    return window.confirm(messageText);
+    // Replacing a dirty stage discards unsaved viewport work, so the confirm action reads as destructive.
+    return confirmDialog.confirm({
+      title: 'Unsaved changes',
+      message: messageText,
+      confirmLabel: 'Discard and continue',
+      cancelLabel: 'Keep editing',
+      danger: true,
+    });
   };
 
   const handleSelectionChange = (ids: string[]) => {
@@ -1025,16 +1054,16 @@ const StageBuilderPage = () => {
 
   const handleStageChange = (next: EditorStage) => commitStage(() => next);
 
-  const handleNew = () => {
-    if (!confirmIfDirty('Create a new blank stage? Unsaved changes will remain only as a recovery draft.')) return;
+  const handleNew = async () => {
+    if (!(await confirmIfDirty('Create a new blank stage? Unsaved changes will remain only as a recovery draft.'))) return;
     const next = emptyEditorStage();
     replaceStage(next, { undoable: false, clean: true, message: 'New blank stage created.' });
     setLocalStage(null);
     setRemoteStage(null);
   };
 
-  const handleDemo = () => {
-    if (!confirmIfDirty('Load the demo stage? Unsaved changes will remain only as a recovery draft.')) return;
+  const handleDemo = async () => {
+    if (!(await confirmIfDirty('Load the demo stage? Unsaved changes will remain only as a recovery draft.'))) return;
     replaceStage(createDemoEditorStage(), { undoable: true, clean: false, message: 'Demo stage loaded.' });
     setLocalStage(null);
     setRemoteStage(null);
@@ -1087,7 +1116,7 @@ const StageBuilderPage = () => {
 
   const handleImportFile = async (file?: File) => {
     if (!file) return;
-    if (!confirmIfDirty('Import this JSON file and replace the current stage? Unsaved changes will remain only as a recovery draft.')) {
+    if (!(await confirmIfDirty('Import this JSON file and replace the current stage? Unsaved changes will remain only as a recovery draft.'))) {
       if (importInputRef.current) importInputRef.current.value = '';
       return;
     }
@@ -1129,26 +1158,35 @@ const StageBuilderPage = () => {
       setMessage('Sign in before saving a stage to your account.');
       return;
     }
-    if (localStage && !localStageHasChanges) {
-      setMessage(`No changes to save. ${localStage.title} is already at r${localStage.revision}.`);
+    // A stage without a preview (imported, migrated, or seeded) must still be
+    // able to capture one: only short-circuit when there is an existing image.
+    if (localStage && !localStageHasChanges && localStage.previewUrl) {
+      setMessage(`No changes to save. ${localStage.title} is already at v${localStage.revision}.`);
       return;
     }
     setLocalStageSaving(true);
     try {
       const record = editorStageToRecord(stage);
+      // Regenerate the low-res stage preview on every save. The capture falls
+      // back to null when the viewport is hidden (mobile drawers) so the save
+      // still succeeds with the previous preview.
+      const previewDataUrl = sceneHandleRef.current?.captureStagePreview() ?? null;
       const saved = localStage
-        ? await updateLocalStage(token, localStage, record)
-        : await createLocalStage(token, record);
+        ? await updateLocalStage(token, localStage, record, previewDataUrl)
+        : await createLocalStage(token, record, previewDataUrl);
       setLocalStage(saved);
       setRemoteStage(null);
       setLastExportFingerprint(stageFingerprint(stage));
       setExportedAt(new Date().toISOString());
       clearStageBuilderDraft(scope);
-      setMessage(`Saved to your account: ${saved.title} · r${saved.revision}`);
+      // Tell the Stages panel to refetch even if it already mounted while this
+      // save was in flight.
+      invalidateLocalStages();
+      setMessage(`Saved to your account: ${saved.title} · v${saved.revision}`);
       if (openLocalStageOpen) setLocalStages(await listLocalStages(token));
     } catch (error) {
       if (error instanceof LocalStageRequestError && error.code === 'revision_conflict') {
-        setMessage(`${error.message} Current revision: r${error.currentRevision || '?'}.`);
+        setMessage(`${error.message} Current revision: v${error.currentRevision || '?'}.`);
       } else {
         setMessage(error instanceof Error ? error.message : 'Local stage save failed.');
       }
@@ -1173,12 +1211,21 @@ const StageBuilderPage = () => {
     }
   };
 
-  const handleOpenLocalStage = (item: LocalStage) => {
-    if (!confirmIfDirty('Open this saved stage and replace the current editor stage? Unsaved changes will remain only as a recovery draft.')) return;
-    replaceStage(configToEditorStage(item.record), { undoable: true, clean: true, message: 'Opened stage from your account.' });
-    setLocalStage(item);
-    setRemoteStage(null);
-    setOpenLocalStageOpen(false);
+  const handleOpenLocalStage = async (item: LocalStageSummary) => {
+    if (!token || !(await confirmIfDirty('Open this saved stage and replace the current editor stage? Unsaved changes will remain only as a recovery draft.'))) return;
+    setLocalStagesLoading(true);
+    setLocalStagesError('');
+    try {
+      const loaded = await loadLocalStage(token, item.id);
+      replaceStage(configToEditorStage(loaded.record), { undoable: true, clean: true, message: 'Opened stage from your account.' });
+      setLocalStage(loaded);
+      setRemoteStage(null);
+      setOpenLocalStageOpen(false);
+    } catch (error) {
+      setLocalStagesError(error instanceof Error ? error.message : 'Could not open this stage.');
+    } finally {
+      setLocalStagesLoading(false);
+    }
   };
 
   const handleProviderSave = async ({ slug, commitMessage, visibility }: SaveToProviderValues) => {
@@ -1342,7 +1389,7 @@ const StageBuilderPage = () => {
 
   const handleOpenProviderStage = async (item: ProviderStageListItem) => {
     if (!token) return;
-    if (!confirmIfDirty('Open this GitHub stage and replace the current editor stage? Unsaved changes will remain only as a recovery draft.')) return;
+    if (!(await confirmIfDirty('Open this GitHub stage and replace the current editor stage? Unsaved changes will remain only as a recovery draft.'))) return;
     setProviderListLoading(true);
     setProviderListError('');
     setProviderListWarning(false);
@@ -1398,10 +1445,9 @@ const StageBuilderPage = () => {
     }
   };
 
-  const handleBack = () => {
-    if (!confirmIfDirty()) return;
-    if (window.history.length > 1) navigate(-1);
-    else navigate('/dashboard');
+  const handleBack = async () => {
+    if (!(await confirmIfDirty())) return;
+    navigate('/stages?tab=mine');
   };
 
   const handleOpenSettings = () => {
@@ -1629,6 +1675,47 @@ const StageBuilderPage = () => {
     return () => window.removeEventListener('keydown', onKey);
   }, [prefs.keyboardShortcutsEnabled, stage, selectedId, selectedIds, selectedGroupId, snapSettings, historyVersion, lookThroughCameraId]);
 
+  const leftPanel = (
+    <EditorLeftPanel
+      stage={stage}
+      selectedId={selectedId}
+      selectedIds={selectedIds}
+      selectedGroupId={selectedGroupId}
+      prefabs={prefabs}
+      onAddKind={addObject}
+      onAddPrefab={addPrefab}
+      onImportObject={() => customObjectInputRef.current?.click()}
+      onSelectObject={handleSelect}
+      onSelectGroup={handleSelectGroup}
+      onSelectionChange={handleSelectionChange}
+      onObjectChange={updateObject}
+      onDuplicateObjects={duplicateObjects}
+      onDeleteObjects={deleteObjects}
+      onHierarchyDrop={handleHierarchyDrop}
+      onGroupRename={renameGroup}
+      onPatchObjects={patchObjects}
+      onTogglePanel={toggleLeftPanel}
+    />
+  );
+  const rightPanel = (
+    <EditorRightInspector
+      tab={inspectorTab}
+      onTabChange={setInspectorTab}
+      stage={stage}
+      selectedObject={selectedObject}
+      selectedCount={selectedCount}
+      validationResults={validationResults}
+      prefs={prefs}
+      onStageChange={handleStageChange}
+      onObjectChange={updateObject}
+      onLookThroughCamera={requestLookThroughCamera}
+      onToggleValidationOverride={toggleValidationOverride}
+      onPrefsChange={setPref}
+      onResetPrefs={() => setPrefs(defaultStageBuilderPreferences)}
+      onTogglePanel={toggleRightPanel}
+    />
+  );
+
   return (
     <EditorThemeProvider value={useMemo(() => {
       const variant = prefs.styleVariant;
@@ -1650,7 +1737,7 @@ const StageBuilderPage = () => {
             setGithubDeepLinkLoad({ status: 'loading', repoLabel: githubDeepLinkTarget.label, step: 'Checking GitHub connection…' });
             setGithubDeepLinkRetry((value) => value + 1);
           }}
-          onBack={() => navigate('/dashboard')}
+          onBack={() => navigate('/stages?tab=mine')}
           onOpenPicker={() => {
             window.history.replaceState(null, '', window.location.pathname);
             setGithubDeepLinkLoad({ status: 'idle' });
@@ -1708,35 +1795,14 @@ const StageBuilderPage = () => {
       <input ref={customObjectInputRef} type="file" accept=".obj,.stl,.glb,model/obj,model/stl,model/gltf-binary,text/plain,application/sla" hidden onChange={(event) => handleImportCustomObject(event.target.files?.[0])} />
 
       <Box sx={{ flex: 1, minHeight: 0, display: 'flex', overflow: 'hidden' }}>
-        {leftPanelVisible && (
-          <Box sx={{ width: leftPanelWidth, flex: '0 0 auto', minHeight: 0, display: { xs: 'none', lg: 'block' }, overflow: 'hidden' }}>
-            <EditorLeftPanel
-              stage={stage}
-              selectedId={selectedId}
-              selectedIds={selectedIds}
-              selectedGroupId={selectedGroupId}
-              prefabs={prefabs}
-              onAddKind={addObject}
-              onAddPrefab={addPrefab}
-              onImportObject={() => customObjectInputRef.current?.click()}
-              onSelectObject={handleSelect}
-              onSelectGroup={handleSelectGroup}
-              onSelectionChange={handleSelectionChange}
-              onObjectChange={updateObject}
-              onDuplicateObjects={duplicateObjects}
-              onDeleteObjects={deleteObjects}
-              onHierarchyDrop={handleHierarchyDrop}
-              onGroupRename={renameGroup}
-              onPatchObjects={patchObjects}
-              onTogglePanel={toggleLeftPanel}
-            />
-          </Box>
-        )}
-        {leftPanelVisible && <PanelResizeHandle side="left" onPointerDown={beginPanelResize('left')} onDoubleClick={resetPanelWidth('left')} />}
+        {leftPanelVisible && desktopPanels && <Box sx={{ width: leftPanelWidth, flex: '0 0 auto', minHeight: 0, overflow: 'hidden' }}>{leftPanel}</Box>}
+        {leftPanelVisible && desktopPanels && <PanelResizeHandle side="left" onPointerDown={beginPanelResize('left')} onDoubleClick={resetPanelWidth('left')} />}
+        {leftPanelVisible && !desktopPanels && <Drawer anchor="left" open onClose={() => setLeftPanelVisible(false)} PaperProps={{ sx: { width: 'min(360px, calc(100vw - 40px))', overflow: 'hidden' } }}>{leftPanel}</Drawer>}
         {!leftPanelVisible && <EditorPanelTab side="left" label="Library" onClick={toggleLeftPanel} />}
 
         <Box sx={{ flex: '1 1 0%', minWidth: 0, minHeight: 0, position: 'relative', bgcolor: editorColors.viewport }}>
           <StageBuilderScene
+            ref={sceneHandleRef}
             objects={activeStage.objects}
             groups={activeStage.metadata.groups}
             selectedId={selectedId}
@@ -1772,10 +1838,10 @@ const StageBuilderPage = () => {
               <Typography variant="subtitle2" fontWeight={700}>
                 {t('aiAssistant.stage.previewingLive', 'Previewing proposed stage changes in Stage Builder')}
               </Typography>
-              <Button size="small" variant="contained" color="success" onClick={() => { if (applyAssistantStage(livePreviewStage, livePreviewTarget || 'stage')) { setLivePreviewStage(null); setLivePreviewTarget(null); } }}>
+              <Button size="small" variant="contained" color="success" onClick={() => window.dispatchEvent(new CustomEvent('fossbot:buddy-apply'))}>
                 {t('aiAssistant.apply', 'Apply')}
               </Button>
-              <Button size="small" variant="outlined" onClick={() => { setLivePreviewStage(null); setLivePreviewTarget(null); }}>
+              <Button size="small" variant="outlined" onClick={() => { setLivePreviewStage(null); setLivePreviewTarget(null); window.dispatchEvent(new CustomEvent('fossbot:buddy-live-preview-off')); }}>
                 {t('aiAssistant.stage.backToBuddy', 'Back to Buddy')}
               </Button>
             </Paper>
@@ -1856,28 +1922,10 @@ const StageBuilderPage = () => {
           )}
         </Box>
 
-        {rightPanelVisible && <PanelResizeHandle side="right" onPointerDown={beginPanelResize('right')} onDoubleClick={resetPanelWidth('right')} />}
+        {rightPanelVisible && desktopPanels && <PanelResizeHandle side="right" onPointerDown={beginPanelResize('right')} onDoubleClick={resetPanelWidth('right')} />}
         {!rightPanelVisible && <EditorPanelTab side="right" label="Inspector" onClick={toggleRightPanel} />}
-        {rightPanelVisible && (
-          <Box sx={{ width: rightPanelWidth, flex: '0 0 auto', minHeight: 0, display: { xs: 'none', lg: 'block' }, overflow: 'hidden' }}>
-            <EditorRightInspector
-              tab={inspectorTab}
-              onTabChange={setInspectorTab}
-              stage={stage}
-              selectedObject={selectedObject}
-              selectedCount={selectedCount}
-              validationResults={validationResults}
-              prefs={prefs}
-              onStageChange={handleStageChange}
-              onObjectChange={updateObject}
-              onLookThroughCamera={requestLookThroughCamera}
-              onToggleValidationOverride={toggleValidationOverride}
-              onPrefsChange={setPref}
-              onResetPrefs={() => setPrefs(defaultStageBuilderPreferences)}
-              onTogglePanel={toggleRightPanel}
-            />
-          </Box>
-        )}
+        {rightPanelVisible && desktopPanels && <Box sx={{ width: rightPanelWidth, flex: '0 0 auto', minHeight: 0, overflow: 'hidden' }}>{rightPanel}</Box>}
+        {rightPanelVisible && !desktopPanels && <Drawer anchor="right" open onClose={() => setRightPanelVisible(false)} PaperProps={{ sx: { width: 'min(400px, calc(100vw - 40px))', overflow: 'hidden' } }}>{rightPanel}</Drawer>}
       </Box>
 
       <Box sx={{ height: 28, pl: 1, pr: 1.25, display: 'flex', alignItems: 'center', gap: 2, bgcolor: editorColors.topbar, color: editorColors.keycapInk, borderTop: `1px solid ${editorColors.divider}` }}>
@@ -1910,7 +1958,7 @@ const StageBuilderPage = () => {
       <SaveToProviderDialog
         open={saveProviderOpen}
         stageTitle={stage.title}
-        sourceLabel={localStage ? `local revision ${localStage.title} · r${localStage.revision}` : null}
+        sourceLabel={localStage ? `local revision ${localStage.title} · v${localStage.revision}` : null}
         status={providerStatus}
         remoteStage={remoteStage}
         bootstrapRepoName={bootstrapRepoName}
@@ -1965,7 +2013,6 @@ const StageBuilderPage = () => {
         onPublish={handlePublishMarketplace}
       />}
 
-      <Snackbar open={!!message} autoHideDuration={3600} onClose={() => setMessage('')} message={message} />
     </Box>
       )}
     </EditorThemeProvider>

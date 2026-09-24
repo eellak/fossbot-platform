@@ -15,7 +15,7 @@ const AccountSettingsForm = ({ user, onFormSubmit }: AccountSettingsFormType) =>
   const { t } = useTranslation();
   const auth = useAuth();
 
-  const [showChangePasswordSnackbar, setShowChangePasswordSnackbar] = useState(false);
+  const [showChangePasswordDialog, setShowChangePasswordDialog] = useState(false);
 
   const [formData, setFormData] = useState({
     firstname: user?.firstname,
@@ -38,12 +38,12 @@ const AccountSettingsForm = ({ user, onFormSubmit }: AccountSettingsFormType) =>
     setFormData({ ...formData, [name]: value });
   };
 
-  const showChangeYourPassswordSnackbar = () => {
-    setShowChangePasswordSnackbar(true);
+  const openChangePasswordDialog = () => {
+    setShowChangePasswordDialog(true);
   }
 
   const handlePasswordUpdate = (success) => {
-    setShowChangePasswordSnackbar(false);
+    setShowChangePasswordDialog(false);
     if (success) {
       onFormSubmit(true); // Notify parent component about the success
     } else {
@@ -105,7 +105,7 @@ const AccountSettingsForm = ({ user, onFormSubmit }: AccountSettingsFormType) =>
           </CustomFormLabel>
         </Grid>
         <Grid item xs={12} sm={9}>
-          <Button variant="contained" color="primary" onClick={showChangeYourPassswordSnackbar}>
+          <Button variant="contained" color="primary" onClick={openChangePasswordDialog}>
             {t('changeYourPassword')}
           </Button>
         </Grid>
@@ -132,10 +132,10 @@ const AccountSettingsForm = ({ user, onFormSubmit }: AccountSettingsFormType) =>
         </Grid>
       </Grid>
 
-      {showChangePasswordSnackbar && (
+      {showChangePasswordDialog && (
         <ChangePassword
-          isOpen={showChangePasswordSnackbar}
-          onClose={() => setShowChangePasswordSnackbar(false)}
+          isOpen={showChangePasswordDialog}
+          onClose={() => setShowChangePasswordDialog(false)}
           onPasswordUpdate={handlePasswordUpdate} />
       )}
     </div>

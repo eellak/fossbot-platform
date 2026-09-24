@@ -54,6 +54,28 @@ def test_mutation_context_requires_matching_fingerprint(db, users):
     assert assembled.payload["supplied"]["source_fingerprint"] == hashlib.sha256(source.encode()).hexdigest()
 
 
+def test_runtime_diagnostics_are_tied_to_the_executed_source(db, users):
+    student = users[2]
+    source = "move_step('forward')\n"
+    fingerprint = hashlib.sha256(source.encode()).hexdigest()
+    assembled = assemble_context(db, student, request("python", "code.explain", {
+        "source": source,
+        "runtimeError": "RuntimeError: motor stopped",
+        "runtimeSourceFingerprint": fingerprint,
+        "executionTarget": "simulation",
+    }))
+    supplied = assembled.payload["supplied"]
+    assert supplied["runtime_source_fingerprint"] == fingerprint
+    assert supplied["execution_target"] == "simulation"
+
+    with pytest.raises(ContextError, match="runtime diagnostics"):
+        assemble_context(db, student, request("python", "code.explain", {
+            "source": source,
+            "runtimeError": "SyntaxError: stale",
+            "runtimeSourceFingerprint": "0" * 64,
+        }))
+
+
 def test_context_removes_data_urls_and_is_deterministic(db, users):
     student = users[2]
     unsafe = {"title": "Stage", "description": "", "floor": {"name": "Floor", "dimensions": [10, 10], "color": "#fff"}, "objects": [], "metadata": {}, "summary": {"preview": "data:image/png;base64,secret", "objectCount": 0}}
@@ -166,6 +188,38 @@ def test_student_prompt_is_hint_first_and_versioned(db, users):
     assert "hint-first" in prompt.system
     assert prompt.prompt_version == PROMPT_VERSION
     assert "student@example.test" not in prompt.system
+    assert "without await" in prompt.system
+    assert "runtime_error as primary evidence" in prompt.system
+
+
+def test_lesson_prompt_documents_activity_contract(db, users):
+    tutor = users[0]
+    course = Course(title="Robotics", description="Course", author_id=tutor.id, learning_objectives=["Move safely"], status="draft", visibility="public")
+    db.add(course)
+    db.flush()
+    lesson = Lesson(course_id=course.id, lesson_key="move", title="Move", position=1, activities=[], completion_policy="self", start_mode="fresh", editor_type="none", archived=False)
+    db.add(lesson)
+    db.commit()
+    target_payload = {
+        "course": {"title": "Robotics", "description": "Course", "objectives": ["Move safely"]},
+        "lesson": {"id": lesson.id, "key": lesson.lesson_key, "title": lesson.title, "position": 1, "editorType": "none", "completionPolicy": "self", "activityCount": 0},
+        "outline": [{"key": lesson.lesson_key, "title": lesson.title, "position": 1}],
+    }
+    revision = hashlib.sha256(json.dumps(target_payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    payload = request("lesson", "lesson.suggest_changes", {"courseId": course.id, "target": "lesson", "baseRevision": revision, "targetPayload": target_payload})
+    prompt = build_prompt(tutor.role, payload, assemble_context(db, tutor, payload))
+    assert "numeric_answer: prompt" in prompt.system
+    assert "tolerance is {mode:'absolute'|'percentage'" in prompt.system
+    assert "cannot create or change executable mission rules" in prompt.system
+
+
+def test_stage_validation_prompt_requires_addressing_every_issue(db, users):
+    tutor = users[0]
+    stage = {"title": "Stage", "description": "", "floor": {"name": "Floor", "dimensions": [10, 10], "color": "#fff"}, "objects": [], "metadata": {}, "summary": {"objectCount": 0, "knownObjectIds": []}}
+    validation = [{"id": "stage:spawn-missing", "severity": "error", "objectIds": [], "message": "Robot spawn is missing.", "reason": "Place one."}]
+    payload = request("stage", "stage.suggest_changes", stage_context(stage, target="validation", validation=validation))
+    prompt = build_prompt(tutor.role, payload, assemble_context(db, tutor, payload))
+    assert "address every entry in the supplied validation list" in prompt.system
 
 
 def test_stage_prompt_uses_canonical_flat_contract_without_python_api(db, users):

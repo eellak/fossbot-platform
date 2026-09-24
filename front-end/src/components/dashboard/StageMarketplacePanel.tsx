@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Alert,
   Box,
@@ -40,8 +41,10 @@ import { invalidateMarketplaceFirstPage, invalidateUserStages, marketplaceFirstP
 import { formatStageDate, formatStageRelativeTime, GitHubIdentity, StageCard, StageCardSkeleton, StagePreview } from 'src/stages/StageCard';
 import { MARKETPLACE_COPY, MARKETPLACE_REPORT_CATEGORIES } from 'src/stages/marketplaceCopy';
 import DashboardCard from 'src/components/shared/DashboardCardWithChildren';
+import { useConfirmDialog } from 'src/components/shared/ConfirmDialog';
 import { copyMarketplaceStageToLocal } from 'src/stages/LocalStagesApi';
 import BetaBadge from 'src/components/shared/BetaBadge';
+import { copyText } from 'src/utils/platform';
 
 const validationBadges: Record<MarketplaceValidationState, { label: string; color: 'success' | 'warning' | 'error'; description: string }> = {
   validated: {
@@ -146,13 +149,13 @@ function MarketplaceStageCard({ entry, onSelect, embedded = false }: { entry: Ma
 function MarketplacePanelFrame({ preview, action, children }: { preview: boolean; action: React.ReactNode; children: React.ReactNode }) {
   const subtitle = preview ? 'Discover community stages for FOSSBot simulations.' : 'Browse public stages for FOSSBot simulations.';
   if (preview) {
-    return <DashboardCard title={MARKETPLACE_COPY.stageLibrary} titleAdornment={<BetaBadge feature="stages" />} subtitle={subtitle} action={action} compact>{children}</DashboardCard>;
+    return <DashboardCard title={MARKETPLACE_COPY.stageLibrary} titleAdornment={<BetaBadge feature="stages" />} subtitle={subtitle} action={action} compact collapsible>{children}</DashboardCard>;
   }
   return (
     <>
       <Stack direction={{ xs: 'column', md: 'row' }} justifyContent="space-between" spacing={2} sx={{ mb: 2 }}>
         <Box>
-          <Stack direction="row" spacing={1} alignItems="center"><Typography variant="h5" fontWeight={850}>{MARKETPLACE_COPY.stageLibrary}</Typography><BetaBadge feature="stages" /></Stack>
+          <Stack direction="row" spacing={1} alignItems="center"><Typography variant="h5">{MARKETPLACE_COPY.stageLibrary}</Typography><BetaBadge feature="stages" /></Stack>
           <Typography variant="body2" color="text.secondary">{subtitle}</Typography>
         </Box>
         {action}
@@ -236,7 +239,7 @@ function MarketplaceDetailDrawer({
         <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
           <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ p: 2, borderBottom: '1px solid', borderColor: 'divider' }}>
             <Box sx={{ minWidth: 0 }}>
-              <Typography variant="h6" fontWeight={850} noWrap>{entry.title}</Typography>
+              <Typography variant="h6" fontWeight={700} noWrap>{entry.title}</Typography>
               {entry.author?.platformUsername ? <Typography variant="caption" color="text.secondary">@{entry.author.platformUsername} / {entry.repoName}</Typography> : <GitHubIdentity username={entry.author?.githubUsername || entry.repoOwner} suffix={`/${entry.repoName}`} />}
             </Box>
             <Stack direction="row" spacing={0.5}>
@@ -273,7 +276,7 @@ function MarketplaceDetailDrawer({
                 <Typography component="summary" variant="body2" fontWeight={700} sx={{ cursor: 'pointer', minHeight: 44, display: 'flex', alignItems: 'center' }}>Revision</Typography>
                 <Stack spacing={1} sx={{ pb: 1 }}>
                   <Typography variant="caption" color="text.secondary" sx={{ wordBreak: 'break-all' }}>{entry.commitSha}</Typography>
-                  <Button size="small" variant="outlined" onClick={() => void navigator.clipboard.writeText(entry.commitSha)} sx={{ alignSelf: 'flex-start' }}>Copy revision</Button>
+                  <Button size="small" variant="outlined" onClick={() => void copyText(entry.commitSha)} sx={{ alignSelf: 'flex-start' }}>Copy revision</Button>
                 </Stack>
               </Box>
               <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
@@ -293,13 +296,13 @@ function MarketplaceDetailDrawer({
                 </Button>}
               </Stack>
               {localCopyError && <Alert severity="error">{localCopyError}</Alert>}
-              {canModerate && <Box sx={{ p: 1.5, border: '1px solid', borderColor: 'warning.light', borderRadius: 1.5 }}><Stack spacing={1}><Typography variant="subtitle2" fontWeight={800}>Moderator actions</Typography><Typography variant="body2" color="text.secondary">Applies only to this FOSSBot instance. GitHub source content is not changed.</Typography><Stack direction="row" spacing={1}><Button size="small" color="warning" variant="outlined" disabled={moderationBusy} onClick={() => onModerate('hidden')}>{moderationBusy ? <CircularProgress size={14} color="inherit" /> : 'Hide locally'}</Button><Button size="small" color="error" variant="outlined" disabled={moderationBusy} onClick={() => onModerate('removed')}>{moderationBusy ? <CircularProgress size={14} color="inherit" /> : 'Remove locally'}</Button></Stack>{moderationError && <Alert severity="error">{moderationError}</Alert>}</Stack></Box>}
+              {canModerate && <Box sx={{ p: 1.5, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}><Stack spacing={1}><Typography variant="subtitle2" fontWeight={600}>Moderator actions</Typography><Typography variant="body2" color="text.secondary">Applies only to this FOSSBot instance. GitHub source content is not changed.</Typography><Stack direction="row" spacing={1}><Button size="small" color="warning" variant="outlined" disabled={moderationBusy} onClick={() => onModerate('hidden')}>{moderationBusy ? <CircularProgress size={14} color="inherit" /> : 'Hide locally'}</Button><Button size="small" color="error" variant="outlined" disabled={moderationBusy} onClick={() => onModerate('removed')}>{moderationBusy ? <CircularProgress size={14} color="inherit" /> : 'Remove locally'}</Button></Stack>{moderationError && <Alert severity="error">{moderationError}</Alert>}</Stack></Box>}
               {forkStep === 'ready' ? (
-                <Box sx={{ p: 2, border: '1px solid', borderColor: 'success.light', borderRadius: 1.5, bgcolor: 'success.light' }}>
+                <Box sx={{ p: 2, borderRadius: 1, bgcolor: 'success.light' }}>
                   <Stack spacing={1.5}>
                     <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1}>
                       <Box>
-                        <Typography variant="subtitle2" fontWeight={800}>“{entry.title}” is ready to edit</Typography>
+                        <Typography variant="subtitle2" fontWeight={600}>“{entry.title}” is ready to edit</Typography>
                         <Typography variant="body2" color="text.secondary">This fork is already connected to FOSSBot.</Typography>
                       </Box>
                       <IconButton size="small" onClick={onCancelFork} aria-label="Dismiss completed fork status">
@@ -312,10 +315,10 @@ function MarketplaceDetailDrawer({
                   </Stack>
                 </Box>
               ) : forkStep && (
-                <Box sx={{ p: 2, border: '1px solid', borderColor: 'primary.light', borderRadius: 1.5, bgcolor: 'primary.light' }}>
+                <Box sx={{ p: 2, borderRadius: 1, bgcolor: 'action.hover' }}>
                   <Stack spacing={1.5}>
                     <Box>
-                      <Typography variant="subtitle2" fontWeight={800}>Forking “{entry.title}”</Typography>
+                      <Typography variant="subtitle2" fontWeight={600}>Forking “{entry.title}”</Typography>
                       <Typography variant="body2" color="text.secondary">
                         {forkStep === 'create'
                           ? 'Finish the GitHub fork, then continue here.'
@@ -380,7 +383,10 @@ function MarketplaceDetailDrawer({
   );
 }
 
-export default function StageMarketplacePanel({ embedded = false, preview = false }: { embedded?: boolean; preview?: boolean }) {
+export default function StageMarketplacePanel({ embedded = false, preview = false, previewAppearance = true, appearance = 'card' }: { embedded?: boolean; preview?: boolean; previewAppearance?: boolean; appearance?: 'card' | 'page' }) {
+  const { t } = useTranslation();
+  const inPage = appearance === 'page';
+  const confirmDialog = useConfirmDialog();
   const { token, user } = useAuth();
   const userKey = stageListUserKey(user);
   const navigate = useNavigate();
@@ -632,7 +638,15 @@ export default function StageMarketplacePanel({ embedded = false, preview = fals
   const moderateSelected = async (state: 'hidden' | 'removed') => {
     if (!token || !selected) return;
     const action = state === 'hidden' ? 'hide' : 'remove';
-    if (!window.confirm(`${action[0].toUpperCase()}${action.slice(1)} “${selected.title}” on this FOSSBot instance?`)) return;
+    const actionLabel = `${action[0].toUpperCase()}${action.slice(1)}`;
+    const confirmed = await confirmDialog.confirm({
+      title: `${actionLabel} stage`,
+      message: `${actionLabel} “${selected.title}” on this FOSSBot instance?`,
+      confirmLabel: actionLabel,
+      cancelLabel: 'Keep visible',
+      danger: true,
+    });
+    if (!confirmed) return;
     setModerationBusy(true);
     setModerationError('');
     try {
@@ -678,90 +692,12 @@ export default function StageMarketplacePanel({ embedded = false, preview = fals
     </Stack>
   );
 
-  return (
-    <Box sx={embedded ? undefined : { mt: 3 }}>
-      <MarketplacePanelFrame preview={preview} action={panelAction}>
-        <Box sx={preview ? undefined : { border: '1px solid', borderColor: 'divider', borderRadius: 2, bgcolor: 'background.paper' }}>
-        {!preview && <Box sx={{ p: 2, borderBottom: '1px solid', borderColor: 'divider' }}>
-          <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} alignItems={{ md: 'center' }}>
-            <TextField
-              size="small"
-              placeholder="Search title, author, tag, or repo"
-              inputProps={{ 'aria-label': 'Search stages' }}
-              value={query}
-              onChange={(event) => { setQuery(event.target.value); setPage(1); }}
-              InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> }}
-              sx={{ flex: 1 }}
-            />
-            <Select size="small" value={sort} onChange={(event) => { setSort(event.target.value as typeof sort); setPage(1); }} sx={{ minWidth: 176 }} aria-label="Sort stages">
-              <MenuItem value="updated">Recently updated</MenuItem>
-              <MenuItem value="published">Recently published</MenuItem>
-              <MenuItem value="verified">Verified first</MenuItem>
-            </Select>
-            {(query || activeTag) && <Button variant="text" onClick={() => { setQuery(''); setActiveTag(''); setPage(1); }}>Clear filters</Button>}
-          </Stack>
-          {!!tags.length && (
-                <Stack direction="row" sx={{ mt: 1.5, flexWrap: 'wrap', gap: 1 }}>
-              {tags.map(({ tag, count }) => (
-                <Chip
-                  key={tag}
-                  size="small"
-                  label={`${tag} ${count}`}
-                  color={activeTag === tag ? 'primary' : 'default'}
-                  variant={activeTag === tag ? 'filled' : 'outlined'}
-                  onClick={() => { setActiveTag((current) => current === tag ? '' : tag); setPage(1); }}
-                />
-              ))}
-            </Stack>
-          )}
-        </Box>}
-
-        {loading && !index ? (
-          <Grid container spacing={2} sx={{ p: preview ? 0 : 2 }} aria-label="Loading stages">
-            {Array.from({ length: preview ? 3 : 8 }).map((_, item) => <Grid key={item} item xs={12} sm={6} lg={4} xl={preview ? 4 : 3}><StageCardSkeleton surface={preview ? 'embedded' : 'outlined'} /></Grid>)}
-          </Grid>
-        ) : error ? (
-          <Alert severity={index ? "warning" : "error"} sx={{ m: 2 }} action={<Button color="inherit" size="small" onClick={() => canonicalRequest ? void refreshStageLists(userKey, token, { force: true }) : setRetryKey((current) => current + 1)}>Retry</Button>}>{error}</Alert>
-        ) : index?.warning ? (
-          <Alert severity="info" sx={{ m: 2 }}>{index.warning}</Alert>
-        ) : null}
-
-        {!loading && (index || !error) && (
-          stages.length ? (
-            <>
-              {!preview && pagination && <Typography variant="body2" color="text.secondary" sx={{ px: 2, pt: 2 }}>{pagination.total} stage{pagination.total === 1 ? '' : 's'}</Typography>}
-              <Grid container spacing={2} sx={{ p: preview ? 0 : 2 }}>
-                {stages.map((entry) => (
-                  <Grid key={marketplaceEntryKey(entry)} item xs={12} sm={6} lg={4} xl={preview ? 4 : 3}>
-                    <MarketplaceStageCard entry={entry} onSelect={selectStage} embedded={preview} />
-                  </Grid>
-                ))}
-              </Grid>
-              {pagination && pagination.totalPages > 1 && (
-                <Stack direction={{ xs: 'column', sm: 'row' }} alignItems="center" justifyContent="space-between" spacing={1.5} sx={{ px: 2, pb: 2 }}>
-                  <Typography variant="body2" color="text.secondary">
-                    Page {pagination.page} of {pagination.totalPages} · {pagination.total} stages
-                  </Typography>
-                  <Stack direction="row" spacing={1}>
-                    <Button variant="outlined" disabled={!pagination.hasPrevious} onClick={() => setPage((current) => Math.max(1, current - 1))}>Previous</Button>
-                    <Button variant="outlined" disabled={!pagination.hasNext} onClick={() => setPage((current) => current + 1)}>Next</Button>
-                  </Stack>
-                </Stack>
-              )}
-            </>
-          ) : (
-            <Box sx={{ py: 6, px: 2, textAlign: 'center' }}>
-              <Typography variant="subtitle1" fontWeight={800}>No stages found</Typography>
-              <Typography variant="body2" color="text.secondary">Try another search, clear the tag filter, or publish the first stage from Stage Builder.</Typography>
-            </Box>
-          )
-        )}
-        </Box>
-      </MarketplacePanelFrame>
+  const overlays = (
+    <>
       <Drawer anchor="right" open={detailUnavailable && !selected && !!searchParams.get('stage')} onClose={closeStage} PaperProps={{ sx: { width: { xs: '100%', sm: 420 } } }}>
         <Stack spacing={2} sx={{ p: 3 }}>
           <Stack direction="row" alignItems="center" justifyContent="space-between">
-            <Typography variant="h6" fontWeight={800}>Stage unavailable</Typography>
+            <Typography variant="h6">Stage unavailable</Typography>
             <IconButton onClick={closeStage} aria-label="Close unavailable stage details"><CloseIcon /></IconButton>
           </Stack>
           <Typography variant="body2" color="text.secondary">This stage may have been unpublished, removed, or moved.</Typography>
@@ -808,6 +744,103 @@ export default function StageMarketplacePanel({ embedded = false, preview = fals
           {!reportSent && <Button variant="contained" onClick={submitReport} disabled={reportBusy || !reportExplanation.trim()}>{reportBusy ? 'Sending…' : 'Send report'}</Button>}
         </DialogActions>
       </Dialog>
+    </>
+  );
+
+  const body = (
+    <>
+      {!preview && <Box sx={inPage ? { mb: 2 } : { p: 2, borderBottom: '1px solid', borderColor: 'divider' }}>
+        <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} alignItems={{ md: 'center' }}>
+          <TextField
+            size="small"
+            placeholder="Search title, author, tag, or repo"
+            inputProps={{ 'aria-label': 'Search stages' }}
+            value={query}
+            onChange={(event) => { setQuery(event.target.value); setPage(1); }}
+            InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> }}
+            sx={{ flex: 1 }}
+          />
+          <Select size="small" value={sort} onChange={(event) => { setSort(event.target.value as typeof sort); setPage(1); }} sx={{ minWidth: 176 }} aria-label="Sort stages">
+            <MenuItem value="updated">Recently updated</MenuItem>
+            <MenuItem value="published">Recently published</MenuItem>
+            <MenuItem value="verified">Verified first</MenuItem>
+          </Select>
+          {(query || activeTag) && <Button variant="text" onClick={() => { setQuery(''); setActiveTag(''); setPage(1); }}>Clear filters</Button>}
+        </Stack>
+        {!!tags.length && (
+          <Stack direction="row" sx={{ mt: 1.5, flexWrap: 'wrap', gap: 1 }}>
+            {tags.map(({ tag, count }) => (
+              <Chip
+                key={tag}
+                size="small"
+                label={`${tag} ${count}`}
+                color={activeTag === tag ? 'primary' : 'default'}
+                variant={activeTag === tag ? 'filled' : 'outlined'}
+                onClick={() => { setActiveTag((current) => current === tag ? '' : tag); setPage(1); }}
+              />
+            ))}
+          </Stack>
+        )}
+      </Box>}
+
+      {loading && !index ? (
+        <Grid container spacing={2} sx={{ p: preview || inPage ? 0 : 2 }} aria-label="Loading stages">
+          {Array.from({ length: preview ? 3 : 8 }).map((_, item) => <Grid key={item} item xs={12} sm={6} lg={4} xl={preview ? 4 : 3}><StageCardSkeleton surface={preview ? 'embedded' : 'outlined'} /></Grid>)}
+        </Grid>
+      ) : error ? (
+        <Alert severity={index ? "warning" : "error"} sx={preview || inPage ? { my: 1 } : { m: 2 }} action={<Button color="inherit" size="small" onClick={() => canonicalRequest ? void refreshStageLists(userKey, token, { force: true }) : setRetryKey((current) => current + 1)}>Retry</Button>}>{error}</Alert>
+      ) : index?.warning ? (
+        <Alert severity="info" sx={preview || inPage ? { my: 1 } : { m: 2 }}>{index.warning}</Alert>
+      ) : null}
+
+      {!loading && (index || !error) && (
+        stages.length ? (
+          <>
+            {!preview && pagination && <Typography variant="body2" color="text.secondary" sx={{ px: preview || inPage ? 0 : 2, pt: preview || inPage ? 0 : 2, pb: inPage ? 1 : 0 }}>{pagination.total} stage{pagination.total === 1 ? '' : 's'}</Typography>}
+            <Grid container spacing={2} sx={{ p: preview || inPage ? 0 : 2 }}>
+              {stages.map((entry) => (
+                <Grid key={marketplaceEntryKey(entry)} item xs={12} sm={6} lg={4} xl={preview ? 4 : 3}>
+                  <MarketplaceStageCard entry={entry} onSelect={selectStage} embedded={preview} />
+                </Grid>
+              ))}
+            </Grid>
+            {pagination && pagination.totalPages > 1 && (
+              <Stack direction={{ xs: 'column', sm: 'row' }} alignItems="center" justifyContent="space-between" spacing={1.5} sx={{ px: preview || inPage ? 0 : 2, pb: preview || inPage ? 0 : 2, pt: inPage ? 2 : 0 }}>
+                <Typography variant="body2" color="text.secondary">
+                  Page {pagination.page} of {pagination.totalPages} · {pagination.total} stages
+                </Typography>
+                <Stack direction="row" spacing={1}>
+                  <Button variant="outlined" disabled={!pagination.hasPrevious} onClick={() => setPage((current) => Math.max(1, current - 1))}>Previous</Button>
+                  <Button variant="outlined" disabled={!pagination.hasNext} onClick={() => setPage((current) => current + 1)}>Next</Button>
+                </Stack>
+              </Stack>
+            )}
+          </>
+        ) : previewAppearance && index?.warning ? null : (
+          <Box sx={{ py: previewAppearance ? 2 : (inPage ? 4 : 6), px: preview || inPage ? 0 : 2, textAlign: 'center' }}>
+            <Typography variant="subtitle1" fontWeight={600}>{previewAppearance ? t('stage-marketplace.emptyTitle') : 'No stages found'}</Typography>
+            <Typography variant="body2" color="text.secondary">
+              {previewAppearance ? t('stage-marketplace.emptyDescription') : 'Try another search, clear the tag filter, or publish the first stage from Stage Builder.'}
+            </Typography>
+            {!previewAppearance && (query || activeTag) && <Button variant="text" onClick={() => { setQuery(''); setActiveTag(''); setPage(1); }} sx={{ mt: 1 }}>Clear filters</Button>}
+          </Box>
+        )
+      )}
+    </>
+  );
+
+  if (inPage) {
+    return <Box>{body}{overlays}</Box>;
+  }
+
+  return (
+    <Box sx={embedded ? undefined : { mt: 3 }}>
+      <MarketplacePanelFrame preview={preview} action={panelAction}>
+        <Box sx={preview ? undefined : { border: '1px solid', borderColor: 'divider', borderRadius: 2, bgcolor: 'background.paper' }}>
+          {body}
+        </Box>
+      </MarketplacePanelFrame>
+      {overlays}
     </Box>
   );
 }

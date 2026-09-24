@@ -17,25 +17,19 @@ import { useAuth } from "src/authentication/AuthProvider";
 import { useTranslation } from 'react-i18next';
 import AccountSettingsInfo from '../../components/account-settings-page/AccountSettingsInfo';
 import { Project } from 'src/authentication/AuthInterfaces';
-import SuccessAlert from 'src/components/alerts/SuccessAlert';
-import ErrorAlert from 'src/components/alerts/ErrorAlert';
 import LocalRuntimeSettingsCard from 'src/components/ai/LocalRuntimeSettingsCard';
+import { useNotifications } from 'src/components/notifications/NotificationProvider';
 
 const AccountsSettingsPage = () => {
     const { t } = useTranslation();
     const auth = useAuth();
+    const { notify } = useNotifications();
     const [user, setUser] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
 
     const [monacoProjectsNumber, setMonacoProjectsNumber] = useState(0);
     const [blocklyProjectsNumber, setBlocklyProjectsNumber] = useState(0);
     const [tutorialsNumber, setTutorialsNumber] = useState(0);
-
-    const [showSuccessAlert, setShowSuccessAlert] = useState(false);
-    const [showErrorAlert, setShowErrorAlert] = useState(false);
-
-    const [showSuccessAlertText, setShowSuccessAlertText] = useState("");
-    const [showErrorAlertText, setShowErrorAlertText] = useState("");
 
     useEffect(() => {
         if (auth.authStatus !== 'authenticated' || !auth.token) {
@@ -54,9 +48,7 @@ const AccountsSettingsPage = () => {
                 }
             } catch (error) {
                 console.error('Error fetching projects:', error);
-                setShowErrorAlert(true);
-                const text = t('alertMessages.projectsFetchError');
-                setShowErrorAlertText(text);
+                notify(t('alertMessages.projectsFetchError'), { severity: 'error' });
             }
         };
 
@@ -82,9 +74,7 @@ const AccountsSettingsPage = () => {
                 setUser(userData);
             } catch (error) {
                 console.error('Error fetching user data:', error);
-                setShowErrorAlert(true);
-                const text = t('alertMessages.userDataFetchError');
-                setShowErrorAlertText(text);
+                notify(t('alertMessages.userDataFetchError'), { severity: 'error' });
             } finally {
                 setIsLoading(false);
             }
@@ -95,11 +85,9 @@ const AccountsSettingsPage = () => {
 
     const handleFormSubmitResult = (result) => {
         if (result) {
-            setShowSuccessAlert(true);
-            setShowSuccessAlertText(t('alertMessages.userDataUpdated'));
+            notify(t('alertMessages.userDataUpdated'), { severity: 'success' });
         } else {
-            setShowErrorAlert(true);
-            setShowErrorAlertText(t('alertMessages.userDataUpdateError'));
+            notify(t('alertMessages.userDataUpdateError'), { severity: 'error' });
         }
     };
 
@@ -193,13 +181,6 @@ const AccountsSettingsPage = () => {
 
            
 
-            {showSuccessAlert && (
-                <SuccessAlert title={showSuccessAlertText} description={""} />
-            )}
-
-            {showErrorAlert && (
-                <ErrorAlert title={showErrorAlertText} description={""} />
-            )}
         </PageContainer>
     );
 };

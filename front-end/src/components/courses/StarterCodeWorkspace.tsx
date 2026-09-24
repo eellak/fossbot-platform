@@ -6,21 +6,12 @@ import MonacoEditor, { type MonacoEditorHandle } from 'src/components/editors/Mo
 import type { Lesson } from 'src/courses/types';
 import AssistantPanel, { type AssistantSurfaceAdapter } from 'src/components/ai/AssistantPanel';
 import { fingerprintText } from 'src/ai/fingerprint';
-import { allowedBlocklyBlockTypes, previewPythonSuggestion, validateBlocklySuggestion } from 'src/ai/suggestions/codeSuggestions';
+import { allowedBlocklyBlockTypes, applyPythonEdits, previewPythonSuggestion, validateBlocklySuggestion } from 'src/ai/suggestions/codeSuggestions';
 
 const EMPTY_BLOCKLY = '<xml xmlns="https://developers.google.com/blockly/xml"></xml>';
 
 function blocklyXml(content: Lesson['starter_content']): string {
   return typeof content === 'object' && content && typeof content.xml === 'string' ? content.xml : EMPTY_BLOCKLY;
-}
-
-function fingerprint(value: string): string {
-  let hash = 2166136261;
-  for (let index = 0; index < value.length; index += 1) {
-    hash ^= value.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
-  }
-  return (hash >>> 0).toString(16).padStart(8, '0');
 }
 
 export default function StarterCodeWorkspace({ lesson, onChange, t }: { lesson: Lesson; onChange: (patch: Partial<Lesson>) => void; t: any }) {
@@ -72,11 +63,20 @@ export default function StarterCodeWorkspace({ lesson, onChange, t }: { lesson: 
         stageSummary: lesson.stageReference ? { title: lesson.stageReference.title || '', sourceType: lesson.stageReference.sourceType, revision: lesson.stageReference.commitSha || '' } : {},
       };
     },
+    getSelection: async () => {
+      const handle = monacoRef.current;
+      const selection = handle?.getSelection();
+      return handle && selection ? { source: handle.getSource(), ...selection } : null;
+    },
     previewSuggestion: async (suggestion) => {
-      if (suggestion.type !== 'python_replace') throw new Error('invalid_suggestion');
+      if (suggestion.type !== 'python_replace' && suggestion.type !== 'python_edits') throw new Error('invalid_suggestion');
       return previewPythonSuggestion(suggestion, monacoRef.current?.getSource() ?? serialized);
     },
     applySuggestion: async (suggestion) => {
+      if (suggestion.type === 'python_edits') {
+        monacoRef.current?.replaceSource(applyPythonEdits(monacoRef.current?.getSource() ?? serialized, suggestion.edits));
+        return;
+      }
       if (suggestion.type !== 'python_replace') throw new Error('invalid_suggestion');
       monacoRef.current?.replaceSource(suggestion.replacement);
     },
@@ -120,7 +120,7 @@ export default function StarterCodeWorkspace({ lesson, onChange, t }: { lesson: 
       {lesson.editor_type === 'python' ? <MonacoEditor ref={monacoRef} code={serialized} handleGetValue={(getValue) => onChange({ starter_content: getValue().replace(/\r\n/g, '\n') })} /> : <BlocklyEditor ref={blocklyRef} code={serialized} handleGetValue={(getValue) => onChange({ starter_content: { xml: getValue() } })} handleGetPythonCodeValue={setGeneratedPython} />}
     </Paper>
     <AssistantPanel key={`${lesson.id}:${lesson.editor_type}`} adapter={assistantAdapter} explainCapability={lesson.editor_type === 'python' ? 'code.explain' : 'blockly.explain'} suggestCapability={lesson.editor_type === 'python' ? 'code.suggest_changes' : 'blockly.suggest_changes'} />
-    <Stack direction="row" gap={1} flexWrap="wrap"><Chip size="small" variant="outlined" label={t('education.code.fingerprint', { fingerprint: fingerprint(serialized) })} /><Chip size="small" variant="outlined" label={t('education.code.stageVersion', { status: stageVersion })} /></Stack>
+    <Chip size="small" variant="outlined" label={t('education.code.stageVersion', { status: stageVersion })} sx={{ alignSelf: 'flex-start' }} />
     {result && <Alert severity={result.valid ? 'success' : 'error'}>{result.valid ? t('education.code.valid') : result.message || t('education.code.invalid')}</Alert>}
   </Stack>;
 }

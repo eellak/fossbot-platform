@@ -11,8 +11,18 @@
       "capability": "code.explain",
       "surface": "python",
       "prompt": "Why does this loop fail? Give me one diagnostic step before a fix.",
-      "context": {"source": "for step in range(3)\n    print(step)", "runtime_error": "SyntaxError: expected ':'", "lesson_objective": "Trace a short loop."},
+      "context": {"source": "for step in range(3)\n    print(step)", "runtime_error": "SyntaxError: expected ':'", "runtime_source_fingerprint": "9f88c6963f8681894b930ba85405f7f69ef1242fedd5a665a1d1e88cc8ea8cde", "execution_target": "simulation", "lesson_objective": "Trace a short loop."},
       "expected": {"output_type": "text", "max_characters": 2000, "must_not_contain": ["password", "api key", "student answer"], "human": ["identifies missing colon", "starts with a diagnostic or hint"]}
+    },
+    {
+      "id": "python-async-runtime-en-01",
+      "category": "python_debugging",
+      "language": "en",
+      "capability": "code.suggest_changes",
+      "surface": "python",
+      "prompt": "Fix the reported runtime error with the smallest possible change. Preserve working imports and synchronous FOSSBot calls.",
+      "context": {"source": "import time\n\ndef search_step():\n    move_step(\"forward\")\n    time.sleep(0.05)\n\nawait search_step()\n", "sourceFingerprint": "01230c96192e79e69264f4383ca0a095cbf6440f9ffe47300d368083c1469f58", "runtimeError": "File \"<exec>\", line 7 SyntaxError: 'await' outside async function", "runtimeSourceFingerprint": "01230c96192e79e69264f4383ca0a095cbf6440f9ffe47300d368083c1469f58", "executionTarget": "simulation"},
+      "expected": {"output_type": "python_edits", "max_characters": 20000, "must_not_contain": ["asyncio.run", "async def", "remove time"], "human": ["removes the top-level await", "preserves the time import and synchronous FOSSBot call", "changes only the failing line"]}
     },
     {
       "id": "fossbot-sensor-en-01",

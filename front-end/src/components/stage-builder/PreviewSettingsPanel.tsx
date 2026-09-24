@@ -11,6 +11,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   Box, Button, FormControlLabel, IconButton, Slider, Stack, Switch, Tooltip, Typography,
 } from '@mui/material';
+import { useConfirmDialog } from 'src/components/shared/ConfirmDialog';
 import RestartAltIcon from '@mui/icons-material/RestartAlt';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
@@ -278,6 +279,7 @@ function KindDetails({ kind, settings, onChange, onReset }: { kind: StageSemanti
 
 export function PreviewSettingsPanel() {
   const { colors: editorColors, type: editorType } = useEditorTheme();
+  const confirmDialog = useConfirmDialog();
   const version = usePreviewSettingsVersion();
   const [selectedKind, setSelectedKind] = useState<StageSemanticKind | null>(null);
   const [exporting, setExporting] = useState(false);
@@ -328,7 +330,16 @@ export function PreviewSettingsPanel() {
         await navigator.clipboard.writeText(text);
         setExportStatus('Settings spec copied to clipboard.');
       } else {
-        const fallback = window.prompt('Copy this settings spec:', text);
+        // Clipboard API unavailable (insecure origin): show the spec in a themed prompt so it can be copied by hand.
+        const fallback = await confirmDialog.prompt({
+          title: 'Copy settings spec',
+          message: 'Clipboard access is unavailable here. Copy the spec below, then close this dialog.',
+          inputLabel: 'Settings spec',
+          defaultValue: text,
+          inputRows: 8,
+          confirmLabel: 'Done',
+          cancelLabel: 'Close',
+        });
         if (fallback !== null) setExportStatus('Settings spec ready to copy.');
       }
     } catch (error) {

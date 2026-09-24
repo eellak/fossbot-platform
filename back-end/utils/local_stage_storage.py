@@ -9,6 +9,8 @@ from typing import Any, Optional
 
 
 MAX_STAGE_RECORD_BYTES = 512 * 1024
+MAX_STL_STAGE_RECORD_BYTES = 30 * 1024 * 1024
+MAX_STL_ASSET_BYTES = 10 * 1024 * 1024
 MAX_PREVIEW_BYTES = 512 * 1024
 LOCAL_STAGE_VISIBILITIES = {"private", "public"}
 LOCAL_SHARING_LICENSES = {"CC-BY-4.0", "CC0-1.0"}
@@ -41,16 +43,32 @@ def compact_record_bytes(record: dict[str, Any]) -> bytes:
         raise LocalStageValidationError("Stage record must contain JSON-compatible values.") from error
 
 
-def _validate_no_local_assets(value: Any, key: Optional[str] = None) -> None:
+def _validate_local_assets(value: Any, stl_assets: set[str], key: Optional[str] = None) -> None:
     if isinstance(value, dict):
-        if value.get("type") == "model" or value.get("kind") == "model" or value.get("semanticKind") == "customObject":
-            raise LocalStageValidationError("Custom OBJ, STL, and GLB objects are not supported in local database stages yet.")
+        is_model = value.get("type") == "model" or value.get("kind") == "model" or value.get("semanticKind") == "customObject"
+        if is_model:
+            filename = value.get("filename")
+            if value.get("format") != "stl" or not isinstance(filename, str) or not filename.startswith("data:"):
+                raise LocalStageValidationError("Local database stages support embedded STL models only.")
+            if filename not in stl_assets:
+                match = DATA_URL_RE.match(filename)
+                if not match or not match.group(2) or match.group(1) not in {None, "model/stl", "application/sla", "application/vnd.ms-pki.stl", "application/octet-stream"}:
+                    raise LocalStageValidationError("STL model must be a base64-encoded STL data URL.")
+                try:
+                    content = base64.b64decode(match.group(3), validate=True)
+                except (ValueError, binascii.Error) as error:
+                    raise LocalStageValidationError("STL model contains invalid base64 data.") from error
+                if not content or len(content) > MAX_STL_ASSET_BYTES:
+                    raise LocalStageValidationError("STL model must be non-empty and at most 10 MiB.")
+                stl_assets.add(filename)
         for child_key, child in value.items():
-            _validate_no_local_assets(child, child_key)
+            if is_model and child_key == "filename":
+                continue
+            _validate_local_assets(child, stl_assets, child_key)
         return
     if isinstance(value, list):
         for child in value:
-            _validate_no_local_assets(child, key)
+            _validate_local_assets(child, stl_assets, key)
         return
     if isinstance(value, str) and key in ASSET_KEYS and value.startswith(("data:", "blob:")):
         raise LocalStageValidationError("Embedded and temporary assets are not supported in local database stages yet.")
@@ -62,10 +80,12 @@ def validate_local_stage_record(record: dict[str, Any]) -> tuple[int, str]:
     config = record.get("config")
     if not isinstance(config, list) or not config:
         raise LocalStageValidationError("Stage record must contain a non-empty config array.")
-    _validate_no_local_assets(record)
+    stl_assets: set[str] = set()
+    _validate_local_assets(record, stl_assets)
     encoded = compact_record_bytes(record)
-    if len(encoded) > MAX_STAGE_RECORD_BYTES:
-        raise LocalStageValidationError(f"Stage JSON exceeds the {MAX_STAGE_RECORD_BYTES // 1024} KiB local storage limit.")
+    limit = MAX_STL_STAGE_RECORD_BYTES if stl_assets else MAX_STAGE_RECORD_BYTES
+    if len(encoded) > limit:
+        raise LocalStageValidationError(f"Stage JSON exceeds the {limit // 1024} KiB local storage limit.")
     return len(encoded), hashlib.sha256(encoded).hexdigest()
 
 
@@ -117,21 +137,27 @@ def copy_provenance(source: dict[str, Any], inherited: Optional[dict[str, Any]] 
     return {**source, "copiedAt": utc_now_iso(), "ancestors": ancestors[:20]}
 
 
-def local_stage_payload(stage: Any) -> dict[str, Any]:
-    return {
+def local_stage_payload(stage: Any, *, include_record: bool = True) -> dict[str, Any]:
+    # Listing stages must not load full JSON records or preview blobs: an embedded
+    # STL can make a single record tens of MiB. Saved previews always have a MIME.
+    has_preview = bool(stage.preview_mime)
+    payload = {
         "id": stage.id,
         "slug": stage.slug,
         "title": stage.title,
         "description": stage.description,
         "visibility": stage.visibility,
-        "record": stage.record,
         "recordBytes": stage.record_bytes,
         "revision": stage.revision,
         "checksum": stage.checksum,
+        "previewUrl": f"{public_backend_url()}/api/local-stages/{stage.id}/preview?v={stage.revision}" if has_preview else None,
         "provenance": stage.provenance,
         "createdAt": stage.created_at.isoformat() + "Z",
         "updatedAt": stage.updated_at.isoformat() + "Z",
     }
+    if include_record:
+        payload["record"] = stage.record
+    return payload
 
 
 def local_publication_entry(publication: Any, submission: Any = None) -> dict[str, Any]:

@@ -43,7 +43,7 @@ const MobileSidebar = () => {
         <StyledButton color="inherit" variant="text" href="https://gfoss.eu/">
         <IconBrandOpenSource style={{ marginRight: '8px' }} /> {t('gfoss')}
         </StyledButton>
-        <StyledButton color="inherit" variant="text" href="/about-page">
+        <StyledButton color="inherit" variant="text" href="https://hot.dit.hua.gr/">
         <IconInfoCircle style={{ marginRight: '8px' }} /> {t('aboutUs')} 
         </StyledButton>
           {/* <Button

@@ -3,6 +3,7 @@ import { Alert, Box, Button, Chip, FormControlLabel, Stack, Switch, ToggleButton
 import { IconCheck, IconCopy, IconTrash } from '@tabler/icons-react';
 import { useTranslation } from 'react-i18next';
 import type { AIDebugTraceEntry } from 'src/ai/types';
+import { copyText } from 'src/utils/platform';
 
 
 type CompactTraceEntry = Omit<AIDebugTraceEntry, 'data'> & {
@@ -14,7 +15,7 @@ const compactSteps = new Set([
   'request.started', 'provider.selected', 'context.assembled', 'prompt.built',
   'event.metadata', 'event.finish',
   'suggestion.raw', 'suggestion.json_repaired', 'suggestion.normalized', 'suggestion.rejected', 'suggestion.repair_requested',
-  'suggestion.validated', 'suggestion.parse_failed', 'preview.rejected', 'preview.validated',
+  'response.validated', 'suggestion.validated', 'suggestion.parse_failed', 'preview.rejected', 'preview.validated',
   'request.completed', 'request.failed', 'request.cancelled', 'stream.error',
 ]);
 
@@ -82,12 +83,26 @@ function compactSummary(entry: AIDebugTraceEntry): CompactTraceEntry {
       break;
     case 'suggestion.validated': {
       const suggestion = record(data.suggestion);
-      summary = `Attempt ${data.attempt || '?'} passed backend validation · ${Array.isArray(suggestion.operations) ? suggestion.operations.length : 0} operations`;
+      const detail = Array.isArray(suggestion.edits)
+        ? `${suggestion.edits.length} line edits`
+        : Array.isArray(suggestion.operations)
+          ? `${suggestion.operations.length} operations`
+          : suggestion.type === 'python_replace'
+            ? 'whole-file replacement'
+            : 'validated';
+      const checkLabel = suggestion.type === 'python_replace' || suggestion.type === 'python_edits'
+        ? 'passed backend schema and syntax checks'
+        : 'passed backend schema and domain checks';
+      summary = `Attempt ${data.attempt || '?'} ${checkLabel} · ${detail}`;
       severity = 'success';
       break;
     }
+    case 'response.validated':
+      summary = `Attempt ${data.attempt || '?'} selected a conversational answer`;
+      severity = 'success';
+      break;
     case 'preview.validated':
-      summary = 'Proposal passed client preview validation';
+      summary = 'Proposal rendered and passed client structural checks';
       severity = 'success';
       break;
     case 'request.completed':
@@ -135,7 +150,8 @@ export default function AdminDebugTrace({ entries, onClear }: { entries: AIDebug
   const [view, setView] = useState<'compact' | 'full'>('compact');
   const compactEntries = compactDebugEntries(entries);
   const copy = async () => {
-    await navigator.clipboard.writeText(JSON.stringify(view === 'compact' ? compactEntries : entries, null, 2));
+    const copied = await copyText(JSON.stringify(view === 'compact' ? compactEntries : entries, null, 2));
+    if (!copied) return;
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1_500);
   };

@@ -9,8 +9,20 @@ import type { SuggestionPreview } from './codeSuggestions';
 
 export type StageAuthoringTarget = 'create' | 'stage' | 'selection' | 'validation';
 
-const SUPPORTED_KINDS = new Set(STAGE_OBJECT_CATALOG.filter((item) => item.placeable && item.id !== 'audio' && item.id !== 'customObject').map((item) => item.id));
+// Keep this in sync with the backend stage validator and createCatalogObject.
+// `wedge` has a creator but no library tile, so it is allowed here even though it
+// is absent from STAGE_OBJECT_CATALOG.
+const SUPPORTED_KINDS = new Set([
+  ...STAGE_OBJECT_CATALOG.filter((item) => item.placeable && item.id !== 'audio' && item.id !== 'customObject').map((item) => item.id),
+  'wedge',
+]);
 const PATCH_FIELDS = new Set(['name', 'color', 'mass', 'immovable', 'collision', 'hidden', 'locked', 'text', 'scale', 'onFloor', 'intensity', 'range', 'angle', 'penumbra', 'fov', 'pitch', 'subtype', 'challenge']);
+
+// Optional patch values may arrive as null; dropping them keeps them from
+// overwriting real stage fields with null.
+const withoutNulls = (patch: Record<string, unknown>) => Object.fromEntries(
+  Object.entries(patch).filter(([, value]) => value !== null && value !== undefined),
+);
 
 export function parseStageSuggestion(value: Record<string, unknown>): StageAuthoringSuggestion {
   if (value.version !== '1' || value.type !== 'stage_operations' || typeof value.baseFingerprint !== 'string' || !/^[0-9a-f]{64}$/.test(value.baseFingerprint) || typeof value.rationale !== 'string' || !value.rationale.trim() || typeof value.expectedValidation !== 'string' || !value.expectedValidation.trim() || typeof value.summary !== 'string' || !value.summary.trim() || !Array.isArray(value.operations) || value.operations.length < 1 || value.operations.length > 64) throw new Error('invalid_suggestion');
@@ -67,7 +79,7 @@ function applyOperations(stage: EditorStage, suggestion: StageAuthoringSuggestio
     if (operation.op === 'set_floor') {
       if (!operation.patch || Object.keys(operation.patch).some((key) => !['name', 'dimensions', 'color', 'repeat', 'offset'].includes(key))) throw new Error('invalid_suggestion');
       if (operation.patch.dimensions !== undefined && !finite(operation.patch.dimensions, 2, true)) throw new Error('invalid_stage_geometry');
-      next.floor = { ...next.floor, ...operation.patch } as EditorStage['floor'];
+      next.floor = { ...next.floor, ...withoutNulls(operation.patch) } as EditorStage['floor'];
       return;
     }
     if (operation.op === 'add_object') {
@@ -84,7 +96,7 @@ function applyOperations(stage: EditorStage, suggestion: StageAuthoringSuggestio
     if (target === 'selection' && !selected.has(object.id)) throw new Error('unselected_stage_object');
     if (operation.op === 'update_object') {
       if (!operation.patch || Object.keys(operation.patch).some((key) => !PATCH_FIELDS.has(key))) throw new Error('invalid_suggestion');
-      Object.assign(object, cloneStage(operation.patch));
+      Object.assign(object, cloneStage(withoutNulls(operation.patch)));
       changed.add(object.id);
       return;
     }

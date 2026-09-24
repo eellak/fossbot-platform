@@ -1,5 +1,5 @@
-import PageContainer from 'src/components/container/PageContainer';
 import COMMANDS_JSON from 'src/utils/toolboxMonaco/toolboxMonaco';
+import { copyText } from 'src/utils/platform';
 
 import { useState, useRef } from 'react';
 import {
@@ -15,13 +15,14 @@ import {
   TextField,
   ListItemButton,
   Fab,
+  Tooltip,
 } from '@mui/material';
-import { IconX } from '@tabler/icons-react';
+import { IconBook, IconX } from '@tabler/icons-react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faCogs } from '@fortawesome/free-solid-svg-icons';
 import { useTranslation } from 'react-i18next';
 
-const SearchBar = () => {
+const SearchBar = ({ variant = 'fab' }: { variant?: 'fab' | 'button' }) => {
   const { t } = useTranslation();
 
   const [showDrawer, setShowDrawer] = useState(false);
@@ -75,7 +76,7 @@ const SearchBar = () => {
   const [copySuccess, setCopySuccess] = useState(false);
 
   const handleCopy = (command: string) => {
-    navigator.clipboard.writeText(command);
+    void copyText(command);
     setCopiedCommand(command);
     setCopySuccess(true);
 
@@ -86,10 +87,22 @@ const SearchBar = () => {
   };
 
   return (
-    <PageContainer>
-      <Fab color="warning" aria-label="search" onClick={() => setShowDrawer(true)}>
-        <FontAwesomeIcon icon={faCogs} size="1x" />
-      </Fab>
+    <>
+      {variant === 'fab' ? (
+        <Fab color="warning" aria-label="search" onClick={() => setShowDrawer(true)}>
+          <FontAwesomeIcon icon={faCogs} size="1x" />
+        </Fab>
+      ) : (
+        <Tooltip title={t('monaco-search-bar.quickCommandLinks')}>
+          <IconButton
+            aria-label={t('monaco-search-bar.quickCommandLinks')}
+            onClick={() => setShowDrawer(true)}
+            sx={{ width: 44, height: 44, color: 'primary.main' }}
+          >
+            <IconBook size={20} />
+          </IconButton>
+        </Tooltip>
+      )}
       <Dialog
         open={showDrawer}
         onClose={handleDrawerClose}
@@ -149,7 +162,7 @@ const SearchBar = () => {
           </Box>
         </Box>
       </Dialog>
-    </PageContainer>
+    </>
   );
 };
 

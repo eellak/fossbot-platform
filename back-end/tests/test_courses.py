@@ -2,7 +2,7 @@ from unittest.mock import patch
 
 import pytest
 
-from database.database import ActivityAnswer, Course, CourseRelease, Enrollment, Lesson, LessonProgress, LessonWorkspace, MissionAttempt, User
+from database.database import ActivityAnswer, Course, CourseRelease, Enrollment, Lesson, LessonProgress, LessonWorkspace, LocalStage, MissionAttempt, User
 from models.models import UserRole
 from utils.activity_schema import grade_submission, validate_activities
 
@@ -338,6 +338,44 @@ def test_stage_variants_are_normalized_and_remote_references_are_pinned(client_f
             assert pinned["commitSha"] == "a" * 40
 
 
+def test_local_stage_reference_is_embedded_in_the_release(client_for, users, db):
+    tutor, other_tutor, _, _ = users
+    client = client_for(tutor)
+    stage = LocalStage(
+        user_id=tutor.id,
+        slug="maze-runner",
+        title="Maze runner",
+        description="A locally saved stage.",
+        visibility="private",
+        record={"title": "Maze runner", "config": [{"type": "skybox", "mode": "color", "color": "#ddf0fb"}]},
+        record_bytes=64,
+        revision=1,
+        checksum="b" * 64,
+    )
+    db.add(stage)
+    db.commit()
+    db.refresh(stage)
+
+    course = create_course(client, title="Local stage course")
+    lesson = add_lesson(client, course["id"], stageReference={"sourceType": "local", "localStageId": stage.id})
+    assert lesson["stageReference"]["sourceType"] == "local"
+    assert lesson["stageReference"]["commitSha"] == "b" * 64
+
+    release = client.post(f"/courses/{course['id']}/publish")
+    assert release.status_code == 201, release.text
+    snapshot_lesson = release.json()["snapshot"]["lessons"][0]
+    assert snapshot_lesson["stageReference"]["sourceType"] == "local"
+    assert snapshot_lesson["stageConfig"] == [{"type": "skybox", "mode": "color", "color": "#ddf0fb"}]
+
+    # Another tutor cannot reference a stage from someone else's library.
+    other_course = create_course(client_for(other_tutor), title="Other course")
+    denied = client_for(other_tutor).post(
+        f"/courses/{other_course['id']}/lessons",
+        json={"title": "Nope", "stageReference": {"sourceType": "local", "localStageId": stage.id}},
+    )
+    assert denied.status_code == 404
+
+
 def test_archiving_is_soft_and_release_rows_remain(client_for, users, db):
     tutor, _, _, _ = users
     client = client_for(tutor)
@@ -349,6 +387,35 @@ def test_archiving_is_soft_and_release_rows_remain(client_for, users, db):
     assert db.query(CourseRelease).filter(CourseRelease.course_id == course["id"]).count() == 1
     assert client.delete(f"/courses/{course['id']}").status_code == 204
     assert db.query(Course).filter(Course.id == course["id"]).one().status == "archived"
+
+
+def test_permanent_delete_removes_unused_course(client_for, users, db):
+    tutor, other_tutor, _, _ = users
+    teacher = client_for(tutor)
+    course = create_course(teacher)
+    lesson = add_lesson(teacher, course["id"])
+    assert teacher.post(f"/courses/{course['id']}/publish").status_code == 201
+
+    assert client_for(other_tutor).delete(f"/courses/{course['id']}/permanent").status_code == 404
+    assert teacher.delete(f"/courses/{course['id']}/permanent").status_code == 204
+    assert db.query(Course).filter(Course.id == course["id"]).count() == 0
+    assert db.query(Lesson).filter(Lesson.id == lesson["id"]).count() == 0
+    assert db.query(CourseRelease).filter(CourseRelease.course_id == course["id"]).count() == 0
+    assert teacher.get(f"/courses/{course['id']}/draft").status_code == 404
+
+
+def test_permanent_delete_refuses_course_with_enrollments(client_for, users, db):
+    tutor, _, student, _ = users
+    teacher = client_for(tutor)
+    course = create_course(teacher)
+    add_lesson(teacher, course["id"])
+    assert teacher.post(f"/courses/{course['id']}/publish").status_code == 201
+    assert client_for(student).post(f"/courses/{course['id']}/enroll").status_code == 201
+
+    response = teacher.delete(f"/courses/{course['id']}/permanent")
+    assert response.status_code == 409
+    assert response.json()["detail"]["error"] == "course_has_enrollments"
+    assert db.query(Course).filter(Course.id == course["id"]).count() == 1
 
 
 def test_publication_validation_and_deprecated_aliases(client_for, users):
@@ -619,6 +686,55 @@ def test_rejects_unsafe_urls_and_rich_text_embeds(client_for, users):
     })
     assert response.status_code == 422
     assert "unsupported formatting" in response.text
+
+
+def test_drafts_save_incomplete_activities_but_publish_rejects_them(client_for, users):
+    tutor, *_ = users
+    teacher = client_for(tutor)
+    course = create_course(teacher)
+    lesson = add_lesson(teacher, course["id"], title="Reflect")
+    incomplete = [{
+        "key": "reflect",
+        "version": 1,
+        "required": True,
+        "type": "short_reflection",
+        "prompt": "",
+        "collectResponse": True,
+    }]
+
+    # Work in progress must be savable even though a required prompt is empty.
+    saved = teacher.put(
+        f"/courses/{course['id']}/lessons/{lesson['id']}",
+        json={"activities": incomplete, "expected_updated_at": lesson["updated_at"]},
+    )
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["activities"][0]["prompt"] == ""
+
+    # The same draft is still not publishable.
+    validation = teacher.post(f"/courses/{course['id']}/validate").json()
+    assert validation["valid"] is False
+    assert any(issue["code"] == "activity" for issue in validation["errors"])
+    assert teacher.post(f"/courses/{course['id']}/publish").status_code == 422
+
+    # Safety is not deferred: an unsafe draft is rejected at save time.
+    unsafe = [{
+        "key": "reflect",
+        "version": 1,
+        "required": True,
+        "type": "rich_text",
+        "content": {
+            "type": "doc",
+            "content": [{
+                "type": "paragraph",
+                "content": [{"type": "text", "text": "Open me", "marks": [{"type": "link", "attrs": {"href": "javascript:alert(1)"}}]}],
+            }],
+        },
+    }]
+    rejected = teacher.put(
+        f"/courses/{course['id']}/lessons/{lesson['id']}",
+        json={"activities": unsafe, "expected_updated_at": saved.json()["updated_at"]},
+    )
+    assert rejected.status_code == 422
 
 
 def test_teacher_to_student_core_regression(client_for, users):

@@ -3,12 +3,15 @@ import json
 
 import pytest
 
-from utils.ai.schemas import ConversationTurn, ProviderStreamRequest
-from utils.ai.suggestions import SuggestionError, build_suggestion_repair_request, parse_suggestion, parse_suggestion_with_normalizations, repair_incomplete_json_object, suggestion_output_token_budget, suggestion_payload, suggestion_response_character_limit
+from utils.ai.schemas import ConversationTurn, CourseAuthoringPatch, LessonAuthoringSuggestion, LessonOperation, ProviderStreamRequest
+from utils.ai.suggestion_contracts import suggestion_contract_prompt, suggestion_json_schema
+from utils.ai.suggestions import SuggestionError, apply_python_edits, build_suggestion_repair_request, output_token_budget, parse_suggestion, parse_suggestion_with_normalizations, repair_incomplete_json_object, suggestion_output_token_budget, suggestion_payload, suggestion_response_character_limit
 
 
 def test_structured_output_budgets_match_capability_payload_sizes():
-    assert suggestion_output_token_budget("code.suggest_changes") == 4_096
+    assert output_token_budget("code.explain") == 4_096
+    assert output_token_budget("blockly.explain") == 4_096
+    assert suggestion_output_token_budget("code.suggest_changes") == 6_144
     assert suggestion_output_token_budget("blockly.suggest_changes") == 6_144
     assert suggestion_output_token_budget("lesson.suggest_changes") == 6_144
     assert suggestion_output_token_budget("stage.create") == 8_192
@@ -106,6 +109,184 @@ def test_repair_instruction_prescribes_flat_operation_shape():
     assert 'Correct: {"op":"add_object"' in repaired.messages[-1].content
 
 
+def test_repair_instruction_points_invalid_activities_back_to_the_contract():
+    request = ProviderStreamRequest(model="test", system="system", messages=[ConversationTurn(role="user", content="Add an activity")])
+    error = SuggestionError("operations[0] op 'insert_activity' contains an invalid activity: numeric_answer unit must not be blank")
+    error.__cause__ = ValueError("numeric_answer unit must not be blank")
+    repaired = build_suggestion_repair_request(request, "{}", error, 1)
+    assert "platform activity schema" in repaired.messages[-1].content
+    assert "numeric_answer needs prompt" in repaired.messages[-1].content
+
+
+def test_suggestion_payload_omits_null_optional_fields():
+    suggestion = LessonAuthoringSuggestion(
+        version="1",
+        type="lesson_operations",
+        base_revision="a" * 64,
+        operations=[LessonOperation(op="update_course", course_patch=CourseAuthoringPatch(description="A new description."))],
+        summary="Update the course description.",
+    )
+    payload = suggestion_payload(suggestion)
+    assert payload["operations"][0]["coursePatch"] == {"description": "A new description."}
+    assert "lessonId" not in payload["operations"][0]
+
+
+def test_lesson_update_requires_an_effective_patch():
+    revision = "a" * 64
+    course_context = {"target": "course", "target_payload": {"course": {}, "outline": []}}
+    with pytest.raises(SuggestionError, match="does not change"):
+        parse_suggestion(json.dumps({
+            "version": "1", "type": "lesson_operations", "baseRevision": revision, "summary": "No-op.",
+            "operations": [{"op": "update_course", "coursePatch": {}}],
+        }), "lesson.draft", revision, course_context)
+    lesson_context = {"target": "lesson", "target_payload": {"course": {}, "lesson": {"id": 7}, "outline": []}}
+    with pytest.raises(SuggestionError, match="missing its title"):
+        parse_suggestion(json.dumps({
+            "version": "1", "type": "lesson_operations", "baseRevision": revision, "summary": "No-op.",
+            "operations": [{"op": "update_lesson", "lessonId": 7, "lessonPatch": {}}],
+        }), "lesson.suggest_changes", revision, lesson_context)
+
+
+def test_create_lesson_is_validated_and_target_scoped():
+    revision = "a" * 64
+    course_context = {"target": "course", "target_payload": {"course": {}, "outline": []}}
+    activity = {"key": "ai-intro", "type": "rich_text", "version": 1, "required": False, "content": "Predict, then test."}
+    valid = {
+        "version": "1", "type": "lesson_operations", "baseRevision": revision, "summary": "Create lesson.",
+        "operations": [{"op": "create_lesson", "lessonTitle": "Getting started", "activities": [activity]}],
+    }
+    parsed = parse_suggestion(json.dumps(valid), "lesson.draft", revision, course_context)
+    payload = suggestion_payload(parsed)
+    assert payload["operations"][0]["lessonTitle"] == "Getting started"
+    assert payload["operations"][0]["activities"][0]["key"] == "ai-intro"
+    with pytest.raises(SuggestionError, match="needs a title"):
+        parse_suggestion(json.dumps({**valid, "operations": [{"op": "create_lesson", "lessonTitle": "  "}]}), "lesson.draft", revision, course_context)
+    with pytest.raises(SuggestionError, match="ai- keys"):
+        parse_suggestion(json.dumps({**valid, "operations": [{"op": "create_lesson", "lessonTitle": "New", "activities": [{**activity, "key": "fixed"}]}]}), "lesson.draft", revision, course_context)
+    lesson_context = {"target": "lesson", "target_payload": {"course": {}, "lesson": {"id": 7}}}
+    with pytest.raises(SuggestionError, match="not valid for selected target"):
+        parse_suggestion(json.dumps(valid), "lesson.draft", revision, lesson_context)
+
+
+def test_create_lesson_accepts_hint_linked_to_another_new_activity():
+    revision = "a" * 64
+    context = {"target": "course", "target_payload": {"course": {}, "outline": []}}
+    activities = [
+        {"key": "ai-question", "type": "multiple_choice", "version": 1, "required": True,
+         "prompt": "Which way?", "options": [{"key": "left", "label": "Left"}, {"key": "right", "label": "Right"}],
+         "correctOptionKey": "left"},
+        {"key": "ai-hint", "type": "hint", "version": 1, "required": False,
+         "content": "Look at the arrow.", "forActivityKey": "ai-question"},
+    ]
+    suggestion = {
+        "version": "1", "type": "lesson_operations", "baseRevision": revision, "summary": "Create lesson with hint.",
+        "operations": [{"op": "create_lesson", "lessonTitle": "Directions", "activities": activities}],
+    }
+    parsed = parse_suggestion(json.dumps(suggestion), "lesson.draft", revision, context)
+    assert parsed.operations[0].activities == activities
+
+    activities[1]["forActivityKey"] = "missing"
+    with pytest.raises(SuggestionError, match="forActivityKey"):
+        parse_suggestion(json.dumps(suggestion), "lesson.draft", revision, context)
+
+
+def test_python_edits_merge_line_ranges_and_validate():
+    source = "def greet():\n    print('hi')\n\nprint('bye')\n"
+    fingerprint = hashlib.sha256(source.encode()).hexdigest()
+    context = {"source": source}
+    suggestion = {
+        "version": "1", "type": "python_edits", "baseFingerprint": fingerprint,
+        "edits": [{"startLine": 2, "endLine": 2, "replacement": "    print('hello')"}],
+        "summary": "Update one line.",
+    }
+    parsed = parse_suggestion(json.dumps(suggestion), "code.suggest_changes", fingerprint, context)
+    assert parsed.type == "python_edits"
+    assert apply_python_edits(source, parsed.edits) == "def greet():\n    print('hello')\n\nprint('bye')\n"
+
+    delete = {**suggestion, "edits": [{"startLine": 3, "endLine": 3, "replacement": ""}]}
+    deleted = parse_suggestion(json.dumps(delete), "code.suggest_changes", fingerprint, context)
+    assert apply_python_edits(source, deleted.edits) == "def greet():\n    print('hi')\nprint('bye')\n"
+
+    with pytest.raises(SuggestionError, match="not syntactically valid"):
+        parse_suggestion(json.dumps({**suggestion, "edits": [{"startLine": 2, "endLine": 2, "replacement": "    print("}]}), "code.suggest_changes", fingerprint, context)
+    with pytest.raises(SuggestionError, match="must not overlap"):
+        parse_suggestion(json.dumps({**suggestion, "edits": [{"startLine": 2, "endLine": 3}, {"startLine": 3, "endLine": 4}]}), "code.suggest_changes", fingerprint, context)
+    with pytest.raises(SuggestionError, match="stay within"):
+        parse_suggestion(json.dumps({**suggestion, "edits": [{"startLine": 9, "endLine": 9, "replacement": "x"}]}), "code.suggest_changes", fingerprint, context)
+
+
+def test_python_suggestions_reject_top_level_await():
+    source = "print('hi')\n"
+    fingerprint = hashlib.sha256(source.encode()).hexdigest()
+    context = {"source": source}
+    replacement = {
+        "version": "1", "type": "python_replace", "baseFingerprint": fingerprint,
+        "replacement": "await move_step('forward')\n", "summary": "Fix the error.",
+    }
+    with pytest.raises(SuggestionError, match="not syntactically valid"):
+        parse_suggestion(json.dumps(replacement), "code.suggest_changes", fingerprint, context)
+    edits = {
+        "version": "1", "type": "python_edits", "baseFingerprint": fingerprint,
+        "edits": [{"startLine": 1, "endLine": 1, "replacement": "await move_step('forward')"}], "summary": "Fix the error.",
+    }
+    with pytest.raises(SuggestionError, match="not syntactically valid"):
+        parse_suggestion(json.dumps(edits), "code.suggest_changes", fingerprint, context)
+
+
+def test_python_suggestions_reject_no_op_and_summary_claims_not_in_diff():
+    source = "if search_step():\n    break\n"
+    fingerprint = hashlib.sha256(source.encode()).hexdigest()
+    context = {"source": source}
+    no_op = {
+        "version": "1", "type": "python_edits", "baseFingerprint": fingerprint,
+        "edits": [{"startLine": 1, "endLine": 1, "replacement": "if search_step():"}],
+        "summary": "Keep the condition.",
+    }
+    with pytest.raises(SuggestionError, match="effective change"):
+        parse_suggestion(json.dumps(no_op), "code.suggest_changes", fingerprint, context)
+
+    false_claim = {
+        **no_op,
+        "edits": [{"startLine": 1, "endLine": 1, "replacement": "    if search_step():"}],
+        "summary": "Removed the invalid await usage.",
+    }
+    with pytest.raises(SuggestionError, match="claims that await was removed"):
+        parse_suggestion(json.dumps(false_claim), "code.suggest_changes", fingerprint, context)
+
+
+def test_code_suggestion_contract_documents_line_edits():
+    supplied = {"source_fingerprint": "a" * 64, "source": "print('hi')"}
+    schema = suggestion_json_schema("code.suggest_changes")
+    assert set(branch["properties"]["type"]["const"] for branch in schema["anyOf"]) == {"answer", "python_replace", "python_edits"}
+    prompt = suggestion_contract_prompt("code.suggest_changes", supplied)
+    assert '"type":"answer"' in prompt
+    assert '"type":"python_edits"' in prompt
+    assert "startLine" in prompt
+
+
+def test_code_and_blockly_assistance_can_return_a_contextual_answer():
+    fingerprint = "a" * 64
+    answer = json.dumps({
+        "version": "1",
+        "type": "answer",
+        "baseFingerprint": fingerprint,
+        "content": "The condition runs only when the sensor reports true.",
+    })
+    for capability in ("code.suggest_changes", "blockly.suggest_changes"):
+        parsed = parse_suggestion(answer, capability, fingerprint, {"source": "print('hi')"})
+        assert parsed.type == "answer"
+        assert parsed.content.startswith("The condition")
+
+    wrapped, normalizations = parse_suggestion_with_normalizations(
+        json.dumps({"outcome": json.loads(answer)}),
+        "code.suggest_changes",
+        fingerprint,
+        {"source": "print('hi')"},
+    )
+    assert wrapped.type == "answer"
+    assert normalizations == ["root:unwrap-outcome"]
+
+
 def test_blockly_suggestion_requires_well_formed_xml_and_matching_fingerprint():
     fingerprint = hashlib.sha256(b"<xml></xml>").hexdigest()
     valid = parse_suggestion(json.dumps({
@@ -183,22 +364,24 @@ def test_lesson_suggestion_cannot_create_mission_rules():
         }), "lesson.suggest_changes", revision, context)
 
 
-def test_stage_create_requires_supported_spawn_and_target():
+def test_stage_create_requires_spawn_but_target_is_optional():
     fingerprint = "c" * 64
     context = {"target": "create", "selected_object_ids": [], "stage_payload": {"objects": [], "summary": {"knownObjectIds": []}}}
     suggestion = {
         "version": "1", "type": "stage_operations", "baseFingerprint": fingerprint,
-        "rationale": "Create a minimal challenge.", "expectedValidation": "Spawn and target remain visible.", "summary": "Create stage.",
+        "rationale": "Create a minimal challenge.", "expectedValidation": "Spawn remains visible.", "summary": "Create stage.",
         "operations": [
             {"op": "set_metadata", "patch": {"title": "Line challenge"}},
             {"op": "add_object", "tempId": "ai-spawn", "semanticKind": "robotSpawn", "position": [-2, 0, -2]},
-            {"op": "add_object", "tempId": "ai-target", "semanticKind": "target", "position": [2, 0, 2]},
         ],
     }
     parsed = parse_suggestion(json.dumps(suggestion), "stage.create", fingerprint, context)
     assert parsed.type == "stage_operations"
-    suggestion["operations"][2]["semanticKind"] = "downloadedModel"
+    suggestion["operations"].append({"op": "add_object", "tempId": "ai-invalid", "semanticKind": "downloadedModel", "position": [2, 0, 2]})
     with pytest.raises(SuggestionError, match="not supported"):
+        parse_suggestion(json.dumps(suggestion), "stage.create", fingerprint, context)
+    suggestion["operations"] = [{"op": "set_metadata", "patch": {"title": "No spawn"}}]
+    with pytest.raises(SuggestionError, match="robot spawn"):
         parse_suggestion(json.dumps(suggestion), "stage.create", fingerprint, context)
 
 

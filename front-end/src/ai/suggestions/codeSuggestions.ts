@@ -2,13 +2,17 @@ import * as Blockly from 'blockly';
 import { pythonGenerator } from 'blockly/python';
 import TOOLBOX_JSON_EN from 'src/utils/toolboxBlockly/toolbox_en';
 import 'src/utils/blocksBlockly/customBlocks';
-import type { AIAssistantSuggestion, AICodeSuggestion, BlocklyReplaceSuggestion, PythonReplaceSuggestion } from '../types';
+import type { AIAssistantSuggestion, AICodeSuggestion, BlocklyReplaceSuggestion, PythonEditsSuggestion, PythonReplaceSuggestion } from '../types';
+import { applyPythonEdits, previewPythonEdits } from './pythonEdits';
+import type { PythonEditPreview } from './pythonEdits';
+
+export { applyPythonEdits };
 
 export const CODE_SUGGESTION_VERSION = '1';
 
-export type LessonPreviewValue = string | number | boolean | string[] | Record<string, unknown>;
+export type LessonPreviewValue = string | number | boolean | LessonPreviewValue[] | Record<string, unknown>;
 export type LessonPreviewItem = {
-  title: 'course' | 'lesson' | 'activity' | 'removeActivity' | 'activityOrder';
+  title: 'course' | 'lesson' | 'createLesson' | 'activity' | 'removeActivity' | 'activityOrder';
   activityType?: string;
   fields: Array<{ name: string; value: LessonPreviewValue }>;
 };
@@ -20,6 +24,8 @@ export type SuggestionPreview = {
   before: string;
   after: string;
   detail: string;
+  /** Per-line-range changes for a python_edits suggestion, so the review can show each one. */
+  edits?: PythonEditPreview[];
   changes?: string[];
   lesson?: {
     studentVisible: LessonPreviewItem[];
@@ -60,12 +66,21 @@ export function parseCodeSuggestion(value: Record<string, unknown>): AICodeSugge
     throw new Error('invalid_suggestion');
   }
   if (value.type === 'python_replace' && typeof value.replacement === 'string' && value.replacement.length <= 12_000) return value as unknown as PythonReplaceSuggestion;
+  if (value.type === 'python_edits' && Array.isArray(value.edits) && value.edits.length >= 1 && value.edits.length <= 32 && value.edits.every((edit) => {
+    if (!edit || typeof edit !== 'object') return false;
+    const candidate = edit as Record<string, unknown>;
+    return Number.isInteger(candidate.startLine) && Number.isInteger(candidate.endLine) && typeof candidate.replacement === 'string' && candidate.replacement.length <= 12_000;
+  })) return value as unknown as PythonEditsSuggestion;
   if (value.type === 'blockly_replace' && typeof value.xml === 'string' && value.xml.length <= 16_000) return value as unknown as BlocklyReplaceSuggestion;
   throw new Error('invalid_suggestion');
 }
 
-export function previewPythonSuggestion(suggestion: PythonReplaceSuggestion, currentSource: string): SuggestionPreview {
-  return { suggestion, summary: suggestion.summary, kind: 'python', before: currentSource, after: suggestion.replacement, detail: '' };
+export function previewPythonSuggestion(suggestion: PythonReplaceSuggestion | PythonEditsSuggestion, currentSource: string): SuggestionPreview {
+  const after = suggestion.type === 'python_edits' ? applyPythonEdits(currentSource, suggestion.edits) : suggestion.replacement;
+  const edits = suggestion.type === 'python_edits'
+    ? previewPythonEdits(currentSource, suggestion.edits)
+    : undefined;
+  return { suggestion, summary: suggestion.summary, kind: 'python', before: currentSource, after, detail: '', edits };
 }
 
 export function validateBlocklySuggestion(suggestion: BlocklyReplaceSuggestion, currentXml: string): SuggestionPreview {
