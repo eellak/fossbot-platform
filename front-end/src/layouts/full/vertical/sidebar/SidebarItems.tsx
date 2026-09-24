@@ -22,6 +22,9 @@ const SidebarItems = ({ previewAppearance = true }: { previewAppearance?: boolea
   const lgUp = useMediaQuery((theme: any) => theme.breakpoints.up('lg'));
   const hideMenu: any = lgUp ? customizer.isCollapse && !customizer.isSidebarHover : '';
   const dispatch = useDispatch();
+  const closeMobileSidebar = () => {
+    if (!lgUp && customizer.isMobileSidebar) dispatch(toggleMobileSidebar());
+  };
   const { user } = useAuth(); // Access user info
 
   const hasBetaAccess = user?.beta_tester || user?.role === UserRole.ADMIN;
@@ -66,7 +69,7 @@ const SidebarItems = ({ previewAppearance = true }: { previewAppearance?: boolea
                 pathWithoutLastPart={pathWithoutLastPart}
                 level={1}
                 key={item.id}
-                onClick={() => dispatch(toggleMobileSidebar())}
+                onClick={closeMobileSidebar}
               />
             );
 
@@ -79,7 +82,7 @@ const SidebarItems = ({ previewAppearance = true }: { previewAppearance?: boolea
                 pathDirect={pathDirect}
                 hideMenu={hideMenu}
                 previewAppearance={previewAppearance}
-                onClick={() => dispatch(toggleMobileSidebar())}
+                onClick={closeMobileSidebar}
               />
             );
           }

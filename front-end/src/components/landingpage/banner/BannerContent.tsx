@@ -10,11 +10,11 @@ const BannerContent = () => {
       <Typography
         component="h1"
         sx={{
-          fontSize: { xs: '2.5rem', sm: '3.25rem', md: '3.75rem' },
+          fontSize: { xs: '2.125rem', sm: '3rem', md: '3.25rem' },
           fontWeight: 600,
           letterSpacing: '-0.03em',
           lineHeight: 1.05,
-          maxWidth: '14ch',
+          maxWidth: '17ch',
           textWrap: 'balance',
         }}
       >

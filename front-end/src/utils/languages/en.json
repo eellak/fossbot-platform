@@ -1,6 +1,7 @@
 {
   "english": "English (UK)",
   "greek": "Greek (GR)",
+  "languageSelector": "Change language",
   "login": "Login",
   "register": "Register",
   "projects": "Projects",
@@ -65,9 +66,9 @@
     "home": "Home",
     "fossbotHome": "FOSSBot Home",
     "dashboard": "Dashboard",
-    "monacoEditor": "Monaco Editor",
-    "pythonEditor": "Python editor",
-    "editors": "Editors",
+    "monacoEditor": "Python Editor",
+    "pythonEditor": "Python Editor",
+    "editors": "Python/Blockly Editor",
     "pythonBased": "Python based",
     "blocklyEditor": "Blockly Editor",
     "blocksBased": "Blocks based",
@@ -163,6 +164,18 @@
   "stage-marketplace": {
     "emptyTitle": "No community stages yet",
     "emptyDescription": "Published stages will appear here when they are available."
+  },
+  "dashboardStages": {
+    "mine": "My stages",
+    "mineSubtitle": "Stages saved locally or on GitHub.",
+    "create": "Create new stage",
+    "all": "All stages",
+    "empty": "No saved stages yet",
+    "emptyHelp": "Create your first stage here, or connect GitHub to access existing repositories.",
+    "library": "Stage library",
+    "librarySubtitle": "Discover community stages for FOSSBot simulations.",
+    "libraryPageSubtitle": "Browse public stages for FOSSBot simulations.",
+    "explore": "Explore stages"
   },
   "banner-content": {
     "openTechnologies": "an open technologies robot for education.",
@@ -293,7 +306,9 @@
   "theme": {
     "mode": "Color theme",
     "light": "Light",
-    "dark": "Dark"
+    "dark": "Dark",
+    "switchToLight": "Switch to light mode",
+    "switchToDark": "Switch to dark mode"
   },
   "roles": {
     "user": "User",
@@ -328,8 +343,8 @@
     }
   },
   "blockly-page": {
-    "title": "Blockly Page",
-    "description": "This is the Blockly page",
+    "title": "Blockly Editor",
+    "description": "Build and run programs with blocks.",
     "fossbot-terminal": "FOSSBot terminal",
     "save": "Save",
     "run": "Run",
@@ -351,8 +366,8 @@
     "describeYourProject": "Describe your project"
   },
   "monaco-page": {
-    "title": "Monaco Page",
-    "description": "This is the Monaco page",
+    "title": "Python Editor",
+    "description": "Write and run Python programs.",
     "fossbot-terminal": "FOSSBot terminal",
     "terminalStale": "This output is from a previous version of the code. Run again to refresh.",
     "save": "Save",

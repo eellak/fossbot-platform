@@ -8,7 +8,7 @@ const ClosingCta = () => {
 
   return (
     <Box component="section" sx={{ bgcolor: 'background.paper', pb: { xs: 8, md: 12 } }}>
-      <Container maxWidth="xl">
+      <Container maxWidth="lg">
         <Box
           className="visual-language-supporting-panel"
           sx={{ bgcolor: 'primary.light', p: { xs: 4, sm: 5, md: 6 }, textAlign: 'center' }}

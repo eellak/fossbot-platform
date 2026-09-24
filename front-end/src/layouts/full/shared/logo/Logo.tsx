@@ -1,89 +1,39 @@
-import { FC, useMemo } from 'react';
-import { useSelector } from 'src/store/Store';
+import { FC } from 'react';
 import { Link } from 'react-router-dom';
-import { ReactComponent as LogoDark } from 'src/assets/images/logos/dark-logo.svg';
-import { ReactComponent as LogoDarkRTL } from 'src/assets/images/logos/dark-rtl-logo.svg';
-import { ReactComponent as LogoLight } from 'src/assets/images/logos/light-logo.svg';
-import { ReactComponent as LogoLightRTL } from 'src/assets/images/logos/light-logo-rtl.svg';
-import { Typography, styled } from '@mui/material';
-import { AppState } from 'src/store/Store';
+import { Box, Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
+import { useSelector } from 'src/store/Store';
+import type { AppState } from 'src/store/Store';
 
 const Logo: FC = () => {
   const { t } = useTranslation();
-
-  const customizer = useSelector((state: AppState) => state.customizer);
-  const LinkStyled = useMemo(
-    () => styled(Link)(() => ({
-      height: customizer.TopbarHeight,
-      width: customizer.isCollapse ? '40px' : '180px',
-      overflow: 'hidden',
-      display: 'block',
-    })),
-    [customizer.TopbarHeight, customizer.isCollapse]
-  );
-
-  if (customizer.activeDir === 'ltr') {
-    return (
-      <LinkStyled
-        to="/"
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-        }}
-      >
-        {/* <Typography align={'center'} fontSize={18} lineHeight={40} color={'primary'} > FOSSBOT Platform</Typography> */}
-        <Typography
-          align={'center'}
-          fontSize={20}
-          lineHeight={40}
-          fontWeight={500}
-          color={'primary'}
-        >
-          <Typography component={'span'} variant="inherit" color={'primary'}>
-            {t('foss')}
-          </Typography>
-          {''}
-          <Typography component={'span'} variant="inherit" color={'orange'}>
-            {t('bot')}
-          </Typography>{' '}
-          {t('platform')}
-        </Typography>
-
-        {/* {customizer.activeMode === 'dark' ? (
-          <LogoLight  />
-        ) : (
-          <LogoDark  />
-        )} */}
-      </LinkStyled>
-    );
-  }
+  const { isCollapse, isSidebarHover, TopbarHeight } = useSelector((state: AppState) => state.customizer);
+  const collapsed = isCollapse && !isSidebarHover;
 
   return (
-    <LinkStyled
+    <Box
+      component={Link}
       to="/"
-      style={{
+      aria-label="FOSSBot"
+      sx={{
         display: 'flex',
-        alignItems: 'center',
+        flexDirection: 'column',
+        justifyContent: 'center',
+        height: TopbarHeight,
+        width: { xs: 112, sm: collapsed ? 40 : 180 },
+        overflow: 'hidden',
+        flexShrink: 0,
+        textDecoration: 'none',
+        whiteSpace: 'nowrap',
       }}
     >
-      {/* <Typography align={'center'} fontSize={18} lineHeight={40} color={'primary'} > FOSSBOT Platform</Typography> */}
-      <Typography align={'center'} fontSize={20} lineHeight={40} fontWeight={500} color={'primary'}>
-        <Typography component={'span'} variant="inherit" color={'primary'}>
-          {t('foss')}
-        </Typography>
-        {''}
-        <Typography component={'span'} variant="inherit" color={'orange'}>
-          {t('bot')}
-        </Typography>{' '}
+      <Typography component="span" sx={{ color: 'primary.main', fontSize: 20, fontWeight: 600, lineHeight: 1.2 }}>
+        FOSSBot
+      </Typography>
+      <Typography component="span" sx={{ color: 'text.secondary', fontSize: 13, lineHeight: 1.3, display: { xs: 'none', sm: collapsed ? 'none' : 'block' } }}>
         {t('platform')}
       </Typography>
-      {/* {customizer.activeMode === 'dark' ? (
-        <LogoDarkRTL  />
-      ) : (
-        <LogoLightRTL  />
-      )} */}
-    </LinkStyled>
+    </Box>
   );
 };
 

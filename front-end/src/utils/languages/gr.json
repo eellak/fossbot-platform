@@ -1,6 +1,7 @@
 {
   "english": "Αγγλικά (UK)",
   "greek": "Ελληνικά (GR)",
+  "languageSelector": "Αλλαγή γλώσσας",
   "login": "Σύνδεση",
   "register": "Εγγραφή",
   "projects": "Προτζκετς",
@@ -65,11 +66,11 @@
     "home": "Αρχική",
     "fossbotHome": "FOSSBot Αρχική",
     "dashboard": "Διαχειριστικό",
-    "monacoEditor": "Monaco Editor",
-    "pythonEditor": "Επεξεργαστής Python",
-    "editors": "Επεξεργασία",
+    "monacoEditor": "Python Περιβάλλον",
+    "pythonEditor": "Python Περιβάλλον",
+    "editors": "Python/Blockly Περιβάλλον",
     "pythonBased": "Βασισμένο σε Python",
-    "blocklyEditor": "Blockly Editor",
+    "blocklyEditor": "Blockly Περιβάλλον",
     "blocksBased": "Βασισμένο σε Blocks",
     "kindergarten": "Νηπιαγωγείο",
     "interactive": "Διαδραστική Χρήση",
@@ -163,6 +164,18 @@
   "stage-marketplace": {
     "emptyTitle": "Δεν υπάρχουν ακόμη κοινοτικές σκηνές",
     "emptyDescription": "Οι δημοσιευμένες σκηνές θα εμφανιστούν εδώ όταν γίνουν διαθέσιμες."
+  },
+  "dashboardStages": {
+    "mine": "Οι σκηνές μου",
+    "mineSubtitle": "Σκηνές αποθηκευμένες τοπικά ή στο GitHub.",
+    "create": "Νέα σκηνή",
+    "all": "Όλες οι σκηνές",
+    "empty": "Δεν υπάρχουν ακόμη αποθηκευμένες σκηνές",
+    "emptyHelp": "Δημιουργήστε την πρώτη σας σκηνή εδώ ή συνδέστε το GitHub για να δείτε υπάρχοντα αποθετήρια.",
+    "library": "Βιβλιοθήκη σκηνών",
+    "librarySubtitle": "Ανακαλύψτε κοινοτικές σκηνές για προσομοιώσεις FOSSBot.",
+    "libraryPageSubtitle": "Περιηγηθείτε στις δημόσιες σκηνές για προσομοιώσεις FOSSBot.",
+    "explore": "Εξερεύνηση σκηνών"
   },
   "banner-content": {
     "openTechnologies": "ένα ρομπότ ανοικτών τεχνολογιών για εκπαίδευση.",
@@ -292,7 +305,9 @@
   "theme": {
     "mode": "Χρωματικό θέμα",
     "light": "Ανοιχτό",
-    "dark": "Σκούρο"
+    "dark": "Σκούρο",
+    "switchToLight": "Μετάβαση σε ανοιχτό θέμα",
+    "switchToDark": "Μετάβαση σε σκούρο θέμα"
   },
   "roles": {
     "user": "Χρήστης",
@@ -327,8 +342,8 @@
     }
   },
   "blockly-page": {
-    "title": "Σελίδα Blockly",
-    "description": "Αυτή είναι η σελίδα Blockly",
+    "title": "Blockly Περιβάλλον",
+    "description": "Δημιουργήστε και εκτελέστε προγράμματα με μπλοκ.",
     "fossbot-terminal": "Τερματικό FOSSBot",
     "save": "Αποθήκευση",
     "run": "Εκτέλεση",
@@ -350,8 +365,8 @@
     "describeYourProject": "Δώστε μια περιγραφή για το πρότζεκτ σας"
   },
   "monaco-page": {
-    "title": "Σελίδα Monaco",
-    "description": "Αυτή είναι η σελίδα Monaco",
+    "title": "Python Περιβάλλον",
+    "description": "Γράψτε και εκτελέστε προγράμματα Python.",
     "fossbot-terminal": "Τερματικό FOSSBot",
     "terminalStale": "Η έξοδος προέρχεται από προηγούμενη έκδοση του κώδικα. Εκτελέστε ξανά για ανανέωση.",
     "save": "Αποθήκευση",

@@ -38,6 +38,7 @@ import { LocalStageDetailsDialog } from 'src/stages/StageDetailsDialog';
 import { useStagePreviews } from 'src/stages/useStagePreviews';
 import { MARKETPLACE_COPY } from 'src/stages/marketplaceCopy';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 
 type DashboardStage = {
   key: string;
@@ -97,6 +98,7 @@ function localStatus(stage: LocalStageSummary): Pick<DashboardStage, 'status' | 
 }
 
 export default function UserStagesDashboardPanel({ showViewAll = true, appearance = 'card' }: { showViewAll?: boolean; appearance?: 'card' | 'page' }) {
+  const { t } = useTranslation();
   const confirmDialog = useConfirmDialog();
   const { notify } = useNotifications();
   const { token, user } = useAuth();
@@ -375,12 +377,12 @@ export default function UserStagesDashboardPanel({ showViewAll = true, appearanc
   }, [pageCount]);
 
   const showConnect = !loading && (!providerStatus?.connected || providerStatus.needsReconnect);
-  const createStageButton = <Button size="small" variant="contained" startIcon={<AddIcon />} onClick={() => showViewAll ? navigate('/stages?create=1') : setStagePickerOpen(true)}>Create new stage</Button>;
+  const createStageButton = <Button size="small" variant="contained" startIcon={<AddIcon />} onClick={() => showViewAll ? navigate('/stages?create=1') : setStagePickerOpen(true)}>{t('dashboardStages.create')}</Button>;
   const connectButton = showConnect ? <Button size="small" variant="outlined" startIcon={connecting ? <CircularProgress size={16} color="inherit" /> : <GitHubIcon />} disabled={connecting} onClick={connectGitHub}>{connecting ? 'Connecting…' : MARKETPLACE_COPY.connectGitHub}</Button> : null;
   const actions = (
     <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" justifyContent="flex-end">
       {createStageButton}
-      {showViewAll && <Button component="a" href="/stages?tab=mine" size="small" variant="outlined">All stages</Button>}
+      {showViewAll && <Button component="a" href="/stages?tab=mine" size="small" variant="outlined">{t('dashboardStages.all')}</Button>}
     </Stack>
   );
 
@@ -491,7 +493,7 @@ export default function UserStagesDashboardPanel({ showViewAll = true, appearanc
     {loading && !stages.length ? <Stack spacing={1}>{Array.from({ length: 4 }).map((_, index) => <Skeleton key={index} variant="rounded" height={64} />)}</Stack>
       : <>
         {stageToolbar}
-        {!stages.length ? <Box sx={{ py: 2 }}><Typography variant="subtitle2" fontWeight={600}>No saved stages yet</Typography><Typography variant="body2" color="text.secondary">Create your first stage here, or connect GitHub to access existing repositories.</Typography></Box>
+        {!stages.length ? <Box sx={{ py: 2 }}><Typography variant="subtitle2" fontWeight={600}>{t('dashboardStages.empty')}</Typography><Typography variant="body2" color="text.secondary">{t('dashboardStages.emptyHelp')}</Typography></Box>
           : filteredStages.length === 0 ? (
             <Box sx={{ py: 4, textAlign: 'center' }}>
               <Typography variant="body2" fontWeight={600}>{hasActiveFilters ? 'No stages match your filters' : 'No saved stages yet'}</Typography>
@@ -558,5 +560,5 @@ export default function UserStagesDashboardPanel({ showViewAll = true, appearanc
     return content;
   }
 
-  return <DashboardCard title={MARKETPLACE_COPY.myStages} subtitle="Stages saved locally or on GitHub." action={actions} compact collapsible>{content}</DashboardCard>;
+  return <DashboardCard title={t('dashboardStages.mine')} subtitle={t('dashboardStages.mineSubtitle')} action={actions} compact collapsible>{content}</DashboardCard>;
 }

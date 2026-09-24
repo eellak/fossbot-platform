@@ -127,7 +127,7 @@ const Router = [
   },
   {
     path: '/monaco-page',
-    title: 'Monaco Editor',
+    title: 'Python Editor',
     element: (
       <PrivateRoute>
         <FullLayout />

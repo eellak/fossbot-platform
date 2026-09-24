@@ -63,11 +63,11 @@ const PlatformCard = () => {
             <Typography
               component="h2"
               sx={{
-                fontSize: { xs: '2.25rem', sm: '3rem', md: '3.5rem' },
+                fontSize: { xs: '2rem', sm: '2.75rem', md: '3.25rem' },
                 fontWeight: 600,
                 letterSpacing: '-0.03em',
                 lineHeight: 1.05,
-                maxWidth: '14ch',
+                maxWidth: '18ch',
                 textWrap: 'balance',
               }}
             >

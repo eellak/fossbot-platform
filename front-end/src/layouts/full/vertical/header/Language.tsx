@@ -1,6 +1,6 @@
  
 import React from 'react';
-import { Box, IconButton, Menu, MenuItem, Typography, Stack } from '@mui/material';
+import { Box, Button, Menu, MenuItem, Typography, Stack } from '@mui/material';
 import { useSelector, useDispatch } from 'src/store/Store';
 import { setLanguage } from 'src/store/customizer/CustomizerSlice';
 import { useTranslation } from 'react-i18next';
@@ -9,14 +9,14 @@ import { AppState } from 'src/store/Store';
 import { Languages } from 'src/utils/languages/Languages';
 
 const Language = () => {
-  const [anchorEl, setAnchorEl] = React.useState(null);
+  const [anchorEl, setAnchorEl] = React.useState<HTMLElement | null>(null);
   const dispatch = useDispatch();
   const open = Boolean(anchorEl);
   const customizer = useSelector((state: AppState) => state.customizer);
   const currentLang =
     Languages.find((_lang) => _lang.value === customizer.isLanguage) || Languages[1];
   const { i18n, t } = useTranslation();
-  const handleClick = (event: any) => {
+  const handleClick = (event: React.MouseEvent<HTMLButtonElement>) => {
     setAnchorEl(event.currentTarget);
   };
   const handleClose = () => {
@@ -28,23 +28,27 @@ const Language = () => {
 
   return (
     <>
-      <IconButton
-        aria-label="more"
-        id="long-button"
-        aria-controls={open ? 'long-menu' : undefined}
-        aria-expanded={open ? 'true' : undefined}
+      <Button
+        id="language-button"
+        aria-label={t('languageSelector')}
+        aria-controls={open ? 'language-menu' : undefined}
+        aria-expanded={open}
         aria-haspopup="true"
         onClick={handleClick}
+        color="inherit"
+        sx={{ minWidth: 0, gap: 1, whiteSpace: 'nowrap' }}
       >
         <Box
           component="img"
           src={currentLang.icon}
-          alt={currentLang.value}
+          alt=""
           sx={{ width: 20, height: 20, borderRadius: '50%' }}
         />
-      </IconButton>
+        <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>{t(currentLang.flagname)}</Box>
+        <Box component="span" sx={{ display: { xs: 'inline', sm: 'none' } }}>{currentLang.value === 'gr' ? 'ΕΛ' : 'EN'}</Box>
+      </Button>
       <Menu
-        id="long-menu"
+        id="language-menu"
         anchorEl={anchorEl}
         open={open}
         onClose={handleClose}
@@ -57,7 +61,8 @@ const Language = () => {
         {Languages.map((option, index) => (
           <MenuItem
             key={index}
-            sx={{ py: 2, px: 3 }}
+            selected={option.value === customizer.isLanguage}
+            sx={{ py: 1.5, px: 2 }}
             onClick={() => {
               dispatch(setLanguage(option.value));
               handleClose();

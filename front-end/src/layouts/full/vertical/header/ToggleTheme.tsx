@@ -1,40 +1,27 @@
-import React from 'react';
-import WbSunnyTwoToneIcon from '@mui/icons-material/WbSunnyTwoTone';
-import DarkModeTwoToneIcon from '@mui/icons-material/DarkModeTwoTone';
-
-import { useDispatch, useSelector } from 'src/store/Store';
-import { ToggleButton, ToggleButtonGroup } from '@mui/material';
-import { setDarkMode } from 'src/store/customizer/CustomizerSlice';
+import { IconMoon, IconSun } from '@tabler/icons-react';
+import { IconButton, Tooltip } from '@mui/material';
 import { useTranslation } from 'react-i18next';
-import { AppState } from 'src/store/Store';
+import { useDispatch, useSelector } from 'src/store/Store';
+import type { AppState } from 'src/store/Store';
+import { setDarkMode } from 'src/store/customizer/CustomizerSlice';
 
 const ModeToggle = () => {
-    const { t } = useTranslation();
-    const dispatch = useDispatch();
-    const mode = useSelector((state: AppState) => state.customizer.activeMode) || 'light';
+  const { t } = useTranslation();
+  const dispatch = useDispatch();
+  const isDark = useSelector((state: AppState) => state.customizer.activeMode === 'dark');
+  const label = t(isDark ? 'theme.switchToLight' : 'theme.switchToDark');
 
-    const handleModeChange = (_event: React.MouseEvent<HTMLElement>, newMode: string | null) => {
-        if (newMode === null) return;
-        dispatch(setDarkMode(newMode));
-    };
-
-    return (
-        <ToggleButtonGroup
-            value={mode}
-            exclusive
-            onChange={handleModeChange}
-            aria-label={t('theme.mode')}
-        >
-            <ToggleButton value="light" aria-label={t('theme.light')}>
-                <WbSunnyTwoToneIcon color={mode === 'light' ? 'primary' : 'inherit'} />
-                {t('theme.light')}
-            </ToggleButton>
-            <ToggleButton value="dark" aria-label={t('theme.dark')}>
-                <DarkModeTwoToneIcon color={mode === 'dark' ? 'primary' : 'inherit'} />
-                {t('theme.dark')}
-            </ToggleButton>
-        </ToggleButtonGroup>
-    );
+  return (
+    <Tooltip title={label} arrow>
+      <IconButton
+        aria-label={label}
+        onClick={() => dispatch(setDarkMode(isDark ? 'light' : 'dark'))}
+        sx={{ width: 44, height: 44, borderRadius: 1, color: 'text.secondary', '&:hover': { color: 'text.primary', bgcolor: 'action.hover' } }}
+      >
+        {isDark ? <IconSun size={20} aria-hidden="true" /> : <IconMoon size={20} aria-hidden="true" />}
+      </IconButton>
+    </Tooltip>
+  );
 };
 
 export default ModeToggle;

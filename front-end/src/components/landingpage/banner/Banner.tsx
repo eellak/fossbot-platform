@@ -27,7 +27,7 @@ const logoWall = [...logoSet, ...logoSet];
 
 const Banner = () => (
   <Box component="section" sx={{ overflow: 'hidden', pb: { xs: 6, md: 8 }, pt: { xs: 4, md: 6 } }}>
-    <Container maxWidth="xl">
+    <Container maxWidth="lg">
       <Grid container spacing={{ xs: 5, lg: 6 }} alignItems="center">
         <Grid item xs={12} lg={6}>
           <BannerContent />

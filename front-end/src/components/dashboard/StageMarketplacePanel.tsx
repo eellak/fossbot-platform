@@ -147,15 +147,16 @@ function MarketplaceStageCard({ entry, onSelect, embedded = false }: { entry: Ma
 }
 
 function MarketplacePanelFrame({ preview, action, children }: { preview: boolean; action: React.ReactNode; children: React.ReactNode }) {
-  const subtitle = preview ? 'Discover community stages for FOSSBot simulations.' : 'Browse public stages for FOSSBot simulations.';
+  const { t } = useTranslation();
+  const subtitle = t(preview ? 'dashboardStages.librarySubtitle' : 'dashboardStages.libraryPageSubtitle');
   if (preview) {
-    return <DashboardCard title={MARKETPLACE_COPY.stageLibrary} titleAdornment={<BetaBadge feature="stages" />} subtitle={subtitle} action={action} compact collapsible>{children}</DashboardCard>;
+    return <DashboardCard title={t('dashboardStages.library')} titleAdornment={<BetaBadge feature="stages" />} subtitle={subtitle} action={action} compact collapsible>{children}</DashboardCard>;
   }
   return (
     <>
       <Stack direction={{ xs: 'column', md: 'row' }} justifyContent="space-between" spacing={2} sx={{ mb: 2 }}>
         <Box>
-          <Stack direction="row" spacing={1} alignItems="center"><Typography variant="h5">{MARKETPLACE_COPY.stageLibrary}</Typography><BetaBadge feature="stages" /></Stack>
+          <Stack direction="row" spacing={1} alignItems="center"><Typography variant="h5">{t('dashboardStages.library')}</Typography><BetaBadge feature="stages" /></Stack>
           <Typography variant="body2" color="text.secondary">{subtitle}</Typography>
         </Box>
         {action}
@@ -683,7 +684,7 @@ export default function StageMarketplacePanel({ embedded = false, preview = fals
     <Stack direction="row" spacing={1} alignItems="center">
       {canonicalRequest && cacheUpdatedAt && <Typography variant="caption" color="text.secondary">{cacheRefreshing ? 'Refreshing…' : formatStageRelativeTime(cacheUpdatedAt)}</Typography>}
       {preview ? (
-        <Button variant="outlined" size="small" onClick={() => navigate('/stages?tab=explore')}>Explore stages</Button>
+        <Button variant="outlined" size="small" onClick={() => navigate('/stages?tab=explore')}>{t('dashboardStages.explore')}</Button>
       ) : (
         <Button variant="outlined" size="small" onClick={() => { void refreshStageLists(userKey, token, { force: true }); }} disabled={cacheRefreshing}>
           {cacheRefreshing ? 'Refreshing…' : 'Refresh stages'}

@@ -16,6 +16,7 @@ import Logo from 'src/layouts/full/shared/logo/Logo';
 import Navigations from './Navigations';
 import MobileSidebar from './MobileSidebar';
 import { IconMenu2 } from '@tabler/icons-react';
+import Language from 'src/layouts/full/vertical/header/Language';
 
 const LpHeader = () => {
   const AppBarStyled = useMemo(
@@ -40,10 +41,7 @@ const LpHeader = () => {
     []
   );
 
-  //   sidebar
   const lgUp = useMediaQuery((theme: Theme) => theme.breakpoints.up('lg'));
-  const lgDown = useMediaQuery((theme: Theme) => theme.breakpoints.down('lg'));
-
   const [open, setOpen] = React.useState(false);
 
   const handleDrawerOpen = () => {
@@ -54,41 +52,25 @@ const LpHeader = () => {
     setOpen(newOpen);
   };
 
-  const [y, setY] = React.useState(window.scrollY);
-
-  const handleNavigation = React.useCallback(
-    (e: Event | any) => {
-      const window = e.currentTarget;
-      setY(window.scrollY);
-    },
-    [],
-  );
-
-  React.useEffect(() => {
-    setY(window.scrollY);
-    window.addEventListener('scroll', handleNavigation);
-
-    return () => {
-      window.removeEventListener('scroll', handleNavigation);
-    };
-  }, [handleNavigation]);
-
   return (
-    <AppBarStyled position="sticky" elevation={y ? 8 : 0}>
-      <Container maxWidth="xl">
+    <AppBarStyled position="sticky" elevation={0} sx={{ borderBottom: '1px solid', borderColor: 'divider' }}>
+      <Container maxWidth="lg">
         <ToolbarStyled>
           <Logo />
           <Box flexGrow={1} />
-          {lgDown ? (
-            <IconButton color="inherit" aria-label="menu" onClick={handleDrawerOpen}>
-              <IconMenu2 size="20" />
-            </IconButton>
-          ) : null}
-          {lgUp ? (
+          {lgUp && (
             <Stack spacing={1} direction="row" alignItems="center">
               <Navigations />
             </Stack>
-          ) : null}
+          )}
+          <Box sx={{ ml: { lg: 2 }, flexShrink: 0 }}>
+            <Language />
+          </Box>
+          {!lgUp && (
+            <IconButton color="inherit" aria-label="menu" onClick={handleDrawerOpen}>
+              <IconMenu2 size="20" />
+            </IconButton>
+          )}
         </ToolbarStyled>
       </Container>
       <Drawer
