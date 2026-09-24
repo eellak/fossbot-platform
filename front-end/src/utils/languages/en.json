@@ -208,6 +208,27 @@
     "about_monaco": "The Monaco editor is a text-based editor that allows users to write programs for the FOSSBot robot using the Python programming language. The editor provides a real coding experience and is ideal for users who are familiar with text-based programming languages.",
     "about_simulator": "We have developed a simulator that allows users to test their programs for the FOSSBot robot without needing access to the physical robot. The simulator provides a virtual environment where users can run and debug their programs before deploying them to the robot."
   },
+  "landing_about": {
+    "title": "What is FOSSBot?",
+    "intro": "FOSSBot is an open source, open design DIY robot for education, developed by GFOSS and Harokopio University of Athens to give every classroom a hands-on way into robotics.",
+    "robotImageAlt": "A FOSSBot robot with 3D-printed parts, sensors, and a LEGO-compatible top",
+    "robotTitle": "An affordable, repairable robot",
+    "robotBody": "FOSSBot is built with low-cost electronics and durable 3D-printable PETG parts, using a Raspberry Pi Zero for connectivity and sensing. It carries a gyroscope, accelerometer, wheel odometers, an RGB LED, and distance, floor, light, and sound sensors, plus a pencil holder for drawing, side spoilers, and a LEGO-compatible top. The whole build stays under $200 and every part can be replaced.",
+    "fact1": "Open source and open design",
+    "fact2": "3D-printable parts",
+    "fact3": "Raspberry Pi Zero",
+    "fact4": "Sensors and actuators",
+    "fact5": "Under $200",
+    "platformTitle": "The FOSSBot Platform",
+    "platformBody": "The FOSSBot Platform is a browser-based workspace for creating, editing, and running programs for the robot. It is designed to be friendly for beginners and capable enough for advanced projects, so learners can start simply and keep growing.",
+    "mode1": "Blockly — drag-and-drop visual programming for the first steps",
+    "mode2": "Python — a real text-based coding experience",
+    "mode3": "Simulator — test and debug programs without the physical robot",
+    "mode4": "Interactive and RC — drive the robot by hand or with a game controller",
+    "openTitle": "Open by design",
+    "openBody": "Download the 3D print designs and assembly instructions to build your own FOSSBot, and help the project grow by contributing bug reports, feature requests, or code.",
+    "openLink": "View on GitHub"
+  },
   "landing_features": {
     "title": "From a first block to a real robot",
     "intro": "Build a project, teach it as a course, and run it in simulation or on physical hardware—all from the browser.",
