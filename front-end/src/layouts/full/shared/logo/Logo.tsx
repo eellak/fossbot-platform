@@ -9,19 +9,21 @@ import { Typography, styled } from '@mui/material';
 import { AppState } from 'src/store/Store';
 import { useTranslation } from 'react-i18next';
 
-const Logo: FC = () => {
+const Logo: FC<{ sidebar?: boolean }> = ({ sidebar = false }) => {
   const { t } = useTranslation();
 
   const customizer = useSelector((state: AppState) => state.customizer);
+  const hideWordmark = sidebar && customizer.isCollapse && !customizer.isSidebarHover;
   const LinkStyled = useMemo(
     () => styled(Link)(() => ({
       height: customizer.TopbarHeight,
-      width: customizer.isCollapse ? '40px' : 'auto',
-      overflow: 'hidden',
+      width: 'auto',
       display: 'block',
     })),
-    [customizer.TopbarHeight, customizer.isCollapse]
+    [customizer.TopbarHeight]
   );
+
+  if (hideWordmark) return null;
 
   if (customizer.activeDir === 'ltr') {
     return (

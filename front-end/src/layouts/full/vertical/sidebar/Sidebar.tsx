@@ -73,7 +73,7 @@ const Sidebar = ({ previewAppearance = true }: { previewAppearance?: boolean }) 
             {/* Logo */}
             {/* ------------------------------------------- */}
             <Box px={3} >
-              <Logo />
+              <Logo sidebar />
             </Box>
             {/* <Scrollbar sx={{ height: 'calc(100% - 190px)' }}> */}
             <Scrollbar sx={{ flex: 1, minHeight: 0 }}>
