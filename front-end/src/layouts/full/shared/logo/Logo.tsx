@@ -19,11 +19,10 @@ const Logo: FC<{ sidebar?: boolean }> = ({ sidebar = false }) => {
       height: customizer.TopbarHeight,
       width: 'auto',
       display: 'block',
+      visibility: hideWordmark ? 'hidden' : 'visible',
     })),
-    [customizer.TopbarHeight]
+    [customizer.TopbarHeight, hideWordmark]
   );
-
-  if (hideWordmark) return null;
 
   if (customizer.activeDir === 'ltr') {
     return (
