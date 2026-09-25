@@ -16,7 +16,7 @@ const Logo: FC = () => {
   const LinkStyled = useMemo(
     () => styled(Link)(() => ({
       height: customizer.TopbarHeight,
-      width: customizer.isCollapse ? '40px' : '180px',
+      width: customizer.isCollapse ? '40px' : 'auto',
       overflow: 'hidden',
       display: 'block',
     })),
@@ -36,9 +36,10 @@ const Logo: FC = () => {
         <Typography
           align={'center'}
           fontSize={20}
-          lineHeight={40}
+          lineHeight="40px"
           fontWeight={500}
           color={'primary'}
+          sx={{ whiteSpace: 'nowrap' }}
         >
           <Typography component={'span'} variant="inherit" color={'primary'}>
             {t('foss')}
@@ -68,7 +69,7 @@ const Logo: FC = () => {
       }}
     >
       {/* <Typography align={'center'} fontSize={18} lineHeight={40} color={'primary'} > FOSSBOT Platform</Typography> */}
-      <Typography align={'center'} fontSize={20} lineHeight={40} fontWeight={500} color={'primary'}>
+      <Typography align={'center'} fontSize={20} lineHeight="40px" fontWeight={500} color={'primary'} sx={{ whiteSpace: 'nowrap' }}>
         <Typography component={'span'} variant="inherit" color={'primary'}>
           {t('foss')}
         </Typography>
