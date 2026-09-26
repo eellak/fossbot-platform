@@ -46,6 +46,49 @@ corresponding `.local` address, and is not regenerated on later boots.
 The idle OLED menu shows the current `<IP>:8081` app address. Its Network page
 also shows the permanent `.local` hostname, split across rows when necessary.
 
+## Wi-Fi from the OLED menu
+
+Add Network and Saved Networks use NetworkManager (`nmcli`), matching Trixie.
+New connections are saved as system profiles with automatic reconnection;
+passwords belong to NetworkManager's persistent storage, not the application.
+The installer supplies a polkit rule allowing the `pi` service account to scan,
+activate connections and save system profiles without a desktop login or sudo.
+
+On the password screen, tap BT3 to advance to the next character. Hold BT3
+for 0.7 seconds to delete the last character (once per hold). BT1/BT2 change
+the selected character and BT4 submits the password.
+
+Connection attempts run in the background with a timeout. The result stays on
+screen until BT4 is pressed, including password and authorization failures.
+Disconnected screens say `WiFi disconnected`; they do not advertise a hotspot.
+The Network page refreshes its IP address while open.
+
+Run the backend regression tests with:
+
+```bash
+python3 -m unittest discover -s scripts/robot-agent-v2/tests -v
+```
+
+## Bluetooth remote discovery
+
+Remote Control opens the Bluetooth Remote page with saved controllers, without
+scanning. Connected controllers appear first, marked with `*`; saved controllers
+default to Connect, and already connected controllers skip reconnection.
+Choose Scan new controller explicitly to run a 10-second scan. Put a new
+controller into Bluetooth pairing mode before scanning. Select it, Pair,
+then Trust and Connect to open the control screen. BT4 returns to the menu. Pairing and connection run
+in the background and leave their result visible on the device page.
+
+The service unblocks Bluetooth on startup and the scanner powers the adapter
+on before discovery. Bluetooth failures are displayed instead of being treated
+as an empty device list. The service includes the `input` group for controller
+event access. Pairing uses a temporary interactive BlueZ agent, waits for registration and
+default-agent confirmation before requesting authentication, and closes the
+agent after success or failure. Re-selecting Pair on a paired controller keeps
+its bond. Xbox Series X Bluetooth pairing and joystick events have been
+verified on the robot. The control screen starts with neutral axes and stops
+the motors on input disconnection; physical driving still requires a test.
+
 ## Recovered board mapping
 
 - hardware PWM: left GPIO12/PWM0, right GPIO13/PWM1;
@@ -155,7 +198,7 @@ the Otsu-adjusted value used for that frame is available as
 `road["effective_black_threshold"]`.
 
 The overlay files under `overlay/app` map to
-`/home/pi/fossbot-app/blockly_server/app`. The checked-in `hardware_broker.py`
+`/opt/fossbot/app/blockly_server/app`. The checked-in `hardware_broker.py`
 at this directory's root is the canonical broker source; the overlay contains a
 deployment copy for reproducibility.
 

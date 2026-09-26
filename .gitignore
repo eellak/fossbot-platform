@@ -28,3 +28,6 @@ front-end/.local-certs/
 
 # Local design-review artifacts; not part of the product
 .impeccable/
+
+# Local physical-robot access and debugging instructions
+/AGENTS.md

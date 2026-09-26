@@ -1,17 +1,18 @@
 [Unit]
 Description=FOSSBot physical robot platform agent
-After=network-online.target
-Wants=network-online.target
+After=network-online.target bluetooth.service
+Wants=network-online.target bluetooth.service
 
 [Service]
 Type=simple
 User=pi
 Group=pi
-SupplementaryGroups=gpio i2c spi video
+SupplementaryGroups=gpio i2c spi video input
 # python3-rpi-lgpio creates its notification pipe in the current directory.
 WorkingDirectory=/var/lib/fossbot
 EnvironmentFile=-/etc/default/fossbot-agent
 Environment=PYTHONPATH=/opt/fossbot/app:/opt/fossbot/source
+ExecStartPre=+/usr/sbin/rfkill unblock bluetooth
 ExecStartPre=+/usr/local/lib/fossbot/prepare-pwm.sh
 ExecStartPre=+/usr/local/lib/fossbot/stop-motors.sh
 ExecStart=/usr/bin/python3 /opt/fossbot/app/blockly_server/run.py

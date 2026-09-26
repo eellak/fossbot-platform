@@ -1,0 +1,11 @@
+// The headless menu runs as pi, without a desktop authentication agent.
+polkit.addRule(function(action, subject) {
+    var allowed = [
+        "org.freedesktop.NetworkManager.settings.modify.system",
+        "org.freedesktop.NetworkManager.network-control",
+        "org.freedesktop.NetworkManager.wifi.scan"
+    ];
+    if (subject.user === "pi" && allowed.indexOf(action.id) !== -1) {
+        return polkit.Result.YES;
+    }
+});

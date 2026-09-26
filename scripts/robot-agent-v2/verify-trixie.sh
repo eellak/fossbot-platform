@@ -11,6 +11,11 @@ check() {
   fi
 }
 
+check command -v bluetoothctl
+check test -x /usr/sbin/rfkill
+check command -v nmcli
+check systemctl is-active --quiet NetworkManager.service
+check test -r /etc/polkit-1/rules.d/49-fossbot-network.rules
 check test -r /etc/os-release
 check grep -q 'VERSION_CODENAME=trixie' /etc/os-release
 check test -e /dev/i2c-1

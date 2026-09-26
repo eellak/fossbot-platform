@@ -23,7 +23,7 @@ class MainMenuScreen(Screen):
         ]
         self.current_item = 0
         self.battery_monitor = battery_monitor
-        self.network_address = "Waiting for network"
+        self.network_address = "WiFi disconnected"
         self.network_updated_at = 0.0
 
     def is_low_batt(self):
@@ -40,7 +40,7 @@ class MainMenuScreen(Screen):
             return
         ip_address = utils.get_ip_address()
         self.network_address = (
-            f"{ip_address}:8081" if ip_address != "No IP" else "Waiting for network"
+            f"{ip_address}:8081" if ip_address != "No IP" else "WiFi disconnected"
         )
         self.network_updated_at = now
 

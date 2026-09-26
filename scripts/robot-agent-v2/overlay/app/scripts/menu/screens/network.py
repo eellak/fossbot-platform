@@ -19,16 +19,17 @@ class NetworkScreen(Screen):
         self.ip = utils.get_ip_address()
 
     def update(self):
+        self.update_info()
         # The 128-pixel display fits about 21 default-font characters. Split
         # long friendly hostnames across two rows and keep the direct app
         # address visible on the final row.
         hostname = self.hostname
         self.robot.screen.text_lines(
             [
-                "App (BT4 back)",
+                "Network (BT4 back)",
                 hostname[:21],
                 hostname[21:42],
-                f"{self.ip}:8081",
+                f"{self.ip}:8081" if self.ip != "No IP" else "WiFi disconnected",
             ],
             line_h=16,
         )

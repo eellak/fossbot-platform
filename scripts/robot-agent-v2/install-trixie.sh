@@ -33,7 +33,7 @@ install -d -o pi -g pi -m 0755 /var/lib/fossbot /var/lib/fossbot/projects
 
 apt-get update
 DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-  ca-certificates curl git i2c-tools python3-dev python3-venv python3-pip python3-smbus python3-spidev \
+  bluez rfkill network-manager polkitd ca-certificates curl git i2c-tools python3-dev python3-venv python3-pip python3-smbus python3-spidev \
   python3-rpi-lgpio python3-flask python3-flask-cors python3-flask-socketio \
   python3-flask-babel python3-flask-sqlalchemy python3-sqlalchemy \
   python3-socketio python3-eventlet python3-simple-websocket python3-requests \
@@ -121,6 +121,10 @@ fi
 
 printf '%s\n' i2c-dev > /etc/modules-load.d/fossbot.conf
 modprobe i2c-dev
+install -d -m 0755 /etc/polkit-1/rules.d
+install -m 0644 "$SCRIPT_DIR/polkit/49-fossbot-network.rules" \
+  /etc/polkit-1/rules.d/49-fossbot-network.rules
+systemctl enable --now NetworkManager.service
 systemctl daemon-reload
 systemctl enable fossbot-hostname.service
 systemctl disable --now fossbot-agent.service >/dev/null 2>&1 || true
