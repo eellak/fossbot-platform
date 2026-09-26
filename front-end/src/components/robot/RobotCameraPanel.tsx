@@ -3,7 +3,6 @@ import {
   Box,
   Button,
   CircularProgress,
-  Paper,
   Stack,
   ToggleButton,
   ToggleButtonGroup,
@@ -31,19 +30,19 @@ const RobotCameraPanel: React.FC = () => {
   if (!cameraSupported) return null;
 
   return (
-    <Paper variant="outlined" sx={{ overflow: 'hidden', minWidth: 0 }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, minWidth: 0, overflow: 'hidden' }}>
       <Stack
         direction="row"
         alignItems="center"
         justifyContent="space-between"
-        sx={{ px: 1.5, py: 1 }}
+        sx={{ px: 1.5, py: 0.75, gap: 0.75, flexWrap: 'wrap', flexShrink: 0, borderBottom: 1, borderColor: 'divider' }}
       >
         <Stack direction="row" alignItems="center" spacing={0.75}>
           <VideocamIcon color={cameraStreaming ? 'success' : 'disabled'} fontSize="small" />
-          <Typography variant="subtitle2">Live robot camera</Typography>
+          <Typography variant="h6" fontWeight={600}>Live camera</Typography>
           {cameraStreaming && !cameraFrameUrl && <CircularProgress size={15} />}
         </Stack>
-        <Stack direction="row" alignItems="center" spacing={1} sx={{ flexWrap: 'wrap' }}>
+        <Stack direction="row" alignItems="center" spacing={1} sx={{ flexWrap: 'wrap', gap: 0.5, minWidth: 0 }}>
           {(
             cameraInferenceSupported
             || cameraDepthSupported
@@ -59,6 +58,7 @@ const RobotCameraPanel: React.FC = () => {
                 if (mode) setCameraVisionMode(mode);
               }}
               aria-label="Camera processing mode"
+              sx={{ flexWrap: 'wrap', '& .MuiToggleButton-root': { minHeight: 44, px: 1 } }}
             >
               <ToggleButton value="normal">Video</ToggleButton>
               {cameraInferenceSupported && (
@@ -89,11 +89,10 @@ const RobotCameraPanel: React.FC = () => {
         sx={{
           position: 'relative',
           width: '100%',
-          // Reserve the stream ratio only while there is no image. Once a
-          // frame arrives, let its intrinsic dimensions determine the height
-          // so responsive parent layouts cannot clip or stretch the video.
-          aspectRatio: cameraFrameUrl ? 'auto' : '16 / 9',
-          bgcolor: 'grey.900',
+          flex: 1,
+          minHeight: 0,
+          overflow: 'hidden',
+          bgcolor: 'action.hover',
           display: 'grid',
           placeItems: 'center',
         }}
@@ -104,20 +103,23 @@ const RobotCameraPanel: React.FC = () => {
             src={cameraFrameUrl}
             alt="Live view from the FOSSBot camera"
             sx={{
+              position: 'absolute',
+              inset: 0,
               display: 'block',
               width: '100%',
-              height: 'auto',
+              height: '100%',
               maxWidth: '100%',
+              maxHeight: '100%',
               objectFit: 'contain',
             }}
           />
         ) : (
-          <Typography variant="body2" color="grey.400">
+          <Typography variant="body2" color={cameraError ? 'error.main' : 'text.secondary'} sx={{ p: 2, textAlign: 'center' }}>
             {cameraError || (cameraStreaming ? 'Starting camera…' : 'Camera is paused')}
           </Typography>
         )}
       </Box>
-    </Paper>
+    </Box>
   );
 };
 

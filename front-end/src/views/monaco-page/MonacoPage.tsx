@@ -577,7 +577,7 @@ const MonacoPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppearan
                 <>
                 <Tabs value={workspaceActivePane} onChange={(_, value) => setWorkspaceActivePane(value)} variant="scrollable" scrollButtons="auto" aria-label={t('education.workspace.tabs')}>
                   <Tab value="code" label={t('education.workspace.code')} />
-                  <Tab value="simulator" label={t('education.workspace.simulator')} />
+                  <Tab value="simulator" label={t(target === 'robot' ? 'education.workspace.robot' : 'education.workspace.simulator')} />
                   <Tab value="results" label={t('education.workspace.results')} />
                 </Tabs>
                 <Box sx={{ pt: 2, minHeight: 480 }}>
@@ -604,7 +604,7 @@ const MonacoPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppearan
                 <WorkspacePane gridArea="editor" label={t('education.workspace.code')}>
                     {proposedEditor}
                 </WorkspacePane>
-                <WorkspacePane gridArea="simulator" label={t('education.workspace.simulator')}>
+                <WorkspacePane gridArea="simulator" label={t(target === 'robot' ? 'education.workspace.robot' : 'education.workspace.simulator')}>
                   <ExecutionTargetPanel height="100%" embedded>
                     <WebGLApp
                       ref={simulatorRef}

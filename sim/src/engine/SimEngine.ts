@@ -1081,6 +1081,9 @@ export class SimEngine {
 
       this.currentStage.collidersGroup.visible = this.showColliders
       this.applyStartCamera()
+      // Start behind the robot in third person; keep the stage's orbit view
+      // available when cycling cameras. Locked stage previews stay fixed.
+      this.setCameraMode('follow')
 
       this.splash.setStatus('Loading robot model...')
       this.robot = await loadRobotV2(undefined, this.config.assetBaseUrl)

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useId, useState } from 'react';
 import {
   Alert,
   Box,
@@ -12,10 +12,13 @@ import {
   Select,
   Stack,
   Switch,
+  Tab,
+  Tabs,
   TextField,
   Tooltip,
   Typography,
 } from '@mui/material';
+import { pageTabsSx } from 'src/components/shared/PageHeader';
 import LinkOffIcon from '@mui/icons-material/LinkOff';
 import RobotTelemetryPanel from './RobotTelemetryPanel';
 import RobotCameraPanel from './RobotCameraPanel';
@@ -52,6 +55,7 @@ const ExecutionTargetPanel: React.FC<ExecutionTargetPanelProps> = ({
     statusMessage,
     telemetry,
     programState,
+    cameraSupported,
     connect,
     disconnect,
     discover,
@@ -66,6 +70,9 @@ const ExecutionTargetPanel: React.FC<ExecutionTargetPanelProps> = ({
   const [robots, setRobots] = useState<DiscoveredRobot[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [robotView, setRobotView] = useState<'camera' | 'telemetry'>('camera');
+  const panelId = useId();
+  const activeView = cameraSupported ? robotView : 'telemetry';
   const compactConnectedView = target === 'robot' && status === 'connected';
 
   const runAction = async (action: () => Promise<void>) => {
@@ -102,8 +109,9 @@ const ExecutionTargetPanel: React.FC<ExecutionTargetPanelProps> = ({
       elevation={embedded ? 0 : undefined}
       square={embedded}
       sx={{
-        height: embedded ? height : compactConnectedView ? 'auto' : height,
-        minHeight: embedded || compactConnectedView ? 0 : 360,
+        height,
+        minHeight: 0,
+        minWidth: 0,
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
@@ -115,7 +123,7 @@ const ExecutionTargetPanel: React.FC<ExecutionTargetPanelProps> = ({
         direction="row"
         alignItems="center"
         justifyContent="space-between"
-        sx={{ px: 2, py: 1, borderBottom: 1, borderColor: 'divider' }}
+        sx={{ px: 1.5, py: 0.5, flexShrink: 0, flexWrap: 'wrap', gap: 0.5, borderBottom: 1, borderColor: 'divider' }}
       >
         <FormControlLabel
           control={
@@ -151,8 +159,45 @@ const ExecutionTargetPanel: React.FC<ExecutionTargetPanelProps> = ({
 
       {target === 'simulation' ? (
         <Box sx={{ flex: 1, minHeight: 0 }}>{children}</Box>
+      ) : compactConnectedView ? (
+        <>
+          <Tabs
+            value={activeView}
+            onChange={(_, value) => setRobotView(value)}
+            variant="scrollable"
+            scrollButtons="auto"
+            aria-label="Robot view"
+            sx={{ ...pageTabsSx, flexShrink: 0, borderBottom: 1, borderColor: 'divider' }}
+          >
+            {cameraSupported && <Tab value="camera" label="Camera" id={`${panelId}-camera-tab`} aria-controls={`${panelId}-camera`} />}
+            <Tab value="telemetry" label="Telemetry" id={`${panelId}-telemetry-tab`} aria-controls={`${panelId}-telemetry`} />
+          </Tabs>
+          {error && <Alert severity="error" sx={{ flexShrink: 0 }}>{error}</Alert>}
+          {cameraSupported && (
+            <Box
+              role="tabpanel"
+              id={`${panelId}-camera`}
+              aria-labelledby={`${panelId}-camera-tab`}
+              hidden={activeView !== 'camera'}
+              sx={{ display: activeView === 'camera' ? 'flex' : 'none', flex: 1, minHeight: 0, minWidth: 0, overflow: 'hidden' }}
+            >
+              <RobotCameraPanel />
+            </Box>
+          )}
+          <Box
+            role="tabpanel"
+            id={`${panelId}-telemetry`}
+            aria-labelledby={`${panelId}-telemetry-tab`}
+            hidden={activeView !== 'telemetry'}
+            sx={{ display: activeView === 'telemetry' ? 'block' : 'none', flex: 1, minHeight: 0, minWidth: 0, overflow: 'hidden' }}
+          >
+            {telemetry ? <RobotTelemetryPanel telemetry={telemetry} programState={programState} /> : (
+              <Typography color="text.secondary" sx={{ p: 2 }}>Waiting for telemetry…</Typography>
+            )}
+          </Box>
+        </>
       ) : (
-        <Box sx={{ p: 2, overflow: 'auto' }}>
+        <Box sx={{ flex: 1, minHeight: 0, p: 2, overflow: 'auto' }}>
           {status !== 'connected' && (
             <>
               <Typography variant="h5" gutterBottom>
@@ -236,13 +281,6 @@ const ExecutionTargetPanel: React.FC<ExecutionTargetPanelProps> = ({
                   network permission cannot override a robot response such as “Not an accepted
                   origin.”
                 </Alert>
-              </>
-            )}
-
-            {status === 'connected' && telemetry && (
-              <>
-                <RobotCameraPanel />
-                <RobotTelemetryPanel telemetry={telemetry} programState={programState} />
               </>
             )}
 
