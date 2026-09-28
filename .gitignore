@@ -4,6 +4,7 @@
 build/
 dist/
 data/
+!sim/src/stages/data/
 **/__pycache__/
 /back-end/fossenv
 /back-end/.env

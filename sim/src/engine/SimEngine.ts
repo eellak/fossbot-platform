@@ -1114,7 +1114,8 @@ export class SimEngine {
       ]
       this.wheelBaseLeft = this.robot.leftWheel.position.clone()
       this.wheelBaseRight = this.robot.rightWheel.position.clone()
-      this.vehicle = createVehicle(world, this.robotPhysics.body, wheelPositions, this.robot.wheelRadius)
+      this.vehicle = createVehicle(world, this.robotPhysics.body, wheelPositions, this.robot.wheelRadius,
+        (x, z) => this.currentStage?.floorMaterialAt(x, z) ?? null)
       const chassisColliders = ['main_body_1', 'main_body_2', 'main_body_3']
         .map((n) => this.robotPhysics!.collidersByName[n])
         .filter((c): c is RAPIER.Collider => !!c)
@@ -1411,6 +1412,13 @@ export class SimEngine {
         this.worldHandle.step()
         this.currentStage?.syncDynamicObjects()
         this.sensorSystem?.update(dt)
+        if (this.sensorSystem && this.robotPhysics) {
+          const position = this.robotPhysics.body.translation()
+          const material = this.currentStage?.floorMaterialAt(position.x, position.z, 0.15)
+          const readings = this.sensorSystem.getReadings().bySensorId
+          if (material) readings.set('floor-material-code', { kind: 'floor-material', code: material.code })
+          else readings.delete('floor-material-code')
+        }
         if (this.sensorSystem) this.sensorTelemetry.sample(this.sensorSystem.getReadings(), dt)
         this.accumulator -= dt
       }

@@ -1,6 +1,7 @@
 import stageAnimals from './data/stage_animals.json'
 import stageCones from './data/stage_cones.json'
 import stageEiffel from './data/stage_eiffel.json'
+import stageFloorMaterials from './data/stage_floor_materials.json'
 import stageMaze from './data/stage_maze.json'
 import stageMissionChallenge from './data/stage_mission_challenge.json'
 import stageNumbers from './data/stage_numbers.json'
@@ -22,6 +23,7 @@ export const STAGES: Record<StageName, RawStageEntry[]> = {
   stage_animals: stageAnimals as RawStageEntry[],
   stage_cones: stageCones as RawStageEntry[],
   stage_eiffel: stageEiffel as RawStageEntry[],
+  stage_floor_materials: stageFloorMaterials as RawStageEntry[],
   stage_maze: stageMaze as RawStageEntry[],
   stage_mission_challenge: stageMissionChallenge as RawStageEntry[],
   stage_numbers: stageNumbers as RawStageEntry[],

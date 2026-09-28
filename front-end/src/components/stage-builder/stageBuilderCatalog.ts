@@ -21,6 +21,7 @@ export const STAGE_OBJECT_CATALOG: StageObjectCatalogItem[] = [
   { id: 'targetZone', label: 'Object target zone', shortLabel: 'Zone', description: 'A floor region for a tracked push object.', category: 'mission', placeable: true },
   { id: 'line', label: 'Line path', shortLabel: 'Line', description: 'A floor line for line-following tests.', category: 'path', placeable: true },
   { id: 'baseTile', label: 'Floor marker', shortLabel: 'Marker', description: 'A colored no-collision marker on the floor.', category: 'path', placeable: true },
+  { id: 'floorMaterial', label: 'Floor material', shortLabel: 'Material', description: 'A drivable surface with a material label for simulator sensor recordings. Add one from the templates.', category: 'path', placeable: false },
   { id: 'dangerZone', label: 'No-go zone', shortLabel: 'No-go', description: 'A no-go floor region for challenge rules.', category: 'path', placeable: true },
   { id: 'sensorZone', label: 'Sensor region', shortLabel: 'Sensor', description: 'A floor region for later sensor-based challenges.', category: 'path', placeable: true },
   { id: 'directionArrow', label: 'Direction arrow', shortLabel: 'Arrow', description: 'A floor arrow for route direction and instructions.', category: 'path', placeable: true },

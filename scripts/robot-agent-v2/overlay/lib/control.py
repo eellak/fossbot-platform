@@ -127,7 +127,7 @@ class Odometer:
         self.pin = pin
         self.sensor_disc = 20
         self.steps = 0
-        self.wheel_diameter = 6.65
+        self.wheel_diameter = 6.0
         self._lock = threading.Lock()
         GPIO.setup(pin, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
         GPIO.add_event_detect(pin, GPIO.RISING, callback=self.count_revolutions, bouncetime=1)

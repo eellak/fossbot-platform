@@ -1,0 +1,8 @@
+#!/bin/sh
+# Install as /etc/letsencrypt/renewal-hooks/deploy/reload-fossbot-nginx.
+set -eu
+if [ "${RENEWED_LINEAGE:-}" != /etc/letsencrypt/live/fossbot.gr ]; then
+    exit 0
+fi
+/usr/bin/docker exec fsbt-front nginx -t
+/usr/bin/docker exec fsbt-front nginx -s reload

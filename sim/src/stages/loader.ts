@@ -11,6 +11,7 @@ import { log } from '../util/log'
 import { syncObjectToBody } from '../physics/mesh-sync'
 import type { ChallengeMarker } from '../missions/types'
 import { challengeForEntry } from '../missions/stageChallengeCore.js'
+import { surfaceDetails } from './surfaceDetails'
 
 interface StageDynamicObject {
   body: RAPIER.RigidBody
@@ -31,6 +32,7 @@ export interface StageHandle {
   lineSegmentCount: number
   dynamicCount: number
   missionMarkers: ChallengeMarker[]
+  floorMaterialAt: (x: number, z: number, inset?: number) => { code: number; traction: number } | null
   /** Stage-level LDR baseline (0..1). Mutable so a debug knob can adjust live. */
   ambientFloor: number
   /** Optional start camera captured from a `camera` stage entry. */
@@ -156,6 +158,7 @@ export async function loadStageEntries(
   const lineSegments: LineSegment[] = []
   const audioEntries: StageAudioEntry[] = []
   const missionMarkers: ChallengeMarker[] = []
+  const floorMaterials: Array<{ x: number; z: number; width: number; depth: number; yaw: number; code: number; traction: number }> = []
   const markerIds = new Set<string>()
   let startCamera: StageHandle['startCamera']
 
@@ -215,12 +218,29 @@ export async function loadStageEntries(
         break
       }
       case 'cube': {
+        const materialCode = Number(entry.floorMaterialCode)
+        const dimensions = entry.dimensions as number[] | undefined
+        const position = entry.position as number[] | undefined
+        if (Number.isInteger(materialCode) && materialCode >= 0 && dimensions && position) {
+          const orientation = entry.orientation as number[] | undefined
+          floorMaterials.push({ x: position[0], z: position[2], width: dimensions[0], depth: dimensions[2], yaw: Number(orientation?.[1]) || 0, code: materialCode, traction: Number(entry.surfaceTraction) || 1 })
+        }
         const vis = buildCubeVisual(entry as any)
         const col = buildCubeCollider(entry as any)
         scene.add(vis.object)
         objects.push(vis.object)
         attachColliders(vis, col, world, stageBody, stgCollidersGrp, dynamicObjects)
         registerMarker(vis.object, dynamicObjects[dynamicObjects.length - 1]?.object === vis.object ? dynamicObjects[dynamicObjects.length - 1].body : undefined)
+        if (Number.isInteger(materialCode) && materialCode >= 0 && dimensions && position) {
+          for (const detail of surfaceDetails(entry as { position: [number, number, number]; dimensions: [number, number, number]; orientation?: [number, number, number]; floorMaterialCode: number })) {
+            const built = detail.type === 'sphere'
+              ? { visual: buildSphereVisual(detail as any), collider: buildSphereCollider(detail as any) }
+              : { visual: buildCubeVisual(detail as any), collider: buildCubeCollider(detail as any) }
+            scene.add(built.visual.object)
+            objects.push(built.visual.object)
+            attachColliders(built.visual, built.collider, world, stageBody, stgCollidersGrp, dynamicObjects)
+          }
+        }
         break
       }
       case 'cylinder': {
@@ -358,6 +378,16 @@ export async function loadStageEntries(
     lineSegmentCount,
     dynamicCount,
     missionMarkers,
+    floorMaterialAt(x, z, inset = 0) {
+      const surface = floorMaterials.find((item) => {
+        const dx = x - item.x
+        const dz = z - item.z
+        const localX = Math.cos(item.yaw) * dx - Math.sin(item.yaw) * dz
+        const localZ = Math.sin(item.yaw) * dx + Math.cos(item.yaw) * dz
+        return Math.abs(localX) <= item.width / 2 - inset && Math.abs(localZ) <= item.depth / 2 - inset
+      })
+      return surface ? { code: surface.code, traction: surface.traction } : null
+    },
     ambientFloor: 0.05,
     startCamera,
     get disposed() { return disposed },

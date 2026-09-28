@@ -6,6 +6,7 @@ all serialize access to that instance through a small Unix-domain RPC service.
 """
 
 import json
+import math
 import os
 import socket
 import subprocess
@@ -35,6 +36,11 @@ ROAD_CONFIG_FILE = os.getenv(
     "FOSSBOT_ROAD_CONFIG_FILE",
     "/tmp/fossbot-road-config.json",
 )
+ODOMETER_STALL_SECONDS = 0.75
+ODOMETER_MISMATCH_CM = 3.0
+ODOMETER_MISMATCH_STEPS = 3
+ODOMETER_IMBALANCE_CM = 5.0
+ODOMETER_IMBALANCE_STEPS = 5
 DEPTH_FILE = os.getenv(
     "FOSSBOT_DEPTH_FILE",
     "/tmp/fossbot-fastdepth.json",
@@ -248,10 +254,32 @@ class RobotProxy:
 
     def move_distance(self, distance, direction="forward"):
         target = abs(float(distance))
+        if not math.isfinite(target):
+            raise ValueError("Distance must be finite")
+        if target == 0:
+            return
         self._call_root("just_move", direction=direction)
+        last_progress = 0.0
+        last_progress_at = time.monotonic()
         try:
-            while float(self.odometer_right.get_distance()) < target:
-                time.sleep(0.01)
+            while True:
+                left = float(self.odometer_left.get_distance())
+                right = float(self.odometer_right.get_distance())
+                progress = max(left, right)
+                if progress >= min(target, ODOMETER_MISMATCH_CM) and min(left, right) == 0:
+                    failed_side = "right" if right == 0 else "left"
+                    raise RuntimeError(f"{failed_side} wheel odometer has no pulses; movement stopped")
+                if progress >= min(target, ODOMETER_IMBALANCE_CM) and min(left, right) < progress / 2:
+                    raise RuntimeError("Wheel odometer readings disagree; movement stopped")
+                if progress >= target:
+                    break
+                now = time.monotonic()
+                if progress > last_progress:
+                    last_progress = progress
+                    last_progress_at = now
+                elif now - last_progress_at >= ODOMETER_STALL_SECONDS:
+                    raise RuntimeError("Wheel odometers stopped reporting movement; motors stopped")
+                time.sleep(0.02)
         finally:
             self._call_root("stop")
 
@@ -281,9 +309,27 @@ class RobotProxy:
         target_steps = int(round(degrees * float(steps_per_360) / 360.0))
         self.odometer_right.reset()
         self._call_root("just_rotate", 1 if clockwise else 0)
+        last_progress = 0
+        last_progress_at = time.monotonic()
         try:
-            while int(self.odometer_right.get_steps()) < target_steps:
-                time.sleep(0.005)
+            while True:
+                left = int(self.odometer_left.get_steps())
+                right = int(self.odometer_right.get_steps())
+                progress = max(left, right)
+                if progress >= min(target_steps, ODOMETER_MISMATCH_STEPS) and min(left, right) == 0:
+                    failed_side = "right" if right == 0 else "left"
+                    raise RuntimeError(f"{failed_side} wheel odometer has no pulses; rotation stopped")
+                if progress >= min(target_steps, ODOMETER_IMBALANCE_STEPS) and min(left, right) < progress / 2:
+                    raise RuntimeError("Wheel odometer readings disagree; rotation stopped")
+                if progress >= target_steps:
+                    break
+                now = time.monotonic()
+                if progress > last_progress:
+                    last_progress = progress
+                    last_progress_at = now
+                elif now - last_progress_at >= ODOMETER_STALL_SECONDS:
+                    raise RuntimeError("Wheel odometers stopped reporting rotation; motors stopped")
+                time.sleep(0.02)
         finally:
             self._call_root("stop")
 

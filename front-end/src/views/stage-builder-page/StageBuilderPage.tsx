@@ -1038,7 +1038,7 @@ const StageBuilderPage = () => {
 
   const addPrefab = (prefab: StageBuilderPrefab) => {
     const center = selectedCentroid(prefab.objects);
-    const delta: Vec3 = [-center[0], -center[1], -center[2]];
+    const delta: Vec3 = [-center[0], prefab.id.startsWith('builtin_floor_') ? 0 : -center[1], -center[2]];
     const groupId = makeLocalStageId();
     const copies = prefab.objects.map((object) => {
       const copy = translateObject(cloneStage(object), delta) as EditorStageObject;

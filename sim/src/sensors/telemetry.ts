@@ -16,6 +16,7 @@ export const SENSOR_CHANNELS: readonly SensorChannelDefinition[] = [
   { id: 'ir-floor-left', label: 'Left floor sensor', unit: 'state' },
   { id: 'ir-floor-center', label: 'Centre floor sensor', unit: 'state' },
   { id: 'ir-floor-right', label: 'Right floor sensor', unit: 'state' },
+  { id: 'floor-material-code', label: 'Floor material (0 tile, 1 carpet, 2 rough mat, 3 dirt)', unit: 'class' },
   { id: 'ldr-top', label: 'Light level', unit: '0–1023' },
   { id: 'microphone', label: 'Sound level', unit: '0–1023' },
   { id: 'odometer-left', label: 'Left odometer', unit: 'm' },
@@ -125,7 +126,10 @@ export class SensorTelemetryRecorder {
 
     for (const channel of SENSOR_CHANNELS) {
       const value = readChannel(readings, channel.id)
-      if (value === null || !Number.isFinite(value)) continue
+      if (value === null || !Number.isFinite(value)) {
+        delete this.readings[channel.id]
+        continue
+      }
       this.readings[channel.id] = { value, unit: channel.unit }
       const points = this.samples[channel.id] ?? (this.samples[channel.id] = [])
       points.push({ elapsedMs: Math.round(this.elapsedMs), value, unit: channel.unit })
@@ -184,6 +188,7 @@ function readChannel(readings: SensorReadings, channelId: string): number | null
 }
 
 function scalarReading(reading: SensorReading): number | null {
+  if (reading.kind === 'floor-material') return reading.code
   if (reading.kind === 'ultrasonic') return reading.distanceM
   if (reading.kind === 'ir-proximity') return reading.distanceM
   if (reading.kind === 'ir-floor') return reading.triggered

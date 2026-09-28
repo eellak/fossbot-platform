@@ -463,7 +463,7 @@ export function StageInspector({ object, selectedCount = object ? 1 : 0, advance
           </Stack>
         </FieldRow>
         <FieldRow label="Role">
-          <TextField {...commonFieldProps} select value={role || ''} disabled={locked} inputProps={{ 'aria-label': 'Category or role' }} onChange={(event) => {
+          <TextField {...commonFieldProps} select value={role || ''} disabled={locked || (object.kind === 'cube' && Number.isInteger(object.floorMaterialCode))} inputProps={{ 'aria-label': 'Category or role' }} onChange={(event) => {
             const semanticKind = event.target.value as StageSemanticKind;
             const kind = semanticKind === 'robotSpawn' ? 'spawn'
               : semanticKind === 'target' ? 'target'
@@ -485,9 +485,12 @@ export function StageInspector({ object, selectedCount = object ? 1 : 0, advance
             } as Partial<EditorStageObject>);
           }}>
             <MenuItem value="">Object</MenuItem>
-            {STAGE_OBJECT_CATALOG.filter((item) => item.placeable).map((item) => <MenuItem key={item.id} value={item.id}>{item.label}</MenuItem>)}
+            {STAGE_OBJECT_CATALOG.filter((item) => item.placeable || item.id === role).map((item) => <MenuItem key={item.id} value={item.id}>{item.label}</MenuItem>)}
           </TextField>
         </FieldRow>
+        {object.kind === 'cube' && Number.isInteger(object.floorMaterialCode) && <FullRow>
+          <Alert severity="info" sx={{ py: 0 }}>Sensor label {object.floorMaterialCode}: {['smooth tile', 'carpet', 'rough mat', 'dirt and small rocks'][object.floorMaterialCode!] || 'floor material'}. Surface texture follows this patch when you move or resize it.</Alert>
+        </FullRow>}
         {challengeKind && <FieldRow label="Mission ID">
           <TextField {...commonFieldProps} value={object.challenge?.markerId || object.id} disabled={locked} inputProps={{ 'aria-label': 'Stable mission ID' }} onChange={(event) => set({ challenge: { markerId: event.target.value, kind: challengeKind, order: object.challenge?.order, pickupRadius: object.challenge?.pickupRadius } } as Partial<EditorStageObject>)} />
         </FieldRow>}

@@ -26,9 +26,9 @@ const logoSet = Array.from({ length: 10 }, () => [hua, bot, gfoss]).flat();
 const logoWall = [...logoSet, ...logoSet];
 
 const Banner = () => (
-  <Box component="section" sx={{ overflow: 'hidden', pb: { xs: 6, md: 8 }, pt: { xs: 4, md: 6 } }}>
+  <Box component="section" sx={{ overflow: 'hidden', mb: { xs: 8, md: 10 } }}>
     <Container maxWidth="lg">
-      <Grid container spacing={{ xs: 5, lg: 6 }} alignItems="center">
+      <Grid container spacing={3} alignItems="center">
         <Grid item xs={12} lg={6}>
           <BannerContent />
         </Grid>
@@ -37,8 +37,7 @@ const Banner = () => (
             aria-hidden="true"
             sx={{
               bgcolor: 'primary.light',
-              borderRadius: 1,
-              height: 440,
+              height: { lg: 'min(70vh, 790px)' },
               overflow: 'hidden',
               position: 'relative',
             }}

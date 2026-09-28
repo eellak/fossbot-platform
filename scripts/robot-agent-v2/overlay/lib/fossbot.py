@@ -1,5 +1,6 @@
 """Physical FOSSBot v2 using the pin map recovered from the deployed robot."""
 
+import math
 import time
 
 from fossbot_lib.real_robot.control import (
@@ -9,6 +10,12 @@ from fossbot_lib.real_robot.control import (
 
 
 class FossBot:
+    _odometer_stall_seconds = 0.75
+    _odometer_mismatch_cm = 3.0
+    _odometer_mismatch_steps = 3
+    _odometer_imbalance_cm = 5.0
+    _odometer_imbalance_steps = 5
+
     def __init__(self, _parameters=None) -> None:
         start_lib()
         self.motor_right = Motor(13, 5, 0, 40)
@@ -36,10 +43,32 @@ class FossBot:
 
     def move_distance(self, dist, direction="forward"):
         target = abs(float(dist))
+        if not math.isfinite(target):
+            raise ValueError("Distance must be finite")
+        if target == 0:
+            return
         self.just_move(direction)
+        last_progress = 0.0
+        last_progress_at = time.monotonic()
         try:
-            while self.odometer_right.get_distance() < target:
-                time.sleep(0.01)
+            while True:
+                left = float(self.odometer_left.get_distance())
+                right = float(self.odometer_right.get_distance())
+                progress = max(left, right)
+                if progress >= min(target, self._odometer_mismatch_cm) and min(left, right) == 0:
+                    failed_side = "right" if right == 0 else "left"
+                    raise RuntimeError(f"{failed_side} wheel odometer has no pulses; movement stopped")
+                if progress >= min(target, self._odometer_imbalance_cm) and min(left, right) < progress / 2:
+                    raise RuntimeError("Wheel odometer readings disagree; movement stopped")
+                if progress >= target:
+                    break
+                now = time.monotonic()
+                if progress > last_progress:
+                    last_progress = progress
+                    last_progress_at = now
+                elif now - last_progress_at >= self._odometer_stall_seconds:
+                    raise RuntimeError("Wheel odometers stopped reporting movement; motors stopped")
+                time.sleep(0.02)
         finally:
             self.stop()
 
@@ -68,14 +97,36 @@ class FossBot:
         self.motor_right.move("reverse" if dir_id == 1 else "forward")
 
     def rotate_degrees(self, degrees, clockwise=True, speed=None):
+        if not math.isfinite(float(degrees)):
+            raise ValueError("Rotation must be finite")
         if speed is not None:
             self.motor_left.set_speed(speed)
             self.motor_right.set_speed(speed)
         target = int(round(abs(float(degrees)) * self._steps_per_360 / 360))
+        if target == 0:
+            return
         self.just_rotate(1 if clockwise else 0)
+        last_progress = 0
+        last_progress_at = time.monotonic()
         try:
-            while self.odometer_right.get_steps() < target:
-                time.sleep(0.005)
+            while True:
+                left = int(self.odometer_left.get_steps())
+                right = int(self.odometer_right.get_steps())
+                progress = max(left, right)
+                if progress >= min(target, self._odometer_mismatch_steps) and min(left, right) == 0:
+                    failed_side = "right" if right == 0 else "left"
+                    raise RuntimeError(f"{failed_side} wheel odometer has no pulses; rotation stopped")
+                if progress >= min(target, self._odometer_imbalance_steps) and min(left, right) < progress / 2:
+                    raise RuntimeError("Wheel odometer readings disagree; rotation stopped")
+                if progress >= target:
+                    break
+                now = time.monotonic()
+                if progress > last_progress:
+                    last_progress = progress
+                    last_progress_at = now
+                elif now - last_progress_at >= self._odometer_stall_seconds:
+                    raise RuntimeError("Wheel odometers stopped reporting rotation; motors stopped")
+                time.sleep(0.02)
         finally:
             self.stop()
 
@@ -121,4 +172,3 @@ class FossBot:
         self.rgb_set_color("closed")
         self.buzzer.cleanup()
         clean()
-

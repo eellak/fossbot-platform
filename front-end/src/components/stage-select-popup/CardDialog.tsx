@@ -63,6 +63,12 @@ interface CardDialogProps {
 
 const defaultStages: DefaultStageOption[] = [
   {
+    title: 'Floor materials',
+    description: 'Drive across tile, carpet, rough mat, and dirt with small rocks to record accelerometer data.',
+    image: '/js-simulator/stages/floor_materials.svg',
+    url: '/js-simulator/stages/stage_floor_materials.json',
+  },
+  {
     title: 'White Tiles',
     description: 'Good stage to start using the robot, especially the commands that make the robot move in default steps.',
     image: '/js-simulator/stages/white_tiles.png',

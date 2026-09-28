@@ -1,0 +1,158 @@
+[
+  {
+    "type": "floor",
+    "dimensions": [
+      10,
+      10
+    ],
+    "material": {
+      "color": "#e7ebed"
+    },
+    "name": "floor"
+  },
+  {
+    "type": "fossbot",
+    "position": [
+      0,
+      0,
+      2.1
+    ],
+    "orientation": [
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "type": "cube",
+    "name": "tile surface",
+    "dimensions": [
+      1.5,
+      0.001,
+      1.2
+    ],
+    "position": [
+      0,
+      0.0005,
+      1.8
+    ],
+    "material": {
+      "color": "#dbe8eb"
+    },
+    "floorMaterialCode": 0,
+    "surfaceTraction": 1,
+    "collision": "none"
+  },
+  {
+    "type": "text",
+    "name": "tile label",
+    "text": "0 TILE",
+    "position": [
+      -1.4,
+      0.025,
+      1.8
+    ],
+    "scale": 0.45,
+    "onFloor": true,
+    "color": "black"
+  },
+  {
+    "type": "cube",
+    "name": "carpet surface",
+    "dimensions": [
+      1.5,
+      0.001,
+      1.2
+    ],
+    "position": [
+      0,
+      0.0005,
+      0.6
+    ],
+    "material": {
+      "color": "#547b9a"
+    },
+    "floorMaterialCode": 1,
+    "surfaceTraction": 0.82,
+    "collision": "none"
+  },
+  {
+    "type": "text",
+    "name": "carpet label",
+    "text": "1 CARPET",
+    "position": [
+      -1.4,
+      0.025,
+      0.6
+    ],
+    "scale": 0.45,
+    "onFloor": true,
+    "color": "black"
+  },
+  {
+    "type": "cube",
+    "name": "rough mat surface",
+    "dimensions": [
+      1.5,
+      0.001,
+      1.2
+    ],
+    "position": [
+      0,
+      0.0005,
+      -0.6
+    ],
+    "material": {
+      "color": "#5b6267"
+    },
+    "floorMaterialCode": 2,
+    "surfaceTraction": 0.7,
+    "collision": "none"
+  },
+  {
+    "type": "text",
+    "name": "rough mat label",
+    "text": "2 ROUGH MAT",
+    "position": [
+      -1.4,
+      0.025,
+      -0.6
+    ],
+    "scale": 0.45,
+    "onFloor": true,
+    "color": "black"
+  },
+  {
+    "type": "cube",
+    "name": "dirt and rocks surface",
+    "dimensions": [
+      1.5,
+      0.001,
+      1.2
+    ],
+    "position": [
+      0,
+      0.0005,
+      -1.8
+    ],
+    "material": {
+      "color": "#a77a4f"
+    },
+    "floorMaterialCode": 3,
+    "surfaceTraction": 0.62,
+    "collision": "none"
+  },
+  {
+    "type": "text",
+    "name": "dirt and rocks label",
+    "text": "3 DIRT AND ROCKS",
+    "position": [
+      -1.4,
+      0.025,
+      -1.8
+    ],
+    "scale": 0.45,
+    "onFloor": true,
+    "color": "black"
+  }
+]

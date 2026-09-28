@@ -7,18 +7,17 @@ const ClosingCta = () => {
   const { t } = useTranslation();
 
   return (
-    <Box component="section" sx={{ bgcolor: 'background.paper', pb: { xs: 8, md: 12 } }}>
+    <Box component="section" sx={{ bgcolor: 'background.paper', pb: { xs: 8, md: 10 } }}>
       <Container maxWidth="lg">
         <Box
-          className="visual-language-supporting-panel"
-          sx={{ bgcolor: 'primary.light', p: { xs: 4, sm: 5, md: 6 }, textAlign: 'center' }}
+          sx={{ borderTop: 1, borderColor: 'divider', pt: { xs: 4, md: 6 }, textAlign: 'center' }}
         >
           <Typography
             component="h2"
             sx={{
               fontSize: { xs: '1.5rem', md: '2rem' },
-              fontWeight: 600,
-              letterSpacing: '-0.02em',
+              fontWeight: 300,
+              color: 'primary.main',
               lineHeight: 1.2,
               textWrap: 'balance',
             }}

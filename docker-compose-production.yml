@@ -35,8 +35,10 @@ services:
       - "443:443"
     volumes:
       - ./front-end/nginx.conf:/etc/nginx/conf.d/default.conf
-      - /etc/letsencrypt/live/fossbot.gr/fullchain.pem:/etc/letsencrypt/live/fossbot.gr/fullchain.pem
-      - /etc/letsencrypt/live/fossbot.gr/privkey.pem:/etc/letsencrypt/live/fossbot.gr/privkey.pem
+      # Mount directories so Certbot's updated symlinks are visible on reload.
+      - /etc/letsencrypt/live/fossbot.gr:/etc/letsencrypt/live/fossbot.gr:ro
+      - /etc/letsencrypt/archive/fossbot.gr:/etc/letsencrypt/archive/fossbot.gr:ro
+      - /var/www/certbot:/var/www/certbot:ro
     depends_on:
       - backend
   db:

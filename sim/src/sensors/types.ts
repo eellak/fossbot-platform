@@ -62,6 +62,7 @@ export type SensorLayoutEntry =
   | MicrophoneLayoutEntry
 
 export type SensorReading =
+  | { kind: 'floor-material'; code: number }
   | { kind: 'ultrasonic'; distanceM: number; outOfRange: boolean }
   | { kind: 'ir-proximity'; triggered: 0 | 1; distanceM: number }
   | { kind: 'ir-floor'; triggered: 0 | 1; distanceM: number }

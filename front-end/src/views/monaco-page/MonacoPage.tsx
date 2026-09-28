@@ -56,6 +56,8 @@ import ExecutionTargetPanel from 'src/components/robot/ExecutionTargetPanel';
 import { useSelector } from 'react-redux';
 import { AppState } from 'src/store/Store';
 import PhysicalRobotTerminal from 'src/components/robot/PhysicalRobotTerminal';
+import SensorDataPanel from 'src/components/robot/SensorDataPanel';
+import { useSensorDataCollection } from 'src/components/robot/useSensorDataCollection';
 import { useRobotConnection } from 'src/robot/RobotConnectionContext';
 import ProjectStageIndicator from 'src/components/editors/ProjectStageIndicator';
 import AssistantPanel, { type AssistantSurfaceAdapter } from 'src/components/ai/AssistantPanel';
@@ -110,6 +112,7 @@ const MonacoPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppearan
   const [runtimeContext, setRuntimeContext] = useState({ output: [] as string[], error: '' });
   // The source that produced the current terminal output; used to drop stale runtime context.
   const runSourceRef = useRef('');
+  const runHadErrorRef = useRef(false);
   const runTargetRef = useRef<'simulation' | 'robot'>('simulation');
   const auth = useAuth();
   const { token } = auth;
@@ -123,6 +126,8 @@ const MonacoPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppearan
   const {
     target,
     programState,
+    status,
+    telemetry,
     runCode: runCodeOnRobot,
     stop: stopPhysicalRobot,
   } = useRobotConnection();
@@ -130,6 +135,8 @@ const MonacoPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppearan
   const isColumn = useMediaQuery('(max-width:1024px)');
 
   const [isRunning, setIsRunning] = useState(false);
+  const collector = useSensorDataCollection(target, programState, status, telemetry);
+  const [resultsTab, setResultsTab] = useState<'terminal' | 'data'>('terminal');
   const { notify } = useNotifications();
 
   const theme = useTheme();
@@ -196,7 +203,8 @@ const MonacoPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppearan
     }
     if (target === 'robot') {
       try {
-        await runCodeOnRobot(editorValue, `${projectTitle || 'fossbot_program'}.py`);
+        const programId = await runCodeOnRobot(editorValue, `${projectTitle || 'fossbot_program'}.py`);
+        collector.start('robot', programId);
         setIsRunning(true);
         handleShowSuccessAlert('The physical FOSSBot accepted the program.');
       } catch (error) {
@@ -238,14 +246,15 @@ const MonacoPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppearan
   }, []);
 
   const handleExecutionEvent = useCallback((event: { type: 'start' | 'stdout' | 'stderr' | 'complete' | 'stopped'; text?: string }) => {
-    if (event.type === 'start') { runSourceRef.current = editorRef.current?.getSource() ?? ''; runTargetRef.current = target; setRuntimeContext({ output: [], error: '' }); return; }
+    if (event.type === 'start') { runHadErrorRef.current = false; collector.start('simulation'); runSourceRef.current = editorRef.current?.getSource() ?? ''; runTargetRef.current = target; setRuntimeContext({ output: [], error: '' }); return; }
     if (event.type === 'stdout') setRuntimeContext((current) => ({ ...current, output: [...current.output, event.text || ''].slice(-24) }));
-    if (event.type === 'stderr') setRuntimeContext((current) => ({ output: [...current.output, event.text || ''].slice(-24), error: event.text || 'Runtime error' }));
+    if (event.type === 'stderr') { runHadErrorRef.current = true; setRuntimeContext((current) => ({ output: [...current.output, event.text || ''].slice(-24), error: event.text || 'Runtime error' })); }
     if (event.type === 'complete' || event.type === 'stopped') {
+      collector.finish(event.type === 'complete' && runHadErrorRef.current ? 'failed' : event.type);
       setIsRunning(false);
       notify(t(event.type === 'complete' ? 'alertMessages.runCompleted' : 'alertMessages.codeStopped'), { severity: 'info' });
     }
-  }, [notify, t, target]);
+  }, [collector.start, collector.finish, notify, t, target]);
 
   useEffect(() => {
     const newSessionId = uuidv4();
@@ -508,6 +517,17 @@ const MonacoPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppearan
     </Box>
   );
 
+  const resultsPanel = (
+    <Box sx={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+      <Tabs value={resultsTab} onChange={(_, value) => setResultsTab(value)} aria-label="Results views" sx={{ minHeight: 38, flexShrink: 0 }}>
+        <Tab value="terminal" label={t('dataCollection.terminal')} sx={{ minHeight: 38 }} />
+        <Tab value="data" label={t('dataCollection.title')} sx={{ minHeight: 38 }} />
+      </Tabs>
+      <Box sx={{ flex: 1, minHeight: 0 }} hidden={resultsTab !== 'terminal'}>{proposedTerminal}</Box>
+      <Box sx={{ flex: 1, minHeight: 0 }} hidden={resultsTab !== 'data'}><SensorDataPanel collector={collector} /></Box>
+    </Box>
+  );
+
   const beginWorkspaceResize = (target: MonacoResizeTarget) => (event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return;
     event.preventDefault();
@@ -588,6 +608,7 @@ const MonacoPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppearan
                     <ExecutionTargetPanel height="100%">
                       <WebGLApp
                         ref={simulatorRef}
+                        onTelemetry={collector.onSimulatorTelemetry}
                         appsessionId={sessionId}
                         onMountChange={handleMountChange}
                         initialStageUrl={selectedStage?.url || null}
@@ -596,7 +617,7 @@ const MonacoPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppearan
                       />
                     </ExecutionTargetPanel>
                   </Box>
-                  <Box hidden={workspaceActivePane !== 'results'}>{proposedTerminal}</Box>
+                  <Box hidden={workspaceActivePane !== 'results'}>{resultsPanel}</Box>
                 </Box>
                 </>
               ) : (
@@ -608,6 +629,7 @@ const MonacoPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppearan
                   <ExecutionTargetPanel height="100%" embedded>
                     <WebGLApp
                       ref={simulatorRef}
+                      onTelemetry={collector.onSimulatorTelemetry}
                       appsessionId={sessionId}
                       onMountChange={handleMountChange}
                       initialStageUrl={selectedStage?.url || null}
@@ -617,7 +639,7 @@ const MonacoPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppearan
                   </ExecutionTargetPanel>
                 </WorkspacePane>
                 <WorkspacePane gridArea="results" label={t('education.workspace.results')}>
-                  {proposedTerminal}
+                  {resultsPanel}
                 </WorkspacePane>
                 <WorkspaceResizeHandle overlay direction="vertical" position={workspaceColumnSplit} valueNow={workspaceColumnSplit} valueMin={28} valueMax={65} label={t('monaco-page.resizeColumns')} onPointerDown={beginWorkspaceResize('columns')} onReset={resetWorkspacePaneSizes} onKeyboardResize={resizeWorkspaceWithKeyboard} />
                 <WorkspaceResizeHandle overlay direction="horizontal" position={workspaceRowSplit} crossStart={workspaceColumnSplit} valueNow={workspaceRowSplit} valueMin={40} valueMax={72} label={t('education.workspace.resizeRows')} onPointerDown={beginWorkspaceResize('rows')} onReset={resetWorkspacePaneSizes} onKeyboardResize={resizeWorkspaceWithKeyboard} />

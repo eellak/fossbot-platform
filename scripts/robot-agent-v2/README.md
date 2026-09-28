@@ -108,6 +108,17 @@ The service prepares the two kernel hardware-PWM channels before dropping to
 the `pi` user. Every stop path writes zero PWM duty and forces all H-bridge
 direction pins low.
 
+Distance and rotation commands require pulses from both wheel odometers. If
+one counter stays at zero while the other advances, the counters differ by
+more than 50% after at least five pulses, or neither advances for 0.75
+seconds, the command stops the motors and reports an odometer error.
+This prevents a failed encoder from leaving a distance command driving until
+the user presses Stop. Check the sensor and wiring before relying on precise
+distance movement again.
+The wheel distance calculation uses a 6.0 cm outside diameter measured on
+the physical robot. Verify it over a marked path after both encoders report
+reliably; a short run stopped by an encoder error is not a calibration.
+
 ## Camera
 
 The IMX500 stream is opt-in. A browser sends `camera:start`; the agent then

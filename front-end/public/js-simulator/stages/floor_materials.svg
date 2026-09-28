@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360" role="img" aria-label="Four simulator floor materials: tile, carpet, rough mat, and dirt with rocks">
+  <rect width="640" height="360" fill="#e7ebed"/>
+  <rect x="90" y="28" width="460" height="72" fill="#dbe8eb"/>
+  <rect x="90" y="105" width="460" height="72" fill="#547b9a"/>
+  <rect x="90" y="182" width="460" height="72" fill="#5b6267"/>
+  <rect x="90" y="259" width="460" height="72" fill="#a77a4f"/>
+  <g stroke="#9bb6bf" stroke-width="2"><path d="M90 64h460M200 28v72M320 28v72M440 28v72"/></g>
+  <g stroke="#9fc0d0" stroke-width="3"><path d="M95 129h450M95 151h450"/></g>
+  <g stroke="#899294" stroke-width="5"><path d="M95 206h450M95 231h450"/></g>
+  <g fill="#84745f"><circle cx="145" cy="284" r="8"/><circle cx="245" cy="310" r="10"/><circle cx="350" cy="289" r="7"/><circle cx="460" cy="313" r="9"/><circle cx="515" cy="278" r="6"/></g>
+  <g font-family="sans-serif" font-size="19" font-weight="700" fill="#172c3c"><text x="105" y="58">TILE</text><text x="105" y="137" fill="#fff">CARPET</text><text x="105" y="214" fill="#fff">ROUGH MAT</text><text x="105" y="291">DIRT + ROCKS</text></g>
+</svg>

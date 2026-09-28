@@ -131,10 +131,8 @@ const PythonExecutor = ({
       return;
     }
 
-    if (!pyodideWorker) {
-      const worker = createWorker();
-      setPyodideWorker(worker);
-    }
+    const worker = pyodideWorker ?? createWorker();
+    if (!pyodideWorker) setPyodideWorker(worker);
 
     const scriptWithSession = {
       command: 'run',
@@ -143,7 +141,7 @@ const PythonExecutor = ({
     };
 
     onExecutionEvent?.({ type: 'start' });
-    pyodideWorker?.postMessage(JSON.stringify(scriptWithSession));
+    worker.postMessage(JSON.stringify(scriptWithSession));
     setError('');
   }, [onExecutionEvent, pythonScript, sessionId, t, pyodideWorker]);
 

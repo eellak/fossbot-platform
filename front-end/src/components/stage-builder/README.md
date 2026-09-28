@@ -138,6 +138,7 @@ The builder imports and round-trips geometry/model objects as OBJ, STL, or GLB c
 - JSON export is the save action for this implementation stage.
 - Browser recovery drafts are only unsaved-work recovery, not project storage.
 - Adding from the Library/Add menu creates objects at the floor center and selects them.
+- The Prefabs section includes four single-object floor material patches: tile, carpet, rough mat, and dirt with small rocks. Each patch exports a material code and traction setting; the simulator generates its low ridges or rocks from the patch size and position. The floor material code appears in sensor CSV recordings only while the robot is fully inside a patch.
 - A new robot spawn replaces any existing robot spawn.
 - A new camera replaces any existing camera; multiple visible cameras are supported only through import/duplication and produce a validation warning.
 - Hidden objects are omitted from exported simulator config.

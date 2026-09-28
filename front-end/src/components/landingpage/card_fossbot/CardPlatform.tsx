@@ -1,9 +1,8 @@
 import React from 'react';
-import { Box, Container, Divider, Grid, Stack, Typography } from '@mui/material';
+import { Box, Container, Grid, Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 
 const featureStories = ['programming', 'stages', 'learning', 'buddy'] as const;
-const foundations = ['projects', 'access', 'language', 'open'] as const;
 const storyMedia: Record<(typeof featureStories)[number], string> = {
   programming: 'python-editor',
   stages: 'stage-builder',
@@ -30,7 +29,7 @@ const StoryScreenshot = ({ story }: { story: (typeof featureStories)[number] }) 
           bgcolor: 'secondary.light',
           border: 1,
           borderColor: 'divider',
-          borderRadius: 1,
+          boxShadow: '0 4px 10px rgba(0, 0, 0, 0.1)',
           display: 'block',
           height: 'auto',
           width: '100%',
@@ -52,51 +51,47 @@ const PlatformCard = () => {
       id="platform-features"
       sx={{
         bgcolor: 'background.paper',
-        pb: { xs: 8, md: 12 },
-        pt: { xs: 7, md: 9 },
+        pb: { xs: 8, md: 10 },
         scrollMarginTop: 80,
       }}
     >
       <Container maxWidth="lg">
-        <Grid container spacing={{ xs: 2, md: 6 }} alignItems="end" sx={{ mb: { xs: 7, md: 10 } }}>
-          <Grid item xs={12} md={7}>
+        <Grid container spacing={2} sx={{ mb: { xs: 7, md: 10 } }}>
+          <Grid item xs={12}>
             <Typography
               component="h2"
               sx={{
                 fontSize: { xs: '2rem', sm: '2.75rem', md: '3.25rem' },
-                fontWeight: 600,
-                letterSpacing: '-0.03em',
-                lineHeight: 1.05,
-                maxWidth: '18ch',
+                fontWeight: 300,
+                lineHeight: 1.15,
+                color: 'primary.main',
                 textWrap: 'balance',
               }}
             >
               {t('landing_features.title')}
             </Typography>
           </Grid>
-          <Grid item xs={12} md={5}>
+          <Grid item xs={12}>
             <Typography
               variant="body1"
               color="text.secondary"
-              sx={{ fontSize: '1.125rem', lineHeight: 1.6, maxWidth: '52ch' }}
+              sx={{ fontSize: '1.125rem', lineHeight: 1.6, maxWidth: '90ch' }}
             >
               {t('landing_features.intro')}
             </Typography>
           </Grid>
         </Grid>
 
-        <Box sx={{ display: 'grid', rowGap: { xs: 8, md: 10 } }}>
-          {featureStories.map((story) => (
-            <Grid component="article" container spacing={{ xs: 3, md: 5 }} alignItems="center" key={story}>
-              <Grid item xs={12} md={5}>
+        <Box sx={{ display: 'grid', rowGap: { xs: 7, md: 10 } }}>
+          {featureStories.map((story, index) => (
+            <Grid component="article" container spacing={3} alignItems="center" key={story}>
+              <Grid item xs={12} md={6} sx={{ order: { xs: 1, md: index % 2 === 1 ? 2 : 1 } }}>
                 <Typography
                   component="h3"
                   sx={{
                     fontSize: { xs: '1.625rem', md: '2rem' },
-                    fontWeight: 600,
-                    letterSpacing: '-0.02em',
-                    lineHeight: 1.2,
-                    maxWidth: '24ch',
+                    fontWeight: 300,
+                    lineHeight: 1.3,
                     textWrap: 'balance',
                   }}
                 >
@@ -105,7 +100,7 @@ const PlatformCard = () => {
                 <Typography
                   variant="body1"
                   color="text.secondary"
-                  sx={{ lineHeight: 1.6, maxWidth: '62ch', mt: 2 }}
+                  sx={{ lineHeight: 1.6, mt: 2 }}
                 >
                   {t(`landing_features.stories.${story}.description`)}
                 </Typography>
@@ -128,60 +123,13 @@ const PlatformCard = () => {
                   ))}
                 </Box>
               </Grid>
-              <Grid item xs={12} md={7} sx={{ display: 'flex', justifyContent: 'flex-end' }}>
-                <Box sx={{ width: '100%', maxWidth: 640 }}>
+              <Grid item xs={12} md={6} sx={{ display: 'flex', justifyContent: 'center', order: { xs: 2, md: index % 2 === 1 ? 1 : 2 } }}>
+                <Box sx={{ width: '100%', maxWidth: 500 }}>
                   <StoryScreenshot story={story} />
                 </Box>
               </Grid>
             </Grid>
           ))}
-        </Box>
-
-        <Box
-          component="section"
-          className="visual-language-supporting-panel"
-          sx={{ bgcolor: 'secondary.light', mt: { xs: 9, md: 14 }, p: { xs: 3, sm: 4, md: 5 } }}
-        >
-          <Grid container spacing={{ xs: 4, md: 7 }}>
-            <Grid item xs={12} md={4}>
-              <Typography
-                component="h2"
-                sx={{
-                  fontSize: { xs: '1.5rem', md: '2rem' },
-                  fontWeight: 600,
-                  letterSpacing: '-0.02em',
-                  lineHeight: 1.2,
-                  maxWidth: '18ch',
-                }}
-              >
-                {t('landing_features.foundationsTitle')}
-              </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mt: 1.5, maxWidth: '42ch' }}>
-                {t('landing_features.foundationsIntro')}
-              </Typography>
-            </Grid>
-            <Grid item xs={12} md={8}>
-              <Stack divider={<Divider flexItem />}>
-                {foundations.map((foundation) => (
-                  <Grid container spacing={2} key={foundation} sx={{ py: 2.25 }}>
-                    <Grid item xs={12} sm={4}>
-                      <Typography variant="body1" fontWeight={600}>
-                        {t(`landing_features.foundations.${foundation}.title`)}
-                      </Typography>
-                    </Grid>
-                    <Grid item xs={12} sm={8}>
-                      <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.6 }}>
-                        {t(`landing_features.foundations.${foundation}.description`)}
-                      </Typography>
-                    </Grid>
-                  </Grid>
-                ))}
-              </Stack>
-              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 2 }}>
-                {t('landing_features.availability')}
-              </Typography>
-            </Grid>
-          </Grid>
         </Box>
       </Container>
     </Box>

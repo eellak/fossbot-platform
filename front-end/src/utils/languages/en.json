@@ -219,12 +219,12 @@
     "fact3": "Raspberry Pi Zero",
     "fact4": "Sensors and actuators",
     "fact5": "Under $200",
-    "platformTitle": "The FOSSBot Platform",
-    "platformBody": "The FOSSBot Platform is a browser-based workspace for creating, editing, and running programs for the robot. It is designed to be friendly for beginners and capable enough for advanced projects, so learners can start simply and keep growing.",
-    "mode1": "Blockly — drag-and-drop visual programming for the first steps",
-    "mode2": "Python — a real text-based coding experience",
-    "mode3": "Simulator — test and debug programs without the physical robot",
-    "mode4": "Interactive and RC — drive the robot by hand or with a game controller",
+    "platformTitle": "Teach with FOSSBot",
+    "platformBody": "Plan robotics learning in one place: organize classrooms, build a curriculum of hands-on lessons, and give students space to experiment with code and the robot.",
+    "mode1": "Classrooms — assign courses to groups and follow student progress",
+    "mode2": "Curriculum — create lessons and missions with instructions, starter code, and activities",
+    "mode3": "Custom stages — build simulator environments that fit each lesson or challenge",
+    "mode4": "FOSSBot Buddy — help educators draft and refine teaching material for review",
     "openTitle": "Open by design",
     "openBody": "Download the 3D print designs and assembly instructions to build your own FOSSBot, and help the project grow by contributing bug reports, feature requests, or code.",
     "openLink": "View on GitHub"
@@ -822,6 +822,10 @@
       "errors": { "load": "Could not load courses.", "enroll": "Could not start this course.", "progress": "Your progress could not be saved. Retry when you are ready.", "update": "The course was not updated. You can continue the current version.", "lesson": "This lesson is unavailable." }
     },
     "errors": { "load": "Courses could not be loaded. Check your connection, then try again.", "loadCourse": "This course could not be loaded. Check your connection, then try again.", "create": "The course could not be created. Check your connection, then submit the form again.", "duplicate": "The copy could not be created. Check your connection, then choose Duplicate again.", "archive": "The course was not archived. It remains available; check your connection and try again.", "delete": "The course was not deleted. It remains available; check your connection and try again.", "deleteEnrolled": "This course has students enrolled, so it cannot be deleted. Archive it instead to keep their progress.", "deleteAssigned": "This course is assigned to a class, so it cannot be deleted. Archive it instead to keep the assignment and leaderboards.", "save": "Your latest changes could not be saved. They remain on this page; check your connection and retry.", "saveValidation": "A validation error is blocking this save. Fix the highlighted field, then retry.", "validate": "The publish check could not finish. Check your connection and run it again.", "publish": "The course was not published. Your draft is safe; check your connection and try again.", "reload": "Reload course", "retrySave": "Retry save", "retryValidation": "Check again", "retryPublish": "Try publishing again" }
+  },
+  "dataCollection": {
+    "frequency": "Collection frequency", "frequencyOption": "{{hz}} Hz (every {{seconds}} s)", "frequencyHelp": "The robot reports readings about every 0.5 s. Actual sample timing can vary slightly.", "simulatorFrequencyHelp": "For floor classification, record acceleration and floor material at 10 Hz. Material codes: 0 tile, 1 carpet, 2 rough mat, 3 dirt and rocks.",
+    "title": "Data collection", "terminal": "Terminal", "record": "Record sensor data when I run the program", "unavailable": "Sensor recording requires simulator v2 or a connected physical robot.", "select": "Select sensors to record ({{count}} selected)", "selectRequired": "Select at least one sensor before running.", "recording": "Recording · {{count}} rows", "inProgress": "Recording in progress", "last": "Last recording", "physicalRobot": "Physical robot", "simulator": "Simulator", "rows": "{{count}} rows", "running": "Running", "export": "Export CSV", "empty": "No readings were received during this run.", "replaces": "A new recorded run replaces the last recording. Export it first if you want to keep it.", "reason": { "completed": "Completed", "stopped": "Stopped", "failed": "Failed", "disconnected": "Disconnected", "target changed": "Target changed", "page closed": "Page closed", "replaced": "Replaced" }
   },
   "accountSettings": {
     "blocklyProjects": "Blockly projects",

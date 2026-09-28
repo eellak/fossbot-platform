@@ -111,6 +111,7 @@ export function createVehicle(
   chassis: RAPIER.RigidBody,
   wheelLocalPositions: [THREE.Vector3, THREE.Vector3],
   wheelRadius: number,
+  surfaceAt?: (x: number, z: number) => { traction: number } | null,
 ): VehicleHandle {
   const settings = createDefaultVehicleSettings(wheelRadius)
   let leftInput = 0
@@ -255,6 +256,7 @@ export function createVehicle(
         settings.maxTireForce,
         suspensionForce * settings.tireLoadFactor,
       )
+      const traction = THREE.MathUtils.clamp(surfaceAt?.(_contact.x, _contact.z)?.traction ?? 1, 0.2, 1)
 
       // Slope-hold via direct gravity projection onto the contact plane.
       const slopeSin = Math.sqrt(Math.max(0, 1 - _normal.y * _normal.y))
@@ -267,15 +269,15 @@ export function createVehicle(
       // --- longitudinal tire force ---
       const fLong = THREE.MathUtils.clamp(
         input * settings.motorForce - vLong * settings.brakeStrength,
-        -maxLoadedTireForce,
-        maxLoadedTireForce,
+        -maxLoadedTireForce * traction,
+        maxLoadedTireForce * traction,
       )
 
       // --- lateral tire force ---
       const fLat = THREE.MathUtils.clamp(
         -vLat * settings.gripStrength,
-        -maxLoadedTireForce,
-        maxLoadedTireForce,
+        -maxLoadedTireForce * traction,
+        maxLoadedTireForce * traction,
       )
 
       wheelData.longitudinalForce = fLong

@@ -11,6 +11,7 @@ import { disposeScene, initScene, renderScene, type SceneHandle } from 'src/simu
 import { loadRobotV2 } from 'src/simulator/robot/v2';
 import { SENSOR_LAYOUT } from 'src/simulator/sensors/layout';
 import { createStageAssetResolver } from 'src/simulator/stages/assets';
+import { surfaceDetails } from 'src/simulator/stages/surfaceDetails';
 import { objectVisualKey } from './stageBuilderVisualKey';
 import type { EditorStageObject, StageBuilderGroup, StageBuilderMode, StageBuilderSkyboxSettings, StageBuilderTransformSpace, StageLabelAttachment, StageLabelFace, StageTextStyle, Vec3 } from './types';
 import type { StageBuilderControlScheme, StageBuilderLockMode, StageBuilderStyleVariant } from './stageBuilderPreferences';
@@ -1213,15 +1214,29 @@ export function makeObjectRoot(object: EditorStageObject, options: ObjectVisualO
   let root: THREE.Object3D;
 
   if (object.kind === 'cube') {
-    const mesh = new THREE.Mesh(
-      new THREE.BoxGeometry(object.dimensions[0], object.dimensions[1], object.dimensions[2]),
-      standardMaterial(object.color, options, 1, colors),
-    );
-    mesh.position.set(...object.position);
-    if (object.orientation) mesh.rotation.set(object.orientation[0], object.orientation[1], object.orientation[2]);
-    else mesh.rotation.y = object.rotationY;
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(...object.dimensions), standardMaterial(object.color, options, 1, colors));
     mesh.castShadow = true;
-    root = mesh;
+    if (Number.isInteger(object.floorMaterialCode)) {
+      const group = new THREE.Group();
+      group.add(mesh);
+      for (const detail of surfaceDetails({ position: [0, 0, 0], dimensions: object.dimensions, floorMaterialCode: object.floorMaterialCode })) {
+        const dimensions = detail.dimensions as number[];
+        const detailMesh = detail.type === 'sphere'
+          ? new THREE.Mesh(new THREE.SphereGeometry(dimensions[0] / 2, 12, 8), standardMaterial(String((detail.material as { color?: string })?.color || '#888888'), options, 1, colors))
+          : new THREE.Mesh(new THREE.BoxGeometry(dimensions[0], dimensions[1], dimensions[2]), standardMaterial(String((detail.material as { color?: string })?.color || '#888888'), options, 1, colors));
+        detailMesh.position.fromArray(detail.position as number[]);
+        group.add(detailMesh);
+      }
+      group.position.set(...object.position);
+      if (object.orientation) group.rotation.set(...object.orientation);
+      else group.rotation.y = object.rotationY;
+      root = group;
+    } else {
+      mesh.position.set(...object.position);
+      if (object.orientation) mesh.rotation.set(...object.orientation);
+      else mesh.rotation.y = object.rotationY;
+      root = mesh;
+    }
     pickables.push(mesh);
   } else if (object.kind === 'cylinder') {
     const mesh = new THREE.Mesh(

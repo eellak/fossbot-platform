@@ -68,6 +68,8 @@ export type StageCubeEntry = {
   mass?: number;
   collision?: StagePrimitiveCollisionMode;
   challenge?: StageChallengeMetadata;
+  floorMaterialCode?: number;
+  surfaceTraction?: number;
 };
 
 export type StageCylinderEntry = {
@@ -256,6 +258,7 @@ export type StageObjectKind = 'base' | 'cube' | 'cylinder' | 'sphere' | 'wedge' 
 export type StageSemanticKind =
   | 'floor'
   | 'baseTile'
+  | 'floorMaterial'
   | 'wall'
   | 'block'
   | 'ramp'
@@ -353,6 +356,8 @@ export type EditorCubeObject = EditorObjectCommon & {
   immovable: boolean;
   collision?: StagePrimitiveCollisionMode;
   rampAngle?: number;
+  floorMaterialCode?: number;
+  surfaceTraction?: number;
 };
 
 export type EditorCylinderObject = EditorObjectCommon & {

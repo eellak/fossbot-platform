@@ -132,7 +132,11 @@ export function validateStageBuilderStage(stage: EditorStage): StageBuilderValid
     }
   }
 
-  const solidBounds = bounds.filter((entry) => entry.bounds.solid);
+  // Surface patches and their small ridges/rocks are intentionally drivable
+  // terrain. Their contact with a robot spawn or each other is not a blockage.
+  const solidBounds = bounds.filter((entry) => entry.bounds.solid && !(
+    (entry.object.kind === 'cube' && entry.object.semanticKind === 'floorMaterial' && entry.object.dimensions[1] <= 0.04)
+  ));
   for (let i = 0; i < solidBounds.length; i++) {
     for (let j = i + 1; j < solidBounds.length; j++) {
       const a = solidBounds[i];

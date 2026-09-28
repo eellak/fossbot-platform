@@ -66,6 +66,7 @@ const INHERENT_COLOR_KINDS: ReadonlySet<StageSemanticKind> = new Set<StageSemant
 const CATEGORY_BY_KIND: Record<StageSemanticKind, EditorTone> = {
   floor: editorTones.floorPaths,
   baseTile: editorTones.floorPaths,
+  floorMaterial: editorTones.floorPaths,
   line: editorTones.floorPaths,
   wall: editorTones.structures,
   block: editorTones.structures,

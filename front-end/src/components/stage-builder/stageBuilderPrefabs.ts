@@ -1,5 +1,6 @@
 import type { EditorCubeObject, EditorStageObject } from './types';
 import { cloneStage } from './stageBuilderGeometry';
+import floorMaterialsStage from 'src/simulator/stages/data/stage_floor_materials.json';
 
 const STORAGE_PREFIX = 'fossbot.stageBuilder.prefabs.v1';
 
@@ -65,8 +66,38 @@ function prefab(id: string, title: string, description: string, objects: EditorS
   return { id, title, description, objects, createdAt: BUILTIN_DATE, updatedAt: BUILTIN_DATE, builtIn: true };
 }
 
+type FloorMaterialEntry = {
+  type: string;
+  name?: string;
+  position?: number[];
+  dimensions?: number[];
+  material?: { color?: string };
+  floorMaterialCode?: number;
+  surfaceTraction?: number;
+  collision?: 'auto' | 'none';
+};
+
+function floorMaterialPrefab(code: number, slug: string, title: string, description: string): StageBuilderPrefab {
+  const entries = floorMaterialsStage as FloorMaterialEntry[];
+  const surface = entries.find((entry) => entry.type === 'cube' && entry.floorMaterialCode === code);
+  if (!surface?.position || !surface.dimensions) throw new Error(`Floor material ${code} is missing its surface`);
+  const patch: EditorCubeObject = {
+    id: `${slug}_surface`, kind: 'cube', semanticKind: 'floorMaterial', name: surface.name || title.toLowerCase(),
+    position: [0, surface.position[1], 0], rotationY: 0,
+    dimensions: surface.dimensions as [number, number, number],
+    color: surface.material?.color || '#888888', mass: 0, immovable: true,
+    collision: surface.collision || 'none',
+    floorMaterialCode: code, surfaceTraction: surface.surfaceTraction,
+  };
+  return prefab(`builtin_floor_${slug}`, title, description, [patch]);
+}
+
 export function builtInStageBuilderPrefabs(): StageBuilderPrefab[] {
   return [
+    floorMaterialPrefab(0, 'tile', 'Smooth tile', 'A smooth drivable floor patch labeled 0 in sensor recordings.'),
+    floorMaterialPrefab(1, 'carpet', 'Carpet', 'A drivable floor patch with shallow pile ridges, labeled 1.'),
+    floorMaterialPrefab(2, 'rough_mat', 'Rough mat', 'A drivable floor patch with raised ridges, labeled 2.'),
+    floorMaterialPrefab(3, 'dirt', 'Dirt and small rocks', 'A drivable floor patch with low rocks, labeled 3.'),
     prefab('builtin_bridge', 'Bridge', 'A simple raised bridge made from a deck and two supports.', [
       cube('bridge_deck', 'bridge deck', [0, 0.32, 0], [1.6, 0.12, 0.45], '#78909c', 'platform'),
       cube('bridge_support_a', 'bridge support A', [-0.55, 0.15, 0], [0.18, 0.3, 0.45], '#546e7a', 'block'),

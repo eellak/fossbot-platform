@@ -10,11 +10,9 @@ const BannerContent = () => {
       <Typography
         component="h1"
         sx={{
-          fontSize: { xs: '2.125rem', sm: '3rem', md: '3.25rem' },
-          fontWeight: 600,
-          letterSpacing: '-0.03em',
-          lineHeight: 1.05,
-          maxWidth: '17ch',
+          fontSize: { xs: '2.5rem', md: '3.375rem' },
+          fontWeight: 900,
+          lineHeight: 1.1,
           textWrap: 'balance',
         }}
       >
@@ -30,13 +28,13 @@ const BannerContent = () => {
       <Typography
         variant="body1"
         color="text.secondary"
-        sx={{ fontSize: '1.125rem', lineHeight: 1.6, mt: 3, maxWidth: '52ch' }}
+        sx={{ fontSize: '1.5rem', fontWeight: 300, lineHeight: 1.5, mt: 4 }}
       >
         {t('banner-content.democratizeEducation')}
       </Typography>
 
-      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ mt: 4 }}>
-        <Button variant="contained" color="primary" href="/dashboard">
+      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mt: 4 }}>
+        <Button variant="contained" color="primary" href="/dashboard" sx={{ px: 6, py: 1.5, fontSize: '1rem' }}>
           {t('banner-content.tryItNow')}
         </Button>
       </Stack>

@@ -188,6 +188,8 @@ export function editorStageToConfig(stage: EditorStage): StageJsonEntry[] {
         immovable: object.immovable,
         collision: object.collision,
         challenge: challengeForObject(object),
+        floorMaterialCode: object.floorMaterialCode,
+        surfaceTraction: object.surfaceTraction,
       });
     } else if (object.kind === 'cylinder') {
       entries.push({
@@ -373,7 +375,8 @@ function configEntryToEditorObject(entry: StageJsonEntry, index: number): Editor
   if (entry.type === 'cube') {
     const cube = entry as StageCubeEntry;
     const inferred = cube.challenge ? SEMANTIC_BY_CHALLENGE[cube.challenge.kind] : inferSemanticKindFromConfig('cube', cube.name, cube.material?.color);
-    const semanticKind = inferred === 'block' && Math.abs(cube.orientation?.[0] || 0) > 0.001 ? 'ramp' : inferred;
+    const semanticKind = Number.isInteger(cube.floorMaterialCode) ? 'floorMaterial'
+      : inferred === 'block' && Math.abs(cube.orientation?.[0] || 0) > 0.001 ? 'ramp' : inferred;
     return {
       id: makeLocalStageId(),
       kind: 'cube',
@@ -389,6 +392,8 @@ function configEntryToEditorObject(entry: StageJsonEntry, index: number): Editor
       mass: cube.mass || 0,
       immovable: cube.immovable ?? (cube.mass || 0) <= 0,
       collision: cube.collision || 'auto',
+      floorMaterialCode: cube.floorMaterialCode,
+      surfaceTraction: cube.surfaceTraction,
     };
   }
   if (entry.type === 'cylinder') {

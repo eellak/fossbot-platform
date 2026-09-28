@@ -53,6 +53,8 @@ import type { RawStageConfig } from 'src/simulator/stages';
 import StageLoadScreen from 'src/components/stage-select-popup/StageLoadScreen';
 import ExecutionTargetPanel from 'src/components/robot/ExecutionTargetPanel';
 import PhysicalRobotTerminal from 'src/components/robot/PhysicalRobotTerminal';
+import SensorDataPanel from 'src/components/robot/SensorDataPanel';
+import { useSensorDataCollection } from 'src/components/robot/useSensorDataCollection';
 import { useRobotConnection } from 'src/robot/RobotConnectionContext';
 import ProjectStageIndicator from 'src/components/editors/ProjectStageIndicator';
 import SearchBar from 'src/components/monaco-functions/MonacoSearchBar';
@@ -105,6 +107,7 @@ const BlocklyPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppeara
   const editorRef = useRef<BlocklyEditorHandle | null>(null);
   const [runtimeContext, setRuntimeContext] = useState({ output: [] as string[], error: '' });
   const runSourceRef = useRef('');
+  const runHadErrorRef = useRef(false);
   const runTargetRef = useRef<'simulation' | 'robot'>('simulation');
   const auth = useAuth();
   const { token } = auth;
@@ -120,10 +123,14 @@ const BlocklyPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppeara
   const {
     target,
     programState,
+    status,
+    telemetry,
     runCode: runCodeOnRobot,
     stop: stopPhysicalRobot,
   } = useRobotConnection();
   const [isRunning, setIsRunning] = useState(false);
+  const collector = useSensorDataCollection(target, programState, status, telemetry);
+  const [resultsTab, setResultsTab] = useState<'terminal' | 'data'>('terminal');
   const { notify } = useNotifications();
 
   const theme = useTheme();
@@ -197,7 +204,8 @@ const BlocklyPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppeara
         return;
       }
       try {
-        await runCodeOnRobot(editorPythonValue, `${projectTitle || 'blockly_program'}.py`);
+        const programId = await runCodeOnRobot(editorPythonValue, `${projectTitle || 'blockly_program'}.py`);
+        collector.start('robot', programId);
         setIsRunning(true);
         handleShowSuccessAlert('The physical FOSSBot accepted the Blockly program.');
       } catch (error) {
@@ -221,14 +229,15 @@ const BlocklyPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppeara
   }, []);
 
   const handleExecutionEvent = useCallback((event: { type: 'start' | 'stdout' | 'stderr' | 'complete' | 'stopped'; text?: string }) => {
-    if (event.type === 'start') { runSourceRef.current = editorRef.current?.getGeneratedPython() ?? editorPythonValue; runTargetRef.current = target; setRuntimeContext({ output: [], error: '' }); return; }
+    if (event.type === 'start') { runHadErrorRef.current = false; collector.start('simulation'); runSourceRef.current = editorRef.current?.getGeneratedPython() ?? editorPythonValue; runTargetRef.current = target; setRuntimeContext({ output: [], error: '' }); return; }
     if (event.type === 'stdout') setRuntimeContext((current) => ({ ...current, output: [...current.output, event.text || ''].slice(-24) }));
-    if (event.type === 'stderr') setRuntimeContext((current) => ({ output: [...current.output, event.text || ''].slice(-24), error: event.text || 'Runtime error' }));
+    if (event.type === 'stderr') { runHadErrorRef.current = true; setRuntimeContext((current) => ({ output: [...current.output, event.text || ''].slice(-24), error: event.text || 'Runtime error' })); }
     if (event.type === 'complete' || event.type === 'stopped') {
+      collector.finish(event.type === 'complete' && runHadErrorRef.current ? 'failed' : event.type);
       setIsRunning(false);
       notify(t(event.type === 'complete' ? 'alertMessages.runCompleted' : 'alertMessages.codeStopped'), { severity: 'info' });
     }
-  }, [editorPythonValue, notify, t, target]);
+  }, [collector.start, collector.finish, editorPythonValue, notify, t, target]);
 
   useEffect(() => {
     // Generate a new session ID when the component mounts
@@ -504,6 +513,17 @@ const BlocklyPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppeara
     </Box>
   );
 
+  const resultsPanel = (
+    <Box sx={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+      <Tabs value={resultsTab} onChange={(_, value) => setResultsTab(value)} aria-label="Results views" sx={{ minHeight: 38, flexShrink: 0 }}>
+        <Tab value="terminal" label={t('dataCollection.terminal')} sx={{ minHeight: 38 }} />
+        <Tab value="data" label={t('dataCollection.title')} sx={{ minHeight: 38 }} />
+      </Tabs>
+      <Box sx={{ flex: 1, minHeight: 0 }} hidden={resultsTab !== 'terminal'}>{proposedTerminal}</Box>
+      <Box sx={{ flex: 1, minHeight: 0 }} hidden={resultsTab !== 'data'}><SensorDataPanel collector={collector} /></Box>
+    </Box>
+  );
+
   const beginWorkspaceResize = (resizeTarget: BlocklyResizeTarget) => (event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return;
     event.preventDefault();
@@ -583,6 +603,7 @@ const BlocklyPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppeara
                     <ExecutionTargetPanel height="100%">
                       <WebGLApp
                         ref={simulatorRef}
+                        onTelemetry={collector.onSimulatorTelemetry}
                         appsessionId={sessionId}
                         onMountChange={handleMountChange}
                         initialStageUrl={selectedStage?.url || null}
@@ -591,7 +612,7 @@ const BlocklyPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppeara
                       />
                     </ExecutionTargetPanel>
                   </Box>
-                  <Box hidden={workspaceActivePane !== 'results'}>{proposedTerminal}</Box>
+                  <Box hidden={workspaceActivePane !== 'results'}>{resultsPanel}</Box>
                 </Box>
                 </>
               ) : (
@@ -605,6 +626,7 @@ const BlocklyPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppeara
                   <ExecutionTargetPanel height="100%" embedded>
                     <WebGLApp
                       ref={simulatorRef}
+                      onTelemetry={collector.onSimulatorTelemetry}
                       appsessionId={sessionId}
                       onMountChange={handleMountChange}
                       initialStageUrl={selectedStage?.url || null}
@@ -614,7 +636,7 @@ const BlocklyPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppeara
                   </ExecutionTargetPanel>
                 </WorkspacePane>
                 <WorkspacePane gridArea="results" label={t('education.workspace.results')}>
-                  {proposedTerminal}
+                  {resultsPanel}
                 </WorkspacePane>
                 <WorkspaceResizeHandle overlay direction="vertical" position={workspaceColumnSplit} valueNow={workspaceColumnSplit} valueMin={28} valueMax={65} label={t('blockly-page.resizeColumns')} onPointerDown={beginWorkspaceResize('columns')} onReset={resetWorkspacePaneSizes} onKeyboardResize={resizeWorkspaceWithKeyboard} />
                 <WorkspaceResizeHandle overlay direction="horizontal" position={workspaceRowSplit} crossStart={workspaceColumnSplit} valueNow={workspaceRowSplit} valueMin={40} valueMax={72} label={t('education.workspace.resizeRows')} onPointerDown={beginWorkspaceResize('rows')} onReset={resetWorkspacePaneSizes} onKeyboardResize={resizeWorkspaceWithKeyboard} />
