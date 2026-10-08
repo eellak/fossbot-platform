@@ -34,6 +34,8 @@ export interface SimEngineConfig {
   sensorTelemetryAutoStart?: boolean
   /** Show robot/stage collider wireframes without enabling the full dev UI. */
   showColliders?: boolean
+  /** Replace the LEGO top with the visual AI-camera housing. */
+  aiCameraTopEnabled?: boolean
 }
 
 /**

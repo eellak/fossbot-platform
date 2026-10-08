@@ -687,3 +687,18 @@ export function buildLightVisual(entry: LightEntry): VisualBuilt {
   group.add(light)
   return { object: group }
 }
+
+/** A real textured plane, visible to the onboard pixel-based detectors. */
+export function buildImageVisual(entry: { texture: string; dimensions: [number, number]; position: [number, number, number]; orientation?: [number, number, number]; name?: string }): VisualBuilt {
+  const texture = textureLoader.load(entry.texture)
+  texture.colorSpace = THREE.SRGBColorSpace
+  texture.minFilter = THREE.NearestFilter
+  texture.magFilter = THREE.NearestFilter
+  const material = new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide })
+  material.addEventListener('dispose', () => texture.dispose())
+  const object = new THREE.Mesh(new THREE.PlaneGeometry(...entry.dimensions), material)
+  object.position.set(...entry.position)
+  if (entry.orientation) object.rotation.set(...entry.orientation)
+  object.name = entry.name ?? 'image'
+  return { object }
+}

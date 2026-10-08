@@ -1,3 +1,4 @@
+import type { CameraVisionMode, CameraVisionSnapshot } from './robot/cameraVision'
 import React, { forwardRef, useEffect, useImperativeHandle, useRef } from 'react'
 import { SimEngine } from './engine/SimEngine'
 import type { SimEngineConfig } from './engine/types'
@@ -15,6 +16,10 @@ export interface FossbotSimulatorHandle {
   getStageNames(): string[]
   setLightIntensity(intensity: number): void
   changeCamera(): void
+  setAiCameraTopEnabled(enabled: boolean): void
+  setRobotCameraPreview(canvas: HTMLCanvasElement | null, onUpdate?: (snapshot: CameraVisionSnapshot) => void): void
+  setCameraVisionMode(mode: CameraVisionMode, threshold?: number): void
+  getCameraVisionSnapshot(): CameraVisionSnapshot | null
   setSensorHelpersVisible(visible: boolean): void
   isSensorHelpersVisible(): boolean
   setCollisionWireVisible(visible: boolean): void
@@ -75,6 +80,10 @@ export const FossbotSimulator = forwardRef<FossbotSimulatorHandle, FossbotSimula
       getStageNames: () => engineRef.current?.getStageNames() ?? [],
       setLightIntensity: (intensity) => engineRef.current?.setLightIntensity(intensity),
       changeCamera: () => engineRef.current?.changeCamera(),
+      setAiCameraTopEnabled: (enabled) => engineRef.current?.setAiCameraTopEnabled(enabled),
+      setRobotCameraPreview: (canvas, onUpdate) => engineRef.current?.setRobotCameraPreview(canvas, onUpdate),
+      setCameraVisionMode: (mode, threshold) => engineRef.current?.setCameraVisionMode(mode, threshold),
+      getCameraVisionSnapshot: () => engineRef.current?.getCameraVisionSnapshot() ?? null,
       setSensorHelpersVisible: (visible) => engineRef.current?.setSensorHelpersVisible(visible),
       isSensorHelpersVisible: () => engineRef.current?.isSensorHelpersVisible() ?? false,
       setCollisionWireVisible: (visible) => engineRef.current?.setCollisionWireVisible(visible),

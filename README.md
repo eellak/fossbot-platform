@@ -67,6 +67,13 @@ Every programming mode can switch between two targets:
 - **Simulator:** executes inside the browser and visualizes the robot on a virtual stage.
 - **Physical robot:** sends programs and interactive commands directly from the browser to a selected FOSSBot.
 
+The v2 simulator has an **AI camera top** switch in the upper-left corner of
+the canvas. It replaces the LEGO top with the camera housing and remembers the
+selection in this browser. With the camera top enabled, a **Live camera** panel
+shows the robot's forward view. Use **Stop video / Start video** to pause or
+resume it. The preview uses a simulated lens pose and field of view; AI vision
+processing and calibration against the physical camera are not implemented.
+
 While a physical program is running, the platform displays live telemetry for the ultrasonic and perimeter distance sensors, floor sensors, accelerometer, gyroscope, ambient light, battery, power, and wheel odometers. Program output is streamed to the terminal so that `print()` messages and runtime errors appear where learners already expect them.
 
 ```text
@@ -173,6 +180,20 @@ fossbot-platform/
 ## Production deployment
 
 Production deployment is handled by the GitHub Actions workflow in `.github/workflows/deploy.yml`. The workflow builds the application, preserves the existing PostgreSQL volume, creates a database backup before migration, and verifies the deployed health endpoints. Deployment credentials and Firebase values belong in GitHub Actions secrets rather than tracked environment files.
+
+## Simulator camera vision
+
+Enable **AI camera top** in the v2 simulator, then choose a camera mode:
+**ArUco** and **Road** process rendered pixels using the robot's OpenCV algorithms.
+Road expects two black tape boundaries and exposes a black-threshold control.
+**YOLO · Simulated** shows stage labels and projected object boxes; **Depth ·
+Simulated** shows geometry distance, white near and black at 5 metres or farther.
+These two modes do not run neural models. Use **Load vision test stage** to try
+markers, road boundaries and objects. Stop video pauses processing too.
+
+These are camera-preview features; Python/Blockly AI-camera commands are not yet
+connected. See [runtime details](sim/public/js-simulator/vision/README.md) for
+asset provenance, stage image entries and verification commands.
 
 ## Troubleshooting
 

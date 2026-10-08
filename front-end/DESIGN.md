@@ -102,6 +102,15 @@ Workspaces fill the available area below the shell and give each pane one clear 
 
 ## Elevation & Depth
 
+The v2 simulator's AI camera top switch lives at the upper left of its canvas.
+When enabled, a compact Live camera panel at the upper right shows the onboard
+view with Start/Stop video controls. Move the optional movement overlay to the
+lower left while this panel is shown so the controls do not cover the preview.
+Use the shared supporting surface and semantic theme roles for these overlays.
+The camera uses a compact mode selector (Video, ArUco, Road, simulated YOLO and
+Depth), with explicit simulation labels and Road threshold controls. Its panel
+scrolls within the canvas on short editor panes so all controls remain reachable.
+
 The system is flat by default. Use spacing, background roles, and the shared divider to establish hierarchy. Cards have no resting shadow. Supporting panels use a subtle tonal change and, when a boundary is necessary, one quiet border. Avoid combining a strong background, border, shadow, and divider to communicate the same separation.
 
 Shadows are reserved for elements that genuinely float over content, including menus, popovers, dialogs, and exceptional overlay notices. Those values remain owned by the Material UI theme and component overrides.

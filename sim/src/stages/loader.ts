@@ -1,7 +1,7 @@
 import * as RAPIER from '@dimforge/rapier3d-compat'
 import * as THREE from 'three'
 import { STAGES, type RawStageConfig, type RawStageEntry, type StageName } from './index'
-import { applyAttachedLabelTransform, buildFloorVisual, buildBaseVisual, buildCubeVisual, buildCylinderVisual, buildSphereVisual, buildWedgeVisual, buildArrowVisual, buildModelVisual, buildTextVisual, buildLineVisual, buildLightVisual, lineSegmentsFromEntry } from './visuals'
+import { applyAttachedLabelTransform, buildImageVisual, buildFloorVisual, buildBaseVisual, buildCubeVisual, buildCylinderVisual, buildSphereVisual, buildWedgeVisual, buildArrowVisual, buildModelVisual, buildTextVisual, buildLineVisual, buildLightVisual, lineSegmentsFromEntry } from './visuals'
 import type { VisualBuilt, LineSegment } from './visuals'
 import { buildCubeCollider, buildCylinderCollider, buildSphereCollider, buildWedgeCollider, buildModelCollider } from './colliders'
 import type { ColliderBuilt } from './colliders'
@@ -196,6 +196,12 @@ export async function loadStageEntries(
       })
     }
     const type = entry.type as string
+    const addVisual = (object: THREE.Object3D) => {
+      if (['cube', 'cylinder', 'sphere', 'wedge', 'model'].includes(type)) {
+        object.userData.cameraVisionLabel = String(entry.visionLabel || entry.name || type)
+      }
+      scene.add(object)
+    }
     log.world(
       `dimensions: ${JSON.stringify((entry as any).dimensions)}, position: ${JSON.stringify((entry as any).position)}, orientation: ${JSON.stringify((entry as any).orientation)}`
     )
@@ -206,13 +212,19 @@ export async function loadStageEntries(
       }
       case 'floor': {
         const vis = buildFloorVisual(entry as any)
-        scene.add(vis.object)
+        addVisual(vis.object)
+        objects.push(vis.object)
+        break
+      }
+      case 'image': {
+        const vis = buildImageVisual(entry as any)
+        addVisual(vis.object)
         objects.push(vis.object)
         break
       }
       case 'base': {
         const vis = buildBaseVisual(entry as any)
-        scene.add(vis.object)
+        addVisual(vis.object)
         objects.push(vis.object)
         registerMarker(vis.object)
         break
@@ -227,7 +239,7 @@ export async function loadStageEntries(
         }
         const vis = buildCubeVisual(entry as any)
         const col = buildCubeCollider(entry as any)
-        scene.add(vis.object)
+        addVisual(vis.object)
         objects.push(vis.object)
         attachColliders(vis, col, world, stageBody, stgCollidersGrp, dynamicObjects)
         registerMarker(vis.object, dynamicObjects[dynamicObjects.length - 1]?.object === vis.object ? dynamicObjects[dynamicObjects.length - 1].body : undefined)
@@ -246,7 +258,7 @@ export async function loadStageEntries(
       case 'cylinder': {
         const vis = buildCylinderVisual(entry as any)
         const col = buildCylinderCollider(entry as any)
-        scene.add(vis.object)
+        addVisual(vis.object)
         objects.push(vis.object)
         attachColliders(vis, col, world, stageBody, stgCollidersGrp, dynamicObjects)
         registerMarker(vis.object, dynamicObjects[dynamicObjects.length - 1]?.object === vis.object ? dynamicObjects[dynamicObjects.length - 1].body : undefined)
@@ -255,7 +267,7 @@ export async function loadStageEntries(
       case 'sphere': {
         const vis = buildSphereVisual(entry as any)
         const col = buildSphereCollider(entry as any)
-        scene.add(vis.object)
+        addVisual(vis.object)
         objects.push(vis.object)
         attachColliders(vis, col, world, stageBody, stgCollidersGrp, dynamicObjects)
         registerMarker(vis.object, dynamicObjects[dynamicObjects.length - 1]?.object === vis.object ? dynamicObjects[dynamicObjects.length - 1].body : undefined)
@@ -264,7 +276,7 @@ export async function loadStageEntries(
       case 'wedge': {
         const vis = buildWedgeVisual(entry as any)
         const col = buildWedgeCollider(entry as any)
-        scene.add(vis.object)
+        addVisual(vis.object)
         objects.push(vis.object)
         attachColliders(vis, col, world, stageBody, stgCollidersGrp, dynamicObjects)
         registerMarker(vis.object, dynamicObjects[dynamicObjects.length - 1]?.object === vis.object ? dynamicObjects[dynamicObjects.length - 1].body : undefined)
@@ -272,7 +284,7 @@ export async function loadStageEntries(
       }
       case 'arrow': {
         const vis = buildArrowVisual(entry as any)
-        scene.add(vis.object)
+        addVisual(vis.object)
         objects.push(vis.object)
         break
       }
@@ -288,7 +300,7 @@ export async function loadStageEntries(
         const p = buildModelVisual(entry as any)
           .then(async (vis) => {
             const col = await buildModelCollider(entry as any, vis.object)
-            scene.add(vis.object)
+            addVisual(vis.object)
             objects.push(vis.object)
             attachColliders(vis, col, world, stageBody, stgCollidersGrp, dynamicObjects)
             registerMarker(vis.object, dynamicObjects[dynamicObjects.length - 1]?.object === vis.object ? dynamicObjects[dynamicObjects.length - 1].body : undefined)
@@ -301,7 +313,7 @@ export async function loadStageEntries(
       }
       case 'line': {
         const vis = buildLineVisual(entry as any)
-        scene.add(vis.object)
+        addVisual(vis.object)
         objects.push(vis.object)
         lineSegments.push(...lineSegmentsFromEntry(entry as any))
         break
@@ -317,17 +329,17 @@ export async function loadStageEntries(
             vis.object.userData.labelParentName = attachment.parentName
           } else {
             console.warn(`[stage] attached label parent "${attachment.parentName}" not found; adding label to scene root`)
-            scene.add(vis.object)
+            addVisual(vis.object)
           }
         } else {
-          scene.add(vis.object)
+          addVisual(vis.object)
         }
         objects.push(vis.object)
         break
       }
       case 'light': {
         const vis = buildLightVisual(entry as any)
-        scene.add(vis.object)
+        addVisual(vis.object)
         objects.push(vis.object)
         break
       }

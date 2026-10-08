@@ -1,3 +1,4 @@
+import stageCameraVision from './data/stage_camera_vision.json'
 import stageAnimals from './data/stage_animals.json'
 import stageCones from './data/stage_cones.json'
 import stageEiffel from './data/stage_eiffel.json'
@@ -20,6 +21,7 @@ export type RawStageEntry = Record<string, unknown>
 export type RawStageConfig = RawStageEntry[]
 
 export const STAGES: Record<StageName, RawStageEntry[]> = {
+  stage_camera_vision: stageCameraVision as RawStageEntry[],
   stage_animals: stageAnimals as RawStageEntry[],
   stage_cones: stageCones as RawStageEntry[],
   stage_eiffel: stageEiffel as RawStageEntry[],

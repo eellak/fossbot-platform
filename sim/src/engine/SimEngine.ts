@@ -2,6 +2,8 @@ import * as THREE from 'three'
 import type * as RAPIER from '@dimforge/rapier3d-compat'
 import { initScene, renderScene, disposeScene, type SceneHandle } from '../scene/scene'
 import { loadRobotV2, type RobotV2 } from '../robot/v2'
+import { RobotCameraPreview } from '../robot/cameraPreview'
+import type { CameraVisionMode, CameraVisionSnapshot } from '../robot/cameraVision'
 import type { DebugMenuHandle } from '../debug'
 import { createWorld, type WorldHandle } from '../physics/world'
 import { createRobotBody, type RobotPhysicsState } from '../physics/robotBody'
@@ -71,6 +73,7 @@ function resolveConfig(cfg: Partial<SimEngineConfig> | undefined): Required<SimE
     sensorHelpersVisible: cfg?.sensorHelpersVisible ?? false,
     sensorTelemetryAutoStart: cfg?.sensorTelemetryAutoStart ?? true,
     showColliders: cfg?.showColliders ?? false,
+    aiCameraTopEnabled: cfg?.aiCameraTopEnabled ?? false,
   }
 }
 
@@ -122,6 +125,10 @@ export class SimEngine {
   private sceneHandle: SceneHandle | null = null
   private worldHandle: WorldHandle | null = null
   private robot: RobotV2 | null = null
+  private aiCameraTopEnabled = false
+  private cameraVisionMode: CameraVisionMode = 'normal'
+  private cameraBlackThreshold = 105
+  private robotCameraPreview: RobotCameraPreview | null = null
   private robotRoot: THREE.Object3D | null = null
   private robotPhysics: RobotPhysicsState | null = null
   private vehicle: VehicleHandle | null = null
@@ -238,6 +245,7 @@ export class SimEngine {
     config?: Partial<SimEngineConfig>,
   ) {
     this.config = resolveConfig(config)
+    this.aiCameraTopEnabled = this.config.aiCameraTopEnabled
     this.sensorHelpersVisible = this.config.sensorHelpersVisible
   }
 
@@ -350,6 +358,8 @@ export class SimEngine {
 
   /** Cancel the render loop and dispose all resources. */
   stop(): void {
+    this.robotCameraPreview?.dispose()
+    this.robotCameraPreview = null
     this.cancelled = true
     this.finishAttempt('stopped', 'navigation')
     this.sensorTelemetry.endRun()
@@ -658,6 +668,29 @@ export class SimEngine {
   changeCamera(): void {
     if (this.config.lockCamera) return
     this.cycleCameraMode()
+  }
+
+  setAiCameraTopEnabled(enabled: boolean): void {
+    this.aiCameraTopEnabled = enabled
+    if (!this.robot) return
+    this.robot.legoTop.visible = !enabled
+    this.robot.aiCameraTop.visible = enabled
+  }
+
+  setRobotCameraPreview(canvas: HTMLCanvasElement | null, onUpdate?: (snapshot: CameraVisionSnapshot) => void): void {
+    this.robotCameraPreview?.dispose()
+    this.robotCameraPreview = canvas ? new RobotCameraPreview(canvas, this.config.publicAssetBaseUrl, onUpdate) : null
+    this.robotCameraPreview?.setVisionMode(this.cameraVisionMode, this.cameraBlackThreshold)
+  }
+
+  setCameraVisionMode(mode: CameraVisionMode, threshold = 105): void {
+    this.cameraVisionMode = mode
+    this.cameraBlackThreshold = threshold
+    this.robotCameraPreview?.setVisionMode(mode, threshold)
+  }
+
+  getCameraVisionSnapshot(): CameraVisionSnapshot | null {
+    return this.aiCameraTopEnabled ? this.robotCameraPreview?.getVisionSnapshot() ?? null : null
   }
 
   setSensorHelpersVisible(visible: boolean): void {
@@ -1087,6 +1120,7 @@ export class SimEngine {
 
       this.splash.setStatus('Loading robot model...')
       this.robot = await loadRobotV2(undefined, this.config.assetBaseUrl)
+      this.setAiCameraTopEnabled(this.aiCameraTopEnabled)
       log.physics('robot loaded')
       if (this.cancelled) return
 
@@ -1286,6 +1320,9 @@ export class SimEngine {
     }
 
     renderScene(this.sceneHandle!)
+    if (this.aiCameraTopEnabled && this.robot && this.sceneHandle) {
+      this.robotCameraPreview?.render(this.sceneHandle.renderer, this.sceneHandle.scene, this.robot.onboardCamera, this.robot.onboardCameraMount, this.robot.root, now)
+    }
 
     if (this.frameListeners.size > 0) {
       for (const listener of this.frameListeners) listener(frameMs)

@@ -138,12 +138,15 @@ const setUpPyodide = async () => {
     await waitForAction();
   });
 
-  loadedPyodide.globals.set('get_obstacle_distance', async () => {
+  const readDistance = async () => {
     if (isStopped) return;
     postMessage(JSON.stringify({ command: 'getdistance' }));
     const response = await waitForAction();
     return response.distance;
-  });
+  };
+  // Both editor APIs read the same simulator sensor through the async bridge.
+  loadedPyodide.globals.set('get_obstacle_distance', readDistance);
+  loadedPyodide.globals.set('get_distance', readDistance);
 
   loadedPyodide.globals.set('rgb_set_color', async (color: string) => {
     if (isStopped) return;
@@ -228,7 +231,7 @@ const runPythonCode = async (data: WorkerResponse) => {
     const functionsToAwait = [
       'move_forward_distance', 'move_reverse_distance', 'rotate_90', 
       'rotate_45', 'rotate_degrees', 'rotate_clockwise', 'rotate_counterclockwise', 
-      'get_obstacle_distance', 'rgb_set_color', 'buzzer_beep', 'draw', 'just_move',
+      'get_obstacle_distance', 'get_distance', 'rgb_set_color', 'buzzer_beep', 'draw', 'just_move',
       'just_rotate', 'stop', 'get_acceleration', 'get_light_sensor',
       'get_gyroscope', 'get_floor_sensor', 'move_step'
     ];

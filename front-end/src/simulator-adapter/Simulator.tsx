@@ -1,5 +1,8 @@
+import type { CameraVisionMode, CameraVisionSnapshot } from 'src/simulator/robot/cameraVision';
 import React, { forwardRef, lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Box, CircularProgress, Typography } from '@mui/material';
+import { Box, Button, CircularProgress, FormControlLabel, Stack, Switch, Typography, Select, MenuItem, Slider } from '@mui/material';
+import VideocamIcon from '@mui/icons-material/Videocam';
+import { useTranslation } from 'react-i18next';
 import {
   WebGLApp as LegacyWebGLApp,
   type LegacySimulatorControlHandle,
@@ -50,6 +53,7 @@ export type SimulatorControlHandle = {
 
 const SIMULATOR_VERSION_KEY = 'fossbot.simulatorVersion';
 const SIMULATOR_DEV_KEY = 'fossbot.simulatorDev';
+const AI_CAMERA_TOP_KEY = 'fossbot.simulatorAiCameraTop';
 const DEFAULT_STAGE_URL = '/js-simulator/stages/stage_white_rect.json';
 
 const LazyFossbotSimulator = lazy(() =>
@@ -137,17 +141,34 @@ function useV2Config() {
 }
 
 const V2WebGLApp = forwardRef<SimulatorControlHandle, WebGLAppProps>((props, ref) => {
+  const { t } = useTranslation();
+  const [aiCameraTopEnabled, setAiCameraTopEnabled] = useState(() => {
+    try { return window.localStorage.getItem(AI_CAMERA_TOP_KEY) === 'true'; }
+    catch { return false; }
+  });
   const v2Config = useV2Config();
+  const [cameraPreviewEnabled, setCameraPreviewEnabled] = useState(true);
+  const [cameraMode, setCameraMode] = useState<CameraVisionMode>('normal');
+  const [blackThreshold, setBlackThreshold] = useState(105);
+  const [vision, setVision] = useState<CameraVisionSnapshot | null>(null);
+  const [visionStageLoading, setVisionStageLoading] = useState(false);
+  const cameraPanelRef = useRef<HTMLDivElement | null>(null);
+  const cameraCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const effectiveV2Config = useMemo(
     () => ({
       ...v2Config,
+      aiCameraTopEnabled,
       stageAssetBaseUrl: props.initialStageAssetBaseUrl || undefined,
       sensorHelpersVisible: props.sensorHelpersVisible ?? false,
       sensorTelemetryAutoStart: props.sensorTelemetryAutoStart ?? true,
     }),
-    [v2Config, props.initialStageAssetBaseUrl, props.sensorHelpersVisible, props.sensorTelemetryAutoStart],
+    [v2Config, aiCameraTopEnabled, props.initialStageAssetBaseUrl, props.sensorHelpersVisible, props.sensorTelemetryAutoStart],
   );
   const handleRef = useRef<FossbotSimulatorHandle | null>(null);
+  const setCameraCanvas = useCallback((canvas: HTMLCanvasElement | null) => {
+    cameraCanvasRef.current = canvas;
+    handleRef.current?.setRobotCameraPreview(canvas, setVision);
+  }, []);
   const telemetryUnsubscribeRef = useRef<(() => void) | null>(null);
   const onTelemetryRef = useRef(props.onTelemetry);
   const [currentURL, setCurrentURL] = useState(DEFAULT_STAGE_URL);
@@ -157,6 +178,18 @@ const V2WebGLApp = forwardRef<SimulatorControlHandle, WebGLAppProps>((props, ref
   const [stageLoadError, setStageLoadError] = useState<string | null>(null);
 
   useEffect(() => { onTelemetryRef.current = props.onTelemetry; }, [props.onTelemetry]);
+
+  useEffect(() => {
+    handleRef.current?.setAiCameraTopEnabled(aiCameraTopEnabled);
+    try { window.localStorage.setItem(AI_CAMERA_TOP_KEY, String(aiCameraTopEnabled)); }
+    catch { /* Continue without persistence when storage is unavailable. */ }
+  }, [aiCameraTopEnabled]);
+
+  useEffect(() => {
+    setVision(null);
+    if (cameraPanelRef.current) cameraPanelRef.current.scrollTop = 0;
+    handleRef.current?.setCameraVisionMode(cameraMode, blackThreshold);
+  }, [cameraMode, blackThreshold]);
 
   // Use pre-fetched config from parent if provided; otherwise fetch from URL
   useEffect(() => {
@@ -219,6 +252,9 @@ const V2WebGLApp = forwardRef<SimulatorControlHandle, WebGLAppProps>((props, ref
   const handleMountChange = useCallback(
     (mounted: boolean) => {
       props.onMountChange(mounted);
+      if (mounted) handleRef.current?.setAiCameraTopEnabled(aiCameraTopEnabled);
+      if (mounted) handleRef.current?.setCameraVisionMode(cameraMode, blackThreshold);
+      if (mounted) handleRef.current?.setRobotCameraPreview(cameraCanvasRef.current, setVision);
       // After simulator is mounted-with-correct-stage, apply subsequent stage changes
       // via setStage (e.g. from dialog or reload). The initial stage is handled by initialStageConfig.
       if (mounted && initialStageConfig === null && stageLoadError) {
@@ -228,7 +264,7 @@ const V2WebGLApp = forwardRef<SimulatorControlHandle, WebGLAppProps>((props, ref
         }
       }
     },
-    [initialStageConfig, stageLoadError, props.initialStageUrl, props.onMountChange],
+    [initialStageConfig, stageLoadError, props.initialStageUrl, props.onMountChange, aiCameraTopEnabled, cameraMode, blackThreshold],
   );
 
   // Listen for subsequent stage changes (dialog, reload button)
@@ -319,7 +355,63 @@ const V2WebGLApp = forwardRef<SimulatorControlHandle, WebGLAppProps>((props, ref
           />
         </Suspense>
       </Box>
-      {props.showControls !== false && <SimulatorControlsOverlay onForward={handleForward} onBackward={handleBackward} onTurnLeft={handleRotateLeft} onTurnRight={handleRotateRight} onChangeCamera={handleCamera} />}
+      {props.showControls !== false && (
+        <Box sx={aiCameraTopEnabled ? { '& > .visual-language-supporting-panel': { right: 'auto', left: 8 } } : undefined}>
+          <SimulatorControlsOverlay onForward={handleForward} onBackward={handleBackward} onTurnLeft={handleRotateLeft} onTurnRight={handleRotateRight} onChangeCamera={handleCamera} />
+        </Box>
+      )}
+      <Box className="visual-language-supporting-panel" sx={{ position: 'absolute', top: 8, left: 8, px: 1, bgcolor: 'background.paper', border: 1, borderColor: 'divider' }}>
+        <FormControlLabel
+          sx={{ m: 0, minHeight: 44 }}
+          control={<Switch size="small" checked={aiCameraTopEnabled} onChange={(_, enabled) => setAiCameraTopEnabled(enabled)} />}
+          label={<Typography variant="body2">{t('simulatorControls.aiCameraTop')}</Typography>}
+        />
+      </Box>
+      {aiCameraTopEnabled && (
+        <Box ref={cameraPanelRef} className="visual-language-supporting-panel" sx={{ position: 'absolute', top: { xs: 60, sm: 8 }, right: 8, width: { xs: 200, sm: 240 }, maxWidth: 'calc(100% - 16px)', bgcolor: 'background.paper', border: 1, borderColor: 'divider', overflow: 'auto', maxHeight: 'calc(100% - 16px)', display: 'flex', flexDirection: 'column' }}>
+          <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ px: 1, minHeight: 44, gap: 0.5, flexShrink: 0 }}>
+            <Stack direction="row" alignItems="center" spacing={0.5}>
+              <VideocamIcon fontSize="small" color={cameraPreviewEnabled ? 'success' : 'disabled'} />
+              <Typography variant="body2">{t('simulatorControls.liveCamera')}</Typography>
+            </Stack>
+            <Button size="small" onClick={() => setCameraPreviewEnabled((enabled) => !enabled)}>
+              {t(cameraPreviewEnabled ? 'simulatorControls.stopVideo' : 'simulatorControls.startVideo')}
+            </Button>
+          </Stack>
+          <Select size="small" value={cameraMode} onChange={(event) => setCameraMode(event.target.value as CameraVisionMode)} inputProps={{ 'aria-label': t('simulatorControls.visionMode') }} sx={{ mx: 1, mb: 0.5, flexShrink: 0 }}>
+            <MenuItem value="normal">{t('simulatorControls.videoMode')}</MenuItem>
+            <MenuItem value="objects">YOLO · {t('simulatorControls.simulatedMode')}</MenuItem>
+            <MenuItem value="depth">{t('simulatorControls.depthMode')} · {t('simulatorControls.simulatedMode')}</MenuItem>
+            <MenuItem value="aruco">ArUco</MenuItem>
+            <MenuItem value="road">{t('simulatorControls.roadMode')}</MenuItem>
+          </Select>
+          {cameraPreviewEnabled ? (
+            <Box component="canvas" ref={setCameraCanvas} role="img" aria-label={t('simulatorControls.cameraPreview')} sx={{ display: 'block', width: '100%', aspectRatio: '4 / 3', minHeight: 120, flexShrink: 0, bgcolor: 'action.hover' }} />
+          ) : (
+            <Box sx={{ aspectRatio: '4 / 3', display: 'grid', placeItems: 'center', bgcolor: 'action.hover' }}>
+              <Typography variant="body2" color="text.secondary">{t('simulatorControls.cameraPaused')}</Typography>
+            </Box>
+          )}
+          {cameraPreviewEnabled && ['aruco', 'road'].includes(cameraMode) && (
+            <Box sx={{ px: 1, py: 0.5 }}>
+              <Typography variant="caption" role="status" color={vision?.status === 'error' ? 'error.main' : 'text.secondary'}>
+                {vision?.status === 'error' ? t('simulatorControls.visionError') : !vision || vision.status === 'loading' ? t('simulatorControls.visionLoading') : cameraMode === 'aruco' ? (vision.markers.length ? `ID ${vision.markers.map(marker => marker.id).join(', ')}` : t('simulatorControls.noMarkers')) : vision.road ? t('simulatorControls.roadResult', { error: vision.road.center_error.toFixed(2), confidence: Math.round(vision.road.confidence * 100) }) : t('simulatorControls.noRoad')}
+              </Typography>
+              {cameraMode === 'road' && <>
+                <Typography variant="caption" component="div">{t('simulatorControls.blackThreshold')}: {blackThreshold}</Typography>
+                <Slider size="small" min={20} max={200} value={blackThreshold} onChange={(_, value) => setBlackThreshold(value as number)} aria-label={t('simulatorControls.blackThreshold')} />
+              </>}
+            </Box>
+          )}
+          {['objects', 'depth'].includes(cameraMode) && <Typography variant="caption" component="div" sx={{ px: 1, py: 0.5 }}>{t(cameraMode === 'depth' ? 'simulatorControls.simulatedDepth' : 'simulatorControls.simulatedObjects')}</Typography>}
+          {props.allowStageSelection !== false && <Button size="small" fullWidth disabled={visionStageLoading} onClick={async () => {
+            setVisionStageLoading(true);
+            try { await handleRef.current?.setStage('stage_camera_vision'); setVision(null); }
+            catch { setVision({ mode: cameraMode, status: 'error', markers: [], road: null }); }
+            finally { setVisionStageLoading(false); }
+          }}>{t('simulatorControls.visionTestStage')}</Button>}
+        </Box>
+      )}
       {props.allowStageSelection !== false && <CardDialog open={openDialog} onClose={() => setOpenDialog(false)} onSelect={handleCardSelect} />}
     </Box>
   );

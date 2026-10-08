@@ -15,6 +15,7 @@ const PARTS = [
   'left_fender', 'right_fender',
   'left_eye', 'right_eye',
   'lego_top',
+  'hat_cam_base',
   'pen_holder',
 ] as const
 type PartName = (typeof PARTS)[number]
@@ -29,6 +30,7 @@ const PART_COLOR: Record<PartName, string> = {
   left_fender: NAVY, right_fender: NAVY,
   left_eye: WHITE, right_eye: WHITE,
   lego_top: WHITE,
+  hat_cam_base: WHITE,
   pen_holder: WHITE,
 }
 
@@ -45,6 +47,7 @@ const PART_DEFAULTS: Partial<Record<PartName, PartAdjust>> = {
   left_eye: { pos: [0, 0, 26] },
   right_eye: { pos: [0, 0, 26] },
   lego_top: { pos: [0, 0, 23] },
+  hat_cam_base: { pos: [0, 0, 23] },
   pen_holder: { pos: [0, 0, 21] },
 }
 
@@ -63,6 +66,12 @@ const CASTER_LOCAL_Z_M = 0.07
 export const DEFAULT_TARGET_WIDTH_M = 0.17
 
 export interface RobotV2 {
+  /** Interchangeable CAD tops; these do not change the drive physics. */
+  legoTop: THREE.Mesh
+  aiCameraTop: THREE.Mesh
+  /** Forward-facing camera at the hat's lens, using the CAD assembly frame. */
+  onboardCamera: THREE.PerspectiveCamera
+  onboardCameraMount: THREE.Object3D
   /** Outer group rotated by yaw in the physics sync; everything else is a child. */
   root: THREE.Group
   /** Optional debug collider group created by the physics layer. */
@@ -171,7 +180,9 @@ export async function loadRobotV2(
   //    alignment.
   const assembly = new THREE.Group()
   assembly.name = 'v2_assembly'
-  meshes.forEach((m) => assembly.add(m))
+  // Keep the original assembly bounds: the taller camera hat must not shift
+  // the robot origin, wheel alignment, scale, or caster position.
+  meshes.forEach((m) => { if (m !== byName.hat_cam_base) assembly.add(m) })
 
   const box = new THREE.Box3().setFromObject(assembly)
   const center = new THREE.Vector3()
@@ -274,6 +285,56 @@ export async function loadRobotV2(
   )
   root.add(caster)
 
+  byName.hat_cam_base!.visible = false
+  assembly.add(byName.hat_cam_base!)
+
+  // Decorative electronics stay inside the existing chassis and do not
+  // participate in alignment, mass, or collision calculations.
+  const plate = new THREE.Mesh(
+    new THREE.CylinderGeometry(56, 56, 2, 48),
+    new THREE.MeshStandardMaterial({ color: '#24743e', roughness: 0.7 }),
+  )
+  plate.name = 'v2_internal_board'
+  plate.rotation.x = Math.PI / 2
+  plate.position.set(0, 0, 80)
+  plate.userData.isRobotPart = true
+  plate.receiveShadow = true
+  assembly.add(plate)
+
+  const cameraModule = new THREE.Mesh(
+    new THREE.BoxGeometry(49, 9, 16),
+    new THREE.MeshStandardMaterial({ color: '#16191d', roughness: 0.6 }),
+  )
+  cameraModule.name = 'v2_camera_module'
+  cameraModule.position.set(0, -54.5, 94)
+  cameraModule.userData.isRobotPart = true
+  byName.hat_cam_base!.add(cameraModule)
+
+  const lens = new THREE.Mesh(
+    new THREE.CylinderGeometry(4, 4, 3, 24),
+    new THREE.MeshStandardMaterial({ color: '#080c12', roughness: 0.2, metalness: 0.3 }),
+  )
+  lens.name = 'v2_camera_lens'
+  lens.position.set(0, -61, 94)
+  lens.userData.isRobotPart = true
+  byName.hat_cam_base!.add(lens)
+
+  const onboardCamera = new THREE.PerspectiveCamera(65, 4 / 3, 0.01, 100)
+  onboardCamera.name = 'v2_onboard_camera'
+  onboardCamera.position.set(0, -64.5, 94)
+  onboardCamera.quaternion.setFromRotationMatrix(new THREE.Matrix4().lookAt(
+    onboardCamera.position,
+    new THREE.Vector3(0, -65.5, 94),
+    new THREE.Vector3(0, 0, 1),
+  ))
+  // Keep the render camera out of the CAD mm-to-metre scale hierarchy: scaling
+  // a camera would also shrink its clipping range and hide the stage.
+  const onboardCameraMount = new THREE.Object3D()
+  onboardCameraMount.name = 'v2_camera_mount'
+  onboardCameraMount.position.copy(onboardCamera.position)
+  onboardCameraMount.quaternion.copy(onboardCamera.quaternion)
+  byName.hat_cam_base!.add(onboardCameraMount)
+
   console.log(
     `[v2] scale=${scale.toExponential(2)} targetWidth=${targetWidth.toFixed(3)}m ` +
     `wheelRadius=${wheelRadius.toFixed(4)}m wheelTrack=${wheelTrack.toFixed(4)}m`,
@@ -287,6 +348,10 @@ export async function loadRobotV2(
   const bodyDefault = pivot.position.clone()
 
   return {
+    legoTop: byName.lego_top!,
+    aiCameraTop: byName.hat_cam_base!,
+    onboardCamera,
+    onboardCameraMount,
     root,
     pivot,
     leftWheel: leftWheel.group,

@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "test:camera": "node --test tests/camera-vision.test.mjs",
     "test:telemetry": "node --test tests/telemetry.test.mjs",
     "test:missions": "node --test tests/missions.test.mjs",
     "sync:frontend": "node scripts/sync-frontend.mjs",
