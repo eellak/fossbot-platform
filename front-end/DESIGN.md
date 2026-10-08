@@ -107,9 +107,12 @@ When enabled, a compact Live camera panel at the upper right shows the onboard
 view with Start/Stop video controls. Move the optional movement overlay to the
 lower left while this panel is shown so the controls do not cover the preview.
 Use the shared supporting surface and semantic theme roles for these overlays.
-The camera uses a compact mode selector (Video, ArUco, Road, simulated YOLO and
-Depth), with explicit simulation labels and Road threshold controls. Its panel
-scrolls within the canvas on short editor panes so all controls remain reachable.
+Both physical and simulator cameras use `components/camera/CameraView.tsx`
+for the Live camera header, Start/Stop action, compact mode selector and empty
+states. Physical cameras expose supported modes and fit video to the workspace
+pane without cropping. The simulator retains its compact overlay, explicit
+simulation labels and Road threshold controls, and scrolls within short editor
+panes so all controls remain reachable.
 
 The system is flat by default. Use spacing, background roles, and the shared divider to establish hierarchy. Cards have no resting shadow. Supporting panels use a subtle tonal change and, when a boundary is necessary, one quiet border. Avoid combining a strong background, border, shadow, and divider to communicate the same separation.
 

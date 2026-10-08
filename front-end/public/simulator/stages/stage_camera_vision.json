@@ -1,0 +1,142 @@
+[
+  {
+    "type": "skybox",
+    "mode": "color",
+    "color": "#cce6ff"
+  },
+  {
+    "type": "floor",
+    "dimensions": [
+      8,
+      8
+    ],
+    "material": {
+      "color": "white"
+    },
+    "name": "floor"
+  },
+  {
+    "type": "fossbot",
+    "position": [
+      0,
+      0,
+      1.2
+    ],
+    "orientation": [
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "type": "line",
+    "points": [
+      [
+        -0.14,
+        0.75
+      ],
+      [
+        -0.14,
+        -2.5
+      ]
+    ],
+    "width": 0.05,
+    "color": "black"
+  },
+  {
+    "type": "line",
+    "points": [
+      [
+        0.14,
+        0.75
+      ],
+      [
+        0.14,
+        -2.5
+      ]
+    ],
+    "width": 0.05,
+    "color": "black"
+  },
+  {
+    "type": "image",
+    "texture": "/js-simulator/vision/aruco-4x4-50-0.png",
+    "dimensions": [
+      0.32,
+      0.32
+    ],
+    "position": [
+      -0.4,
+      0.23,
+      -0.8
+    ],
+    "name": "ArUco 0"
+  },
+  {
+    "type": "image",
+    "texture": "/js-simulator/vision/aruco-4x4-50-1.png",
+    "dimensions": [
+      0.32,
+      0.32
+    ],
+    "position": [
+      -0.7,
+      0.23,
+      -1.5
+    ],
+    "name": "ArUco 1"
+  },
+  {
+    "type": "image",
+    "texture": "/js-simulator/vision/aruco-4x4-50-2.png",
+    "dimensions": [
+      0.32,
+      0.32
+    ],
+    "position": [
+      0.7,
+      0.23,
+      -1.5
+    ],
+    "name": "ArUco 2"
+  },
+  {
+    "type": "cube",
+    "dimensions": [
+      0.2,
+      0.3,
+      0.2
+    ],
+    "position": [
+      -0.65,
+      0.15,
+      0.1
+    ],
+    "material": {
+      "color": "blue"
+    },
+    "name": "Blue box",
+    "visionLabel": "box",
+    "immovable": true
+  },
+  {
+    "type": "cylinder",
+    "dimensions": [
+      0.02,
+      0.12,
+      0.3,
+      32
+    ],
+    "position": [
+      0.65,
+      0.15,
+      -0.2
+    ],
+    "material": {
+      "color": "orange"
+    },
+    "name": "Traffic cone",
+    "visionLabel": "cone",
+    "immovable": true
+  }
+]

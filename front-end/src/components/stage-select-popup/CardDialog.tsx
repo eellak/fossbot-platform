@@ -63,6 +63,12 @@ interface CardDialogProps {
 
 const defaultStages: DefaultStageOption[] = [
   {
+    title: 'Camera vision test',
+    description: 'Enable AI camera top to try ArUco markers, two-boundary road detection, simulated object boxes and depth. Uses simulator v2.',
+    image: '/js-simulator/stages/camera_vision.svg',
+    url: '/js-simulator/stages/stage_camera_vision.json',
+  },
+  {
     title: 'Floor materials',
     description: 'Drive across tile, carpet, rough mat, and dirt with small rocks to record accelerometer data.',
     image: '/js-simulator/stages/floor_materials.svg',

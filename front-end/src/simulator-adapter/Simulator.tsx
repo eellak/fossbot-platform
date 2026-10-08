@@ -1,7 +1,7 @@
 import type { CameraVisionMode, CameraVisionSnapshot } from 'src/simulator/robot/cameraVision';
 import React, { forwardRef, lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Box, Button, CircularProgress, FormControlLabel, Stack, Switch, Typography, Select, MenuItem, Slider } from '@mui/material';
-import VideocamIcon from '@mui/icons-material/Videocam';
+import { Box, Button, CircularProgress, FormControlLabel, Switch, Typography, Slider } from '@mui/material';
+import CameraView from 'src/components/camera/CameraView';
 import { useTranslation } from 'react-i18next';
 import {
   WebGLApp as LegacyWebGLApp,
@@ -151,7 +151,6 @@ const V2WebGLApp = forwardRef<SimulatorControlHandle, WebGLAppProps>((props, ref
   const [cameraMode, setCameraMode] = useState<CameraVisionMode>('normal');
   const [blackThreshold, setBlackThreshold] = useState(105);
   const [vision, setVision] = useState<CameraVisionSnapshot | null>(null);
-  const [visionStageLoading, setVisionStageLoading] = useState(false);
   const cameraPanelRef = useRef<HTMLDivElement | null>(null);
   const cameraCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const effectiveV2Config = useMemo(
@@ -368,48 +367,40 @@ const V2WebGLApp = forwardRef<SimulatorControlHandle, WebGLAppProps>((props, ref
         />
       </Box>
       {aiCameraTopEnabled && (
-        <Box ref={cameraPanelRef} className="visual-language-supporting-panel" sx={{ position: 'absolute', top: { xs: 60, sm: 8 }, right: 8, width: { xs: 200, sm: 240 }, maxWidth: 'calc(100% - 16px)', bgcolor: 'background.paper', border: 1, borderColor: 'divider', overflow: 'auto', maxHeight: 'calc(100% - 16px)', display: 'flex', flexDirection: 'column' }}>
-          <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ px: 1, minHeight: 44, gap: 0.5, flexShrink: 0 }}>
-            <Stack direction="row" alignItems="center" spacing={0.5}>
-              <VideocamIcon fontSize="small" color={cameraPreviewEnabled ? 'success' : 'disabled'} />
-              <Typography variant="body2">{t('simulatorControls.liveCamera')}</Typography>
-            </Stack>
-            <Button size="small" onClick={() => setCameraPreviewEnabled((enabled) => !enabled)}>
-              {t(cameraPreviewEnabled ? 'simulatorControls.stopVideo' : 'simulatorControls.startVideo')}
-            </Button>
-          </Stack>
-          <Select size="small" value={cameraMode} onChange={(event) => setCameraMode(event.target.value as CameraVisionMode)} inputProps={{ 'aria-label': t('simulatorControls.visionMode') }} sx={{ mx: 1, mb: 0.5, flexShrink: 0 }}>
-            <MenuItem value="normal">{t('simulatorControls.videoMode')}</MenuItem>
-            <MenuItem value="objects">YOLO · {t('simulatorControls.simulatedMode')}</MenuItem>
-            <MenuItem value="depth">{t('simulatorControls.depthMode')} · {t('simulatorControls.simulatedMode')}</MenuItem>
-            <MenuItem value="aruco">ArUco</MenuItem>
-            <MenuItem value="road">{t('simulatorControls.roadMode')}</MenuItem>
-          </Select>
-          {cameraPreviewEnabled ? (
-            <Box component="canvas" ref={setCameraCanvas} role="img" aria-label={t('simulatorControls.cameraPreview')} sx={{ display: 'block', width: '100%', aspectRatio: '4 / 3', minHeight: 120, flexShrink: 0, bgcolor: 'action.hover' }} />
-          ) : (
-            <Box sx={{ aspectRatio: '4 / 3', display: 'grid', placeItems: 'center', bgcolor: 'action.hover' }}>
-              <Typography variant="body2" color="text.secondary">{t('simulatorControls.cameraPaused')}</Typography>
-            </Box>
-          )}
-          {cameraPreviewEnabled && ['aruco', 'road'].includes(cameraMode) && (
-            <Box sx={{ px: 1, py: 0.5 }}>
-              <Typography variant="caption" role="status" color={vision?.status === 'error' ? 'error.main' : 'text.secondary'}>
-                {vision?.status === 'error' ? t('simulatorControls.visionError') : !vision || vision.status === 'loading' ? t('simulatorControls.visionLoading') : cameraMode === 'aruco' ? (vision.markers.length ? `ID ${vision.markers.map(marker => marker.id).join(', ')}` : t('simulatorControls.noMarkers')) : vision.road ? t('simulatorControls.roadResult', { error: vision.road.center_error.toFixed(2), confidence: Math.round(vision.road.confidence * 100) }) : t('simulatorControls.noRoad')}
-              </Typography>
-              {cameraMode === 'road' && <>
-                <Typography variant="caption" component="div">{t('simulatorControls.blackThreshold')}: {blackThreshold}</Typography>
-                <Slider size="small" min={20} max={200} value={blackThreshold} onChange={(_, value) => setBlackThreshold(value as number)} aria-label={t('simulatorControls.blackThreshold')} />
-              </>}
-            </Box>
-          )}
-          {['objects', 'depth'].includes(cameraMode) && <Typography variant="caption" component="div" sx={{ px: 1, py: 0.5 }}>{t(cameraMode === 'depth' ? 'simulatorControls.simulatedDepth' : 'simulatorControls.simulatedObjects')}</Typography>}
-          {props.allowStageSelection !== false && <Button size="small" fullWidth disabled={visionStageLoading} onClick={async () => {
-            setVisionStageLoading(true);
-            try { await handleRef.current?.setStage('stage_camera_vision'); setVision(null); }
-            catch { setVision({ mode: cameraMode, status: 'error', markers: [], road: null }); }
-            finally { setVisionStageLoading(false); }
-          }}>{t('simulatorControls.visionTestStage')}</Button>}
+        <Box className="visual-language-supporting-panel" sx={{ position: 'absolute', top: { xs: 60, sm: 8 }, right: 8, width: { xs: 200, sm: 240 }, maxWidth: 'calc(100% - 16px)', bgcolor: 'background.paper', border: 1, borderColor: 'divider', overflow: 'hidden', maxHeight: 'calc(100% - 16px)', display: 'flex', flexDirection: 'column' }}>
+          <CameraView ref={cameraPanelRef} streaming={cameraPreviewEnabled} onStreamingChange={setCameraPreviewEnabled}
+            mode={cameraMode} onModeChange={setCameraMode} modes={[
+              { value: 'normal', label: t('simulatorControls.videoMode') },
+              { value: 'objects', label: `YOLO · ${t('simulatorControls.simulatedMode')}` },
+              { value: 'depth', label: `${t('simulatorControls.depthMode')} · ${t('simulatorControls.simulatedMode')}` },
+              { value: 'aruco', label: 'ArUco' },
+              { value: 'road', label: t('simulatorControls.roadMode') },
+            ]}
+            status={<>
+              {cameraPreviewEnabled && ['aruco', 'road'].includes(cameraMode) && (
+                <Box sx={{ px: 1, py: 0.5 }}>
+                  <Typography variant="caption" role="status" color={vision?.status === 'error' ? 'error.main' : 'text.secondary'}>
+                    {vision?.status === 'error' ? t('simulatorControls.visionError') : !vision || vision.status === 'loading' ? t('simulatorControls.visionLoading') : cameraMode === 'aruco' ? (vision.markers.length ? `ID ${vision.markers.map(marker => marker.id).join(', ')}` : t('simulatorControls.noMarkers')) : vision.road ? t('simulatorControls.roadResult', { error: vision.road.center_error.toFixed(2), confidence: Math.round(vision.road.confidence * 100) }) : t('simulatorControls.noRoad')}
+                  </Typography>
+                  {cameraMode === 'road' && <>
+                    <Typography variant="caption" component="div">{t('simulatorControls.blackThreshold')}: {blackThreshold}</Typography>
+                    <Slider size="small" min={20} max={200} value={blackThreshold} onChange={(_, value) => setBlackThreshold(value as number)} aria-label={t('simulatorControls.blackThreshold')} />
+                  </>}
+                </Box>
+              )}
+              {['objects', 'depth'].includes(cameraMode) && <Typography variant="caption" component="div" sx={{ px: 1, py: 0.5 }}>{t(cameraMode === 'depth' ? 'simulatorControls.simulatedDepth' : 'simulatorControls.simulatedObjects')}</Typography>}
+            </>}
+            footer={<>
+              {props.allowStageSelection !== false && <Button size="small" fullWidth onClick={() => {
+                const url = '/js-simulator/stages/stage_camera_vision.json';
+                window.dispatchEvent(new CustomEvent('fossbot:stage-selected', { detail: { sourceType: 'default', title: 'Camera vision test', url } }));
+                handleCardSelect(url);
+                setVision(null);
+              }}>{t('simulatorControls.visionTestStage')}</Button>}
+            </>}
+          >
+            {cameraPreviewEnabled && <Box component="canvas" ref={setCameraCanvas} role="img" aria-label={t('simulatorControls.cameraPreview')} sx={{ display: 'block', width: '100%', height: '100%', objectFit: 'contain' }} />}
+          </CameraView>
         </Box>
       )}
       {props.allowStageSelection !== false && <CardDialog open={openDialog} onClose={() => setOpenDialog(false)} onSelect={handleCardSelect} />}

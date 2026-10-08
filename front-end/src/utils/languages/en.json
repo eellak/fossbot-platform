@@ -43,6 +43,8 @@
   "collapseDescription": "Collapse description",
   "descriptionWordCount": "{{count}} / {{max}} words",
   "simulatorControls": {
+    "cameraStarting": "Starting camera…",
+    "physicalCameraPreview": "Live view from the FOSSBot camera",
     "simulatedMode": "Simulated",
     "depthMode": "Depth",
     "simulatedDepth": "Simulated depth · white = near, black = 5 m or farther",

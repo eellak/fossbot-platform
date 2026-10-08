@@ -188,8 +188,11 @@ Enable **AI camera top** in the v2 simulator, then choose a camera mode:
 Road expects two black tape boundaries and exposes a black-threshold control.
 **YOLO · Simulated** shows stage labels and projected object boxes; **Depth ·
 Simulated** shows geometry distance, white near and black at 5 metres or farther.
-These two modes do not run neural models. Use **Load vision test stage** to try
-markers, road boundaries and objects. Stop video pauses processing too.
+These two modes do not run neural models. Select **Camera vision test** from
+**Change stage → Built-in**, or use **Load vision test stage**, to try markers,
+road boundaries and objects. Stop video pauses processing too. Physical and
+simulator cameras share the same header, mode selector and video controls;
+physical camera choices follow the connected robot's capabilities.
 
 These are camera-preview features; Python/Blockly AI-camera commands are not yet
 connected. See [runtime details](sim/public/js-simulator/vision/README.md) for

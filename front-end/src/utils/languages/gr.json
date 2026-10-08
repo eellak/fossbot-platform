@@ -43,6 +43,8 @@
   "collapseDescription": "Σύμπτυξη περιγραφής",
   "descriptionWordCount": "{{count}} / {{max}} λέξεις",
   "simulatorControls": {
+    "cameraStarting": "Εκκίνηση κάμερας…",
+    "physicalCameraPreview": "Ζωντανή εικόνα από την κάμερα του FOSSBot",
     "simulatedMode": "Προσομοίωση",
     "depthMode": "Βάθος",
     "simulatedDepth": "Προσομοιωμένο βάθος · λευκό = κοντά, μαύρο = 5 m ή περισσότερο",
