@@ -10,7 +10,7 @@ def test_generated_reference_matches_worker_and_artifact():
     worker = backend.parent / "front-end" / "src" / "workers" / "pyodideWorker.ts"
     artifact = backend / "utils" / "ai" / "fossbot_api_reference.json"
     assert artifact.read_text(encoding="utf-8") == render_reference()
-    assert len(reference_payload()["commands"]) == 19
+    assert len(reference_payload()["commands"]) == 21
     if not worker.exists():
         pytest.skip("front-end sources are not included in the backend-only image")
     assert_reference_matches_worker(worker)

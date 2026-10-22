@@ -1,3 +1,4 @@
+import { driveSimulatorMotors, get_camera_detections, get_camera_vision } from 'src/simulator-adapter/Simulator';
 import React, { useCallback, useEffect, useState, useRef } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
 import {
@@ -451,7 +452,7 @@ const MonacoPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppearan
       onStopScript={setStopScriptFunction}
       moveStep={moveStep}
       rotateStep={rotateStep}
-      getdistance={get_distance}
+      getdistance={get_distance} getCameraDetections={get_camera_detections} getCameraVision={get_camera_vision} driveMotors={driveSimulatorMotors}
       rgbsetcolor={rgb_set_color}
       getacceleration={get_acceleration}
       getgyroscope={get_gyroscope}

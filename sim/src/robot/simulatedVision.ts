@@ -50,10 +50,35 @@ export function detectSimulatedObjects(scene: THREE.Scene, camera: THREE.Camera,
   })
   return results
 }
+/** Same RGB palette and metre range as overlay/fastdepth_camera.py. */
+export const CAMERA_DEPTH_NEAR = 0.5
+export const CAMERA_DEPTH_FAR = 8
+export const CAMERA_DEPTH_COLORS = ['#fff550', '#ff5a1e', '#b42396', '#2382dc', '#141e5a']
+export const CAMERA_DEPTH_GRADIENT = `linear-gradient(to right, ${CAMERA_DEPTH_COLORS.join(', ')})`
+
 export function createCameraDepthMaterial(): THREE.ShaderMaterial {
   return new THREE.ShaderMaterial({
-    uniforms: { range: { value: 5 } }, side: THREE.DoubleSide,
+    uniforms: {
+      nearDepth: { value: CAMERA_DEPTH_NEAR }, farDepth: { value: CAMERA_DEPTH_FAR },
+      // Components are display RGB bytes, matching OpenCV's JPEG output.
+      depthColors: { value: CAMERA_DEPTH_COLORS.map(color => new THREE.Vector3(
+        parseInt(color.slice(1, 3), 16) / 255,
+        parseInt(color.slice(3, 5), 16) / 255,
+        parseInt(color.slice(5, 7), 16) / 255,
+      )) },
+    }, side: THREE.DoubleSide, toneMapped: false,
     vertexShader: 'varying float cameraDepth; void main(){ vec4 p = modelViewMatrix * vec4(position, 1.0); cameraDepth = -p.z; gl_Position = projectionMatrix * p; }',
-    fragmentShader: 'uniform float range; varying float cameraDepth; void main(){ float shade = 1.0 - clamp(cameraDepth / range, 0.0, 1.0); gl_FragColor = vec4(vec3(shade), 1.0); }',
+    fragmentShader: `
+      uniform float nearDepth; uniform float farDepth;
+      uniform vec3 depthColors[5]; varying float cameraDepth;
+      void main(){
+        float position = clamp((cameraDepth - nearDepth) / (farDepth - nearDepth), 0.0, 1.0) * 4.0;
+        vec3 color;
+        if(position < 1.0) color = mix(depthColors[0], depthColors[1], position);
+        else if(position < 2.0) color = mix(depthColors[1], depthColors[2], position - 1.0);
+        else if(position < 3.0) color = mix(depthColors[2], depthColors[3], position - 2.0);
+        else color = mix(depthColors[3], depthColors[4], position - 3.0);
+        gl_FragColor = vec4(color, 1.0);
+      }`,
   })
 }

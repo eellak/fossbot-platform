@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Stream RGB and IMX500 FastDepth output side by side as MJPEG on stdout."""
+"""Stream colorized IMX500 FastDepth output as MJPEG on stdout."""
 
 import argparse
 import json
@@ -19,6 +19,9 @@ DEPTH_FILE = os.getenv(
     'FOSSBOT_DEPTH_FILE',
     '/tmp/fossbot-fastdepth.json',
 )
+
+
+DEPTH_NPY_FILE = os.getenv('FOSSBOT_DEPTH_NPY_FILE', DEPTH_FILE + '.npy')
 
 
 def stop(*_args):
@@ -45,7 +48,7 @@ def colorize_depth(depth, near, far):
     """Return a stable BGR heat map: yellow is near and dark blue is far."""
     depth = np.asarray(depth, dtype=np.float32).squeeze()
     valid = np.isfinite(depth) & (depth > 0)
-    normalized = np.clip((depth - near) / max(far - near, 1e-6), 0.0, 1.0)
+    normalized = np.clip((np.where(valid, depth, near) - near) / max(far - near, 1e-6), 0.0, 1.0)
     # Values are BGR because OpenCV encodes the resulting array directly.
     stops = np.array(
         [
@@ -98,6 +101,13 @@ def robust_region_distance(region):
 
 
 def publish_depth(depth):
+    # Keep native model resolution and float32 values; never encode the heatmap.
+    metric = np.array(depth, dtype='<f4', copy=True)
+    metric[~np.isfinite(metric) | (metric <= 0)] = np.nan
+    temporary_depth = f'{DEPTH_NPY_FILE}.{os.getpid()}.tmp'
+    with open(temporary_depth, 'wb') as output:
+        np.save(output, metric, allow_pickle=False)
+    os.replace(temporary_depth, DEPTH_NPY_FILE)
     height, width = depth.shape
     # Ignore the upper background and the lowest floor-heavy part of the image.
     navigation_band = depth[
@@ -144,10 +154,11 @@ def main():
     )
     camera.start()
     output = sys.stdout.buffer
-    try:
-        os.unlink(DEPTH_FILE)
-    except FileNotFoundError:
-        pass
+    for path in (DEPTH_FILE, DEPTH_NPY_FILE):
+        try:
+            os.unlink(path)
+        except FileNotFoundError:
+            pass
 
     try:
         while running:
@@ -160,8 +171,6 @@ def main():
                 if depth.ndim != 2:
                     continue
 
-                # Picamera2 exposes RGB888 as a BGR byte array.
-                rgb = request.make_array('main')
                 depth_view = colorize_depth(depth, arguments.near, arguments.far)
                 depth_view = cv2.resize(
                     depth_view,
@@ -172,12 +181,10 @@ def main():
                     depth[depth.shape[0] // 2, depth.shape[1] // 2]
                 )
                 publish_depth(depth)
-                add_label(rgb, 'RGB camera')
                 add_label(depth_view, f'Depth center: {center_depth:.2f} m')
-                combined = np.hstack((rgb, depth_view))
                 encoded, jpeg = cv2.imencode(
                     '.jpg',
-                    combined,
+                    depth_view,
                     [cv2.IMWRITE_JPEG_QUALITY, arguments.jpeg_quality],
                 )
                 if encoded:
@@ -188,10 +195,11 @@ def main():
     finally:
         camera.stop()
         camera.close()
-        try:
-            os.unlink(DEPTH_FILE)
-        except FileNotFoundError:
-            pass
+        for path in (DEPTH_FILE, DEPTH_NPY_FILE):
+            try:
+                os.unlink(path)
+            except FileNotFoundError:
+                pass
 
 
 if __name__ == '__main__':

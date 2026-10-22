@@ -42,3 +42,14 @@ describe('camera vision worker lifecycle', () => {
     } finally { globalThis.Worker = originalWorker; }
   });
 });
+
+it('uses the physical FastDepth display scale and RGB palette', () => {
+  const { createCameraDepthMaterial, CAMERA_DEPTH_COLORS } = require('../simulator/robot/simulatedVision');
+  const material = createCameraDepthMaterial();
+  expect(material.uniforms.nearDepth.value).toBe(0.5);
+  expect(material.uniforms.farDepth.value).toBe(8);
+  expect(CAMERA_DEPTH_COLORS).toEqual(['#fff550', '#ff5a1e', '#b42396', '#2382dc', '#141e5a']);
+  expect(material.uniforms.depthColors.value[0].toArray()).toEqual([1, 245 / 255, 80 / 255]);
+  expect(material.toneMapped).toBe(false);
+  material.dispose();
+});

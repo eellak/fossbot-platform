@@ -1,3 +1,4 @@
+import { useCameraDataCollection } from './useCameraDataCollection';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ExecutionTarget, RobotConnectionStatus, RobotProgramState, RobotTelemetry } from 'src/robot/RobotConnectionContext';
 import type { SensorTelemetrySnapshot } from 'src/simulator/sensors/telemetry';
@@ -9,6 +10,7 @@ import {
 } from './sensorDataCollection';
 
 export function useSensorDataCollection(target: ExecutionTarget, programState: RobotProgramState, status: RobotConnectionStatus, telemetry?: RobotTelemetry) {
+  const camera = useCameraDataCollection(target);
   const [enabled, setEnabled] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
   const [intervalMs, setIntervalMs] = useState<number>(SAMPLE_INTERVAL_MS);
@@ -20,16 +22,18 @@ export function useSensorDataCollection(target: ExecutionTarget, programState: R
   const channels = target === 'robot' ? ROBOT_CHANNELS : SIMULATOR_CHANNELS;
 
   const finish = useCallback((reason: string) => {
+    camera.stop();
     const active = activeRef.current;
     if (!active) return;
     active.endedAt = Date.now();
     active.reason = reason;
     activeRef.current = null;
     setRecording({ ...active, rows: [...active.rows] });
-  }, []);
+  }, [camera.stop]);
 
   const start = useCallback((runTarget: ExecutionTarget, programId?: string) => {
     finish('replaced');
+    if (runTarget === target) camera.start();
     if (!enabled || !available || selected.length === 0 || runTarget !== target) return;
     const selectedChannels = channels.filter(({ id }) => selected.includes(id));
     const next: SensorRecording = { target, programId, startedAt: Date.now(), endedAt: null, intervalMs, channels: selectedChannels, rows: [], reason: '' };
@@ -38,7 +42,7 @@ export function useSensorDataCollection(target: ExecutionTarget, programState: R
     setRecording({ ...next, rows: [] });
     if (runTarget === 'robot' && programId && telemetry?.program?.programId === programId
       && (programState === 'completed' || programState === 'stopped' || programState === 'failed')) finish(programState);
-  }, [available, channels, enabled, finish, intervalMs, programState, selected, target, telemetry?.program?.programId]);
+  }, [camera.start, available, channels, enabled, finish, intervalMs, programState, selected, target, telemetry?.program?.programId]);
 
   const ingest = useCallback((sampleTarget: ExecutionTarget, timestamp: number, values: Record<string, number | null>) => {
     const active = activeRef.current;
@@ -98,7 +102,7 @@ export function useSensorDataCollection(target: ExecutionTarget, programState: R
   }, [recording]);
 
   return {
-    target, enabled, setEnabled, selected, toggleSelected, intervalMs, setIntervalMs, channels, available,
+    camera, target, enabled, setEnabled, selected, toggleSelected, intervalMs, setIntervalMs, channels, available,
     recording, start, finish, onSimulatorTelemetry, exportCsv,
   };
 }

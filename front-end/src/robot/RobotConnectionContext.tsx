@@ -1,3 +1,4 @@
+import { registerCameraCapture } from 'src/components/camera/cameraCapture';
 import React, {
   createContext,
   useCallback,
@@ -468,6 +469,29 @@ export const RobotConnectionProvider: React.FC<React.PropsWithChildren> = ({ chi
   const runQueueRef = useRef<Promise<void>>(Promise.resolve());
   const rcActionQueueRef = useRef<Promise<void>>(Promise.resolve());
   const cameraFrameUrlRef = useRef<string>();
+  const cameraCaptureRef = useRef<import('src/components/camera/cameraCapture').CameraCapture | null>(null);
+  useEffect(() => registerCameraCapture('robot', async () => {
+    const frame = cameraCaptureRef.current;
+    if (!frame || Date.now() - frame.timestamp >= 2000) return null;
+    if (frame.mode !== 'depth') return frame;
+    const socket = socketRef.current;
+    if (!socket?.connected) return null;
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error('Raw depth unavailable; update the robot agent')), 1500);
+      socket.emit('camera:capture_depth', {}, (packet: { npy?: ArrayBuffer | Uint8Array | { data?: number[] }; timestamp?: number; error?: string }) => {
+        clearTimeout(timeout);
+        const raw = packet?.npy;
+        let bytes: Uint8Array | undefined;
+        if (raw instanceof ArrayBuffer) bytes = new Uint8Array(raw);
+        else if (ArrayBuffer.isView(raw)) bytes = new Uint8Array(raw.buffer, raw.byteOffset, raw.byteLength);
+        else if (raw && 'data' in raw && raw.data) bytes = new Uint8Array(raw.data);
+        if (!bytes) { reject(new Error('Raw depth unavailable')); return; }
+        const npy = new Blob([bytes], { type: 'application/x-npy' });
+        resolve({ image: npy, timestamp: packet.timestamp ?? Date.now(), mode: 'depth',
+          metadata: { ...packet, npy: undefined, format: 'NumPy float32 [height,width]', source: 'physical FastDepth model' } });
+      });
+    });
+  }), []);
   const cameraVisionModeRef = useRef<CameraVisionMode>(cameraVisionMode);
 
   const appendOutput = useCallback((line: string) => {
@@ -494,6 +518,7 @@ export const RobotConnectionProvider: React.FC<React.PropsWithChildren> = ({ chi
   const clearTerminal = useCallback(() => setTerminalLines([]), []);
 
   const clearCameraFrame = useCallback(() => {
+    cameraCaptureRef.current = null;
     if (cameraFrameUrlRef.current) {
       URL.revokeObjectURL(cameraFrameUrlRef.current);
       cameraFrameUrlRef.current = undefined;
@@ -711,6 +736,8 @@ export const RobotConnectionProvider: React.FC<React.PropsWithChildren> = ({ chi
           socket.emit('camera:ack', { timestamp: packet?.timestamp });
           return;
         }
+        cameraCaptureRef.current = { image: blob, timestamp: Date.now(), mode: cameraVisionModeRef.current,
+          metadata: { ...packet, jpeg: undefined, source: 'physical' } };
         const nextUrl = URL.createObjectURL(blob);
         const previousUrl = cameraFrameUrlRef.current;
         cameraFrameUrlRef.current = nextUrl;

@@ -1,6 +1,11 @@
+import { captureMetricDepth } from 'src/simulator/robot/depthCapture';
+import { depthToNpy } from 'src/components/camera/depthNpy';
+import { cameraFrameTimestamp } from 'src/simulator/robot/cameraPreview';
+import { registerCameraCapture } from 'src/components/camera/cameraCapture';
+import { cameraDetectionsForPython, cameraVisionForPython } from './cameraPythonApi';
 import type { CameraVisionMode, CameraVisionSnapshot } from 'src/simulator/robot/cameraVision';
 import React, { forwardRef, lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Box, Button, CircularProgress, FormControlLabel, Switch, Typography, Slider } from '@mui/material';
+import { Box, CircularProgress, FormControlLabel, Switch, Typography, Slider } from '@mui/material';
 import CameraView from 'src/components/camera/CameraView';
 import { useTranslation } from 'react-i18next';
 import {
@@ -153,6 +158,26 @@ const V2WebGLApp = forwardRef<SimulatorControlHandle, WebGLAppProps>((props, ref
   const [vision, setVision] = useState<CameraVisionSnapshot | null>(null);
   const cameraPanelRef = useRef<HTMLDivElement | null>(null);
   const cameraCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  useEffect(() => {
+    if (!aiCameraTopEnabled || !cameraPreviewEnabled) return;
+    return registerCameraCapture('simulation', async () => {
+      const canvas = cameraCanvasRef.current;
+      const snapshot = handleRef.current?.getCameraVisionSnapshot();
+      const timestamp = canvas ? cameraFrameTimestamp(canvas) : undefined;
+      if (!canvas || !snapshot || !timestamp || Date.now() - timestamp > 2000) return null;
+      if (snapshot.mode === 'depth') {
+        const depth = captureMetricDepth(canvas);
+        if (!depth) throw new Error('Raw depth unavailable');
+        const { values, ...calibration } = depth;
+        return { image: depthToNpy(values, depth.width, depth.height), timestamp: depth.timestamp, mode: 'depth',
+          metadata: { ...snapshot, metricDepth: { ...calibration, units: 'metres', dtype: '<f4', invalid: 'NaN',
+            convention: 'camera-forward Z', source: 'simulator geometry', intrinsics: 'approximate simulator camera; not physical calibration' } } };
+      }
+      const image = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/png'));
+      return image ? { image, timestamp, mode: snapshot.mode, metadata: snapshot } : null;
+    });
+  }, [aiCameraTopEnabled, cameraPreviewEnabled]);
+
   const effectiveV2Config = useMemo(
     () => ({
       ...v2Config,
@@ -390,14 +415,6 @@ const V2WebGLApp = forwardRef<SimulatorControlHandle, WebGLAppProps>((props, ref
               )}
               {['objects', 'depth'].includes(cameraMode) && <Typography variant="caption" component="div" sx={{ px: 1, py: 0.5 }}>{t(cameraMode === 'depth' ? 'simulatorControls.simulatedDepth' : 'simulatorControls.simulatedObjects')}</Typography>}
             </>}
-            footer={<>
-              {props.allowStageSelection !== false && <Button size="small" fullWidth onClick={() => {
-                const url = '/js-simulator/stages/stage_camera_vision.json';
-                window.dispatchEvent(new CustomEvent('fossbot:stage-selected', { detail: { sourceType: 'default', title: 'Camera vision test', url } }));
-                handleCardSelect(url);
-                setVision(null);
-              }}>{t('simulatorControls.visionTestStage')}</Button>}
-            </>}
           >
             {cameraPreviewEnabled && <Box component="canvas" ref={setCameraCanvas} role="img" aria-label={t('simulatorControls.cameraPreview')} sx={{ display: 'block', width: '100%', height: '100%', objectFit: 'contain' }} />}
           </CameraView>
@@ -574,3 +591,21 @@ export function subscribeMissionEvents(listener: MissionEventListener): () => vo
 }
 
 export { WebGLApp };
+
+
+export function get_camera_detections(maxAge = 1) {
+  return cameraDetectionsForPython(getActiveV2Handle()?.getCameraVisionSnapshot() ?? null, maxAge);
+}
+
+/** Independent wheel inputs use the existing differential-drive simulator API. */
+export function driveSimulatorMotors(left: number, right: number): void {
+  rc_drive((left + right) / 2, (left - right) / 2);
+}
+
+export function get_camera_vision(mode: string, maxAge: number, blackThreshold?: number | null) {
+  const handle = getActiveV2Handle();
+  if (mode === 'road' && blackThreshold != null && handle?.getCameraVisionSnapshot()?.mode === 'road') {
+    handle.setCameraVisionMode('road', Math.max(20, Math.min(200, Math.trunc(blackThreshold))));
+  }
+  return cameraVisionForPython(handle?.getCameraVisionSnapshot() ?? null, mode, maxAge);
+}

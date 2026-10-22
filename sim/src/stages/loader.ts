@@ -44,6 +44,8 @@ export interface StageHandle {
 }
 
 export interface LoadStageOptions {
+  /** Stop asynchronous model attachment when the owning engine is stopped. */
+  isCancelled?: () => boolean
   resolveAssetUrl?: (url: string) => string
   camera?: THREE.Camera
   gestureTarget?: HTMLElement
@@ -88,6 +90,17 @@ function setBodyRotationFromEuler(bodyDesc: RAPIER.RigidBodyDesc, orientation?: 
   if (!orientation) return bodyDesc
   const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(orientation[0], orientation[1], orientation[2]))
   return bodyDesc.setRotation({ x: q.x, y: q.y, z: q.z, w: q.w })
+}
+
+function disposeVisual(object: THREE.Object3D): void {
+  object.traverse((child) => {
+    const mesh = child as THREE.Mesh
+    if (!mesh.isMesh && !(child as THREE.LineSegments).isLineSegments) return
+    mesh.geometry?.dispose()
+    const material = mesh.material
+    if (Array.isArray(material)) material.forEach((mat) => mat.dispose())
+    else material?.dispose()
+  })
 }
 
 function attachColliders(
@@ -299,14 +312,25 @@ export async function loadStageEntries(
       case 'model': {
         const p = buildModelVisual(entry as any)
           .then(async (vis) => {
+            if (opts.isCancelled?.()) {
+              disposeVisual(vis.object)
+              return
+            }
             const col = await buildModelCollider(entry as any, vis.object)
+            // The engine may have disposed the world while either asset loaded.
+            // Never attach a collider to the now-removed shared stage body.
+            if (opts.isCancelled?.()) {
+              disposeVisual(vis.object)
+              col.debugMeshes.forEach(disposeVisual)
+              return
+            }
             addVisual(vis.object)
             objects.push(vis.object)
             attachColliders(vis, col, world, stageBody, stgCollidersGrp, dynamicObjects)
             registerMarker(vis.object, dynamicObjects[dynamicObjects.length - 1]?.object === vis.object ? dynamicObjects[dynamicObjects.length - 1].body : undefined)
           })
           .catch((err) => {
-            console.warn(`[stage] model load failed: ${(entry as any).filename}`, err)
+            if (!opts.isCancelled?.()) console.warn(`[stage] model load failed: ${(entry as any).filename}`, err)
           })
         modelLoads.push(p)
         break
@@ -442,9 +466,9 @@ export async function loadStageEntries(
         }
       })
       for (const dynamicObject of dynamicObjects) {
-        world.removeRigidBody(dynamicObject.body)
+        if (world.getRigidBody(dynamicObject.body.handle) === dynamicObject.body) world.removeRigidBody(dynamicObject.body)
       }
-      world.removeRigidBody(stageBody)
+      if (world.getRigidBody(stageBody.handle) === stageBody) world.removeRigidBody(stageBody)
     },
   }
 }

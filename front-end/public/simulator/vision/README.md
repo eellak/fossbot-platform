@@ -27,10 +27,12 @@ YOLO and Depth are explicitly simulated, not neural inference. Object labels
 come from `visionLabel`, then entry name/type, for cubes/cylinders/spheres/wedges/
 models. Boxes use camera projection and nine sampled occlusion rays; this is
 approximate visibility for partially hidden/very thin objects. Labels need not
-be COCO classes. Depth renders camera-forward geometry distance with white at
-zero, black at >=5 metres; it is not FastDepth output or hardware calibration.
-Camera mode/results are available through FossbotSimulatorHandle; these preview
-features do not yet add Python/Blockly AI-camera commands.
+be COCO classes. Depth renders camera-forward geometry distance on the physical display
+scale (0.5–8 metres, yellow near and dark blue far); it is not FastDepth output or hardware calibration.
+Camera mode/results are available through FossbotSimulatorHandle; Python robot.get_detections()/get_detection() now read fresh simulated object
+results through the worker bridge, with physical packet fields and synthetic
+confidence 1.0. Preview must be enabled in YOLO Simulated mode. Other vision
+metadata methods are not yet exposed to Python.
 
 Run `npm run test:camera` in sim for real WASM pixel tests. Frontend camera tests
 cover rendering state restoration, mount scale, occlusion and worker lifecycle.

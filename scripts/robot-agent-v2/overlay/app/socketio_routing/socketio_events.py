@@ -16,6 +16,7 @@ from blockly_server.config import Config
 import time
 import uuid
 from blockly_server.app.control_utils.utils import stop_now, execute_blocks, imed_exit, load_parameters, save_parameters, get_all_projects, get_sound_effects
+from blockly_server.app.robot.depth_data import read_depth_capture
 from blockly_server.app.robot.hardware_broker import HardwareBrokerClient, HardwareBrokerProcess
 
 IMX500_YOLO_MODEL = os.getenv(
@@ -126,6 +127,7 @@ class SocketIOEvents:
         self.socketio.on_event('camera:start', self.handle_camera_start)
         self.socketio.on_event('camera:stop', self.handle_camera_stop)
         self.socketio.on_event('camera:ack', self.handle_camera_ack)
+        self.socketio.on_event('camera:capture_depth', self.handle_capture_depth)
         self.socketio.on_event('program:submit', self.handle_program_submit)
         self.socketio.on_event('program:stop', self.handle_program_stop)
         self.socketio.on_event('interactive:command', self.handle_interactive_command)
@@ -430,8 +432,8 @@ class SocketIOEvents:
                         namespace='/',
                     )
                 return
-            # The depth worker places RGB and depth side by side.
-            stream_width = 1024
+            # The depth worker streams only the colorized depth image.
+            stream_width = 512
             command = [
                 FASTDEPTH_CAMERA_WORKER,
                 '--model', IMX500_FASTDEPTH_MODEL,
@@ -611,6 +613,13 @@ class SocketIOEvents:
         if process is not None and process.poll() is None:
             process.terminate()
 
+    def handle_capture_depth(self, _payload=None):
+        # Only an existing depth subscriber can request raw model data.
+        with self.camera_lock:
+            if self.camera_mode != 'depth' or request.sid not in self.camera_subscribers:
+                return {'error': 'Start the depth camera preview first'}
+        return read_depth_capture() or {'error': 'Raw depth is not available yet'}
+
     def handle_camera_start(self, data=None):
         sid = request.sid
         data = data or {}
@@ -639,7 +648,7 @@ class SocketIOEvents:
             process_to_restart.terminate()
         emit('camera:status', {
             'streaming': True,
-            'width': 1024 if requested_mode == 'depth' else 512,
+            'width': 512,
             'height': 288,
             'framerate': 12 if requested_mode == 'depth' else 15,
             'inference': requested_inference,

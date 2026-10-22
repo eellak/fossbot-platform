@@ -47,7 +47,7 @@
     "physicalCameraPreview": "Live view from the FOSSBot camera",
     "simulatedMode": "Simulated",
     "depthMode": "Depth",
-    "simulatedDepth": "Simulated depth · white = near, black = 5 m or farther",
+    "simulatedDepth": "Simulated depth · yellow = near, dark blue = far (0.5–8 m)",
     "simulatedObjects": "Simulated objects · labels from stage geometry",
     "visionMode": "Camera processing mode",
     "videoMode": "Video",
@@ -58,7 +58,7 @@
     "noRoad": "No two-boundary road detected",
     "roadResult": "Centre error: {{error}} · confidence: {{confidence}}%",
     "blackThreshold": "Black threshold",
-    "visionTestStage": "Load vision test stage", "liveCamera": "Live camera", "startVideo": "Start video", "stopVideo": "Stop video", "cameraPreview": "Live view from the simulated FOSSBot camera", "cameraPaused": "Camera is paused", "aiCameraTop": "AI camera top", "label": "Simulator controls", "show": "Show simulator controls", "hide": "Hide simulator controls", "moveForward": "Move forward", "moveBackward": "Move backward", "turnLeft": "Turn left", "turnRight": "Turn right" },
+    "liveCamera": "Live camera", "startVideo": "Start video", "stopVideo": "Stop video", "cameraPreview": "Live view from the simulated FOSSBot camera", "cameraPaused": "Camera is paused", "aiCameraTop": "AI camera top", "label": "Simulator controls", "show": "Show simulator controls", "hide": "Hide simulator controls", "moveForward": "Move forward", "moveBackward": "Move backward", "turnLeft": "Turn left", "turnRight": "Turn right" },
   "saving": "Saving…",
   "retry": "Retry",
   "loading": "Loading…",
@@ -840,6 +840,21 @@
     "errors": { "load": "Courses could not be loaded. Check your connection, then try again.", "loadCourse": "This course could not be loaded. Check your connection, then try again.", "create": "The course could not be created. Check your connection, then submit the form again.", "duplicate": "The copy could not be created. Check your connection, then choose Duplicate again.", "archive": "The course was not archived. It remains available; check your connection and try again.", "delete": "The course was not deleted. It remains available; check your connection and try again.", "deleteEnrolled": "This course has students enrolled, so it cannot be deleted. Archive it instead to keep their progress.", "deleteAssigned": "This course is assigned to a class, so it cannot be deleted. Archive it instead to keep the assignment and leaderboards.", "save": "Your latest changes could not be saved. They remain on this page; check your connection and retry.", "saveValidation": "A validation error is blocking this save. Fix the highlighted field, then retry.", "validate": "The publish check could not finish. Check your connection and run it again.", "publish": "The course was not published. Your draft is safe; check your connection and try again.", "reload": "Reload course", "retrySave": "Retry save", "retryValidation": "Check again", "retryPublish": "Try publishing again" }
   },
   "dataCollection": {
+    "camera": {
+      "title": "Camera collection",
+      "enable": "Record camera frames",
+      "help": "Start the camera preview and select a camera mode. Capture manually or automatically during a program run. Starting a new capture replaces the previous set.",
+      "start": "Start capture",
+      "stop": "Stop capture",
+      "export": "Export camera ZIP",
+      "frames": "{{count}} frames",
+      "noFrame": "Waiting for a live camera frame. Enable the AI camera top in the simulator.",
+      "limit": "Capture stopped at the 100 MB or 1,000-frame limit. Export before starting again.",
+      "rawDepthUnavailable": "Raw depth is unavailable. Update the robot agent; heatmaps are not exported as depth data.",
+      "captureError": "Could not capture this frame. For raw depth, check browser float-rendering support or update the robot agent.",
+      "exportError": "Could not export the ZIP. Try again.",
+      "depthHelp": "Depth exports contain float32 NumPy (.npy) arrays in metres, one value per pixel, plus metadata. Other camera modes export images."
+    },
     "frequency": "Collection frequency", "frequencyOption": "{{hz}} Hz (every {{seconds}} s)", "frequencyHelp": "The robot reports readings about every 0.5 s. Actual sample timing can vary slightly.", "simulatorFrequencyHelp": "For floor classification, record acceleration and floor material at 10 Hz. Material codes: 0 tile, 1 carpet, 2 rough mat, 3 dirt and rocks.",
     "title": "Data collection", "terminal": "Terminal", "record": "Record sensor data when I run the program", "unavailable": "Sensor recording requires simulator v2 or a connected physical robot.", "select": "Select sensors to record ({{count}} selected)", "selectRequired": "Select at least one sensor before running.", "recording": "Recording · {{count}} rows", "inProgress": "Recording in progress", "last": "Last recording", "physicalRobot": "Physical robot", "simulator": "Simulator", "rows": "{{count}} rows", "running": "Running", "export": "Export CSV", "empty": "No readings were received during this run.", "replaces": "A new recorded run replaces the last recording. Export it first if you want to keep it.", "reason": { "completed": "Completed", "stopped": "Stopped", "failed": "Failed", "disconnected": "Disconnected", "target changed": "Target changed", "page closed": "Page closed", "replaced": "Replaced" }
   },

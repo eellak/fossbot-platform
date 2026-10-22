@@ -1,5 +1,6 @@
 import React, { forwardRef } from 'react';
 import { Box, Button, CircularProgress, MenuItem, Select, Stack, Typography } from '@mui/material';
+import { CAMERA_DEPTH_GRADIENT, CAMERA_DEPTH_NEAR, CAMERA_DEPTH_FAR } from 'src/simulator/robot/simulatedVision';
 import VideocamIcon from '@mui/icons-material/Videocam';
 import { useTranslation } from 'react-i18next';
 
@@ -52,6 +53,13 @@ const CameraView = forwardRef<HTMLDivElement, CameraViewProps>(({
         )}
       </Box>
       {error && streaming && children && <Typography role="alert" variant="caption" color="error.main" sx={{ px: 1, py: 0.5, flexShrink: 0 }}>{error}</Typography>}
+      {mode === 'depth' && streaming && (
+        <Stack direction="row" alignItems="center" spacing={1} sx={{ px: 1, py: 0.5, flexShrink: 0 }}>
+          <Typography variant="caption">{CAMERA_DEPTH_NEAR} m</Typography>
+          <Box aria-label="Depth colour scale" sx={{ flex: 1, height: 8, borderRadius: 1, background: CAMERA_DEPTH_GRADIENT }} />
+          <Typography variant="caption">{CAMERA_DEPTH_FAR} m</Typography>
+        </Stack>
+      )}
       {status && <Box sx={{ flexShrink: 0 }}>{status}</Box>}
       {footer && <Box sx={{ flexShrink: 0 }}>{footer}</Box>}
     </Box>

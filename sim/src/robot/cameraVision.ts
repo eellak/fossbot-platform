@@ -11,9 +11,13 @@ export interface RoadDetection {
   center_x_ratio: number; center_error: number; lane_width: number; lane_width_ratio: number
   lookahead_y: number; lookahead_y_ratio: number; confidence: number; frame_width: number; frame_height: number
 }
+export interface SimulatedDepthPacket {
+  timestamp: number; model: string; source: 'simulator'; frame_width: number; frame_height: number
+  center_m: number | null; regions: { left_m: number | null; center_m: number | null; right_m: number | null }
+}
 export interface CameraVisionSnapshot {
   mode: CameraVisionMode; status: 'video' | 'loading' | 'ready' | 'error'
-  objects?: SimulatedObjectDetection[]; markers: ArucoMarker[]; road: RoadDetection | null; error?: string
+  depth?: SimulatedDepthPacket; timestamp?: number; objects?: SimulatedObjectDetection[]; markers: ArucoMarker[]; road: RoadDetection | null; error?: string
 }
 export class CameraVisionProcessor {
   private worker: Worker | null = null
@@ -27,10 +31,12 @@ export class CameraVisionProcessor {
   private snapshot: CameraVisionSnapshot = { mode: 'normal', status: 'video', markers: [], road: null }
   constructor(private baseUrl: string, private onUpdate?: (snapshot: CameraVisionSnapshot) => void) {}
   getSnapshot(): CameraVisionSnapshot {
-    if (performance.now() - this.lastResult > 500) return { ...this.snapshot, markers: [], road: null, objects: [] }
+    if (performance.now() - this.lastResult > 500) return { ...this.snapshot, markers: [], road: null, objects: [], depth: undefined }
     return this.snapshot
   }
   setMode(mode: CameraVisionMode, threshold = 105): void {
+    threshold = Math.max(20, Math.min(200, Math.round(threshold)))
+    if (mode === this.mode && threshold === this.threshold) return
     this.generation++
     this.mode = mode
     this.threshold = Math.max(20, Math.min(200, Math.round(threshold)))
@@ -45,7 +51,7 @@ export class CameraVisionProcessor {
         if (data.type === 'error') { this.fail(data.message); return }
         if (data.generation !== this.generation || data.mode !== this.mode) return
         this.lastResult = performance.now()
-        this.publish({ mode: this.mode, status: 'ready', ...data.result })
+        this.publish({ mode: this.mode, status: 'ready', ...data.result, timestamp: Date.now() })
       }
       this.worker.onerror = () => this.fail('Camera processing could not start. Reload to retry.')
     } catch (error) { this.fail(String(error)) }
@@ -96,7 +102,11 @@ export class CameraVisionProcessor {
   }
   setSimulatedObjects(objects: SimulatedObjectDetection[]): void {
     this.lastResult = performance.now()
-    this.publish({ mode: 'objects', status: 'ready', markers: [], road: null, objects })
+    this.publish({ mode: 'objects', status: 'ready', timestamp: Date.now(), markers: [], road: null, objects })
+  }
+  setSimulatedDepth(depth: SimulatedDepthPacket): void {
+    this.lastResult = performance.now()
+    this.publish({ mode: 'depth', status: 'ready', timestamp: Date.now(), markers: [], road: null, depth })
   }
   private publish(snapshot: CameraVisionSnapshot): void { this.snapshot = snapshot; this.onUpdate?.(snapshot) }
   private fail(error: string): void {

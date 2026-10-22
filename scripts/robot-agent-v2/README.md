@@ -148,9 +148,10 @@ return as no detection, so a stopped or failed camera cannot leave a stale
 target. Start the video and select YOLO11n before running vision code.
 
 FastDepth mode stops the active camera subprocess and loads
-`fossbot_fastdepth.rpk` into the IMX500. The preview places the RGB camera on
-the left and the `224×224` monocular depth estimate on the right, with the
-center-distance estimate overlaid in metres. Selecting Video, YOLO11n, Depth,
+`fossbot_fastdepth.rpk` into the IMX500. The preview shows only the colorized `224×224` monocular depth estimate,
+with the center-distance estimate overlaid in metres. Physical and simulated
+depth use the same fixed 0.5–8 m scale: yellow near, orange/purple in the
+middle, and dark blue far. Selecting Video, YOLO11n, Depth,
 ArUco or Road always stops the preceding subprocess before the next
 camera/model is loaded, so there remains exactly one camera owner.
 
@@ -216,3 +217,13 @@ deployment copy for reproducibility.
 `overlay/run.py` maps to `/opt/fossbot/app/blockly_server/run.py`. With
 `SOCKETIO_ALLOWED_ORIGINS="*"`, the agent accepts browser Socket.IO connections
 from any platform origin, including changing temporary HTTPS domains.
+
+Numeric depth dataset export: the FastDepth worker now atomically publishes
+native-resolution little-endian float32 NPY data (`FOSSBOT_DEPTH_NPY_FILE`,
+default `${FOSSBOT_DEPTH_FILE}.npy`) as well as the region JSON. The agent's
+`camera:capture_depth` acknowledgement returns the latest NPY bytes on demand
+only to an active depth camera subscriber; reads are bounded to 4 MB and 1.5 s
+freshness. Deploy the worker, socketio_events.py and app/robot/depth_data.py
+together. This preserves model depth values (invalid pixels become NaN), rather
+than deriving measurements from the JPEG heatmap. See docs/camera-datasets.md
+in the platform repository for the ZIP schema and NumPy loader.

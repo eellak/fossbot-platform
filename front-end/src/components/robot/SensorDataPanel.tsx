@@ -12,6 +12,8 @@ export default function SensorDataPanel({ collector }: { collector: Collector })
   const active = Boolean(recording && !recording.endedAt);
   const selectedCount = channels.filter(({ id }) => selected.includes(id)).length;
 
+  const camera = collector.camera;
+
   return (
     <Box sx={{ height: '100%', minHeight: 0, overflow: 'auto', p: 1.5 }}>
       <Stack direction="row" alignItems="center" justifyContent="space-between" gap={1} flexWrap="wrap">
@@ -43,6 +45,26 @@ export default function SensorDataPanel({ collector }: { collector: Collector })
       </>}
       {enabled && selectedCount === 0 && available && <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>{t('dataCollection.selectRequired')}</Typography>}
       {!active && recording?.endedAt && <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>{t('dataCollection.replaces')}</Typography>}
+      <Box sx={{ mt: 1.5, pt: 1.5, borderTop: '1px solid', borderColor: 'divider' }}>
+        <Typography variant="h6">{t('dataCollection.camera.title')}</Typography>
+        <FormControlLabel control={<Checkbox checked={camera.enabled} disabled={camera.active || camera.exporting}
+          onChange={event => camera.setEnabled(event.target.checked)} />} label={t('dataCollection.camera.enable')} />
+        <Typography variant="body2" color="text.secondary">{t('dataCollection.camera.help')}</Typography>
+        <TextField select size="small" label={t('dataCollection.frequency')} value={camera.intervalMs}
+          disabled={camera.active || camera.exporting} onChange={event => camera.setIntervalMs(Number(event.target.value))} sx={{ mt: 1, minWidth: 180 }}>
+          {[200, 500, 1000, 2000].map(value => <MenuItem key={value} value={value}>{1000 / value} Hz</MenuItem>)}
+        </TextField>
+        <Stack direction="row" gap={1} flexWrap="wrap" alignItems="center" sx={{ mt: 1 }}>
+          <Button size="small" variant="outlined" disabled={!camera.enabled || camera.exporting}
+            onClick={camera.active ? camera.stop : camera.start}>{t(camera.active ? 'dataCollection.camera.stop' : 'dataCollection.camera.start')}</Button>
+          <Button size="small" variant="outlined" startIcon={<IconDownload size={17} />} disabled={camera.active || camera.exporting || !camera.count}
+            onClick={() => void camera.exportZip()}>{t('dataCollection.camera.export')}</Button>
+          <Typography variant="caption">{t('dataCollection.camera.frames', { count: camera.count })}</Typography>
+          {camera.active && <Chip size="small" color="error" label={t('dataCollection.running')} />}
+        </Stack>
+        {camera.error && <Typography role="status" variant="body2" color="text.secondary">{t(`dataCollection.camera.${camera.error}`)}</Typography>}
+        <Typography variant="caption" color="text.secondary">{t('dataCollection.camera.depthHelp')}</Typography>
+      </Box>
       {recording && <Box sx={{ mt: 1.5, pt: 1.5, borderTop: '1px solid', borderColor: 'divider' }}>
         <Stack direction="row" alignItems="center" justifyContent="space-between" gap={1} flexWrap="wrap">
           <Box>

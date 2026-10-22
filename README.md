@@ -187,15 +187,20 @@ Enable **AI camera top** in the v2 simulator, then choose a camera mode:
 **ArUco** and **Road** process rendered pixels using the robot's OpenCV algorithms.
 Road expects two black tape boundaries and exposes a black-threshold control.
 **YOLO · Simulated** shows stage labels and projected object boxes; **Depth ·
-Simulated** shows geometry distance, white near and black at 5 metres or farther.
+Simulated** shows geometry distance using the same yellow-to-dark-blue
+0.5–8 metre scale as physical FastDepth. Depth mode shows only depth, with a
+centre-distance label and shared colour legend.
 These two modes do not run neural models. Select **Camera vision test** from
-**Change stage → Built-in**, or use **Load vision test stage**, to try markers,
+**Change stage → Built-in** to try markers,
 road boundaries and objects. Stop video pauses processing too. Physical and
 simulator cameras share the same header, mode selector and video controls;
 physical camera choices follow the connected robot's capabilities.
 
-These are camera-preview features; Python/Blockly AI-camera commands are not yet
-connected. See [runtime details](sim/public/js-simulator/vision/README.md) for
+Python can read simulated YOLO results with `robot.get_detections()` and
+`robot.get_detection(label, min_confidence=0.0, max_age=1.0)`. Enable the camera
+preview and select **YOLO · Simulated** first. Labels come from visible stage
+objects; confidence is synthetic (1.0). No matching detection returns `None`.
+Other AI-camera metadata methods are not yet connected to Python. See [runtime details](sim/public/js-simulator/vision/README.md) for
 asset provenance, stage image entries and verification commands.
 
 ## Troubleshooting
@@ -212,3 +217,24 @@ asset provenance, stage image entries and verification commands.
   &nbsp;&nbsp;&nbsp;
   <img src="images/hua_en.png" alt="Harokopio University of Athens" height="70">
 </p>
+
+
+## Python robot calls
+
+Python programs use the preconfigured `robot` object in both simulator and
+physical workspaces, for example `robot.get_distance()`,
+`robot.move_forward_distance(20)` and `robot.stop()`. No import or explicit
+`await` is required. The simulator automatically awaits supported robot calls,
+including calls inside helper functions. Distance readings and distance movement
+on the object API use centimetres; `robot.wait(seconds)` yields without blocking
+the browser. Existing Blockly-generated bare functions remain supported in the
+simulator, including their legacy distance readings in metres. This does not
+add hardware-only components; simulated YOLO metadata is available as described
+above.
+
+The simulator also supports `robot.motor_left` and `robot.motor_right` with
+`set_speed(0..100)`, `move('forward'/'reverse')`, `dir_control(direction)` and
+`stop()`. Independent speeds steer continuous motion; setting speed on stopped
+wheels does not start movement. `robot.stop()` stops both wheels. Percentage
+inputs approximate motion and are not a physical PWM calibration; bounded
+distance/angle commands retain their existing simulator drive speed.

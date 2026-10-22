@@ -1085,6 +1085,10 @@ export class SimEngine {
       log.physics('initializePhysics start')
       this.splash.setStatus('Initializing Rapier world...')
       this.worldHandle = await createWorld()
+      if (this.cancelled) {
+        this.worldHandle.dispose()
+        return
+      }
       const world = this.worldHandle.world
       log.physics('world initialized')
 
@@ -1099,6 +1103,7 @@ export class SimEngine {
         this.splash.setStatus('Loading custom stage...')
         this.currentStage = await loadStageEntries('custom_stage', this.config.initialStageConfig, this.sceneHandle!.scene, world, {
           resolveAssetUrl: this.resolveStageAssetUrl,
+          isCancelled: () => this.cancelled,
           camera: this.sceneHandle!.camera,
           gestureTarget: this.container,
         })
@@ -1107,11 +1112,17 @@ export class SimEngine {
         this.splash.setStatus(`Loading stage ${initialStage}...`)
         this.currentStage = await loadStage(initialStage, this.sceneHandle!.scene, world, {
           resolveAssetUrl: this.resolveStageAssetUrl,
+          isCancelled: () => this.cancelled,
           camera: this.sceneHandle!.camera,
           gestureTarget: this.container,
         })
       }
 
+      if (this.cancelled) {
+        this.currentStage.dispose()
+        this.currentStage = null
+        return
+      }
       this.currentStage.collidersGroup.visible = this.showColliders
       this.applyStartCamera()
       // Start behind the robot in third person; keep the stage's orbit view
@@ -1750,6 +1761,7 @@ export class SimEngine {
       this.activeStageAssetBaseUrl = undefined
       const loadedStage = await loadStage(next, this.sceneHandle.scene, this.worldHandle.world, {
         resolveAssetUrl: this.resolveStageAssetUrl,
+        isCancelled: () => this.cancelled,
         camera: this.sceneHandle.camera,
         gestureTarget: this.container,
       })
@@ -1774,6 +1786,7 @@ export class SimEngine {
       this.activeStageAssetBaseUrl = stageAssetBaseUrl
       const loadedStage = await loadStageEntries(name, entries, this.sceneHandle.scene, this.worldHandle.world, {
         resolveAssetUrl: this.resolveStageAssetUrl,
+        isCancelled: () => this.cancelled,
         camera: this.sceneHandle.camera,
         gestureTarget: this.container,
       })

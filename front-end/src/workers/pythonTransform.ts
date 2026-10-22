@@ -60,21 +60,32 @@ function functionNames(source: string, keyword: 'def' | 'async def'): string[] {
 
 /** Add await only to real calls in Python code, leaving strings, comments, and definitions intact. */
 export function addAwaitToFunctionCalls(source: string, names: string[]): string {
-  const callableNames = [...new Set(names)].filter((name) => identifier.test(name));
+  const callableNames = [...new Set(names)].filter((name) => identifier.test(name) || /^robot\.[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)?$/.test(name));
   if (!callableNames.length) return source;
   const mask = maskedPython(source);
-  const pattern = new RegExp(`\\b(?:${callableNames.join('|')})(?=\\s*\\()`, 'g');
-  const insertionPoints: number[] = [];
+  const pattern = new RegExp(`\\b(?:${callableNames.map((name) => name.split('.').join('\\.')).join('|')})(?=\\s*\\()`, 'g');
+  const insertions: { index: number; text: string }[] = [];
   for (const match of mask.matchAll(pattern)) {
     const index = match.index || 0;
     const prefix = mask.slice(Math.max(0, index - 24), index);
     const previous = mask.slice(0, index).match(/\S(?=\s*$)/)?.[0];
     if (previous === '.' || /(?:await|def|async\s+def)\s*$/.test(prefix)) continue;
-    insertionPoints.push(index);
+    // Await must finish before Python applies a subscript/attribute to the
+    // result; `await call()[key]` would subscript the coroutine instead.
+    const open = mask.indexOf('(', index + match[0].length);
+    let depth = 0;
+    let close = -1;
+    for (let cursor = open; cursor < mask.length; cursor += 1) {
+      if (mask[cursor] === '(') depth += 1;
+      if (mask[cursor] === ')' && --depth === 0) { close = cursor; break; }
+    }
+    const postfix = close >= 0 && /^[ \t]*[.\[]/.test(mask.slice(close + 1));
+    insertions.push({ index, text: postfix ? '(await ' : 'await ' });
+    if (postfix) insertions.push({ index: close + 1, text: ')' });
   }
   let transformed = source;
-  for (const index of insertionPoints.reverse()) {
-    transformed = `${transformed.slice(0, index)}await ${transformed.slice(index)}`;
+  for (const { index, text } of insertions.sort((a, b) => b.index - a.index)) {
+    transformed = `${transformed.slice(0, index)}${text}${transformed.slice(index)}`;
   }
   return transformed;
 }

@@ -10,6 +10,9 @@ type PythonExecutorProps = {
   moveStep: (distance: number) => Promise<void>;
   rotateStep: (angle: number) => Promise<void>;
   getdistance: () => number;
+  driveMotors?: (left: number, right: number) => void;
+  getCameraVision?: (mode: string, maxAge: number, blackThreshold?: number | null) => unknown;
+  getCameraDetections?: (maxAge: number) => unknown[];
   rgbsetcolor: (color: string) => void;
   buzzerBeep?: (frequencyHz: number, durationMs: number) => Promise<void>;
   getacceleration: (axis: string) => number[];
@@ -33,6 +36,9 @@ const PythonExecutor = ({
   moveStep,
   rotateStep,
   getdistance,
+  driveMotors,
+  getCameraDetections,
+  getCameraVision,
   rgbsetcolor,
   buzzerBeep,
   getacceleration,
@@ -75,6 +81,15 @@ const PythonExecutor = ({
       } else if (data.command === 'getdistance') {
         const distance = getdistance();
         worker.postMessage(JSON.stringify({ command: 'getdistance_done', distance }));
+      } else if (data.command === 'drive_motors') {
+        driveMotors?.(data.left, data.right);
+        worker.postMessage(JSON.stringify({ command: 'drive_motors_done' }));
+      } else if (data.command === 'get_camera_vision') {
+        const vision = getCameraVision?.(data.mode, data.maxAge, data.blackThreshold) ?? (data.mode === 'aruco' ? [] : null);
+        worker.postMessage(JSON.stringify({ command: 'get_camera_vision_done', vision }));
+      } else if (data.command === 'get_camera_detections') {
+        const detections = getCameraDetections?.(data.maxAge) || [];
+        worker.postMessage(JSON.stringify({ command: 'get_camera_detections_done', detections }));
       } else if (data.command === 'rgbsetcolor') {
         await rgbsetcolor(data.color);
         worker.postMessage(JSON.stringify({ command: 'rgbsetcolor_done' }));

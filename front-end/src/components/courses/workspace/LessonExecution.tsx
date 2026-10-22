@@ -1,3 +1,4 @@
+import { driveSimulatorMotors, get_camera_detections, get_camera_vision } from 'src/simulator-adapter/Simulator';
 import { forwardRef, useImperativeHandle, useRef } from 'react';
 import { Alert, Box, Button, Stack, Typography } from '@mui/material';
 import { IconCamera, IconPlayerPlay, IconPlayerStop, IconRefresh, IconTerminal2 } from '@tabler/icons-react';
@@ -70,7 +71,7 @@ const LessonExecution = forwardRef<LessonExecutionHandle, Props>(function Lesson
           <Box sx={{ mx: -1.5, mt: -1.5, mb: 1.25, px: 1.5, py: 1, bgcolor: 'grey.800', borderBottom: '1px solid', borderColor: 'grey.700' }}>
             <Typography component="p" sx={{ color: 'grey.400!important', fontStyle: 'italic' }}>{t('education.workspace.terminalReady')}</Typography>
           </Box>
-          <PythonExecutor pythonScript={code} sessionId={sessionId} onRunScript={(run) => { runRef.current = run; }} onStopScript={(stop) => { stopRef.current = stop; }} moveStep={moveStep} rotateStep={rotateStep} getdistance={get_distance} rgbsetcolor={rgb_set_color} buzzerBeep={buzzer_beep} getacceleration={get_acceleration} getgyroscope={get_gyroscope} getfloorsensor={get_floor_sensor} justRotate={just_rotate} justMove={just_move} stopMotion={stopMotion} getLightSensor={get_light_sensor} drawLine={drawLine} onExecutionEvent={onExecutionEvent} onExecutionComplete={() => { if (hasMission) programCompleted(); endSensorRun(); }} onExecutionError={(message) => { if (hasMission) programRuntimeError(message); }} />
+          <PythonExecutor pythonScript={code} sessionId={sessionId} onRunScript={(run) => { runRef.current = run; }} onStopScript={(stop) => { stopRef.current = stop; }} moveStep={moveStep} rotateStep={rotateStep} getdistance={get_distance} getCameraDetections={get_camera_detections} getCameraVision={get_camera_vision} driveMotors={driveSimulatorMotors} rgbsetcolor={rgb_set_color} buzzerBeep={buzzer_beep} getacceleration={get_acceleration} getgyroscope={get_gyroscope} getfloorsensor={get_floor_sensor} justRotate={just_rotate} justMove={just_move} stopMotion={stopMotion} getLightSensor={get_light_sensor} drawLine={drawLine} onExecutionEvent={onExecutionEvent} onExecutionComplete={() => { if (hasMission) programCompleted(); endSensorRun(); }} onExecutionError={(message) => { if (hasMission) programRuntimeError(message); }} />
         </Box>
       </Box>
     </Box>

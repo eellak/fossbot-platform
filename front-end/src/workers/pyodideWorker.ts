@@ -1,8 +1,11 @@
 import { transformPythonForSimulator } from './pythonTransform';
+import { SIMULATOR_BRIDGE_FUNCTIONS, SIMULATOR_ROBOT_METHODS, SIMULATOR_ROBOT_API } from './simulatorRobotApi';
 
 type WorkerResponse = {
   command: string;
   distance?: number;
+  detections?: unknown[];
+  vision?: unknown;
   acceleration?: number[];
   gyroscope?: number[];
   floorsensor?: boolean[];
@@ -34,7 +37,7 @@ onmessage = async function (event: MessageEvent) {
       `).catch(() => {});
     }
   } else if (data.command === 'move_done' || data.command === 'rotate_done' ||
-             data.command === 'getdistance_done' || data.command === 'rgbsetcolor_done' ||
+             data.command === 'get_camera_vision_done' || data.command === 'drive_motors_done' || data.command === 'get_camera_detections_done' || data.command === 'getdistance_done' || data.command === 'rgbsetcolor_done' ||
              data.command === 'getacceleration_done' || data.command === 'getgyroscope_done' ||
              data.command === 'getfloorsensor_done'|| data.command === 'just_rotate_done' || 
              data.command === 'just_move_done' || data.command === 'stop_motion_done' || 
@@ -85,7 +88,7 @@ const setUpPyodide = async () => {
     if (isStopped) return;
     if (isStopped) return;
     let dir_value = -1;
-    if (direction === 'backward') {
+    if (direction === 'backward' || direction === 'reverse') {
       dir_value = 1;
     }
     postMessage(JSON.stringify({ command: 'move', distance: dir_value * 0.4 }));
@@ -212,10 +215,31 @@ const setUpPyodide = async () => {
     return response.floorsensor;
   });
 
+  loadedPyodide.globals.set('_drive_motors', async (left: number, right: number) => {
+    if (isStopped) return;
+    postMessage(JSON.stringify({ command: 'drive_motors', left, right }));
+    await waitForAction();
+  });
+
+  loadedPyodide.globals.set('_get_camera_detections', async (maxAge: number) => {
+    if (isStopped) return '[]';
+    postMessage(JSON.stringify({ command: 'get_camera_detections', maxAge }));
+    const response = await waitForAction();
+    return JSON.stringify(response.detections || []);
+  });
+
+  loadedPyodide.globals.set('_get_camera_vision', async (mode: string, maxAge: number, blackThreshold: number | null) => {
+    if (isStopped) return mode === 'aruco' ? '[]' : 'null';
+    postMessage(JSON.stringify({ command: 'get_camera_vision', mode, maxAge, blackThreshold }));
+    const response = await waitForAction();
+    return JSON.stringify(response.vision ?? (mode === 'aruco' ? [] : null));
+  });
+
   const moduleResponse = await fetch('/fossbotlib/testlib.py'); 
   const moduleText = await moduleResponse.text();
   loadedPyodide.FS.writeFile('/home/pyodide/testlib.py', moduleText);
 
+  await loadedPyodide.runPythonAsync(SIMULATOR_ROBOT_API);
   return loadedPyodide;
 };
 
@@ -228,16 +252,10 @@ const runPythonCode = async (data: WorkerResponse) => {
     postMessage(JSON.stringify({ command: 'clear_results' }));
 
     
-    const functionsToAwait = [
-      'move_forward_distance', 'move_reverse_distance', 'rotate_90', 
-      'rotate_45', 'rotate_degrees', 'rotate_clockwise', 'rotate_counterclockwise', 
-      'get_obstacle_distance', 'get_distance', 'rgb_set_color', 'buzzer_beep', 'draw', 'just_move',
-      'just_rotate', 'stop', 'get_acceleration', 'get_light_sensor',
-      'get_gyroscope', 'get_floor_sensor', 'move_step'
-    ];
-
-
-    pythonScript = transformPythonForSimulator(pythonScript, functionsToAwait);
+    pythonScript = transformPythonForSimulator(pythonScript, [
+      ...SIMULATOR_BRIDGE_FUNCTIONS,
+      ...SIMULATOR_ROBOT_METHODS.map((name) => `robot.${name}`),
+    ]);
 
     try {
       await pyodide.runPythonAsync(pythonScript);
