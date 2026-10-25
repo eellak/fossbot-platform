@@ -21,6 +21,8 @@ const BuddyComparison = Loadable(lazy(() => import('../views/ui-comparison/Buddy
 const AdminComparison = Loadable(lazy(() => import('../views/ui-comparison/AdminComparison')));
 const AdminPanelPreview = Loadable(lazy(() => import('../views/ui-comparison/AdminPanelPreview')));
 const AdminPreviewFrame = Loadable(lazy(() => import('../views/ui-comparison/AdminPreviewFrame')));
+const WebsiteEditor = Loadable(lazy(() => import('../website/WebsiteEditor')));
+const WebsitePublic = Loadable(lazy(() => import('../website/WebsitePublic')));
 const LandingPage = Loadable(lazy(() => import('../views/landing-page/LandingPage')));
 const AccountsSettingsPage = Loadable(lazy(() => import('../views/account-settings-page/AccountsSettingsPage')));
 const StageBuilderPage = Loadable(lazy(() => import('../views/stage-builder-page/StageBuilderPage')));
@@ -281,6 +283,10 @@ const Router = [
       },
     ],
   },
+  { path: '/website-admin', element: <PrivateRoute />, children: [{ element: <FullLayout />, children: [{ index: true, element: <WebsiteEditor /> }] }] },
+  { path: '/pages/:locale/:slug', element: <WebsitePublic /> },
+  { path: '/news/:locale/:slug', element: <WebsitePublic /> },
+  { path: '/news', element: <WebsitePublic news /> },
   {
     path: '/admin-panel',
     title: 'Admin Panel',

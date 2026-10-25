@@ -1,4 +1,7 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+import { cms, contentLocale, type PublicEntry } from 'src/website/api';
+import WebsiteContent from 'src/website/WebsiteContent';
+import { WebsiteNavigation } from 'src/website/WebsitePublic';
 import { Box } from '@mui/material';
 import PageContainer from 'src/components/container/PageContainer';
 import Banner from 'src/components/landingpage/banner/Banner';
@@ -10,16 +13,21 @@ import ClosingCta from 'src/components/landingpage/cta/ClosingCta';
 import { useTranslation } from 'react-i18next';
 
 const Landingpage = () => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const [content, setContent] = useState<PublicEntry | null>(null);
+  useEffect(() => { let active = true; setContent(null); cms<PublicEntry>(`/public/home/${contentLocale(i18n.language)}`).then(data => { if (active) setContent(data); }).catch(() => { if (active) setContent(null); }); return () => { active = false; }; }, [i18n.language]);
 
   return (
-    <PageContainer title={t('landing-title.title')} description={t('landing-title.description')}>
+    <PageContainer title={content?.title || t('landing-title.title')} description={content?.description || t('landing-title.description')}>
       <LpHeader />
+      <WebsiteNavigation />
       <Box component="main">
+        {content ? <WebsiteContent content={content} /> : <>
         <Banner />
         <WhatIsFossbot />
         <PlatformCard />
         <ClosingCta />
+        </>}
       </Box>
       <Footer />
     </PageContainer>

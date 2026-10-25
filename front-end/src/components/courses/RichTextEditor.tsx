@@ -9,6 +9,7 @@ import type { TiptapNode } from 'src/courses/types';
 import { lessonProseMeasure } from './courseContentStyles';
 
 interface RichTextEditorProps {
+  disabled?: boolean;
   value: TiptapNode;
   onChange: (value: TiptapNode) => void;
   labels: { content: string; bold: string; italic: string; code: string; heading: string; bullets: string; numbered: string };
@@ -31,7 +32,7 @@ function markdownPaste(editor: Editor, event: ClipboardEvent): boolean {
   return editor.chain().focus().insertContent(document.content).run();
 }
 
-export default function RichTextEditor({ value, onChange, labels }: RichTextEditorProps) {
+export default function RichTextEditor({ value, onChange, labels, disabled = false }: RichTextEditorProps) {
   const pasteHandler = useRef<(event: ClipboardEvent) => boolean>(() => false);
   const editor = useEditor({
     extensions: [StarterKit],
@@ -42,6 +43,8 @@ export default function RichTextEditor({ value, onChange, labels }: RichTextEdit
     },
     onUpdate: ({ editor: current }) => onChange(current.getJSON() as TiptapNode),
   });
+
+  useEffect(() => { editor?.setEditable(!disabled, false); }, [editor, disabled]);
 
   useEffect(() => {
     if (!editor) return;
@@ -69,7 +72,7 @@ export default function RichTextEditor({ value, onChange, labels }: RichTextEdit
       <Stack direction="row" spacing={0.25} sx={{ p: 0.75, borderBottom: 1, borderColor: 'divider', bgcolor: 'action.hover' }}>
         {tools.map((tool) => (
           <Tooltip title={tool.label} key={tool.label}>
-            <IconButton size="small" color={tool.active ? 'primary' : 'default'} onClick={tool.action} aria-label={tool.label} aria-pressed={tool.active}>
+            <IconButton disabled={disabled} size="small" color={tool.active ? 'primary' : 'default'} onClick={tool.action} aria-label={tool.label} aria-pressed={tool.active}>
               {tool.icon}
             </IconButton>
           </Tooltip>

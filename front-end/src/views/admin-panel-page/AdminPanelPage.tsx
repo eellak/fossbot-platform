@@ -1,4 +1,4 @@
-import { Stack } from '@mui/material';
+import { Button, Stack } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import UsersCard from 'src/components/admin-panel/UsersCard';
 import PageContainer from 'src/components/container/PageContainer';
@@ -10,6 +10,7 @@ const AdminPanelPage = () => {
         <PageContainer title={t('admin-panel.title')} description={t('admin-panel.usageDescription')}>
             <Stack spacing={3}>
                 <PageHeader title={t('admin-panel.title')} description={t('admin-panel.usageDescription')} />
+                <Button variant="outlined" href="/website-admin" sx={{ alignSelf: 'flex-start' }}>{t('website.title')}</Button>
                 <UsersCard />
             </Stack>
         </PageContainer>

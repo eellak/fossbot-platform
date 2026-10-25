@@ -784,3 +784,54 @@ class ClassChallenge(Base):
 
 # Import compatibility for code that has not yet adopted canonical product naming.
 Curriculum = Course
+
+
+# Website content is additive and independent of education/account roles.
+class WebsitePermission(Base):
+    __tablename__ = 'website_permissions'
+    user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), primary_key=True)
+    role = Column(String(24), nullable=False)
+
+
+class WebsiteEntry(Base):
+    __tablename__ = 'website_entries'
+    id = Column(Integer, primary_key=True)
+    key = Column(String(80), unique=True, nullable=False)
+    kind = Column(String(16), nullable=False)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+
+
+class WebsiteTranslation(Base):
+    __tablename__ = 'website_translations'
+    __table_args__ = (UniqueConstraint('entry_id', 'locale'), UniqueConstraint('locale', 'slug'),
+                      UniqueConstraint('locale', 'published_slug'))
+    id = Column(Integer, primary_key=True)
+    entry_id = Column(Integer, ForeignKey('website_entries.id', ondelete='CASCADE'), nullable=False)
+    locale = Column(String(16), nullable=False)
+    slug = Column(String(160), nullable=False)
+    title = Column(String(200), nullable=False)
+    description = Column(String(500), default='', nullable=False)
+    sections = Column(JSON_DOCUMENT, default=list, nullable=False)
+    revision = Column(Integer, default=1, nullable=False)
+    published = Column(JSON_DOCUMENT, nullable=True)
+    published_slug = Column(String(160), nullable=True)
+    published_at = Column(DateTime, nullable=True)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+
+
+class WebsiteRevision(Base):
+    __tablename__ = 'website_revisions'
+    id = Column(Integer, primary_key=True)
+    translation_id = Column(Integer, ForeignKey('website_translations.id', ondelete='CASCADE'), nullable=False)
+    revision = Column(Integer, nullable=False)
+    snapshot = Column(JSON_DOCUMENT, nullable=False)
+    actor_id = Column(Integer, ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+
+
+class WebsiteMedia(Base):
+    __tablename__ = 'website_media'
+    id = Column(Integer, primary_key=True)
+    filename = Column(String(200), nullable=False)
+    content_type = Column(String(40), nullable=False)
+    data = Column(LargeBinary, nullable=False)

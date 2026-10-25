@@ -1,4 +1,6 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+import { IconWorld } from '@tabler/icons-react';
+import { cms } from 'src/website/api';
 import Menuitems from './MenuItems';
 import NavItem from './NavItem';
 import NavCollapse from './NavCollapse';
@@ -25,10 +27,12 @@ const SidebarItems = ({ previewAppearance = true }: { previewAppearance?: boolea
   const closeMobileSidebar = () => {
     if (!lgUp && customizer.isMobileSidebar) dispatch(toggleMobileSidebar());
   };
-  const { user } = useAuth(); // Access user info
+  const { user, token } = useAuth();
+  const [websiteAccess, setWebsiteAccess] = useState(false);
+  useEffect(() => { let active = true; setWebsiteAccess(false); if (token) cms<{role:string}>('/access', token).then(data => { if (active) setWebsiteAccess(data.role !== 'none'); }).catch(() => {}); return () => { active = false; }; }, [token]); // Access user info
 
   const hasBetaAccess = user?.beta_tester || user?.role === UserRole.ADMIN;
-  const visibleItems = Menuitems.filter((item) => !item.allowedRoles || (user && item.allowedRoles.includes(user.role))).filter((item) => !item.betaOnly || hasBetaAccess);
+  const visibleItems = [...Menuitems, ...(websiteAccess ? [{ id: 'website-content', title: 'website.title', icon: IconWorld, href: '/website-admin' }] : [])].filter((item) => !item.allowedRoles || (user && item.allowedRoles.includes(user.role))).filter((item) => !item.betaOnly || hasBetaAccess);
   const hasEducationItems = visibleItems.some((item) => item.href === '/courses' || item.href === '/teach/courses');
   let modifiedMenuItems = visibleItems.filter((item) => item.subheader !== 'menu.educationalMaterial' || hasEducationItems);
   if (previewAppearance) {
