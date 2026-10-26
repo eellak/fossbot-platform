@@ -1,9 +1,12 @@
 import { backendUrl } from 'src/utils/backendUrl';
 import type { TiptapNode } from 'src/courses/types';
-export type Section = { type: 'banner'|'text'|'image'|'cards'|'button'; title?: string; text?: string; content?: TiptapNode; image?: string; alt?: string; href?: string; buttonLabel?: string; cards?: {title:string;text:string;href?:string}[] };
+export type WebsiteMenuItem = {title:string;href:string;icon?:string;linkType?:'cms'|'url'};
+export type WebsiteCard = {title:string;text:string;href?:string;role?:string;organization?:string;image?:string;alt?:string};
+export type Section = { type: 'banner'|'text'|'image'|'cards'|'button'|'landing'|'feature'|'people'|'testimonials'|'latest-posts'|'projects'; group?: string; layout?: 'image-left'|'image-right'; values?: Record<string,string>; menu?: WebsiteMenuItem[]; title?: string; text?: string; fundingText?: string; content?: TiptapNode; image?: string; alt?: string; href?: string; buttonLabel?: string; cards?: WebsiteCard[] };
 export type Translation = { locale: string; slug: string; title: string; description: string; sections: Section[]; revision: number; published?: Translation | null; publishedAt?: string | null };
 export type Entry = { key: string; kind: 'home'|'page'|'post'; translations: Translation[] };
 export type PublicEntry = Translation & { key: string; kind: Entry['kind'] };
+export type PostSummary = Pick<PublicEntry,'key'|'kind'|'locale'|'title'|'description'|'slug'|'publishedAt'> & {thumbnail:string|null};
 export type Media = { id:number; filename:string; url:string };
 export type WebsiteRole = 'admin'|'editor'|'contributor'|'none';
 export async function cms<T>(path: string, token = '', method = 'GET', body?: unknown): Promise<T> {

@@ -43,6 +43,11 @@ def migrate_schema():
     inspector = inspect(engine)
     table_columns = {t: {c['name'] for c in inspector.get_columns(t)} for t in inspector.get_table_names()}
 
+    for table in ('website_entries', 'website_media'):
+        if table in table_columns and 'deleted_at' not in table_columns[table]:
+            with engine.begin() as conn:
+                conn.execute(text(f'ALTER TABLE {table} ADD COLUMN deleted_at TIMESTAMP'))
+
     if 'users' in table_columns:
         cols = table_columns['users']
         with engine.begin() as conn:
@@ -798,6 +803,7 @@ class WebsiteEntry(Base):
     id = Column(Integer, primary_key=True)
     key = Column(String(80), unique=True, nullable=False)
     kind = Column(String(16), nullable=False)
+    deleted_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
 
 
@@ -831,7 +837,22 @@ class WebsiteRevision(Base):
 
 class WebsiteMedia(Base):
     __tablename__ = 'website_media'
+    deleted_at = Column(DateTime, nullable=True)
     id = Column(Integer, primary_key=True)
     filename = Column(String(200), nullable=False)
     content_type = Column(String(40), nullable=False)
     data = Column(LargeBinary, nullable=False)
+
+
+class WebsiteApiToken(Base):
+    __tablename__ = 'website_api_tokens'
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    name = Column(String(100), nullable=False)
+    token_hash = Column(String(64), unique=True, index=True, nullable=False)
+    prefix = Column(String(16), nullable=False)
+    allow_publish = Column(Boolean, default=False, nullable=False)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+    last_used_at = Column(DateTime, nullable=True)
+    revoked_at = Column(DateTime, nullable=True)

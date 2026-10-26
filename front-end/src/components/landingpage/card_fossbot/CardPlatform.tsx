@@ -1,25 +1,17 @@
 import React from 'react';
 import { Box, Container, Grid, Typography } from '@mui/material';
-import { useTranslation } from 'react-i18next';
+import { useLanding, landingImage } from 'src/website/LandingContext';
 
 const featureStories = ['programming', 'stages', 'learning', 'buddy'] as const;
-const storyMedia: Record<(typeof featureStories)[number], string> = {
-  programming: 'python-editor',
-  stages: 'stage-builder',
-  learning: 'student-lesson',
-  buddy: 'buddy-panel',
-};
-
 const StoryScreenshot = ({ story }: { story: (typeof featureStories)[number] }) => {
-  const { t } = useTranslation();
+  const { t, value } = useLanding('features');
   const label = t(`landing_features.stories.${story}.screenshot`);
-  const imageName = storyMedia[story];
 
   return (
     <Box component="figure" sx={{ m: 0, width: '100%' }}>
       <Box
         component="img"
-        src={`/landing-media/candidates/${imageName}-720p.png`}
+        src={landingImage(value('image:'+story))}
         width={1280}
         height={720}
         alt={label}
@@ -42,13 +34,13 @@ const StoryScreenshot = ({ story }: { story: (typeof featureStories)[number] }) 
   );
 };
 
-const PlatformCard = () => {
-  const { t } = useTranslation();
+const PlatformCard = ({sectionId='platform-features'}:{sectionId?:string}) => {
+  const { t, value } = useLanding('features');
 
   return (
     <Box
       component="section"
-      id="platform-features"
+      id={sectionId}
       sx={{
         bgcolor: 'background.paper',
         pb: { xs: 8, md: 10 },

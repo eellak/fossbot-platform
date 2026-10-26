@@ -1,14 +1,14 @@
 import React from 'react';
 import { Box, Button, Stack, Typography } from '@mui/material';
-import { useTranslation } from 'react-i18next';
+import { useLanding, landingImage } from 'src/website/LandingContext';
 
-const BannerContent = () => {
-  const { t } = useTranslation();
+const BannerContent = ({heading='h1'}:{heading?:'h1'|'h2'}) => {
+  const { t, value } = useLanding('hero');
 
   return (
     <Box>
       <Typography
-        component="h1"
+        component={heading}
         sx={{
           fontSize: { xs: '2.5rem', md: '3.375rem' },
           fontWeight: 900,
@@ -34,7 +34,7 @@ const BannerContent = () => {
       </Typography>
 
       <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mt: 4 }}>
-        <Button variant="contained" color="primary" href="/dashboard" sx={{ px: 6, py: 1.5, fontSize: '1rem' }}>
+        <Button variant="contained" color="primary" href={value('href:hero')} sx={{ px: 6, py: 1.5, fontSize: '1rem' }}>
           {t('banner-content.tryItNow')}
         </Button>
       </Stack>

@@ -191,5 +191,16 @@ jobs:
               exit 1
             fi
 
+            # CMS smoke checks exercise additive schema bootstrapping through nginx.
+            sudo docker exec fsbt-front nginx -t
+            curl --fail --silent --insecure --resolve fossbot.gr:443:127.0.0.1 \
+              'https://fossbot.gr/api/website/public/posts/latest?locale=en' >/dev/null
+            cms_status=$(curl --silent --insecure --resolve fossbot.gr:443:127.0.0.1 \
+              --output /dev/null --write-out '%{http_code}' https://fossbot.gr/api/website/entries)
+            if [[ "$cms_status" != 401 ]]; then
+              echo "CMS editing endpoint did not require authentication (HTTP $cms_status)." >&2
+              exit 1
+            fi
+
             sudo docker compose -f docker-compose-production.yml ps
           EOF

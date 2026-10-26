@@ -1,0 +1,24 @@
+{
+  "type": "projects",
+  "title": "FOSSBot in European projects",
+  "text": "FOSSBot supports teaching and learning through European Erasmus+ collaborations.",
+  "cards": [
+    {
+      "title": "S.T.E.P.S.",
+      "text": "An Erasmus+ project broadening access to STEM and educational robotics through the open-source FOSSBot robot. It combines affordable hardware, teacher training and free learning resources for secondary education.",
+      "href": "https://stepsproject.eu/",
+      "image": "/landing-media/projects/steps-logo.png",
+      "alt": "S.T.E.P.S. project logo"
+    },
+    {
+      "title": "FOSSBot4AI",
+      "text": "An Erasmus+ project bringing hands-on artificial intelligence and robotics to higher education. It combines the open-source FOSSBot robot, practical learning activities and a virtual simulator to help students explore AI through projects.",
+      "href": "https://fossbot4ai.eu/",
+      "image": "/landing-media/projects/fossbot4ai-logo.png",
+      "alt": "FOSSBot4AI project logo"
+    }
+  ],
+  "image": "/landing-media/projects/eu-co-funded.png",
+  "alt": "Co-funded by the European Union",
+  "fundingText": "These projects are co-funded by the European Union through Erasmus+."
+}

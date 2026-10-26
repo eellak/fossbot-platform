@@ -1,0 +1,183 @@
+{
+  "locale": "en",
+  "slug": "about-us",
+  "title": "About us",
+  "description": "Meet the people, purpose and open technologies behind FOSSBot: an educational robot and browser-based platform developed through Harokopio University and GFOSS.",
+  "sections": [
+    {
+      "type": "banner",
+      "title": "Open robotics, built for learning",
+      "text": "FOSSBot brings together an educational robot and an open programming platform. Developed through collaboration between Harokopio University of Athens and GFOSS, it gives learners opportunities to build, program, experiment and understand the technology they use. Its software and robot designs are available for others to study, adapt and improve.",
+      "buttonLabel": "Explore the platform",
+      "href": "/dashboard"
+    },
+    {
+      "type": "text",
+      "title": "Our purpose",
+      "content": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "paragraph",
+            "content": [
+              {
+                "type": "text",
+                "text": "We want teachers and students to explore robotics through hands-on activities, creativity and experimentation. Affordable electronics, printable parts and open designs make it possible to repair the robot, extend its capabilities and adapt it to different learning activities."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "type": "text",
+      "title": "Our story",
+      "content": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "paragraph",
+            "content": [
+              {
+                "type": "text",
+                "text": "FOSSBot grew from the 2019 Google Summer of Code project “A DIY robot kit for educators”, which produced the Proteas robot. The FOSSBot design was subsequently documented in a 2022 research publication by Christos Chronis and Iraklis Varlamis."
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "content": [
+              {
+                "type": "text",
+                "text": "Today, the platform connects that work with browser-based Python and Blockly programming, a 3D simulator and physical robot control."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "type": "feature",
+      "title": "From an idea to a working robot",
+      "text": "Learners can begin with visual blocks, develop their ideas in Python, and explore movement and sensors in a virtual environment or with a physical FOSSBot. The robot’s open design also makes building, repairing and adapting it part of the learning process.",
+      "image": "/landing-media/cms/robot.png",
+      "alt": "The FOSSBot educational robot with its printable body and LEGO-compatible top.",
+      "layout": "image-left",
+      "cards": [
+        {
+          "title": "",
+          "text": "Build and understand the robot’s hardware."
+        },
+        {
+          "title": "",
+          "text": "Experiment with code and simulation."
+        },
+        {
+          "title": "",
+          "text": "Create activities around real-world questions."
+        }
+      ]
+    },
+    {
+      "type": "people",
+      "title": "People behind FOSSBot",
+      "cards": [
+        {
+          "title": "Christos Chronis",
+          "text": "Co-creator of FOSSBot, contributing to its concept and software development.",
+          "role": "",
+          "organization": "",
+          "image": "",
+          "alt": ""
+        },
+        {
+          "title": "Iraklis Varlamis",
+          "text": "Co-creator and mentor, contributing scientific supervision and project direction.",
+          "role": "",
+          "organization": "",
+          "image": "",
+          "alt": ""
+        },
+        {
+          "title": "Eleftheria Papageorgiou",
+          "text": "Member of the FOSSBot hardware/software development team.",
+          "role": "",
+          "organization": "",
+          "image": "",
+          "alt": ""
+        }
+      ]
+    },
+    {
+      "type": "text",
+      "title": "Contributors and acknowledgements",
+      "content": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "paragraph",
+            "content": [
+              {
+                "type": "text",
+                "text": "FOSSBot has grown through contributions from students, researchers, developers and the open technologies community. The project repository credits Thanasis Apostolidis, Danai Brilli and Manousos Linardakis among its contributors."
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "content": [
+              {
+                "type": "text",
+                "text": "The original research paper also acknowledges Dimitris Charitos, Giorgos Kazazis, George Yiannakoulias and GFOSS supporter Thodoros Karounos. These credits recognise contributions to the project’s development and history."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "type": "cards",
+      "title": "Project partners",
+      "cards": [
+        {
+          "title": "Harokopio University of Athens",
+          "text": "Academic collaboration, research and development supporting open educational robotics.",
+          "href": "https://www.hua.gr/index.php/en/"
+        },
+        {
+          "title": "GFOSS — Open Technologies Alliance",
+          "text": "The open technologies community collaborating in the development of FOSSBot.",
+          "href": "https://gfoss.eu/"
+        }
+      ]
+    },
+    {
+      "type": "cards",
+      "title": "Explore the project and its research",
+      "cards": [
+        {
+          "title": "FOSSBot project",
+          "text": "Explore the robot, open designs, development credits and contribution opportunities.",
+          "href": "https://github.com/eellak/fossbot"
+        },
+        {
+          "title": "FOSSBot Platform",
+          "text": "Explore the browser-based platform and its source code.",
+          "href": "https://github.com/eellak/fossbot-platform"
+        },
+        {
+          "title": "Research publication",
+          "text": "Chronis, C. and Varlamis, I. (2022). FOSSBot: An Open Source and Open Design Educational Robot. Electronics, 11(16), 2606.",
+          "href": "https://doi.org/10.3390/electronics11162606"
+        }
+      ]
+    },
+    {
+      "type": "banner",
+      "title": "Join the community",
+      "text": "Teachers, students, researchers and makers can help FOSSBot grow by sharing activities, improving documentation, reporting problems and contributing code or robot designs.",
+      "buttonLabel": "Contribute to FOSSBot",
+      "href": "https://github.com/eellak/fossbot"
+    }
+  ]
+}

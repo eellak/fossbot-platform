@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { cms, contentLocale, type PublicEntry } from 'src/website/api';
 import WebsiteContent from 'src/website/WebsiteContent';
-import { WebsiteNavigation } from 'src/website/WebsitePublic';
+import { LandingProvider } from 'src/website/LandingContext';
 import { Box } from '@mui/material';
 import PageContainer from 'src/components/container/PageContainer';
 import Banner from 'src/components/landingpage/banner/Banner';
@@ -18,11 +18,10 @@ const Landingpage = () => {
   useEffect(() => { let active = true; setContent(null); cms<PublicEntry>(`/public/home/${contentLocale(i18n.language)}`).then(data => { if (active) setContent(data); }).catch(() => { if (active) setContent(null); }); return () => { active = false; }; }, [i18n.language]);
 
   return (
-    <PageContainer title={content?.title || t('landing-title.title')} description={content?.description || t('landing-title.description')}>
+    <LandingProvider sections={content?.sections||[]}><PageContainer title={content?.title || t('landing-title.title')} description={content?.description || t('landing-title.description')}>
       <LpHeader />
-      <WebsiteNavigation />
       <Box component="main">
-        {content ? <WebsiteContent content={content} /> : <>
+        {content ? <WebsiteContent content={content} home/> : <>
         <Banner />
         <WhatIsFossbot />
         <PlatformCard />
@@ -30,7 +29,7 @@ const Landingpage = () => {
         </>}
       </Box>
       <Footer />
-    </PageContainer>
+    </PageContainer></LandingProvider>
   );
 };
 

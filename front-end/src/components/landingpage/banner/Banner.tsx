@@ -1,9 +1,7 @@
 import React from 'react';
 import { Box, Container, Grid, styled } from '@mui/material';
+import { useLanding, landingImage } from 'src/website/LandingContext';
 import BannerContent from './BannerContent';
-import bot from 'src/assets/images/fossbot/logos-main/bot.png';
-import gfoss from 'src/assets/images/fossbot/logos-main/gfoss.png';
-import hua from 'src/assets/images/fossbot/logos-main/hua.png';
 
 const logoWallFade = 'linear-gradient(to bottom, transparent 0%, #000 14%, #000 86%, transparent 100%)';
 
@@ -22,15 +20,16 @@ const LogoWallTrack = styled(Box)(() => ({
   },
 }));
 
-const logoSet = Array.from({ length: 10 }, () => [hua, bot, gfoss]).flat();
-const logoWall = [...logoSet, ...logoSet];
-
-const Banner = () => (
+const Banner = ({heading='h1'}:{heading?:'h1'|'h2'}) => {
+  const {value}=useLanding('hero');
+  const logoSet=Array.from({length:10},()=>['hua','bot','gfoss'].map(key=>landingImage(value('image:'+key)))).flat();
+  const logoWall=[...logoSet,...logoSet];
+  return (
   <Box component="section" sx={{ overflow: 'hidden', mb: { xs: 8, md: 10 } }}>
     <Container maxWidth="lg">
       <Grid container spacing={3} alignItems="center">
         <Grid item xs={12} lg={6}>
-          <BannerContent />
+          <BannerContent heading={heading}/>
         </Grid>
         <Grid item xs={12} lg={6} sx={{ display: { xs: 'none', lg: 'block' } }}>
           <Box
@@ -70,5 +69,6 @@ const Banner = () => (
     </Container>
   </Box>
 );
+};
 
 export default Banner;

@@ -1,8 +1,7 @@
 import React from 'react';
 import { Box, Button, Chip, Container, Grid, Stack, Typography } from '@mui/material';
 import { IconBrandGithub } from '@tabler/icons-react';
-import { useTranslation } from 'react-i18next';
-import fossbotImg from 'src/assets/images/landingpage/background/fossbot-front.png';
+import { useLanding, landingImage } from 'src/website/LandingContext';
 
 const robotFacts = ['fact2', 'fact3', 'fact4', 'fact5'] as const;
 const teachingCapabilities = ['mode1', 'mode2', 'mode3', 'mode4'] as const;
@@ -14,13 +13,13 @@ const teachingCapabilities = ['mode1', 'mode2', 'mode3', 'mode4'] as const;
  * The section is one editorial grid: primary copy sits in the left column and
  * the summary, product render, and way-to-work list support it from the right.
  */
-const WhatIsFossbot = () => {
-  const { t } = useTranslation();
+const WhatIsFossbot = ({sectionId='about-fossbot'}:{sectionId?:string}) => {
+  const { t, value } = useLanding('about');
 
   return (
     <Box
       component="section"
-      id="about-fossbot"
+      id={sectionId}
       sx={{
         bgcolor: 'background.paper',
         pb: { xs: 8, md: 10 },
@@ -82,7 +81,7 @@ const WhatIsFossbot = () => {
             >
               <Box
                 component="img"
-                src={fossbotImg}
+                src={landingImage(value('image:robot'))}
                 alt={t('landing_about.robotImageAlt')}
                 sx={{
                   aspectRatio: '1.7',
@@ -166,7 +165,7 @@ const WhatIsFossbot = () => {
           <Button
             variant="outlined"
             color="primary"
-            href="https://github.com/eellak/fossbot"
+            href={value('href:open')}
             endIcon={<IconBrandGithub size={18} />}
           >
             {t('landing_about.openLink')}

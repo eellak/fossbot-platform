@@ -11,6 +11,7 @@ const AdminPanelPage = () => {
             <Stack spacing={3}>
                 <PageHeader title={t('admin-panel.title')} description={t('admin-panel.usageDescription')} />
                 <Button variant="outlined" href="/website-admin" sx={{ alignSelf: 'flex-start' }}>{t('website.title')}</Button>
+                <Button variant="outlined" href="/website-admin?tab=api" sx={{ alignSelf: 'flex-start' }}>{t('website.apiTokens.title')}</Button>
                 <UsersCard />
             </Stack>
         </PageContainer>

@@ -1,4 +1,5 @@
- 
+
+import { PublishedLandingProvider } from 'src/website/LandingContext';
 import React, { useMemo } from 'react';
 import {
   AppBar,
@@ -85,11 +86,11 @@ const LpHeader = () => {
             boxShadow: (theme) => theme.shadows[8],
           },
         }}
-      > 
+      >
         <MobileSidebar />
       </Drawer>
     </AppBarStyled>
   );
 };
 
-export default LpHeader;
+export default function Header() {return <PublishedLandingProvider><LpHeader/></PublishedLandingProvider>;}

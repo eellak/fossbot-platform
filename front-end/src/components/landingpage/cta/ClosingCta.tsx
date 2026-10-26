@@ -1,10 +1,10 @@
 import React from 'react';
 import { Box, Button, Container, Stack, Typography } from '@mui/material';
 import { IconBrandGithub } from '@tabler/icons-react';
-import { useTranslation } from 'react-i18next';
+import { useLanding, landingImage } from 'src/website/LandingContext';
 
 const ClosingCta = () => {
-  const { t } = useTranslation();
+  const { t, value } = useLanding('cta');
 
   return (
     <Box component="section" sx={{ bgcolor: 'background.paper', pb: { xs: 8, md: 10 } }}>
@@ -36,13 +36,13 @@ const ClosingCta = () => {
             spacing={1.5}
             sx={{ justifyContent: 'center', mt: 4 }}
           >
-            <Button variant="contained" color="primary" href="/dashboard">
+            <Button variant="contained" color="primary" href={value('href:cta')}>
               {t('banner-content.tryItNow')}
             </Button>
             <Button
               variant="outlined"
               color="primary"
-              href="https://github.com/eellak/fossbot"
+              href={value('href:github')}
               endIcon={<IconBrandGithub size={18} />}
             >
               {t('github')}

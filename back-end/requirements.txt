@@ -12,3 +12,5 @@ cryptography==42.0.8
 psycopg2==2.9.9
 httpx==0.26.0
 pytest==8.2.2
+
+Pillow==11.3.0
