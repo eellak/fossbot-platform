@@ -15,7 +15,7 @@ export const SIMULATOR_ROBOT_METHODS = [
   'rotate_clockwise_90', 'rotate_counterclockwise_90', 'check_for_obstacle',
 ];
 
-const BRIDGE_PARAMETERS: Record<string, string> = {
+export const BRIDGE_PARAMETERS: Record<string, string> = {
   move_forward_distance: 'distance', move_reverse_distance: 'distance', move_step: 'direction',
   rotate_90: 'direction', rotate_45: 'direction', rotate_degrees: 'angle',
   rgb_set_color: 'color', buzzer_beep: 'frequencyHz, durationMs', draw: 'status',

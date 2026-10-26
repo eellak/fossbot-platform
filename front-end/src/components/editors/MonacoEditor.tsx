@@ -4,6 +4,7 @@ import { editor } from 'monaco-editor';
 import { alpha, useTheme } from '@mui/material/styles';
 import { AppState } from 'src/store/Store';
 import { useSelector } from 'src/store/Store';
+import { registerPythonCompletion } from './pythonCompletion';
 
 type MonacoEditorProps = {
   code: string;
@@ -46,6 +47,7 @@ const MonacoEditorComponent = forwardRef<MonacoEditorHandle, MonacoEditorProps>(
     };
     monaco.editor.defineTheme('fossbot-light', { base: 'vs', inherit: true, rules: [], colors });
     monaco.editor.defineTheme('fossbot-dark', { base: 'vs-dark', inherit: true, rules: [], colors });
+    registerPythonCompletion(monaco);
   }, [scrollThumb, scrollThumbHover, scrollThumbActive]);
 
   const handleEditorDidMount = (editor: editor.IStandaloneCodeEditor) => {

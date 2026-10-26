@@ -1,6 +1,6 @@
 const identifier = /^[A-Za-z_]\w*$/;
 
-function maskedPython(source: string): string {
+export function maskedPython(source: string): string {
   const chars = source.split('');
   const masked = [...chars];
   let quote = '';
