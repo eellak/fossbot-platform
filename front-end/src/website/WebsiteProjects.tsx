@@ -2,11 +2,13 @@ import { Box, Card, CardContent, Grid, Link, Stack, Typography } from '@mui/mate
 import { IconWorld } from '@tabler/icons-react';
 import { useTranslation } from 'react-i18next';
 import { landingImage } from './LandingContext';
+import WebsiteSectionHeading from './WebsiteSectionHeading';
 import type { Section } from './api';
 
 export default function WebsiteProjects({section,safeHref}:{section:Section;safeHref:(href?:string)=>string|undefined}) {
  const {t}=useTranslation();
  return <Stack spacing={3}>
+  {section.title&&<WebsiteSectionHeading>{section.title}</WebsiteSectionHeading>}
   {section.text&&<Typography sx={{whiteSpace:'pre-line'}}>{section.text}</Typography>}
   <Grid container spacing={3}>{(section.cards||[]).map((project,index)=><Grid item key={index} xs={12} sm={6} md={(section.cards||[]).length===2?6:4}>
    <Card variant="outlined" sx={{height:'100%'}}>

@@ -26,7 +26,7 @@ export default function WebsiteContent({ content, home=false, articleDialog=fals
           <Typography variant="h2" component="h2">{section.title}</Typography><Typography sx={{mt:2,whiteSpace:'pre-line'}}>{section.text}</Typography>
           {websiteHref(section.href) && <Button variant="contained" href={websiteHref(section.href)} sx={{mt:2}}>{section.buttonLabel || section.title}</Button>}
         </Box> : <>
-          {section.title && <Typography variant="h4" component="h2" sx={{mb:2}}>{section.title}</Typography>}
+          {section.title && section.type!=='projects' && <Typography variant="h4" component="h2" sx={{mb:2}}>{section.title}</Typography>}
           {section.type==='projects'&&<WebsiteProjects section={section} safeHref={websiteHref}/>}
           {(section.type==='people'||section.type==='testimonials')&&<WebsiteProfileCards section={section} safeHref={websiteHref}/>}
           {section.type === 'feature' && <Grid container spacing={3} alignItems="center">

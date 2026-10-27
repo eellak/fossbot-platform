@@ -1,3 +1,4 @@
+import WebsiteSectionHeading from 'src/website/WebsiteSectionHeading';
 import React from 'react';
 import { Box, Button, Chip, Container, Grid, Stack, Typography } from '@mui/material';
 import { IconBrandGithub } from '@tabler/icons-react';
@@ -28,18 +29,7 @@ const WhatIsFossbot = ({sectionId='about-fossbot'}:{sectionId?:string}) => {
     >
       <Container maxWidth="lg">
         <Box sx={{ mb: { xs: 6, md: 8 } }}>
-          <Typography
-            component="h2"
-            sx={{
-              fontSize: { xs: '2rem', sm: '2.75rem', md: '3.25rem' },
-              fontWeight: 300,
-              lineHeight: 1.15,
-              color: 'primary.main',
-              textWrap: 'balance',
-            }}
-          >
-            {t('landing_about.title')}
-          </Typography>
+          <WebsiteSectionHeading>{t('landing_about.title')}</WebsiteSectionHeading>
           <Typography
             variant="body1"
             color="text.secondary"

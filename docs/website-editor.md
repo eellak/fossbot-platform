@@ -227,6 +227,14 @@ Canonical STEPS/FOSSBot4AI descriptions in English and Greek and official asset
 sources are recorded in `docs/website-content/projects-sources.md`. Their cards
 are saved in the local homepage drafts; publishing remains a separate CMS action.
 
+Projects can also be reused for a multi-year initiative such as Google Summer of
+Code: duplicate the component, rename its section title, and add one card per year
+with a contribution summary and optional project/report URL. Images and the shared
+funding acknowledgement are optional; up to 12 cards are supported. Each copy has
+independent content, with its structure shared across its own language variants.
+The section title uses the same public website heading style as the introduction
+and feature tour.
+
 ### Safe production rollout
 
 Back up production PostgreSQL first. CMS tables are additive; do not replace the

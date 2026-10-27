@@ -1,3 +1,4 @@
+import WebsiteSectionHeading from 'src/website/WebsiteSectionHeading';
 import React from 'react';
 import { Box, Container, Grid, Typography } from '@mui/material';
 import { useLanding, landingImage } from 'src/website/LandingContext';
@@ -50,18 +51,7 @@ const PlatformCard = ({sectionId='platform-features'}:{sectionId?:string}) => {
       <Container maxWidth="lg">
         <Grid container spacing={2} sx={{ mb: { xs: 7, md: 10 } }}>
           <Grid item xs={12}>
-            <Typography
-              component="h2"
-              sx={{
-                fontSize: { xs: '2rem', sm: '2.75rem', md: '3.25rem' },
-                fontWeight: 300,
-                lineHeight: 1.15,
-                color: 'primary.main',
-                textWrap: 'balance',
-              }}
-            >
-              {t('landing_features.title')}
-            </Typography>
+            <WebsiteSectionHeading>{t('landing_features.title')}</WebsiteSectionHeading>
           </Grid>
           <Grid item xs={12}>
             <Typography

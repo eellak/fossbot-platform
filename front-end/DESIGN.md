@@ -77,6 +77,11 @@ Use weights 400 and 600 for the normal hierarchy. A local 700 weight is acceptab
 
 **The Plain-Language Rule.** Use Project, Course, Lesson, Stage, Python editor, Simulator, and Robot consistently. Do not expose library names or internal identifiers when they do not help the user.
 
+Public website landing sections retain their established larger blue heading
+style. `src/website/WebsiteSectionHeading.tsx` owns this responsive treatment,
+shared by the introduction, feature tour and CMS Projects component. This applies
+to public website sections; application browsing headings keep the hierarchy above.
+
 ## Layout
 
 The full application shell is defined by [`src/layouts/full/FullLayout.tsx`](src/layouts/full/FullLayout.tsx). Standard browsing routes use its MUI `Container`, which provides a 16px horizontal gutter on narrow screens and 24px from the `sm` breakpoint upward. Content remains full width and left aligned; do not add a page-local centered `maxWidth`, auto margins, or duplicate page padding. The teacher Courses correction is the canonical example of this rule.
