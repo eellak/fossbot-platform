@@ -65,7 +65,7 @@ const LpHeader = () => {
             </Stack>
           )}
           <Box sx={{ ml: { lg: 2 }, flexShrink: 0 }}>
-            <Language />
+            <Language website />
           </Box>
           {!lgUp && (
             <IconButton color="inherit" aria-label="menu" onClick={handleDrawerOpen}>

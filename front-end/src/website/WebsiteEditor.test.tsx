@@ -7,7 +7,7 @@ import {cms} from './api';
 declare const it:any,expect:any,jest:any;
 jest.mock('react-i18next',()=>({useTranslation:()=>({t:(key:string)=>key,i18n:{language:'en',getFixedT:()=>((key:string)=>key)}})}));
 jest.mock('src/authentication/AuthProvider',()=>({useAuth:()=>({token:'session-token'})}));
-jest.mock('src/components/shared/ConfirmDialog',()=>({useConfirmDialog:()=>({confirm:async()=>true})}));
+jest.mock('src/components/shared/ConfirmDialog',()=>({useConfirmDialog:()=>({confirm:async()=>true,prompt:async()=>'fr-CA'})}));
 jest.mock('./api');
 jest.mock('./WebsiteApiTokens',()=>()=> 'API token panel');
 jest.mock('./WebsiteContent',()=>()=>null);
@@ -75,5 +75,26 @@ it('separates pages and posts for editors and creates posts from the Posts tab',
   expect(container.textContent).toContain('News article');expect(container.textContent).not.toContain('Public page');
   const create=Array.from(container.querySelectorAll('button')).find(node=>node.textContent==='website.create')!;
   await act(async()=>create.click());expect(mockCms).toHaveBeenCalledWith('/entries','session-token','POST',{kind:'post'});
+ }finally{act(()=>root.unmount());container.remove();}
+});
+
+it('starts a new language on the same entry with the existing components and draft-only state',async()=>{
+ (globalThis as any).structuredClone=(value:any)=>JSON.parse(JSON.stringify(value));
+ const container=document.createElement('div');document.body.appendChild(container);const root=createRoot(container);
+ const source={locale:'en',title:'English page',slug:'example',description:'Source description',revision:4,published:{title:'Live title'},sections:[{id:'intro',type:'banner',title:'Welcome',text:'Translate this'}]};
+ const item={key:'same-page',kind:'page',translations:[source]};
+ const mockCms=cms as any;mockCms.mockReset();mockCms.mockImplementation(async(path:string,_token:string,method:string,body:any)=>path==='/access'?{role:'editor'}:method==='PUT'?{...body,revision:1}:path==='/entries'?[item]:[]);
+ const click=async(text:string)=>{const button=Array.from(container.querySelectorAll('button')).find(node=>node.textContent===text||node.getAttribute('aria-label')===text);expect(button).toBeDefined();await act(async()=>button!.click());};
+ try{
+  await act(async()=>root.render(<MemoryRouter><WebsiteEditor/></MemoryRouter>));
+  await click('website.edit English page');
+  await click('website.addLanguage');
+  expect(container.textContent).toContain('fr-CA');
+  expect(container.textContent).toContain('website.translationStarterHelp');
+  await click('website.saveDraft');
+  const save=mockCms.mock.calls.find((args:any[])=>args[2]==='PUT');
+  expect(save[0]).toBe('/entries/same-page/fr-CA');
+  expect(save[3]).toMatchObject({locale:'fr-CA',title:'English page',expectedRevision:0,published:null,sections:source.sections});
+  expect(item.translations).toHaveLength(1);
  }finally{act(()=>root.unmount());container.remove();}
 });

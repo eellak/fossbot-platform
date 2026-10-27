@@ -11,7 +11,7 @@ service, paid plan or new frontend dependency is required.
 
 1. Choose **Landing page**, **Page**, or **News post**, then **Create**.
 2. Choose English or Greek; **Add language** accepts additional locale codes
-   such as `fr` or `de`. Public interface labels currently support English/Greek.
+   such as `fr` or `de`. Public interface labels support English/Greek and fall back to English for other languages.
 3. Set a title, URL slug, description and ordered sections: banner, rich text,
    image, cards, button. Move sections up/down and add/remove them. Slugs use
    lowercase Latin letters, numbers and hyphens; URLs are unique per locale.
@@ -31,11 +31,8 @@ these native sections can be combined with extra generic content blocks. The top
 menu and footer remain fixed areas. The original page is the fallback until a
 home translation is published.
 
-The old two-block starter is upgraded to the complete draft only when it exactly
-matches the original starter (independent of JSON key order). Customized drafts
-and published snapshots are preserved. The upgrade requires an explicit save.
-English and Greek local home drafts have been saved with all six sections and
-remain unpublished for user review.
+Existing drafts are preserved on opening. Saving reconciles all language drafts
+to the shared structure described below; publishing remains explicit.
 
 Published pages use `/pages/{locale}/{slug}`; news posts use
 `/news/{locale}/{slug}`, with `/news` listing posts in the selected interface
@@ -247,3 +244,32 @@ refuses a non-empty destination and runs atomically; it never resets tables.
 Media IDs/references are remapped and images normalized. Historical actor IDs
 are left unset because local user IDs are not production identities. Draft and
 published states remain distinct, including homepage Projects drafts.
+
+### Shared structure across languages
+
+Pages and posts are single entries with language variants. Adding a language
+copies the existing draft, including its component structure and text as a
+translation starting point. Translate the copied text before publishing.
+Additional locales such as `fr`, `de` and `fr-CA` require no code changes.
+Published locales appear automatically in the website language selector; interface
+labels fall back to English when no interface translation exists.
+
+Saving component additions/removals/order, image placement, media, links, menu
+icons or card membership/order updates **all language drafts of that entry** in
+one transaction. Titles, descriptions, slugs, rich text, captions, labels and
+other copy remain specific to the selected language. Stable component/card/menu
+IDs keep translations attached when items move. CMS links select the corresponding
+language URL when that target translation exists. New components start with the
+source language's copy in the other drafts, ready for translation.
+
+Shared updates increment affected translations' revisions and record history;
+a stale editor must reload before saving. Existing legacy layouts are reconciled
+to the saved language's structure on the first save, matching components by type
+and occurrence. Previous saved versions remain in revision history. Review a
+legacy page before saving if its languages currently have different components.
+Independently created entries are not guessed to be translations or merged.
+
+Published snapshots remain immutable: review and publish each affected language
+to apply its updated draft to the live website. Publishing one language does not
+publish another language's unreviewed copy. Consequently, live structures may
+differ temporarily until every affected language has been republished.

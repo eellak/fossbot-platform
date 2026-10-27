@@ -1,5 +1,7 @@
 {
   "website": {
+    "sharedStructureHelp": "One page or post, shared across languages. Saving component order, layout, cards, links or images updates all language drafts. Text stays in the selected language. Publish each language after review.",
+    "translationStarterHelp": "This new translation starts with the existing content and shared structure. Translate the copied text before publishing.",
     "title": "Website content",
     "subtitle": "Manage public pages, news and translations. Draft changes stay private until published.",
     "viewWebsite": "View website",

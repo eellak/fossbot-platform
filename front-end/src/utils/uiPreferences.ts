@@ -2,7 +2,7 @@ export const UI_PREFERENCES_STORAGE_KEY = 'fossbot.uiPreferences';
 
 export type UiPreferences = {
   activeMode?: 'light' | 'dark';
-  language?: 'en' | 'gr';
+  language?: string;
 };
 
 export const loadUiPreferences = (): UiPreferences => {
@@ -11,7 +11,7 @@ export const loadUiPreferences = (): UiPreferences => {
     const stored = JSON.parse(window.localStorage.getItem(UI_PREFERENCES_STORAGE_KEY) || '{}');
     return {
       activeMode: stored.activeMode === 'dark' ? 'dark' : stored.activeMode === 'light' ? 'light' : undefined,
-      language: stored.language === 'gr' ? 'gr' : stored.language === 'en' ? 'en' : undefined,
+      language: typeof stored.language === 'string' && /^(?:gr|[a-z]{2,3}(?:-[A-Z]{2})?)$/.test(stored.language) ? stored.language : undefined,
     };
   } catch {
     return {};

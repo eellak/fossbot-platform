@@ -208,7 +208,7 @@ def test_draft_api_token_can_upload_photos_and_create_private_post(cms_client):
     result=client.post('/website/api/posts',headers=headers,json=body)
     assert result.status_code==201,result.text
     assert result.json()['kind']=='post' and result.json()['url'] is None
-    assert result.json()['sections'][-1]=={'type':'image','image':media.json()['url'],'alt':'Classroom robot'}
+    assert website.public_sections(result.json()['sections'])[-1]=={'type':'image','image':media.json()['url'],'alt':'Classroom robot'}
     assert client.get('/website/public/resolve/en/api-post').status_code==404
     body.update(slug='publish-denied',publish=True)
     assert client.post('/website/api/posts',headers=headers,json=body).status_code==403
@@ -391,3 +391,134 @@ def test_cms_upload_quota_includes_trashed_media(cms_client,monkeypatch):
     assert first.status_code==200
     assert client.delete(first.json()['url']).status_code==200
     assert client.post('/website/media',json=payload).status_code==507
+
+
+def test_shared_layout_preserves_translations_and_published_snapshots(cms_client):
+    client,_=cms_client;key=create(client)
+    en=document();en['sections']=[{'id':'intro','type':'banner','title':'Welcome','text':'English'},
+        {'id':'team','type':'people','cards':[{'id':'alice','title':'Alice','text':'Teacher'}, {'id':'bob','title':'Bob','text':'Maker'}]}]
+    saved=client.put(f'/website/entries/{key}/en',json=en).json()
+    el=document('el','paradeigma','Παράδειγμα');el['sections']=[{'id':'intro','type':'banner','title':'Καλώς ήρθατε','text':'Ελληνικά'},
+        {'id':'team','type':'people','cards':[{'id':'alice','title':'Αλίκη','text':'Δασκάλα'}, {'id':'bob','title':'Μπομπ','text':'Δημιουργός'}]}]
+    assert client.put(f'/website/entries/{key}/el',json=el).status_code==200
+    assert client.post(f'/website/entries/{key}/el/publish?expectedRevision=1').status_code==200
+    before=client.get(f'/website/public/{key}/el').json()
+    saved['sections'].reverse();saved['sections'][0]['cards'].reverse()
+    saved['sections'][0]['cards'][0]['href']='https://example.org/bob'
+    saved['expectedRevision']=1
+    assert client.put(f'/website/entries/{key}/en',json=saved).status_code==200
+    translations={t['locale']:t for t in client.get('/website/entries').json()[0]['translations']}
+    greek=translations['el']
+    assert [s['id'] for s in greek['sections']]==['team','intro']
+    assert [c['title'] for c in greek['sections'][0]['cards']]==['Μπομπ','Αλίκη']
+    assert greek['sections'][0]['cards'][0]['href']=='https://example.org/bob'
+    assert greek['sections'][1]['title']=='Καλώς ήρθατε'
+    assert greek['revision']==2
+    assert client.get(f'/website/public/{key}/el').json()==before
+    # An editor holding the previous Greek draft cannot undo the shared change.
+    el['expectedRevision']=1
+    assert client.put(f'/website/entries/{key}/el',json=el).status_code==409
+    history=client.get(f'/website/entries/{key}/el/history').json()
+    assert history[1]['snapshot']['sections'][0]['title']=='Καλώς ήρθατε'
+    # Translate text without affecting another language's revision or content.
+    greek['expectedRevision']=2;greek['sections'][1]['text']='Νέο κείμενο'
+    assert client.put(f'/website/entries/{key}/el',json=greek).status_code==200
+    current={t['locale']:t for t in client.get('/website/entries').json()[0]['translations']}
+    assert current['en']['revision']==2
+    assert current['en']['sections'][1]['text']=='English'
+
+
+@pytest.mark.parametrize('kind',['page','post','home'])
+def test_new_language_inherits_shared_layout_and_cannot_replace_it(cms_client,kind):
+    client,_=cms_client;key=create(client,kind)
+    en=document();en['sections']=[{'id':'main','type':'feature','layout':'image-left','title':'Source','text':'Text','cards':[{'id':'point','title':'','text':'One'}]}]
+    assert client.put(f'/website/entries/{key}/en',json=en).status_code==200
+    fr=document('fr-CA','exemple','Exemple');fr['sections']=[{'id':'main','type':'feature','layout':'image-right','title':'Traduit','text':'Texte','cards':[{'id':'point','title':'','text':'Un'}]}, {'type':'button','title':'Extra'}]
+    saved=client.put(f'/website/entries/{key}/fr-CA',json=fr)
+    assert saved.status_code==200,saved.text
+    sections=saved.json()['sections']
+    assert len(sections)==1 and sections[0]['layout']=='image-left'
+    assert sections[0]['text']=='Texte' and sections[0]['cards'][0]['text']=='Un'
+    # Removal is shared, while old revisions remain recoverable.
+    updated=saved.json();updated['expectedRevision']=1;updated['sections']=[]
+    assert client.put(f'/website/entries/{key}/fr-CA',json=updated).status_code==200
+    assert all(t['sections']==[] for t in client.get('/website/entries').json()[0]['translations'])
+
+
+def test_shared_layout_adopts_legacy_translations_without_losing_copy(cms_client,db):
+    from database.database import WebsiteEntry, WebsiteTranslation
+    client,_=cms_client;key=create(client)
+    parent=db.query(WebsiteEntry).filter_by(key=key).one()
+    for locale,title in [('en','English'),('el','Ελληνικά')]:
+        db.add(WebsiteTranslation(entry_id=parent.id,locale=locale,slug='legacy',title=title,
+            sections=[{'type':'banner','title':title}],revision=1))
+    db.commit()
+    en=next(t for t in client.get('/website/entries').json()[0]['translations'] if t['locale']=='en')
+    en['expectedRevision']=1;en['sections'].append({'id':'new','type':'button','buttonLabel':'Read more','href':'https://example.org'})
+    assert client.put(f'/website/entries/{key}/en',json=en).status_code==200
+    greek=next(t for t in client.get('/website/entries').json()[0]['translations'] if t['locale']=='el')
+    assert greek['sections'][0]['title']=='Ελληνικά'
+    assert greek['sections'][1]['id']=='new'
+    en['expectedRevision']=2;en['sections'][1]['id']=en['sections'][0]['id']
+    assert client.put(f'/website/entries/{key}/en',json=en).status_code==422
+
+
+def test_shared_menu_destinations_use_each_languages_url(cms_client):
+    client,_=cms_client;page=create(client)
+    for locale,slug in [('en','about'),('el','sxetika')]:
+        assert client.put(f'/website/entries/{page}/{locale}',json=document(locale,slug)).status_code==200
+        assert client.post(f'/website/entries/{page}/{locale}/publish?expectedRevision=1').status_code==200
+    home=create(client,'home')
+    en=document(slug='home');en['sections']=[{'id':'nav','type':'landing','group':'navigation','menu':[{'id':'about','title':'About','linkType':'cms','href':'/pages/en/about','icon':'robot'}]}]
+    assert client.put(f'/website/entries/{home}/en',json=en).status_code==200
+    el=document('el','home','Αρχική');el['sections']=[{'id':'nav','type':'landing','group':'navigation','menu':[{'id':'about','title':'Σχετικά','linkType':'cms','href':'/pages/el/sxetika'}]}]
+    saved=client.put(f'/website/entries/{home}/el',json=el).json()
+    assert saved['sections'][0]['menu'][0]=={'id':'about','title':'Σχετικά','linkType':'cms','href':'/pages/el/sxetika','icon':'robot'}
+    saved['expectedRevision']=1;saved['sections'][0]['menu'][0]['icon']='world'
+    assert client.put(f'/website/entries/{home}/el',json=saved).status_code==200
+    english=next(t for t in client.get('/website/entries').json()[0]['translations'] if t['locale']=='en')
+    assert english['sections'][0]['menu'][0]['href']=='/pages/en/about'
+    assert english['sections'][0]['menu'][0]['title']=='About'
+    assert english['sections'][0]['menu'][0]['icon']=='world'
+    # Only public content contributes to the public language chooser.
+    assert client.get('/website/public/locales').json()==['el','en']
+    assert client.put(f'/website/entries/{page}/fr-CA',json=document('fr-CA','a-propos')).status_code==200
+    assert client.get('/website/public/locales').json()==['el','en']
+    assert client.post(f'/website/entries/{page}/fr-CA/publish?expectedRevision=1').status_code==200
+    assert client.get('/website/public/locales').json()==['el','en','fr-CA']
+    assert client.delete(f'/website/entries/{page}').status_code==200
+    assert client.get('/website/public/locales').json()==[]
+
+
+def test_repeated_blocks_keep_their_copy_when_reordered(cms_client):
+    client,_=cms_client;key=create(client,'post')
+    en=document();en['sections']=[{'id':'first','type':'banner','title':'One'}, {'id':'second','type':'banner','title':'Two'}]
+    assert client.put(f'/website/entries/{key}/en',json=en).status_code==200
+    el=document('el','nea');el['sections']=[{'type':'banner','title':'Ένα'}, {'type':'banner','title':'Δύο'}]
+    assert client.put(f'/website/entries/{key}/el',json=el).status_code==200
+    en['expectedRevision']=1;en['sections'].reverse()
+    assert client.put(f'/website/entries/{key}/en',json=en).status_code==200
+    greek=next(t for t in client.get('/website/entries').json()[0]['translations'] if t['locale']=='el')
+    assert [s['title'] for s in greek['sections']]==['Δύο','Ένα']
+
+
+def test_failed_shared_save_rolls_back_other_language_changes(cms_client):
+    client,_=cms_client;key=create(client)
+    for locale in ['en','el']:
+        assert client.put(f'/website/entries/{key}/{locale}',json=document(locale)).status_code==200
+    other=create(client)
+    assert client.put(f'/website/entries/{other}/en',json=document(slug='reserved')).status_code==200
+    before=next(e for e in client.get('/website/entries').json() if e['key']==key)
+    update=document(slug='reserved',revision=1);update['sections']=[{'id':'new','type':'banner','title':'Shared change'}]
+    assert client.put(f'/website/entries/{key}/en',json=update).status_code==409
+    after=next(e for e in client.get('/website/entries').json() if e['key']==key)
+    assert after==before
+
+
+def test_missing_legacy_card_ids_match_existing_layout_ids(cms_client):
+    client,_=cms_client;key=create(client)
+    en=document();en['sections']=[{'id':'team','type':'people','cards':[{'id':'person','title':'Alice','text':'Teacher'}]}]
+    assert client.put(f'/website/entries/{key}/en',json=en).status_code==200
+    fr=document('fr','equipe');fr['sections']=[{'type':'people','cards':[{'title':'Alice FR','text':'Professeur'}]}]
+    saved=client.put(f'/website/entries/{key}/fr',json=fr).json()
+    assert saved['sections'][0]['cards'][0]=={'id':'person','title':'Alice FR','text':'Professeur'}

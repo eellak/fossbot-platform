@@ -14,7 +14,7 @@ it('renders structured text and sections without executing embedded HTML',()=>{
  expect(html).toContain('Κάρτα');expect(html).toContain('href="/dashboard"');expect(html).toContain('href="/news"');
 });
 it('maps Greek interface codes to content locales and generates localized URLs',()=>{
- expect(contentLocale('gr')).toBe('el');expect(contentLocale('en-US')).toBe('en');
+ expect(contentLocale('gr')).toBe('el');expect(contentLocale('en-US')).toBe('en-US');expect(contentLocale('fr-CA')).toBe('fr-CA');
  expect(publicPath({kind:'post',locale:'el',slug:'nea'} as any)).toBe('/news/el/nea');
  expect(publicPath({kind:'page',locale:'en',slug:'about'} as any)).toBe('/pages/en/about');
 });

@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { Alert, Box, Button, Container, Stack, Typography } from '@mui/material';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { useDispatch } from 'src/store/Store';
+import { setLanguage } from 'src/store/customizer/CustomizerSlice';
 import PageContainer from 'src/components/container/PageContainer';
 import LpHeader from 'src/components/landingpage/header/Header';
 import Footer from 'src/components/landingpage/footer/Footer';
@@ -13,7 +15,8 @@ import { cms, contentLocale, publicPath, type PublicEntry } from './api';
 export default function WebsitePublic({ news=false }: {news?:boolean}) {
   const {locale,slug}=useParams(),{i18n,t}=useTranslation(),navigate=useNavigate();
   const [page,setPage]=useState<PublicEntry|null>(null),[posts,setPosts]=useState<PublicEntry[]>([]),[error,setError]=useState(''),[loading,setLoading]=useState(true);
-  const previousLanguage=useRef(i18n.language);
+  const previousLanguage=useRef(i18n.language),dispatch=useDispatch();
+  useEffect(()=>{if(locale)dispatch(setLanguage(locale==='el'?'gr':locale));},[locale,dispatch]);
   useEffect(()=>{
     let active=true;setLoading(true);setError('');setPage(null);
     const request=news?cms<PublicEntry[]>(`/public?locale=${contentLocale(i18n.language)}`):cms<PublicEntry>(`/public/resolve/${locale}/${slug}`);

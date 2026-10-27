@@ -14,10 +14,10 @@ import { backendUrl } from 'src/utils/backendUrl';
 import { cms, contentLocale, emptyDocument, publicPath, type Entry, type Translation, type Section, type Media, type WebsiteRole } from './api';
 import WebsiteContent from './WebsiteContent';
 import WebsiteComponentLibrary from './WebsiteComponentLibrary';
-import { insertWebsiteComponent, siteSetting } from './componentCatalog';
+import { componentId, insertWebsiteComponent, siteSetting } from './componentCatalog';
 import WebsiteProfileCardsEditor from './WebsiteProfileCardsEditor';
 import WebsiteMenuItemEditor from './WebsiteMenuItemEditor';
-import { landingSections, landingFields, isOriginalHomeStarter } from './landingDefaults';
+import { landingSections, landingFields } from './landingDefaults';
 import { LandingProvider, PublishedLandingProvider, landingImage } from './LandingContext';
 import LpHeader from 'src/components/landingpage/header/Header';
 import Footer from 'src/components/landingpage/footer/Footer';
@@ -60,6 +60,8 @@ export default function WebsiteEditor() {
   },[dirty]);
   const run = async (action:()=>Promise<void>) => { setBusy(true);setError('');setMessage('');try{await action();}catch(e){setError(e instanceof Error?e.message:String(e));}finally{setBusy(false);} };
   const blank = (entry:Entry,lang:string):Translation => {
+    const source=entry.translations.find(item=>item.locale===locale)||entry.translations[0];
+    if(source)return {...structuredClone(source),locale:lang,revision:0,published:null,publishedAt:null};
     const fixed = i18n.getFixedT(lang==='el'?'gr':lang);
     return {locale:lang,slug:entry.kind==='home'?'home':`${entry.kind}-${entry.key.slice(0,8)}`,title:entry.kind==='home'?'FOSSBot':label('untitled'),description:'',sections:entry.kind==='home'?landingSections(k=>String(fixed(k))):[{type:'text',content:emptyDocument}],revision:0};
   };
@@ -68,13 +70,13 @@ export default function WebsiteEditor() {
     if(busy || !await mayLeave())return;
     const original=entry.translations.find(x=>x.locale===lang);
     const next=structuredClone(original||blank(entry,lang));
-    const fixed=i18n.getFixedT(lang==='el'?'gr':lang);
-    const upgrade=entry.kind==='home'&&isOriginalHomeStarter(next.sections,k=>String(fixed(k)));
-    if(upgrade)next.sections=landingSections(k=>String(fixed(k)));
-    setHomeArea(area);setKey(entry.key);setLocale(lang);setForm(next);setDirty(!original||upgrade);setError('');setMessage('');
+    setHomeArea(area);setKey(entry.key);setLocale(lang);setForm(next);setDirty(!original);setError('');setMessage('');
   };
   const change = (patch:Partial<Translation>) => {if(busy)return;setForm(current=>current?{...current,...patch}:current);setDirty(true);setMessage('');};
-  const section = (index:number,patch:Partial<Section>) => {if(form)change({sections:form.sections.map((s,i)=>i===index?{...s,...patch}:s)});};
+  const section = (index:number,patch:Partial<Section>) => {
+    if(patch.cards)patch.cards=patch.cards.map(card=>({...card,id:card.id||componentId()}));
+    if(patch.menu)patch.menu=patch.menu.map(item=>({...item,id:item.id||componentId()}));
+    if(form)change({sections:form.sections.map((s,i)=>i===index?{...s,...patch}:s)});};
   const move = (index:number,direction:number) => {if(!form)return;const copy=[...form.sections];[copy[index],copy[index+direction]]=[copy[index+direction],copy[index]];change({sections:copy});};
   const save = () => run(async()=>{
     if(!form)return;
@@ -139,9 +141,11 @@ export default function WebsiteEditor() {
         </Stack>
         {!form ? <Alert severity="info">{label(activeTab===3?'selectPost':'selectPage')}</Alert> : <Stack spacing={2} key={`${key}-${locale}`}>
           <Paper variant="outlined" sx={{p:2}}><Stack spacing={2}>
-            <Stack direction="row" gap={1} flexWrap="wrap" alignItems="center"><TextField select size="small" label={label('language')} value={locale} onChange={e=>parent&&void open(parent,e.target.value)} disabled={busy} sx={{minWidth:160}}>{Array.from(new Set(['en','el',locale,...(parent?.translations.map(x=>x.locale)||[])])).map(lang=><MenuItem key={lang} value={lang}>{lang==='en'?'English':lang==='el'?'Ελληνικά':lang}</MenuItem>)}</TextField>
+            <Stack direction="row" gap={1} flexWrap="wrap" alignItems="center"><TextField select size="small" label={label('language')} value={locale} onChange={e=>parent&&void open(parent,e.target.value)} disabled={busy} sx={{minWidth:160}}>{Array.from(new Set(['en','el',locale,...entries.flatMap(entry=>entry.translations.map(x=>x.locale))])).map(lang=><MenuItem key={lang} value={lang}>{lang==='en'?'English':lang==='el'?'Ελληνικά':lang}</MenuItem>)}</TextField>
               <Button onClick={()=>void addLanguage()} disabled={busy}>{label('addLanguage')}</Button><Chip size="small" label={form.published?label('hasPublished'):label('draft')} />{dirty&&<Chip size="small" color="warning" label={label('unsaved')} />}
             </Stack>
+            <Typography variant="body2" color="text.secondary">{label('sharedStructureHelp')}</Typography>
+            {!form.revision&&parent?.translations.length!==0&&<Alert severity="info">{label('translationStarterHelp')}</Alert>}
             <TextField disabled={busy} label={label('pageTitle')} value={form.title} onChange={e=>change({title:e.target.value})} inputProps={{maxLength:200}} />
             <TextField disabled={busy} label={label('slug')} value={form.slug} onChange={e=>change({slug:e.target.value})} helperText={label('slugHelp')} />
             <TextField disabled={busy} label={label('description')} value={form.description} onChange={e=>change({description:e.target.value})} multiline minRows={2} inputProps={{maxLength:500}} />
@@ -175,7 +179,7 @@ export default function WebsiteEditor() {
             {s.type==='projects'&&<><WebsiteProfileCardsEditor section={s} disabled={busy} onChange={cards=>section(index,{cards})} onChoosePhoto={cardIndex=>void chooseImage(index,null,cardIndex)}/><Divider/><Typography variant="h6">{label('fundingImage')}</Typography><TextField disabled={busy} multiline minRows={2} label={label('fundingText')} value={s.fundingText||''} onChange={e=>section(index,{fundingText:e.target.value})}/></>}
             {(s.type==='image'||s.type==='feature'||s.type==='projects')&&<><Button variant="outlined" onClick={()=>void chooseImage(index)}>{label('chooseImage')}</Button>{s.image&&<Button disabled={busy} onClick={()=>section(index,{image:''})}>{label('removePhoto')}</Button>}{s.image&&<Box component="img" src={s.type==='feature'||s.type==='projects'?landingImage(s.image):`${backendUrl}${s.image}`} alt={s.alt||''} sx={{maxWidth:'100%',maxHeight:220,objectFit:'contain'}} />}<TextField disabled={busy} label={label('alt')} value={s.alt||''} onChange={e=>section(index,{alt:e.target.value})} /></>}
             {(s.type==='banner'||s.type==='button'||s.type==='feature')&&<><TextField disabled={busy} label={label('buttonLabel')} value={s.buttonLabel||''} onChange={e=>section(index,{buttonLabel:e.target.value})} /><TextField disabled={busy} label={label('link')} value={s.href||''} onChange={e=>section(index,{href:e.target.value})} helperText={label('linkHelp')} /></>}
-            {s.type==='feature'&&<TextField disabled={busy} multiline minRows={3} label={label('featurePoints')} value={(s.cards||[]).map(point=>point.text).join('\n')} onChange={e=>section(index,{cards:e.target.value.split('\n').slice(0,12).map(text=>({title:'',text}))})}/>}
+            {s.type==='feature'&&<TextField disabled={busy} multiline minRows={3} label={label('featurePoints')} value={(s.cards||[]).map(point=>point.text).join('\n')} onChange={e=>section(index,{cards:e.target.value.split('\n').slice(0,12).map((text,i)=>({id:s.cards?.[i]?.id||componentId(),title:'',text}))})}/>}
             {s.type==='feature'&&<TextField select disabled={busy} label={label('imagePosition')} value={s.layout||'image-right'} onChange={e=>section(index,{layout:e.target.value as Section['layout']})}><MenuItem value="image-left">{label('imageLeft')}</MenuItem><MenuItem value="image-right">{label('imageRight')}</MenuItem></TextField>}
             {(s.type==='people'||s.type==='testimonials')&&<WebsiteProfileCardsEditor section={s} disabled={busy} onChange={cards=>section(index,{cards})} onChoosePhoto={cardIndex=>void chooseImage(index,null,cardIndex)}/>}
             {s.type==='cards'&&<>{(s.cards||[]).map((card,i)=><Stack spacing={1} key={i} sx={{p:2,border:1,borderColor:'divider',borderRadius:1}}>{(['title','text','href'] as const).map(field=><TextField key={field} size="small" label={label(field==='href'?'link':field==='text'?'content':'sectionTitle')} value={card[field]||''} onChange={e=>section(index,{cards:s.cards?.map((c,j)=>j===i?{...c,[field]:e.target.value}:c)})} />)}<Button onClick={()=>section(index,{cards:s.cards?.filter((_,j)=>j!==i)})}>{label('remove')}</Button></Stack>)}<Button disabled={(s.cards?.length||0)>=12} onClick={()=>section(index,{cards:[...(s.cards||[]),{title:'',text:''}]})}>{label('addCard')}</Button></>}

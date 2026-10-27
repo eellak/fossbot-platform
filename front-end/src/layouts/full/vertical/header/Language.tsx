@@ -1,4 +1,3 @@
- 
 import React from 'react';
 import { Box, Button, Menu, MenuItem, Typography, Stack } from '@mui/material';
 import { useSelector, useDispatch } from 'src/store/Store';
@@ -6,15 +5,18 @@ import { setLanguage } from 'src/store/customizer/CustomizerSlice';
 import { useTranslation } from 'react-i18next';
 import { useEffect } from 'react';
 import { AppState } from 'src/store/Store';
+import { cms, contentLocale } from 'src/website/api';
 import { Languages } from 'src/utils/languages/Languages';
 
-const Language = () => {
+const Language = ({website=false}:{website?:boolean}) => {
+  const [locales,setLocales]=React.useState<string[]>([]);
+  useEffect(()=>{if(!website)return;let active=true;cms<string[]>('/public/locales').then(items=>{if(active)setLocales(items);}).catch(()=>{});return()=>{active=false;};},[website]);
   const [anchorEl, setAnchorEl] = React.useState<HTMLElement | null>(null);
   const dispatch = useDispatch();
   const open = Boolean(anchorEl);
   const customizer = useSelector((state: AppState) => state.customizer);
-  const currentLang =
-    Languages.find((_lang) => _lang.value === customizer.isLanguage) || Languages[1];
+  const options=[...Languages,...locales.filter(locale=>!['en','el'].includes(locale)).map(locale=>({value:locale,flagname:locale,icon:''}))];
+  const currentLang = options.find((_lang) => contentLocale(_lang.value) === contentLocale(customizer.isLanguage)) || {value:customizer.isLanguage,flagname:customizer.isLanguage,icon:''};
   const { i18n, t } = useTranslation();
   const handleClick = (event: React.MouseEvent<HTMLButtonElement>) => {
     setAnchorEl(event.currentTarget);
@@ -38,14 +40,14 @@ const Language = () => {
         color="inherit"
         sx={{ minWidth: 0, gap: 1, whiteSpace: 'nowrap' }}
       >
-        <Box
+        {currentLang.icon&&<Box
           component="img"
           src={currentLang.icon}
           alt=""
           sx={{ width: 20, height: 20, borderRadius: '50%' }}
-        />
-        <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>{t(currentLang.flagname)}</Box>
-        <Box component="span" sx={{ display: { xs: 'inline', sm: 'none' } }}>{currentLang.value === 'gr' ? 'ΕΛ' : 'EN'}</Box>
+        />}
+        <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>{currentLang.icon?t(currentLang.flagname):currentLang.value.toUpperCase()}</Box>
+        <Box component="span" sx={{ display: { xs: 'inline', sm: 'none' } }}>{currentLang.value === 'gr' ? 'ΕΛ' : currentLang.value.toUpperCase()}</Box>
       </Button>
       <Menu
         id="language-menu"
@@ -58,7 +60,7 @@ const Language = () => {
           },
         }}
       >
-        {Languages.map((option, index) => (
+        {options.map((option, index) => (
           <MenuItem
             key={index}
             selected={option.value === customizer.isLanguage}
@@ -69,13 +71,13 @@ const Language = () => {
             }}
           >
             <Stack direction="row" spacing={1} alignItems="center">
-              <Box
+              {option.icon&&<Box
                 component="img"
                 src={option.icon}
                 alt={option.flagname}
                 sx={{ width: 20, height: 20, borderRadius: '50%' }}
-              />
-              <Typography> {t(option.flagname)}</Typography>
+              />}
+              <Typography> {option.icon?t(option.flagname):option.value.toUpperCase()}</Typography>
             </Stack>
           </MenuItem>
         ))}

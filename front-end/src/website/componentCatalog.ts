@@ -1,6 +1,6 @@
 import { emptyDocument, type Section } from './api';
 import { landingSections } from './landingDefaults';
-// CMS content is validated JSON; copies intentionally carry no shared state.
+// Copies get new identities; translations of the same component keep their identities.
 const copyJson=<T,>(value:T):T=>JSON.parse(JSON.stringify(value));
 export const siteSetting=(section:Section)=>section.type==='landing'&&['navigation','footer'].includes(section.group||'');
 export const componentCatalog=['banner','feature','text','image','cards','projects','people','testimonials','latest-posts','button','hero','about','features','cta'] as const;
@@ -11,5 +11,13 @@ export function createWebsiteComponent(kind:ComponentKind,t:(key:string)=>string
 }
 export function insertWebsiteComponent(sections:Section[],component:Section,after?:number):Section[] {
   const copy=[...sections];const footer=copy.findIndex(s=>siteSetting(s)&&s.group==='footer');
-  copy.splice(after!==undefined?after+1:footer<0?copy.length:footer,0,copyJson(component));return copy;
+  copy.splice(after!==undefined?after+1:footer<0?copy.length:footer,0,copyWebsiteComponent(component));return copy;
+}
+
+export const componentId=()=>`cms-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+export function copyWebsiteComponent(component:Section):Section {
+  const copy=copyJson(component);copy.id=componentId();
+  if(copy.cards)copy.cards=copy.cards.map(card=>({...card,id:componentId()}));
+  if(copy.menu)copy.menu=copy.menu.map(item=>({...item,id:componentId()}));
+  return copy;
 }

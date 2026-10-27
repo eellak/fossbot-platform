@@ -18,6 +18,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from database.database import User, WebsiteEntry, WebsiteTranslation, WebsiteRevision, WebsitePermission, WebsiteMedia, WebsiteApiToken
 from utils.website_images import normalize_website_image
+from utils.website_structure import identify, localize, public_sections
 from models.models import UserRole
 from routers.stage_sources import get_db, get_current_user
 
@@ -96,6 +97,10 @@ def validate(data):
         raise HTTPException(422, 'Use a language code, a lowercase URL slug and a title')
     if len(json.dumps(data.sections)) > 500_000:
         raise HTTPException(422, 'Page content is too large')
+    try:
+        identify(data.sections)
+    except (ValueError, TypeError, AttributeError):
+        raise HTTPException(422, 'Invalid component or card identities')
     for section in data.sections:
         if section.get('type') not in ('banner', 'text', 'image', 'cards', 'button', 'landing', 'feature', 'people', 'testimonials', 'latest-posts', 'projects'):
             raise HTTPException(422, 'Unknown page section')
@@ -170,7 +175,7 @@ def snapshot(row):
 
 
 def draft(row):
-    return {**snapshot(row), 'published': row.published, 'publishedAt': row.published_at, 'updatedAt': row.updated_at}
+    return {**snapshot(row), 'sections': identify(row.sections), 'published': row.published, 'publishedAt': row.published_at, 'updatedAt': row.updated_at}
 
 
 def entry(db, key):
@@ -263,16 +268,60 @@ def create_entry(data: EntryInput, user=Depends(editor), db: Session=Depends(get
     return {'key':key,'kind':data.kind,'translations':[]}
 
 
+def localized_links(db, sections, locale):
+    """Keep CMS destinations attached to the same entry across language URLs."""
+    result = copy.deepcopy(sections)
+    def href(value):
+        match = re.fullmatch(r'/(pages|news)/([^/]+)/([^/]+)', value or '')
+        if not match: return value
+        kind, source_locale, slug = match.groups()
+        source = db.query(WebsiteTranslation).join(WebsiteEntry).filter(
+            WebsiteEntry.deleted_at.is_(None), WebsiteEntry.kind == ('post' if kind == 'news' else 'page'),
+            WebsiteTranslation.locale == source_locale,
+            (WebsiteTranslation.published_slug == slug) | (WebsiteTranslation.slug == slug)).order_by((WebsiteTranslation.published_slug == slug).desc()).first()
+        target = db.query(WebsiteTranslation).filter_by(entry_id=source.entry_id, locale=locale).first() if source else None
+        return f'/{kind}/{locale}/{target.published_slug or target.slug}' if target else value
+    def visit(items):
+        for item in items:
+            if 'href' in item: item['href'] = href(item['href'])
+            if 'values' in item:
+                item['values'] = {name: href(value) if name.startswith('href:') else value for name, value in item['values'].items()}
+            for name in ('cards', 'menu'):
+                if name in item: visit(item[name])
+    visit(result)
+    return result
+
+
 @router.put('/entries/{key}/{locale}')
 def save_translation(key:str, locale:str, data:TranslationInput, user=Depends(editor), db: Session=Depends(get_db)):
     validate(data)
     if locale != data.locale: raise HTTPException(422, 'Language mismatch')
-    parent = entry(db, key)
-    row = db.query(WebsiteTranslation).filter_by(entry_id=parent.id,locale=locale).with_for_update().first()
+    parent = db.query(WebsiteEntry).filter_by(key=key).with_for_update().first()
+    if not parent or parent.deleted_at: raise HTTPException(404, 'Page not found')
+    siblings = db.query(WebsiteTranslation).filter_by(entry_id=parent.id).order_by(WebsiteTranslation.id).with_for_update().all()
+    row = next((item for item in siblings if item.locale == locale), None)
     if (row.revision if row else 0) != data.expectedRevision: raise HTTPException(409, 'This draft changed. Reload it before saving.')
-    require_active_media(db,data.sections)
+    sections = identify(data.sections)
+    if not row and siblings:
+        source = max(siblings, key=lambda item: (item.updated_at, item.id))
+        sections = localize(source.sections, data.sections)
+    sections = localized_links(db, sections, locale)
+    validate(TranslationInput(locale=locale, slug=data.slug, title=data.title, description=data.description, sections=sections))
+    require_active_media(db,sections)
+    # A save changes the shared draft layout atomically; translated text stays local.
+    for sibling in siblings:
+        if sibling is row: continue
+        shared = localized_links(db, localize(sections, sibling.sections), sibling.locale)
+        if shared != sibling.sections:
+            checked = TranslationInput(locale=sibling.locale, slug=sibling.slug, title=sibling.title, description=sibling.description, sections=shared)
+            validate(checked)
+            require_active_media(db, shared)
+            sibling.sections = shared
+            sibling.revision += 1
+            sibling.updated_at = datetime.datetime.utcnow()
+            db.add(WebsiteRevision(translation_id=sibling.id, revision=sibling.revision, snapshot=snapshot(sibling), actor_id=user.id))
     if not row: row=WebsiteTranslation(entry_id=parent.id,locale=locale); db.add(row)
-    row.slug=data.slug; row.title=data.title.strip(); row.description=data.description; row.sections=copy.deepcopy(data.sections)
+    row.slug=data.slug; row.title=data.title.strip(); row.description=data.description; row.sections=sections
     row.revision = (row.revision or 0)+1; row.updated_at=datetime.datetime.utcnow()
     try: db.flush()
     except IntegrityError:
@@ -289,7 +338,7 @@ def publish(key:str,locale:str,expectedRevision:int,user=Depends(editor),db: Ses
     row=translation(db,key,locale,expectedRevision)
     if not row.sections: raise HTTPException(422,'Add content before publishing')
     require_active_media(db,row.sections)
-    row.published=snapshot(row); row.published_slug=row.slug; row.published_at=datetime.datetime.utcnow(); commit(db)
+    row.published={**snapshot(row), 'sections': public_sections(row.sections)}; row.published_slug=row.slug; row.published_at=datetime.datetime.utcnow(); commit(db)
     return draft(row)
 
 
@@ -357,6 +406,11 @@ def read_media(media_id:int,db: Session=Depends(get_db)):
 def public_entry(e, row):
     if e.deleted_at: raise HTTPException(404, 'Published page not found')
     return {'key':e.key,'kind':e.kind,**copy.deepcopy(row.published),'publishedAt':row.published_at}
+
+
+@router.get('/public/locales')
+def public_locales(db:Session=Depends(get_db)):
+    return [locale for (locale,) in db.query(WebsiteTranslation.locale).join(WebsiteEntry).filter(WebsiteEntry.deleted_at.is_(None), WebsiteTranslation.published_slug.isnot(None)).distinct().order_by(WebsiteTranslation.locale).all()]
 
 
 @router.get('/public')
