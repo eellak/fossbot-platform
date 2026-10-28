@@ -283,9 +283,9 @@ function MarketplaceDetailDrawer({
                 </Stack>
               </Box>
               <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
-                <Button component="a" href={stageTestUrl} target="_blank" rel="noreferrer" variant="contained" startIcon={<PlayArrowIcon />}>
+                {!readOnly && <Button component="a" href={stageTestUrl} target="_blank" rel="noreferrer" variant="contained" startIcon={<PlayArrowIcon />}>
                   Test stage
-                </Button>
+                </Button>}
                 {!readOnly && <Button variant="outlined" onClick={() => onCopyLocal(entry)} disabled={localCopyBusy} startIcon={<ContentCopyIcon />}>
                   {localCopyBusy ? 'Copying…' : 'Copy to my stages'}
                 </Button>}

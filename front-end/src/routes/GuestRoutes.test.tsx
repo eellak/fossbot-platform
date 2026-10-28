@@ -75,7 +75,7 @@ describe('guest route guards', () => {
             <Route path="/monaco-page" element={<div>python landing</div>} />
             <Route path="/guest-unavailable" element={<div>guest unavailable</div>} />
             <Route path="/admin-panel" element={<AdminRoute />}><Route index element={<div>admin page</div>} /></Route>
-            <Route path="/dashboard" element={<div>dashboard landing</div>} />
+            <Route path="/dashboard" element={<PrivateRoute guestAllowed><RoleBasedRoute guestView="dashboard"><div>dashboard landing</div></RoleBasedRoute></PrivateRoute>} />
           </Routes>
         </MemoryRouter>,
       );
@@ -101,6 +101,15 @@ describe('guest route guards', () => {
     setGuest(['python', 'blockly']);
     await render('/blockly-page');
     expect(container.textContent).toBe('blockly page');
+  });
+
+  it('blocks the dashboard when only another view is enabled', async () => {
+    setGuest(['python']);
+    await render('/dashboard');
+    expect(container.textContent).toBe('python landing');
+    setGuest(['dashboard']);
+    await render('/dashboard');
+    expect(container.textContent).toBe('dashboard landing');
   });
 
   it('sends a guest with no enabled views to the unavailable page instead of looping', async () => {

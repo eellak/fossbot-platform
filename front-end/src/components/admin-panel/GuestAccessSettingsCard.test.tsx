@@ -52,14 +52,16 @@ describe('guest access settings card', () => {
     container.remove();
   });
 
-  const render = async () => {
+  const render = async (props: { onDirtyChange?: (dirty: boolean) => void } = {}) => {
     await act(async () => {
-      root.render(<GuestAccessSettingsCard />);
+      root.render(<GuestAccessSettingsCard {...props} />);
       await flush();
     });
   };
 
-  const saveButton = () => Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'admin-panel.guest.save');
+  const saveButton = () => Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'admin-panel.guest.save' || button.textContent === 'admin-panel.guest.saving');
+  const checkboxes = () => Array.from(container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'));
+  const byLabel = (label: string) => checkboxes().find((box) => box.closest('label')?.textContent?.includes(label));
 
   it('is hidden for non-administrators', async () => {
     mockAuth.user.role = 'tutor';
@@ -70,10 +72,8 @@ describe('guest access settings card', () => {
 
   it('loads and saves the policy while preserving a failed edit', async () => {
     await render();
-    expect(container.textContent).toContain('admin-panel.guest.title');
+    expect(container.textContent).not.toContain('admin-panel.guest.description');
     expect(mockGet).toHaveBeenCalledWith('admin-token');
-    const checkboxes = Array.from(container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'));
-    const byLabel = (label: string) => checkboxes.find((box) => box.closest('label')?.textContent?.includes(label));
     expect(byLabel('views_python')?.checked).toBe(true);
 
     act(() => byLabel('views_blockly')?.click());
@@ -88,14 +88,99 @@ describe('guest access settings card', () => {
     await act(async () => { saveButton()?.click(); await flush(); });
     expect(mockUpdate).toHaveBeenLastCalledWith('admin-token', { beta_tester: false, allowed_views: ['python', 'blockly'] });
     expect(mockNotify).toHaveBeenCalled();
+    expect(saveButton()?.disabled).toBe(true);
 
     act(() => byLabel('admin-panel.guest.beta')?.click());
     expect(saveButton()?.disabled).toBe(false);
+  });
+
+  it('only offers saving while the draft differs from the saved policy', async () => {
+    const onDirtyChange = jest.fn();
+    await render({ onDirtyChange });
+    expect(onDirtyChange).toHaveBeenLastCalledWith(false);
+
+    act(() => byLabel('views_blockly')?.click());
+    expect(saveButton()?.disabled).toBe(false);
+    expect(onDirtyChange).toHaveBeenLastCalledWith(true);
+
+    act(() => byLabel('views_blockly')?.click());
+    expect(saveButton()?.disabled).toBe(true);
+    expect(onDirtyChange).toHaveBeenLastCalledWith(false);
+
+    act(() => byLabel('admin-panel.guest.beta')?.click());
+    expect(saveButton()?.disabled).toBe(false);
+    act(() => byLabel('admin-panel.guest.beta')?.click());
+    expect(saveButton()?.disabled).toBe(true);
+  });
+
+  it('disables the controls while a save is in flight', async () => {
+    await render();
+    act(() => byLabel('views_blockly')?.click());
+    let finishSave = (_body: unknown) => {};
+    mockUpdate.mockImplementationOnce(() => new Promise((resolve) => { finishSave = resolve; }));
+    await act(async () => { saveButton()?.click(); await flush(); });
+
+    expect(saveButton()?.textContent).toBe('admin-panel.guest.saving');
+    expect(checkboxes().every((box) => box.disabled)).toBe(true);
+
+    await act(async () => {
+      finishSave(jsonResponse({ beta_tester: false, allowed_views: ['python', 'blockly'] }));
+      await flush();
+    });
+    expect(checkboxes().some((box) => box.disabled)).toBe(false);
+    expect(saveButton()?.disabled).toBe(true);
+  });
+
+  it('selects and clears every view', async () => {
+    mockGet.mockResolvedValue(jsonResponse({ beta_tester: false, allowed_views: [] }));
+    await render();
+    const boxes = () => Array.from(container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'));
+    const button = (label: string) => Array.from(container.querySelectorAll('button')).find((item) => item.textContent === label);
+    expect(boxes().filter((box) => box.checked)).toHaveLength(0);
+
+    act(() => button('admin-panel.guest.all')?.click());
+    expect(boxes().filter((box) => box.checked)).toHaveLength(9);
+    expect(container.textContent).not.toContain('admin-panel.guest.empty');
+
+    act(() => button('admin-panel.guest.none')?.click());
+    expect(boxes().every((box) => !box.checked)).toBe(true);
+    expect(container.textContent).toContain('admin-panel.guest.empty');
+  });
+
+  it('does not expose an empty policy when the first load fails', async () => {
+    mockGet.mockResolvedValueOnce(jsonResponse({ detail: 'Load failed' }, 500));
+    await render();
+    expect(container.textContent).toContain('Load failed');
+    expect(container.querySelectorAll('input')).toHaveLength(0);
+    expect(saveButton()).toBeUndefined();
+
+    mockGet.mockResolvedValueOnce(jsonResponse({ beta_tester: false, allowed_views: ['python'] }));
+    await act(async () => {
+      Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'admin-panel.guest.retry')?.click();
+      await flush();
+    });
+    expect(byLabel('views_python')?.checked).toBe(true);
+    expect(saveButton()).toBeDefined();
   });
 
   it('explains an empty selection and disables new guest entry', async () => {
     mockGet.mockResolvedValue(jsonResponse({ beta_tester: false, allowed_views: [] }));
     await render();
     expect(container.textContent).toContain('admin-panel.guest.empty');
+    expect(Array.from(container.querySelectorAll('h2')).map((node) => node.textContent)).toEqual([
+      'admin-panel.guest.views',
+      'admin-panel.guest.betaSection',
+    ]);
+    expect(container.querySelectorAll('h3')).toHaveLength(4);
+    const groups = Array.from(container.querySelectorAll('h3')).map((heading) => ({
+      title: heading.textContent,
+      views: Array.from(heading.parentElement!.querySelectorAll('input')).map((input) => input.closest('label')?.textContent),
+    }));
+    expect(groups).toEqual([
+      { title: 'admin-panel.guest.groups_editors', views: ['admin-panel.guest.views_python', 'admin-panel.guest.views_blockly'] },
+      { title: 'admin-panel.guest.groups_learning', views: ['admin-panel.guest.views_courses', 'admin-panel.guest.views_classrooms'] },
+      { title: 'admin-panel.guest.groups_stages', views: ['admin-panel.guest.views_stages', 'admin-panel.guest.views_stage_builder'] },
+      { title: 'admin-panel.guest.groups_tools', views: ['admin-panel.guest.views_dashboard', 'admin-panel.guest.views_interactive', 'admin-panel.guest.views_rc'] },
+    ]);
   });
 });

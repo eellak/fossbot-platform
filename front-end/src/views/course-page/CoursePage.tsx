@@ -77,7 +77,7 @@ export default function CoursePage() {
   return (
     <PageContainer title={course.title} description={course.description}>
       <Stack spacing={3} sx={{ '& .MuiButton-containedPrimary': { color: theme.palette.getContrastText(theme.palette.primary.main) }, '& .MuiButtonBase-root:focus-visible': { outline: '2px solid', outlineColor: 'text.primary', outlineOffset: 2 }, '@media (pointer: coarse), (max-width: 768px)': { '& .MuiButtonBase-root': { minHeight: 44 }, '& .MuiSwitch-switchBase, & .MuiCheckbox-root, & .MuiRadio-root': { minHeight: 0 } } }}>
-        <Button sx={{ alignSelf: 'flex-start' }} onClick={() => navigate('/courses')}>{t('education.student.backToCourses')}</Button>
+        <Button sx={{ alignSelf: 'flex-start' }} onClick={() => navigate(isGuest && !guestCanView(guestSettings, 'courses') ? '/classrooms' : '/courses')}>{t(isGuest && !guestCanView(guestSettings, 'courses') ? 'education.student.backToClasses' : 'education.student.backToCourses')}</Button>
         {error ? <Alert severity="error">{error}</Alert> : null}
         {update?.available ? <Alert severity="info" action={<Stack direction={{ xs: 'column', sm: 'row' }}><Button color="inherit" onClick={() => setUpdate(null)} disabled={working}>{t('education.student.continueCurrent')}</Button><Button color="inherit" onClick={() => setReviewOpen(true)} disabled={working}>{t('education.student.reviewChanges')}</Button></Stack>}>
           <Typography fontWeight={700}>{t('education.student.updateAvailable')}</Typography>

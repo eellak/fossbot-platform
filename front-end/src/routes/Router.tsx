@@ -82,7 +82,7 @@ const Router = [
     path: '/dashboard',
     element: (
       <PrivateRoute guestAllowed>
-        <FullLayout />
+        <RoleBasedRoute guestView="dashboard"><FullLayout /></RoleBasedRoute>
       </PrivateRoute>
     ),
     children: [
