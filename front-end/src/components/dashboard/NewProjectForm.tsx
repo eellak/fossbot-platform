@@ -18,6 +18,8 @@ import { useAuth } from 'src/authentication/AuthProvider';
 import type { ProjectStageReference } from 'src/authentication/AuthInterfaces';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { useNotifications } from 'src/components/notifications/NotificationProvider';
+import { guestProjectRepository } from 'src/guest/guestProjects';
 
 interface NewProjectFormProps {
   isDescriptionDisabled: boolean,
@@ -39,6 +41,7 @@ const NewProjectForm = ({ isDescriptionDisabled, editorInitialValue, code, stage
   const navigate = useNavigate();
   const location = useLocation();
   const auth = useAuth();
+  const { notify } = useNotifications();
 
   const handleProjectNameChange = (event: any) => {
     setProjectName(event.target.value);
@@ -78,6 +81,13 @@ const NewProjectForm = ({ isDescriptionDisabled, editorInitialValue, code, stage
           code: code,
           stageReference: stageReference || null,
         });
+        if (!projectID) {
+          if (auth.isGuest) notify(t('guest.storageError'), { severity: 'error' });
+          return;
+        }
+        if (auth.isGuest) {
+          try { guestProjectRepository.clearDraft(selectedOption as 'python' | 'blockly'); } catch { /* Draft cleanup must not block opening the saved project. */ }
+        }
 
         const monacoPageUrl = `/monaco-page/${projectID}`;
         const blocklyPageUrl = `/blockly-page/${projectID}`;

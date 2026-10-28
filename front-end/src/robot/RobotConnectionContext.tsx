@@ -9,6 +9,7 @@ import React, {
   useState,
 } from 'react';
 import { io, Socket } from 'socket.io-client';
+import { useAuth } from 'src/authentication/AuthProvider';
 
 export type ExecutionTarget = 'simulation' | 'robot';
 export type RobotConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
@@ -414,7 +415,9 @@ const probeRobot = async (
 };
 
 export const RobotConnectionProvider: React.FC<React.PropsWithChildren> = ({ children }) => {
+  const { isGuest } = useAuth();
   const [target, setTargetState] = useState<ExecutionTarget>(() => {
+    if (isGuest) return 'simulation';
     try {
       return window.localStorage.getItem(TARGET_STORAGE_KEY) === 'robot' ? 'robot' : 'simulation';
     } catch {
@@ -598,6 +601,14 @@ export const RobotConnectionProvider: React.FC<React.PropsWithChildren> = ({ chi
     setStatusMessage('Robot disconnected.');
   }, [disconnectSocket]);
 
+  useEffect(() => {
+    if (!isGuest) return;
+    disconnectSocket();
+    setTargetState('simulation');
+    setStatus('disconnected');
+    setStatusMessage('Guest sessions use the simulator only.');
+  }, [disconnectSocket, isGuest]);
+
   const stop = useCallback(async () => {
     const socket = socketRef.current;
     if (!socket?.connected) {
@@ -623,6 +634,10 @@ export const RobotConnectionProvider: React.FC<React.PropsWithChildren> = ({ chi
 
   const setTarget = useCallback(
     (nextTarget: ExecutionTarget) => {
+      if (isGuest && nextTarget === 'robot') {
+        setStatusMessage('Guest sessions can only use the simulator.');
+        return;
+      }
       if (nextTarget === target) return;
       if (nextTarget === 'simulation') {
         if (socketRef.current?.connected) {
@@ -643,7 +658,7 @@ export const RobotConnectionProvider: React.FC<React.PropsWithChildren> = ({ chi
           : 'Physical robot mode selected. The browser will connect directly to your FOSSBot.',
       );
     },
-    [disconnectSocket, target],
+    [disconnectSocket, isGuest, target],
   );
 
   const setRobotUrl = useCallback((url: string) => {
@@ -653,6 +668,7 @@ export const RobotConnectionProvider: React.FC<React.PropsWithChildren> = ({ chi
 
   const connect = useCallback(
     async (urlOverride?: string) => {
+      if (isGuest) throw new Error('Guest sessions can only use the simulator.');
       const normalizedUrl = normalizeRobotUrl(urlOverride || robotUrlRef.current);
       disconnectSocket();
       setStatus('connecting');
@@ -888,7 +904,7 @@ export const RobotConnectionProvider: React.FC<React.PropsWithChildren> = ({ chi
         throw new Error(message);
       }
     },
-    [appendOutput, appendTerminalLine, disconnectSocket, setRobotUrl],
+    [appendOutput, appendTerminalLine, disconnectSocket, isGuest, setRobotUrl],
   );
 
   const discover = useCallback(async (networkPrefix?: string) => {

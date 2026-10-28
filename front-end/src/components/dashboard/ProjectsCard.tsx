@@ -105,6 +105,8 @@ const ProjectsCard = ({ previewAppearance = true }: { previewAppearance?: boolea
         if (fetchedProjects) {
           setProjects(fetchedProjects);
           setPage(1);
+        } else if (auth.isGuest) {
+          notify(t('alertMessages.projectsFetchError'), { severity: 'error' });
         }
       } catch (error) {
         notify(t('alertMessages.projectsFetchError'), { severity: 'error' });

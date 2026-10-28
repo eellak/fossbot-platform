@@ -510,6 +510,7 @@ export interface CourseAssignment {
   id: number;
   group_id: number;
   course_id: number;
+  enrollment_id?: number | null;
   course_title: string;
   release_id: number;
   release_version: number;
@@ -540,6 +541,7 @@ export interface TeacherClassGroup {
     student_username: string;
     display_alias: string;
     leaderboard_opt_in: boolean;
+    is_guest?: boolean;
     joined_at: string;
   }>;
   assignments: CourseAssignment[];
@@ -554,6 +556,8 @@ export interface StudentClassGroup {
   membership: {
     display_alias: string;
     leaderboard_opt_in: boolean;
+    is_guest?: boolean;
+    alias_editable?: boolean;
     joined_at: string;
   };
   assignments: CourseAssignment[];
@@ -569,7 +573,7 @@ export interface ClassLeaderboard {
   release_version: number;
   season: number;
   friendly_competition: true;
-  entries: Array<{ rank: number; alias: string; value: number }>;
+  entries: Array<{ rank: number; alias: string; value: number; is_guest?: boolean }>;
 }
 
 export interface ClassChallengeStatistics {
@@ -598,7 +602,7 @@ export interface CourseProgressAnalytics {
   common_outcome_reasons: Record<string, number>;
   students: Array<{
     enrollment_id: number;
-    student: { username: string; display_name: string };
+    student: { username: string; display_name: string; is_guest?: boolean };
     active_release: { id: number; version: number };
     update_available: boolean;
     enrolled_at: string;

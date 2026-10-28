@@ -166,7 +166,7 @@ function emitStageSelection(stage: StageSelection): void {
 }
 
 const CardDialog: React.FC<CardDialogProps> = ({ open, onClose, onSelect, onSelectStage, onCreateStage }) => {
-  const { token, user } = useAuth();
+  const { token, user, isGuest } = useAuth();
   const { marketplace: marketplaceEnabled } = useFeatureFlags();
   const userKey = stageListUserKey(user);
   const [tab, setTab] = useState<StageSelectionSource>('default');
@@ -192,8 +192,9 @@ const CardDialog: React.FC<CardDialogProps> = ({ open, onClose, onSelect, onSele
   }, [open]);
 
   useEffect(() => {
-    if (!open || !token) {
+    if (!open || !token || isGuest) {
       setLocalStages([]);
+      setLocalLoading(false);
       return undefined;
     }
     let active = true;
@@ -204,10 +205,16 @@ const CardDialog: React.FC<CardDialogProps> = ({ open, onClose, onSelect, onSele
       .catch((error) => { if (active) setLocalError(error instanceof Error ? error.message : 'Could not load local stages.'); })
       .finally(() => { if (active) setLocalLoading(false); });
     return () => { active = false; };
-  }, [open, token]);
+  }, [isGuest, open, token]);
 
   useEffect(() => {
-    if (!open || !token || !userKey) return undefined;
+    if (!open || !token || !userKey || isGuest) {
+      setUserStages([]);
+      setProviderStatus(null);
+      setUserLoading(false);
+      setProviderLoading(false);
+      return undefined;
+    }
     let active = true;
     setProviderLoading(true);
     getGitHubProviderStatus(token)
@@ -227,10 +234,10 @@ const CardDialog: React.FC<CardDialogProps> = ({ open, onClose, onSelect, onSele
     sync();
     const unsubscribe = subscribeUserStages(userKey, sync);
     return () => { active = false; unsubscribe(); };
-  }, [open, token, userKey]);
+  }, [isGuest, open, token, userKey]);
 
   const handleConnect = async () => {
-    if (!token) return;
+    if (!token || isGuest) return;
     setConnecting(true);
     setUserError('');
     try {
@@ -265,6 +272,7 @@ const CardDialog: React.FC<CardDialogProps> = ({ open, onClose, onSelect, onSele
   }), [localStages.length, marketplaceStages.length, userStages.length]);
 
   const handleLocalSelect = async (stage: LocalStageSummary) => {
+    if (isGuest) return;
     const selection = {
       sourceType: 'local' as const,
       localStageId: stage.id,
@@ -297,6 +305,7 @@ const CardDialog: React.FC<CardDialogProps> = ({ open, onClose, onSelect, onSele
   };
 
   const handleUserSelect = async (stage: ProviderStageListItem) => {
+    if (isGuest) return;
     const stageUrl = githubRawStageUrl(stage);
     const selection = {
       sourceType: 'github' as const,
@@ -360,7 +369,7 @@ const CardDialog: React.FC<CardDialogProps> = ({ open, onClose, onSelect, onSele
       <DialogContent>
         <Tabs value={tab} onChange={(_event, value) => setTab(value)} sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}>
           <Tab value="default" label={<span>Built-in <Typography component="span" variant="caption" color="text.secondary">{tabCounts.default}</Typography></span>} />
-          <Tab value="github" label={<span>{MARKETPLACE_COPY.myStages} <Typography component="span" variant="caption" color="text.secondary">{tabCounts.github}</Typography></span>} />
+          {!isGuest && <Tab value="github" label={<span>{MARKETPLACE_COPY.myStages} <Typography component="span" variant="caption" color="text.secondary">{tabCounts.github}</Typography></span>} />}
           {marketplaceEnabled && <Tab value="marketplace" label={<span>{MARKETPLACE_COPY.marketplace} <Typography component="span" variant="caption" color="text.secondary">{tabCounts.marketplace}</Typography></span>} />}
         </Tabs>
 
@@ -380,7 +389,7 @@ const CardDialog: React.FC<CardDialogProps> = ({ open, onClose, onSelect, onSele
           </Grid>
         )}
 
-        {tab === 'github' && (
+        {!isGuest && tab === 'github' && (
           <Stack spacing={2}>
             <Box>
               <Typography variant="subtitle2" sx={{ mb: 1 }}>Local stages</Typography>

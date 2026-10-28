@@ -35,6 +35,8 @@ import {
 import { formatStageRelativeTime } from 'src/stages/StageCard';
 import StageListCard from 'src/stages/StageListCard';
 import { LocalStageDetailsDialog } from 'src/stages/StageDetailsDialog';
+import { localStageRepository } from 'src/components/stage-builder/localStages';
+import type { LocalStageRecord } from 'src/components/stage-builder/types';
 import { useStagePreviews } from 'src/stages/useStagePreviews';
 import { MARKETPLACE_COPY } from 'src/stages/marketplaceCopy';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -101,11 +103,12 @@ export default function UserStagesDashboardPanel({ showViewAll = true, appearanc
   const { t } = useTranslation();
   const confirmDialog = useConfirmDialog();
   const { notify } = useNotifications();
-  const { token, user } = useAuth();
+  const { token, user, isGuest } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const userKey = stageListUserKey(user);
   const [localStages, setLocalStages] = useState<LocalStageSummary[]>([]);
+  const [browserStages, setBrowserStages] = useState<LocalStageRecord[]>([]);
   const [githubStages, setGitHubStages] = useState<ProviderStageListItem[]>([]);
   const [publications, setPublications] = useState<MyMarketplaceStage[]>([]);
   const [providerStatus, setProviderStatus] = useState<GitHubProviderStatus | null>(null);
@@ -159,7 +162,7 @@ export default function UserStagesDashboardPanel({ showViewAll = true, appearanc
   };
 
   const connectGitHub = useCallback(async () => {
-    if (!token) {
+    if (!token || isGuest) {
       setError('Sign in before connecting GitHub.');
       return;
     }
@@ -171,7 +174,7 @@ export default function UserStagesDashboardPanel({ showViewAll = true, appearanc
       setError(connectError instanceof Error ? connectError.message : 'Could not start GitHub connection.');
       setConnecting(false);
     }
-  }, [token]);
+  }, [isGuest, token]);
 
   useEffect(() => {
     if (!userKey) return undefined;
@@ -185,22 +188,38 @@ export default function UserStagesDashboardPanel({ showViewAll = true, appearanc
   }, [userKey]);
 
   const refreshLocalStages = useCallback(async () => {
-    if (!token) return;
+    if (!token || isGuest) return;
     try {
       setLocalStages(await listLocalStages(token));
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Could not load local stages.');
     }
-  }, [token]);
+  }, [isGuest, token]);
 
   // Refetch when a Stage Builder save finishes, including saves that commit
   // after this panel has already mounted.
   useEffect(() => {
-    if (!token) return undefined;
+    if (!token || isGuest) return undefined;
     return subscribeLocalStages(() => { void refreshLocalStages(); });
-  }, [refreshLocalStages, token]);
+  }, [isGuest, refreshLocalStages, token]);
 
   useEffect(() => {
+    if (isGuest) {
+      const refreshBrowserStages = () => {
+        try {
+          setBrowserStages(localStageRepository.list('guest'));
+          setError('');
+        } catch (loadError) {
+          setError(loadError instanceof Error ? loadError.message : 'Could not read browser-saved stages.');
+        } finally {
+          setLoading(false);
+        }
+      };
+      setLoading(true);
+      refreshBrowserStages();
+      window.addEventListener('focus', refreshBrowserStages);
+      return () => window.removeEventListener('focus', refreshBrowserStages);
+    }
     if (!token) {
       setLoading(false);
       return undefined;
@@ -237,7 +256,7 @@ export default function UserStagesDashboardPanel({ showViewAll = true, appearanc
       if (active) setLoading(false);
     });
     return () => { active = false; };
-  }, [token, userKey]);
+  }, [isGuest, token, userKey]);
 
   const updateLocalPublication = async (stage: LocalStageSummary) => {
     if (!token) return;
@@ -273,6 +292,18 @@ export default function UserStagesDashboardPanel({ showViewAll = true, appearanc
   };
 
   const stages = useMemo<DashboardStage[]>(() => {
+    if (isGuest) {
+      return browserStages.map((stage) => ({
+        key: `browser:${stage.id}`,
+        title: stage.title,
+        description: stage.description,
+        updatedAt: stage.updatedAt,
+        href: `/stage-builder?guestStage=${encodeURIComponent(stage.id)}`,
+        source: 'local' as const,
+        detail: '',
+        statusKey: 'draft' as const,
+      })).sort((left, right) => new Date(right.updatedAt || 0).getTime() - new Date(left.updatedAt || 0).getTime());
+    }
     const rows: DashboardStage[] = localStages.map((stage) => ({
       key: `local:${stage.id}`,
       title: stage.title,
@@ -307,7 +338,7 @@ export default function UserStagesDashboardPanel({ showViewAll = true, appearanc
       previewUrl: publication?.entry.previewUrl,
     }));
     return rows.sort((left, right) => new Date(right.updatedAt || 0).getTime() - new Date(left.updatedAt || 0).getTime());
-  }, [githubStages, localStages, publications]);
+  }, [browserStages, githubStages, isGuest, localStages, publications]);
 
   const previewObjectUrls = useStagePreviews(token, stages.map((stage) => stage.previewUrl));
 
@@ -377,8 +408,8 @@ export default function UserStagesDashboardPanel({ showViewAll = true, appearanc
   }, [pageCount]);
 
   const showConnect = !loading && (!providerStatus?.connected || providerStatus.needsReconnect);
-  const createStageButton = <Button size="small" variant="contained" startIcon={<AddIcon />} onClick={() => showViewAll ? navigate('/stages?create=1') : setStagePickerOpen(true)}>{t('dashboardStages.create')}</Button>;
-  const connectButton = showConnect ? <Button size="small" variant="outlined" startIcon={connecting ? <CircularProgress size={16} color="inherit" /> : <GitHubIcon />} disabled={connecting} onClick={connectGitHub}>{connecting ? 'Connecting…' : MARKETPLACE_COPY.connectGitHub}</Button> : null;
+  const createStageButton = <Button size="small" variant="contained" startIcon={<AddIcon />} onClick={() => isGuest ? navigate('/stage-builder') : showViewAll ? navigate('/stages?create=1') : setStagePickerOpen(true)}>{isGuest ? t('guest.newStage') : t('dashboardStages.create')}</Button>;
+  const connectButton = !isGuest && showConnect ? <Button size="small" variant="outlined" startIcon={connecting ? <CircularProgress size={16} color="inherit" /> : <GitHubIcon />} disabled={connecting} onClick={connectGitHub}>{connecting ? 'Connecting…' : MARKETPLACE_COPY.connectGitHub}</Button> : null;
   const actions = (
     <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" justifyContent="flex-end">
       {createStageButton}
@@ -395,11 +426,11 @@ export default function UserStagesDashboardPanel({ showViewAll = true, appearanc
       status={stage.status ? <Chip size="small" label={stage.status} color={stage.statusColor} variant="outlined" /> : undefined}
       notice={stage.notice}
       fallbackIcon={stage.source === 'local' ? <StorageIcon fontSize="small" /> : <GitHubIcon fontSize="small" />}
-      meta={<>{stage.source === 'local' ? 'Local' : 'GitHub'}{'\u00A0\u00A0'}{stage.detail}{'\u00A0\u00A0'}{formatStageRelativeTime(stage.updatedAt).toLowerCase()}</>}
+      meta={<>{isGuest ? 'Browser' : stage.source === 'local' ? 'Local' : 'GitHub'}{stage.detail ? <>{'\u00A0\u00A0'}{stage.detail}</> : null}{'\u00A0\u00A0'}{formatStageRelativeTime(stage.updatedAt).toLowerCase()}</>}
       onOpen={() => navigate(stage.href)}
       surface={viewMode === 'cards' ? 'card' : 'row'}
       divided={viewMode !== 'cards' && index > 0}
-      action={stage.source === 'local' ? (
+      action={!isGuest && stage.source === 'local' ? (
         <Tooltip title="More actions">
           <span>
             <IconButton
@@ -440,7 +471,7 @@ export default function UserStagesDashboardPanel({ showViewAll = true, appearanc
         }}
         sx={{ flex: 1, minWidth: 0 }}
       />}
-      {showFilters && <FormControl size="small" sx={{ minWidth: { xs: '100%', sm: 150 } }}>
+      {showFilters && !isGuest && <FormControl size="small" sx={{ minWidth: { xs: '100%', sm: 150 } }}>
         <InputLabel id="stages-source-filter-label">Source</InputLabel>
         <Select labelId="stages-source-filter-label" value={sourceFilter} label="Source" onChange={(event) => { setSourceFilter(event.target.value as typeof sourceFilter); setPage(1); }}>
           <MenuItem value="all">All sources</MenuItem>
@@ -448,7 +479,7 @@ export default function UserStagesDashboardPanel({ showViewAll = true, appearanc
           <MenuItem value="github">GitHub</MenuItem>
         </Select>
       </FormControl>}
-      {showFilters && <FormControl size="small" sx={{ minWidth: { xs: '100%', sm: 160 } }}>
+      {showFilters && !isGuest && <FormControl size="small" sx={{ minWidth: { xs: '100%', sm: 160 } }}>
         <InputLabel id="stages-status-filter-label">Status</InputLabel>
         <Select labelId="stages-status-filter-label" value={statusFilter} label="Status" onChange={(event) => { setStatusFilter(event.target.value as typeof statusFilter); setPage(1); }}>
           <MenuItem value="all">All statuses</MenuItem>
@@ -493,7 +524,7 @@ export default function UserStagesDashboardPanel({ showViewAll = true, appearanc
     {loading && !stages.length ? <Stack spacing={1}>{Array.from({ length: 4 }).map((_, index) => <Skeleton key={index} variant="rounded" height={64} />)}</Stack>
       : <>
         {stageToolbar}
-        {!stages.length ? <Box sx={{ py: 2 }}><Typography variant="subtitle2" fontWeight={600}>{t('dashboardStages.empty')}</Typography><Typography variant="body2" color="text.secondary">{t('dashboardStages.emptyHelp')}</Typography></Box>
+        {!stages.length ? <Box sx={{ py: 2 }}><Typography variant="subtitle2" fontWeight={600}>{isGuest ? t('guest.noStages') : t('dashboardStages.empty')}</Typography><Typography variant="body2" color="text.secondary">{isGuest ? t('guest.localStagesHelp') : t('dashboardStages.emptyHelp')}</Typography></Box>
           : filteredStages.length === 0 ? (
             <Box sx={{ py: 4, textAlign: 'center' }}>
               <Typography variant="body2" fontWeight={600}>{hasActiveFilters ? 'No stages match your filters' : 'No saved stages yet'}</Typography>
@@ -560,5 +591,5 @@ export default function UserStagesDashboardPanel({ showViewAll = true, appearanc
     return content;
   }
 
-  return <DashboardCard title={t('dashboardStages.mine')} subtitle={t('dashboardStages.mineSubtitle')} action={actions} compact collapsible>{content}</DashboardCard>;
+  return <DashboardCard title={t('dashboardStages.mine')} subtitle={isGuest ? t('guest.localStagesHelp') : t('dashboardStages.mineSubtitle')} action={actions} compact collapsible>{content}</DashboardCard>;
 }

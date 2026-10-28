@@ -39,6 +39,7 @@ const LessonWorkspacePage = Loadable(lazy(() => import('../views/lesson-workspac
 const CourseProgressPage = Loadable(lazy(() => import('../views/course-progress-page/CourseProgressPage')));
 const ClassGroupsTeacherPage = Loadable(lazy(() => import('../views/class-groups-teacher-page/ClassGroupsTeacherPage')));
 const ClassGroupsStudentPage = Loadable(lazy(() => import('../views/class-groups-student-page/ClassGroupsStudentPage')));
+const GuestUnavailable = Loadable(lazy(() => import('../views/guest-unavailable-page/GuestUnavailable')));
 
 //const BlocklyPage = Loadable(lazy(() => import('../views/blockly-page/BlocklyPage')));
 //const BlocklyPage =  '../views/blockly-page/BlocklyPage';
@@ -80,7 +81,7 @@ const Router = [
   {
     path: '/dashboard',
     element: (
-      <PrivateRoute>
+      <PrivateRoute guestAllowed>
         <FullLayout />
       </PrivateRoute>
     ),
@@ -106,6 +107,11 @@ const Router = [
     children: [{ path: '/hua-page', exact: true, element: <HuaPage /> }],
   },
   {
+    path: '/guest-unavailable',
+    element: <BlankLayout />,
+    children: [{ path: '', exact: true, element: <GuestUnavailable /> }],
+  },
+  {
     path: '/auth',
     element: <BlankLayout />,
     children: [
@@ -118,8 +124,8 @@ const Router = [
     path: '/blockly-page',
     title: 'Blockly Editor',
     element: (
-      <PrivateRoute>
-        <FullLayout />
+      <PrivateRoute guestAllowed>
+        <RoleBasedRoute guestView="blockly"><FullLayout /></RoleBasedRoute>
       </PrivateRoute>
     ),
     children: [
@@ -131,8 +137,8 @@ const Router = [
     path: '/monaco-page',
     title: 'Python Editor',
     element: (
-      <PrivateRoute>
-        <FullLayout />
+      <PrivateRoute guestAllowed>
+        <RoleBasedRoute guestView="python"><FullLayout /></RoleBasedRoute>
       </PrivateRoute>
     ),
     children: [
@@ -145,8 +151,8 @@ const Router = [
     path: '/stages',
     title: 'Stages',
     element: (
-      <PrivateRoute>
-        <RoleBasedRoute betaTesterOnly><FullLayout /></RoleBasedRoute>
+      <PrivateRoute guestAllowed>
+        <RoleBasedRoute betaTesterOnly guestView="stages"><FullLayout /></RoleBasedRoute>
       </PrivateRoute>
     ),
     children: [{ path: '', exact: true, element: <StagesPage /> }],
@@ -154,19 +160,19 @@ const Router = [
   {
     path: '/courses',
     title: 'Courses',
-    element: <PrivateRoute><RoleBasedRoute betaTesterOnly><FullLayout /></RoleBasedRoute></PrivateRoute>,
+    element: <PrivateRoute guestAllowed><RoleBasedRoute betaTesterOnly guestView="courses"><FullLayout /></RoleBasedRoute></PrivateRoute>,
     children: [{ path: '', exact: true, element: <CoursesPage /> }],
   },
   {
     path: '/courses/:courseId',
     title: 'Course',
-    element: <PrivateRoute><RoleBasedRoute betaTesterOnly><FullLayout /></RoleBasedRoute></PrivateRoute>,
+    element: <PrivateRoute guestAllowed><RoleBasedRoute betaTesterOnly guestViews={['courses', 'classrooms']}><FullLayout /></RoleBasedRoute></PrivateRoute>,
     children: [{ path: '', exact: true, element: <CoursePage /> }],
   },
   {
     path: '/courses/:courseId/learn/:lessonKey',
     title: 'Lesson',
-    element: <PrivateRoute><RoleBasedRoute betaTesterOnly><FullLayout /></RoleBasedRoute></PrivateRoute>,
+    element: <PrivateRoute guestAllowed><RoleBasedRoute betaTesterOnly guestView="classrooms"><FullLayout /></RoleBasedRoute></PrivateRoute>,
     children: [{ path: '', exact: true, element: <LessonWorkspacePage /> }],
   },
   {
@@ -192,7 +198,7 @@ const Router = [
   {
     path: '/classrooms',
     title: 'Class groups',
-    element: <PrivateRoute><RoleBasedRoute roles={['user']} betaTesterOnly><FullLayout /></RoleBasedRoute></PrivateRoute>,
+    element: <PrivateRoute guestAllowed><RoleBasedRoute roles={['user']} betaTesterOnly guestView="classrooms"><FullLayout /></RoleBasedRoute></PrivateRoute>,
     children: [{ path: '', exact: true, element: <ClassGroupsStudentPage /> }],
   },
   {
@@ -219,8 +225,8 @@ const Router = [
     path: '/stage-builder',
     title: 'Stage Builder',
     element: (
-      <PrivateRoute>
-        <RoleBasedRoute betaTesterOnly><BlankLayout /></RoleBasedRoute>
+      <PrivateRoute guestAllowed>
+        <RoleBasedRoute betaTesterOnly guestView="stage_builder"><BlankLayout /></RoleBasedRoute>
       </PrivateRoute>
     ),
     children: [
@@ -239,10 +245,8 @@ const Router = [
   {
     path: '/interactive-page',
     element: (
-      <PrivateRoute>
-        {/* <RoleBasedRoute betaTesterOnly={true}> */}
-          <FullLayout />
-        {/* </RoleBasedRoute> */}
+      <PrivateRoute guestAllowed>
+        <RoleBasedRoute guestView="interactive"><FullLayout /></RoleBasedRoute>
       </PrivateRoute>
     ),
     children: [
@@ -255,8 +259,8 @@ const Router = [
   {
     path: '/rc-page',
     element: (
-      <PrivateRoute>
-        <FullLayout />
+      <PrivateRoute guestAllowed>
+        <RoleBasedRoute guestView="rc"><FullLayout /></RoleBasedRoute>
       </PrivateRoute>
     ),
     children: [

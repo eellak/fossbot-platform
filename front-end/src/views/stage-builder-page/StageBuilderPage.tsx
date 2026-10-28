@@ -43,6 +43,8 @@ import { getMarketplaceStageStatus, publishStageToMarketplace, MarketplaceReques
 import { PublishToMarketplaceDialog, type PublishMarketplaceValues } from 'src/stages/PublishToMarketplaceDialog';
 import { invalidateLocalStages, invalidateMarketplaceFirstPage, invalidateMyMarketplaceStages, invalidateUserStages, refreshMarketplaceFirstPage, refreshMyMarketplaceStages, refreshUserStages, stageListUserKey, subscribeUserStages, userStagesSnapshot } from 'src/stages/stageListCache';
 import { createLocalStage, listLocalStages, loadLocalStage, LocalStageRequestError, publishLocalStage, updateLocalStage, type LocalPublicationSubmissionSummary, type LocalStage, type LocalStageSummary } from 'src/stages/LocalStagesApi';
+import { localStageRepository } from 'src/components/stage-builder/localStages';
+import type { LocalStageRecord } from 'src/components/stage-builder/types';
 import { OpenLocalStageDialog } from 'src/stages/OpenLocalStageDialog';
 import { useFeatureFlags } from 'src/config/FeatureFlags';
 import StageAuthoringAssistant from 'src/components/ai/StageAuthoringAssistant';
@@ -385,11 +387,16 @@ const StageBuilderPage = () => {
   const { notify } = useNotifications();
   const confirmDialog = useConfirmDialog();
   const { t } = useTranslation();
-  const { user, token } = useAuth();
-  const { marketplace: marketplaceEnabled, ready: featureFlagsReady } = useFeatureFlags();
+  const { user, token, isGuest } = useAuth();
+  const { marketplace: marketplaceAllowed, ready: featureFlagsReady } = useFeatureFlags();
+  const marketplaceEnabled = marketplaceAllowed && !isGuest;
   const navigate = useNavigate();
   const desktopPanels = useMediaQuery((theme: any) => theme.breakpoints.up('lg'));
-  const scope = useMemo(() => userScope(user), [user]);
+  const scope = useMemo(() => isGuest ? 'guest' : userScope(user), [isGuest, user]);
+  const guestStageIdFromUrl = useMemo(() => new URLSearchParams(window.location.search).get('guestStage'), []);
+  const [guestLocalStageId, setGuestLocalStageId] = useState<string | null>(null);
+  const [guestOpenLocalOpen, setGuestOpenLocalOpen] = useState(false);
+  const [guestLocalStages, setGuestLocalStages] = useState<LocalStageRecord[]>([]);
   const [prefs, setPrefs] = useState<StageBuilderPreferences>(() => readStageBuilderPreferences(scope));
   const editorColors = useMemo(() => getEditorColors(prefs.styleVariant), [prefs.styleVariant]);
   const editorTones = useMemo(() => getEditorTones(prefs.styleVariant), [prefs.styleVariant]);
@@ -512,7 +519,7 @@ const StageBuilderPage = () => {
   }, [desktopPanels]);
 
   const refreshProviderStatus = async ({ force = false }: RefreshCacheOptions = {}) => {
-    if (!token) {
+    if (!token || isGuest) {
       providerStatusCacheRef.current = 0;
       setProviderStatus(null);
       return;
@@ -534,7 +541,7 @@ const StageBuilderPage = () => {
   };
 
   const refreshMarketplaceStatus = async ({ force = false }: RefreshCacheOptions = {}) => {
-    if (!marketplaceEnabled || !token || !remoteStage || remoteStage.private) {
+    if (!marketplaceEnabled || !token || isGuest || !remoteStage || remoteStage.private) {
       marketplaceStatusCacheRef.current = { key: '', checkedAt: 0 };
       setMarketplaceStatus(null);
       setMarketplaceStatusLoading(false);
@@ -558,8 +565,8 @@ const StageBuilderPage = () => {
     }
   };
 
-  useEffect(() => { refreshProviderStatus(); }, [token]);
-  useEffect(() => { refreshMarketplaceStatus(); }, [marketplaceEnabled, token, remoteStage?.repoOwner, remoteStage?.repoName, remoteStage?.private]);
+  useEffect(() => { refreshProviderStatus(); }, [isGuest, token]);
+  useEffect(() => { refreshMarketplaceStatus(); }, [isGuest, marketplaceEnabled, token, remoteStage?.repoOwner, remoteStage?.repoName, remoteStage?.private]);
 
   useEffect(() => {
     if (!stageListUser) {
@@ -601,6 +608,10 @@ const StageBuilderPage = () => {
 
   useEffect(() => {
     if (!featureFlagsReady || !githubDeepLinkTarget) return undefined;
+    if (isGuest) {
+      setGithubDeepLinkLoad({ status: 'error', repoLabel: githubDeepLinkTarget.label, error: 'Guest sessions cannot open GitHub stages.' });
+      return undefined;
+    }
     if (!token) {
       setGithubDeepLinkLoad({
         status: 'error',
@@ -656,10 +667,25 @@ const StageBuilderPage = () => {
 
     openDeepLinkedStage();
     return () => { cancelled = true; };
-  }, [featureFlagsReady, githubDeepLinkRetry, githubDeepLinkTarget, marketplaceEnabled, token]);
+  }, [featureFlagsReady, githubDeepLinkRetry, githubDeepLinkTarget, isGuest, marketplaceEnabled, token]);
 
   useEffect(() => {
-    if (!localDeepLinkStageId || !token) return;
+    if (!isGuest || !guestStageIdFromUrl) return;
+    try {
+      const record = localStageRepository.get(guestStageIdFromUrl, scope);
+      if (!record) return;
+      replaceStage(configToEditorStage(record), { undoable: false, clean: true, message: 'Opened stage from this browser.' });
+      setGuestLocalStageId(record.id);
+      setLocalStage(null);
+      setRemoteStage(null);
+      window.history.replaceState(null, '', window.location.pathname);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not open the local stage.');
+    }
+  }, [guestStageIdFromUrl, isGuest, scope]);
+
+  useEffect(() => {
+    if (!localDeepLinkStageId || !token || isGuest) return;
     let cancelled = false;
     setLocalStagesLoading(true);
     loadLocalStage(token, localDeepLinkStageId)
@@ -676,7 +702,7 @@ const StageBuilderPage = () => {
       .catch((error) => { if (!cancelled) setMessage(error instanceof Error ? error.message : 'Could not open local stage.'); })
       .finally(() => { if (!cancelled) setLocalStagesLoading(false); });
     return () => { cancelled = true; };
-  }, [localDeepLinkStageId, token]);
+  }, [isGuest, localDeepLinkStageId, token]);
 
   useEffect(() => {
     if (!remoteStageUrl) return;
@@ -1060,6 +1086,7 @@ const StageBuilderPage = () => {
     replaceStage(next, { undoable: false, clean: true, message: 'New blank stage created.' });
     setLocalStage(null);
     setRemoteStage(null);
+    setGuestLocalStageId(null);
   };
 
   const handleDemo = async () => {
@@ -1067,6 +1094,7 @@ const StageBuilderPage = () => {
     replaceStage(createDemoEditorStage(), { undoable: true, clean: false, message: 'Demo stage loaded.' });
     setLocalStage(null);
     setRemoteStage(null);
+    setGuestLocalStageId(null);
   };
 
   const readFileAsDataUrl = (file: File): Promise<string> => new Promise((resolve, reject) => {
@@ -1126,6 +1154,7 @@ const StageBuilderPage = () => {
       replaceStage(imported, { undoable: true, clean: true, message: 'Imported stage JSON.' });
       setLocalStage(null);
       setRemoteStage(null);
+      setGuestLocalStageId(null);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Import failed.');
     } finally {
@@ -1134,8 +1163,8 @@ const StageBuilderPage = () => {
   };
 
   const handleProviderConnect = async () => {
-    if (!token) {
-      setProviderError('Sign in before connecting GitHub.');
+    if (!token || isGuest) {
+      setProviderError('Guest sessions cannot connect GitHub.');
       setProviderErrorCode('not_connected');
       return;
     }
@@ -1149,11 +1178,32 @@ const StageBuilderPage = () => {
   };
 
   const handleCreateBootstrapLinks = async (slug: string, visibility: 'public' | 'private') => {
-    if (!token) throw new Error('Sign in before creating GitHub setup links.');
+    if (!token || isGuest) throw new Error('Guest sessions cannot create GitHub setup links.');
     return getGitHubBootstrapLinks(token, slug, visibility);
   };
 
   const handleLocalSave = async () => {
+    if (isGuest) {
+      setLocalStageSaving(true);
+      try {
+        const record = editorStageToRecord(stage);
+        const existing = guestLocalStageId ? localStageRepository.get(guestLocalStageId, scope) : undefined;
+        const saved = existing
+          ? localStageRepository.save({ ...record, id: existing.id, createdAt: existing.createdAt }, scope)
+          : localStageRepository.create(record, scope);
+        setGuestLocalStageId(saved.id);
+        window.history.replaceState(null, '', `/stage-builder?guestStage=${encodeURIComponent(saved.id)}`);
+        setLastExportFingerprint(stageFingerprint(stage));
+        setExportedAt(new Date().toISOString());
+        clearStageBuilderDraft(scope);
+        setMessage('Saved in this browser.');
+      } catch (error) {
+        setMessage(error instanceof Error ? error.message : 'Local stage save failed.');
+      } finally {
+        setLocalStageSaving(false);
+      }
+      return;
+    }
     if (!token) {
       setMessage('Sign in before saving a stage to your account.');
       return;
@@ -1196,6 +1246,15 @@ const StageBuilderPage = () => {
   };
 
   const refreshLocalStageList = async () => {
+    if (isGuest) {
+      try {
+        setGuestLocalStages(localStageRepository.list(scope));
+        setGuestOpenLocalOpen(true);
+      } catch (error) {
+        setMessage(error instanceof Error ? error.message : 'Could not read browser-saved stages.');
+      }
+      return;
+    }
     if (!token) {
       setLocalStagesError('Sign in before opening stages from your account.');
       return;
@@ -1211,8 +1270,22 @@ const StageBuilderPage = () => {
     }
   };
 
+  const handleGuestOpenLocalStage = async (item: LocalStageRecord) => {
+    if (!(await confirmIfDirty('Open this browser-saved stage and replace the current editor stage? Unsaved changes will remain only as a recovery draft.'))) return;
+    try {
+      replaceStage(configToEditorStage(item), { undoable: true, clean: true, message: 'Opened stage from this browser.' });
+      setGuestLocalStageId(item.id);
+      setLocalStage(null);
+      setRemoteStage(null);
+      setGuestOpenLocalOpen(false);
+      window.history.replaceState(null, '', `/stage-builder?guestStage=${encodeURIComponent(item.id)}`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not open the local stage.');
+    }
+  };
+
   const handleOpenLocalStage = async (item: LocalStageSummary) => {
-    if (!token || !(await confirmIfDirty('Open this saved stage and replace the current editor stage? Unsaved changes will remain only as a recovery draft.'))) return;
+    if (isGuest || !token || !(await confirmIfDirty('Open this saved stage and replace the current editor stage? Unsaved changes will remain only as a recovery draft.'))) return;
     setLocalStagesLoading(true);
     setLocalStagesError('');
     try {
@@ -1229,7 +1302,7 @@ const StageBuilderPage = () => {
   };
 
   const handleProviderSave = async ({ slug, commitMessage, visibility }: SaveToProviderValues) => {
-    if (!token) {
+    if (!token || isGuest) {
       setProviderError('Sign in before saving to GitHub.');
       setProviderErrorCode('not_connected');
       return;
@@ -1291,7 +1364,7 @@ const StageBuilderPage = () => {
   };
 
   const handlePublishMarketplace = async ({ title, description, tags, previewDataUrl, sharingLicense, commitMessage }: PublishMarketplaceValues) => {
-    if (!marketplaceEnabled) return;
+    if (!marketplaceEnabled || isGuest) return;
     if (!token) {
       setMarketplaceError('Sign in before publishing to the marketplace.');
       return;
@@ -1373,6 +1446,11 @@ const StageBuilderPage = () => {
   };
 
   const refreshProviderStageList = async ({ force = false }: RefreshCacheOptions = {}) => {
+    if (isGuest) {
+      setProviderListError('Guest sessions cannot open GitHub stages.');
+      setProviderStages([]);
+      return;
+    }
     if (!token || !stageListUser) {
       setProviderListError('Sign in before opening from GitHub.');
       setProviderListWarning(false);
@@ -1383,6 +1461,10 @@ const StageBuilderPage = () => {
   };
 
   const handleProviderOpenDialog = () => {
+    if (isGuest) {
+      setMessage('Guest sessions cannot open GitHub stages.');
+      return;
+    }
     setOpenProviderOpen(true);
     refreshProviderStageList();
   };
@@ -1772,7 +1854,8 @@ const StageBuilderPage = () => {
         marketplacePublishReady={marketplacePublishReady}
         onImport={() => importInputRef.current?.click()}
         onSaveLocal={handleLocalSave}
-        onOpenLocal={() => { setOpenLocalStageOpen(true); void refreshLocalStageList(); }}
+        onOpenLocal={() => { if (isGuest) { void refreshLocalStageList(); return; } setOpenLocalStageOpen(true); void refreshLocalStageList(); }}
+        allowCloud={!isGuest}
         onExport={handleExport}
         onRefreshGitHubStatus={() => { refreshProviderStatus(); refreshMarketplaceStatus(); }}
         onConnectProvider={handleProviderConnect}
@@ -1871,7 +1954,7 @@ const StageBuilderPage = () => {
           <Box sx={{ position: 'absolute', top: 12, right: 12, zIndex: 5 }}>
             <EditorViewportCameraGizmo currentView={lookThroughCameraId && lookThroughCamera ? 'camera' : (cameraViewRequest?.view || 'perspective')} hasActiveCamera={hasVisibleStageCamera(activeStage)} onCameraViewChange={requestCameraView} />
           </Box>
-          <StageAuthoringAssistant stage={stage} selectedIds={assistantSelectedIds} validation={validationResults} localStageId={localStage?.id} onApply={applyAssistantStage} onPreviewStageChange={handleAssistantPreviewStageChange} />
+          {!isGuest && <StageAuthoringAssistant stage={stage} selectedIds={assistantSelectedIds} validation={validationResults} localStageId={localStage?.id} onApply={applyAssistantStage} onPreviewStageChange={handleAssistantPreviewStageChange} />}
           {lookThroughCamera && lookThroughCamera.kind === 'camera' && (
             <Box sx={{ position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)', zIndex: 6, maxWidth: 'min(420px, calc(100% - 32px))', pointerEvents: 'none' }}>
               <Stack
@@ -1984,6 +2067,24 @@ const StageBuilderPage = () => {
         onRefresh={() => refreshProviderStageList({ force: true })}
         onOpenStage={handleOpenProviderStage}
       />
+
+      <Dialog open={guestOpenLocalOpen} onClose={() => setGuestOpenLocalOpen(false)} fullWidth maxWidth="sm">
+        <DialogTitle>Browser-saved stages</DialogTitle>
+        <DialogContent>
+          <Stack spacing={1}>
+            {!guestLocalStages.length && <Typography color="text.secondary">No browser-saved stages yet.</Typography>}
+            {guestLocalStages.map((item) => (
+              <Paper key={item.id} variant="outlined" sx={{ p: 1.5 }}>
+                <Stack direction="row" spacing={1} alignItems="center">
+                  <Box sx={{ flex: 1 }}><Typography fontWeight={600}>{item.title}</Typography><Typography variant="caption" color="text.secondary">{new Date(item.updatedAt).toLocaleString()}</Typography></Box>
+                  <Button size="small" variant="contained" onClick={() => void handleGuestOpenLocalStage(item)}>Open</Button>
+                </Stack>
+              </Paper>
+            ))}
+          </Stack>
+        </DialogContent>
+        <DialogActions><Button onClick={() => setGuestOpenLocalOpen(false)}>Close</Button></DialogActions>
+      </Dialog>
 
       <OpenLocalStageDialog
         open={openLocalStageOpen}

@@ -1,19 +1,22 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Alert, Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Divider, Grid, List, ListItem, ListItemText, Paper, Stack, Typography, useTheme } from '@mui/material';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import PageContainer from 'src/components/container/PageContainer';
 import StudentCourseOutline from 'src/components/courses/StudentCourseOutline';
 import { useAuth } from 'src/authentication/AuthProvider';
 import { enrollInCourse, listMyEnrollments, readPublishedCourse, readReleaseUpdate, updateEnrollmentRelease } from 'src/courses/CoursesApi';
 import type { Enrollment, ReleaseUpdate, StudentCourse } from 'src/courses/types';
+import { guestCanView } from 'src/authentication/guest';
 
 export default function CoursePage() {
   const { t } = useTranslation();
-  const { token, user } = useAuth();
+  const { token, user, isGuest, guestSettings } = useAuth();
   const theme = useTheme();
   const navigate = useNavigate();
   const courseId = Number(useParams().courseId);
+  const [searchParams] = useSearchParams();
+  const requestedEnrollmentId = Number(searchParams.get('enrollment')) || null;
   const [course, setCourse] = useState<StudentCourse | null>(null);
   const [enrollment, setEnrollment] = useState<Enrollment | null>(null);
   const [update, setUpdate] = useState<ReleaseUpdate | null>(null);
@@ -27,24 +30,31 @@ export default function CoursePage() {
     try {
       const overview = await readPublishedCourse(token, courseId);
       setCourse(overview);
-      if (user?.role === 'user') {
+      const canUseEnrollment = user?.role === 'user' || (isGuest && guestCanView(guestSettings, 'classrooms'));
+      if (canUseEnrollment) {
         const mine = await listMyEnrollments(token);
-        const current = mine.find((item) => item.course_id === courseId) || null;
+        const current = requestedEnrollmentId
+          ? mine.find((item) => item.id === requestedEnrollmentId) || null
+          : mine.find((item) => item.course_id === courseId) || null;
         setEnrollment(current);
         setUpdate(current?.update_available ? await readReleaseUpdate(token, current.id) : null);
       }
     } catch (reason) { setError(reason instanceof Error ? reason.message : t('education.student.errors.load')); }
     finally { setLoading(false); }
-  }, [courseId, token, user?.role, t]);
+  }, [courseId, guestSettings, isGuest, requestedEnrollmentId, token, user?.role, t]);
   useEffect(() => { void load(); }, [load]);
 
   const start = async () => {
     if (!course) return;
     setWorking(true); setError('');
     try {
+      if (isGuest) {
+        if (enrollment?.resume_lesson_key) navigate(`/courses/${course.id}/learn/${enrollment.resume_lesson_key}${isGuest ? `?enrollment=${enrollment.id}` : ''}`);
+        return;
+      }
       const current = enrollment || await enrollInCourse(token, course.id);
       setEnrollment(current);
-      if (current.resume_lesson_key) navigate(`/courses/${course.id}/learn/${current.resume_lesson_key}`);
+      if (current.resume_lesson_key) navigate(`/courses/${course.id}/learn/${current.resume_lesson_key}${isGuest ? `?enrollment=${current.id}` : ''}`);
     } catch (reason) { setError(reason instanceof Error ? reason.message : t('education.student.errors.enroll')); }
     finally { setWorking(false); }
   };
@@ -90,10 +100,10 @@ export default function CoursePage() {
                 <Typography variant="h5">{t('education.student.objectives')}</Typography>
                 <Box component="ul" sx={{ m: 0, pl: 3 }}>{course.learning_objectives.map((objective) => <li key={objective}><Typography>{objective}</Typography></li>)}</Box>
                 {course.prerequisites ? <><Typography variant="h6">{t('education.student.prerequisites')}</Typography><Typography>{course.prerequisites}</Typography></> : null}
-                {user?.role === 'user' ? <Button variant="contained" size="large" disabled={working} onClick={start} sx={{ alignSelf: 'flex-start' }}>{working ? t('education.student.saving') : enrollment?.completed_at ? t('education.student.reviewCourse') : enrollment ? t('education.student.continueCourse') : t('education.student.startCourse')}</Button> : null}
+                {(user?.role === 'user' || (isGuest && enrollment)) ? <Button variant="contained" size="large" disabled={working} onClick={start} sx={{ alignSelf: 'flex-start' }}>{working ? t('education.student.saving') : enrollment?.completed_at ? t('education.student.reviewCourse') : enrollment ? t('education.student.continueCourse') : t('education.student.startCourse')}</Button> : null}
               </Stack>
             </Grid>
-            <Grid item xs={12} md={4}><StudentCourseOutline collapsible defaultOpen={false} lessons={lessons} progress={enrollment?.progress} title={t('education.student.outline')} completedLabel={t('education.student.completed')} onSelect={enrollment ? (key) => navigate(`/courses/${course.id}/learn/${key}`) : undefined} /></Grid>
+            <Grid item xs={12} md={4}><StudentCourseOutline collapsible defaultOpen={false} lessons={lessons} progress={enrollment?.progress} title={t('education.student.outline')} completedLabel={t('education.student.completed')} onSelect={enrollment ? (key) => navigate(`/courses/${course.id}/learn/${key}${isGuest ? `?enrollment=${enrollment.id}` : ''}`) : undefined} /></Grid>
           </Grid>
         </Paper>
       </Stack>

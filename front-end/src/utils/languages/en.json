@@ -426,7 +426,8 @@
     "stageBuilder": "Stage Builder",
     "stageBuilderBased": "Create simulator stages",
     "teacherCourses": "My teaching courses",
-    "studentCourses": "Courses"
+    "studentCourses": "Courses",
+    "classGroups": "Class groups"
   },
   "stage-builder": {
     "title": "Stage Builder",
@@ -691,7 +692,12 @@
       "welcome": "Welcome to FOSSBot-Platform",
       "robotsCodingCreativity": "Robotics, Coding, Creativity. All in one place.",
       "newToPlatform": " New to FOSSBot-Platform?",
-      "createAccount": "Create an account"
+      "createAccount": "Create an account",
+      "or": "or",
+      "continueAsGuest": "Continue as guest",
+      "startingGuest": "Starting guest session…",
+      "guestDisabled": "Guest access is currently disabled.",
+      "guestUnavailable": "Guest access is unavailable right now."
     },
     "register": {
       "title": "Register Page",
@@ -845,7 +851,29 @@
     "verifier": "Verifier",
     "moderator": "Moderator",
     "noRoles": "No marketplace roles",
-    "actions": "Actions"
+    "actions": "Actions",
+    "guest": {
+      "title": "Guest access",
+      "description": "Choose which views anonymous guests can use. Guest code and stages stay in the guest browser. Accounts, teachers, and administrators are controlled separately.",
+      "retry": "Retry",
+      "loading": "Loading guest access settings…",
+      "beta": "Treat guests as beta testers",
+      "betaHelp": "Applies the beta tester treatment to guest sessions. It does not grant admin or authoring permissions.",
+      "views": "Guest views",
+      "empty": "No views selected. New guest sessions will be disabled; existing guest results remain visible to teachers.",
+      "save": "Save guest access",
+      "saving": "Saving…",
+      "saved": "Guest access settings saved.",
+      "views_dashboard": "Dashboard",
+      "views_python": "Python editor",
+      "views_blockly": "Blockly editor",
+      "views_interactive": "Interactive mode",
+      "views_rc": "RC mode",
+      "views_courses": "Course catalog",
+      "views_classrooms": "Class groups and lessons",
+      "views_stages": "Stages and public marketplace",
+      "views_stage_builder": "Stage Builder"
+    }
   },
   "aiAdmin": {
     "title": "AI settings",
@@ -2259,5 +2287,27 @@
     "blocklyProjects": "Blockly projects",
     "monacoProjects": "Monaco projects",
     "tutorials": "Tutorials"
-  }
+  },
+  "guest": {
+    "menuTitle": "Guest session",
+    "session": "Guest",
+    "localOnly": "Your code stays in this browser only.",
+    "exit": "Exit guest session",
+    "storageError": "Guest work could not be saved in this browser. Check available storage and try again.",
+    "localStagesHelp": "Stages saved in this browser. They are never uploaded to an account.",
+    "newStage": "New stage",
+    "noStages": "No browser-saved stages yet.",
+    "local": "Local",
+    "noDescription": "No description",
+    "deleteStageHelp": "This removes the stage from this browser only.",
+    "viewBadge": "Guest view"
+  },
+  "guestUnavailable": {
+    "title": "Guest access is unavailable",
+    "description": "An administrator has not enabled any guest views. Sign in with an account or check again later.",
+    "continue": "Continue",
+    "checkAgain": "Check again",
+    "signIn": "Sign in"
+  },
+  "open": "Open"
 }

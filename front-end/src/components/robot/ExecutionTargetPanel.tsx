@@ -19,6 +19,7 @@ import {
   Typography,
 } from '@mui/material';
 import { pageTabsSx } from 'src/components/shared/PageHeader';
+import { useAuth } from 'src/authentication/AuthProvider';
 import LinkOffIcon from '@mui/icons-material/LinkOff';
 import RobotTelemetryPanel from './RobotTelemetryPanel';
 import RobotCameraPanel from './RobotCameraPanel';
@@ -60,6 +61,7 @@ const ExecutionTargetPanel: React.FC<ExecutionTargetPanelProps> = ({
     disconnect,
     discover,
   } = useRobotConnection();
+  const { isGuest } = useAuth();
   const [networkPrefix, setNetworkPrefix] = useState(() => {
     try {
       return window.localStorage.getItem(DISCOVERY_PREFIX_STORAGE_KEY) || '';
@@ -129,6 +131,7 @@ const ExecutionTargetPanel: React.FC<ExecutionTargetPanelProps> = ({
           control={
             <Switch
               checked={target === 'robot'}
+              disabled={isGuest}
               onChange={(_, checked) => setTarget(checked ? 'robot' : 'simulation')}
               color="warning"
             />

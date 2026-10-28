@@ -15,6 +15,8 @@ sys.path.insert(0, str(BACKEND_DIR))
 from database.database import Base, User  # noqa: E402
 from models.models import UserRole  # noqa: E402
 from routers import classrooms, courses  # noqa: E402
+from utils.guest_access import Participant  # noqa: E402
+from utils.beta_access import require_beta_access  # noqa: E402
 
 
 @pytest.fixture()
@@ -94,8 +96,18 @@ def client_for(db):
         app.dependency_overrides[courses.get_db] = override_db
         app.dependency_overrides[courses.get_current_user] = lambda: user
         app.dependency_overrides[courses.optional_current_user] = lambda: user
+        def beta_participant():
+            require_beta_access(user)
+            return Participant(user=user)
+
+        app.dependency_overrides[courses.get_participant] = lambda: Participant(user=user)
+        app.dependency_overrides[courses.get_course_access] = beta_participant
+        app.dependency_overrides[courses.get_course_view_participant] = beta_participant
+        app.dependency_overrides[courses.get_classroom_participant] = beta_participant
         app.dependency_overrides[classrooms.get_db] = override_db
         app.dependency_overrides[classrooms.get_current_user] = lambda: user
+        app.dependency_overrides[classrooms.get_participant] = lambda: Participant(user=user)
+        app.dependency_overrides[classrooms.get_classroom_participant] = beta_participant
         client = TestClient(app)
         clients.append(client)
         return client

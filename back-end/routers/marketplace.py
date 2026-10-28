@@ -21,7 +21,6 @@ from routers.stage_sources import (
     ensure_repo_in_installation,
     ensure_public_repo,
     get_current_user,
-    get_beta_user,
     get_db,
     github_raw_base_url,
     github_stage_error,
@@ -44,9 +43,10 @@ from utils.marketplace_schema import (
 from utils.source_providers import get_provider
 from utils.source_providers.github_app import GitHubApiError, github_rate_limit_code, github_rate_limit_retry_after
 from utils.stage_repo_manifest import verify_stage_manifest
+from utils.guest_access import get_marketplace_access
 
 
-router = APIRouter(dependencies=[Depends(get_beta_user)])
+router = APIRouter(dependencies=[Depends(get_marketplace_access)])
 DATA_URL_RE = re.compile(r"^data:([^;,]+)?(;base64)?,(.*)$", re.DOTALL)
 MARKETPLACE_INDEX_CACHE: dict[str, Any] = {"expiresAt": 0.0, "payload": None}
 

@@ -228,7 +228,7 @@ function ModerationWorkspace({ canModerate, canVerify }: { canModerate: boolean;
 }
 
 export default function StagesPage() {
-  const { token, user } = useAuth();
+  const { token, user, isGuest } = useAuth();
   const { marketplace } = useFeatureFlags();
   const [searchParams, setSearchParams] = useSearchParams();
   const userKey = stageListUserKey(user);
@@ -238,13 +238,13 @@ export default function StagesPage() {
   const [refreshing, setRefreshing] = useState(false);
   const tab = marketplace && (requestedTab === 'explore' || (requestedTab === 'moderation' && (canModerate || canVerify))) ? requestedTab : 'mine';
   useEffect(() => {
-    if (!marketplace || !token) {
+    if (!marketplace || !token || isGuest) {
       setCanModerate(false);
       setCanVerify(false);
       return;
     }
     void getMarketplacePermissions(token).then((permissions) => { setCanModerate(permissions.roles.includes('moderator')); setCanVerify(permissions.roles.includes('verifier')); }).catch(() => { setCanModerate(false); setCanVerify(false); });
-  }, [marketplace, token]);
+  }, [isGuest, marketplace, token]);
   const refreshStages = async () => {
     if (!token) return;
     setRefreshing(true);

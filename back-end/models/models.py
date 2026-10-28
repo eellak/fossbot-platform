@@ -1,5 +1,5 @@
 from enum import Enum as PyEnum
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, field_validator
 from typing import Optional
 from pydantic import Field
 
@@ -7,6 +7,34 @@ class UserRole(PyEnum):
     ADMIN = 'admin'
     TUTOR = 'tutor'
     USER = 'user'
+
+class GuestView(str, PyEnum):
+    DASHBOARD = 'dashboard'
+    PYTHON = 'python'
+    BLOCKLY = 'blockly'
+    INTERACTIVE = 'interactive'
+    RC = 'rc'
+    COURSES = 'courses'
+    CLASSROOMS = 'classrooms'
+    STAGES = 'stages'
+    STAGE_BUILDER = 'stage_builder'
+
+
+class GuestSettingsUpdate(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+
+    beta_tester: bool = Field(default=False, strict=True)
+    allowed_views: list[GuestView] = Field(
+        default_factory=lambda: list(GuestView), max_length=len(GuestView),
+    )
+
+    @field_validator('allowed_views')
+    @classmethod
+    def unique_views(cls, views: list[GuestView]) -> list[GuestView]:
+        if len(views) != len(set(views)):
+            raise ValueError('Guest views must be unique')
+        return views
+
 
 class LoginRequest(BaseModel):
     username: str

@@ -41,6 +41,7 @@ export interface EditorTopBarProps {
   onImport: () => void;
   onSaveLocal: () => void;
   onOpenLocal: () => void;
+  allowCloud?: boolean;
   onExport: () => void;
   onRefreshGitHubStatus?: () => void;
   onConnectProvider: () => void;
@@ -138,6 +139,7 @@ export function EditorTopBar({
   onImport,
   onSaveLocal,
   onOpenLocal,
+  allowCloud = true,
   onExport,
   onRefreshGitHubStatus,
   onConnectProvider,
@@ -222,8 +224,8 @@ export function EditorTopBar({
         <TopStatusText label={validationSummary(validationResults)} tone={hasErrors ? editorColors.danger : hasWarnings ? editorColors.warning : editorColors.success} onClick={onOpenValidation} />
       </Stack>
       <Stack direction="row" spacing={0.75} alignItems="center" sx={{ pl: 0.75, ml: 0.25 }}>
-        <Button size="small" color="inherit" variant="outlined" startIcon={localStageBusy ? <CircularProgress size={15} color="inherit" /> : <SaveIcon />} onClick={onSaveLocal} disabled={localStageBusy} sx={{ ...exportButtonSx, display: { xs: 'none', sm: 'inline-flex' } }}>{localStageBusy ? 'Saving locally…' : 'Save locally'}</Button>
-        <Tooltip title={providerLabel || 'GitHub actions'}>
+        <Button size="small" color="inherit" variant="outlined" startIcon={localStageBusy ? <CircularProgress size={15} color="inherit" /> : <SaveIcon />} onClick={onSaveLocal} disabled={localStageBusy} sx={{ ...exportButtonSx, display: { xs: 'none', sm: 'inline-flex' } }}>{localStageBusy ? allowCloud ? 'Saving locally…' : 'Saving in this browser…' : allowCloud ? 'Save locally' : 'Save in this browser'}</Button>
+        {allowCloud && <Tooltip title={providerLabel || 'GitHub actions'}>
           <span>
             <Button
               size="small"
@@ -238,7 +240,7 @@ export function EditorTopBar({
               <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>{providerBusy || marketplaceBusy || marketplaceStatusLoading ? 'GitHub…' : 'GitHub'}</Box>
             </Button>
           </span>
-        </Tooltip>
+        </Tooltip>}
         {marketplaceEnabled && <Button
           size="small"
           color="inherit"
@@ -253,7 +255,7 @@ export function EditorTopBar({
         <Button size="small" variant="contained" disableElevation startIcon={<PlayArrowIcon />} onClick={onRunTest} aria-label="Run test" sx={{ ...runButtonSx, minWidth: { xs: 34, sm: 96 }, px: { xs: 0.75, sm: 1.75 }, '& .MuiButton-startIcon': { mr: { xs: 0, sm: 1 }, ml: 0 } }}><Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>Run test</Box></Button>
         <IconButton size="small" onClick={overflow.openMenu} aria-label="More editor actions" sx={topbarIconButtonSx}><MoreVertIcon fontSize="small" /></IconButton>
       </Stack>
-      <Menu anchorEl={github.anchorEl} open={github.open} onClose={github.closeMenu}>
+      {allowCloud && <Menu anchorEl={github.anchorEl} open={github.open} onClose={github.closeMenu}>
         <Box sx={{ px: 2, py: 1.25, maxWidth: 360 }}>
           <Typography variant="subtitle2" fontWeight={600}>GitHub</Typography>
           <Typography variant="caption" color="text.secondary" sx={{ display: 'block', wordBreak: 'break-word' }}>
@@ -270,10 +272,10 @@ export function EditorTopBar({
             Marketplace PR #{marketplacePullRequest.number || '—'} · {marketplacePrStateLabel(marketplacePullRequest.state)}
           </MenuItem>
         )}
-      </Menu>
+      </Menu>}
       <Menu anchorEl={overflow.anchorEl} open={overflow.open} onClose={overflow.closeMenu}>
-        <MenuItem disabled={localStageBusy} onClick={() => { overflow.closeMenu(); onSaveLocal(); }}><SaveIcon fontSize="small" sx={{ mr: 1 }} />{localStageBusy ? 'Saving…' : 'Save to my account'}</MenuItem>
-        <MenuItem onClick={() => { overflow.closeMenu(); onOpenLocal(); }}><FolderOpenIcon fontSize="small" sx={{ mr: 1 }} />Open my stage…</MenuItem>
+        <MenuItem disabled={localStageBusy} onClick={() => { overflow.closeMenu(); onSaveLocal(); }}><SaveIcon fontSize="small" sx={{ mr: 1 }} />{localStageBusy ? 'Saving…' : allowCloud ? 'Save to my account' : 'Save in this browser'}</MenuItem>
+        <MenuItem onClick={() => { overflow.closeMenu(); onOpenLocal(); }}><FolderOpenIcon fontSize="small" sx={{ mr: 1 }} />{allowCloud ? 'Open my stage…' : 'Open browser-saved stage…'}</MenuItem>
         {marketplaceEnabled && <MenuItem disabled={marketplaceBusy} onClick={() => { overflow.closeMenu(); onPublishMarketplace(); }}>{marketplaceBusy ? <CircularProgress size={16} sx={{ mr: 1 }} /> : <PublishIcon fontSize="small" sx={{ mr: 1 }} />}{marketplaceBusy ? 'Submitting…' : marketplacePublishLabel}</MenuItem>}
         <Divider />
         <MenuItem onClick={() => { overflow.closeMenu(); onExport(); }}><FileDownloadIcon fontSize="small" sx={{ mr: 1 }} />Save JSON</MenuItem>

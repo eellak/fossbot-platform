@@ -93,9 +93,13 @@ Browser ─ React frontend ┤
 
 Chrome or another Chromium-based browser is recommended for direct local-network access. Depending on the browser and operating system, you may need to allow **Local network access** for the platform. This permission is separate from camera access. The FOSSBot agent must also accept the website origin—for example `https://fossbot.gr` in production or `http://localhost:3000` during local development.
 
-## Accounts and projects
+## Accounts, guest sessions, and projects
 
 Users can sign in with a platform account, Google, or GitHub. Saved projects remain associated with the same user and can be reopened from the dashboard.
+
+**Continue as guest** creates an anonymous browser session with a generated `adjective_animal` alias. Guests never receive a platform account or email link. Python/Blockly projects, stages, and lesson code stay in that browser's local storage; only class participation and submitted challenge results are sent to the platform. A guest session expires after 30 days, cannot be recovered after browser storage is cleared, and cannot be converted into an account.
+
+Administrators choose which guest views are available and whether guests receive the beta treatment in **Admin panel → Guest access**. An empty view selection disables new guest entry; existing guest results remain visible to their teachers. Guests use the simulator only, not a physical robot, and cannot author courses, publish stages, use AI assistance, or manage an account.
 
 ![FOSSBot sign-in options](images/login-social.png)
 
