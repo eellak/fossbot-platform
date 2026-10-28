@@ -52,16 +52,20 @@ def upgrade() -> None:
             batch.create_foreign_key(
                 "fk_enrollments_assignment_id", "course_assignments", ["assignment_id"], ["id"],
             )
+    enrollment_uniques = {item["name"] for item in sa.inspect(op.get_bind()).get_unique_constraints("enrollments")}
+    enrollment_checks = {item["name"] for item in sa.inspect(op.get_bind()).get_check_constraints("enrollments")}
     with op.batch_alter_table("enrollments") as batch:
         batch.alter_column("student_id", existing_type=sa.Integer(), nullable=True)
-        batch.create_unique_constraint(
-            "uq_enrollments_guest_assignment", ["guest_session_id", "assignment_id"],
-        )
-        batch.create_check_constraint(
-            "ck_enrollments_owner",
-            "(student_id IS NOT NULL AND guest_session_id IS NULL AND assignment_id IS NULL) OR "
-            "(student_id IS NULL AND guest_session_id IS NOT NULL AND assignment_id IS NOT NULL)",
-        )
+        if "uq_enrollments_guest_assignment" not in enrollment_uniques:
+            batch.create_unique_constraint(
+                "uq_enrollments_guest_assignment", ["guest_session_id", "assignment_id"],
+            )
+        if "ck_enrollments_owner" not in enrollment_checks:
+            batch.create_check_constraint(
+                "ck_enrollments_owner",
+                "(student_id IS NOT NULL AND guest_session_id IS NULL AND assignment_id IS NULL) OR "
+                "(student_id IS NULL AND guest_session_id IS NOT NULL AND assignment_id IS NOT NULL)",
+            )
 
     membership_columns = {column["name"] for column in inspector.get_columns("class_memberships")}
     if "guest_session_id" not in membership_columns:
@@ -71,16 +75,20 @@ def upgrade() -> None:
             batch.create_foreign_key(
                 "fk_class_memberships_guest_session_id", "guest_sessions", ["guest_session_id"], ["id"],
             )
+    membership_uniques = {item["name"] for item in sa.inspect(op.get_bind()).get_unique_constraints("class_memberships")}
+    membership_checks = {item["name"] for item in sa.inspect(op.get_bind()).get_check_constraints("class_memberships")}
     with op.batch_alter_table("class_memberships") as batch:
         batch.alter_column("student_id", existing_type=sa.Integer(), nullable=True)
-        batch.create_unique_constraint(
-            "uq_class_membership_guest", ["group_id", "guest_session_id"],
-        )
-        batch.create_check_constraint(
-            "ck_class_memberships_owner",
-            "(student_id IS NOT NULL AND guest_session_id IS NULL) OR "
-            "(student_id IS NULL AND guest_session_id IS NOT NULL)",
-        )
+        if "uq_class_membership_guest" not in membership_uniques:
+            batch.create_unique_constraint(
+                "uq_class_membership_guest", ["group_id", "guest_session_id"],
+            )
+        if "ck_class_memberships_owner" not in membership_checks:
+            batch.create_check_constraint(
+                "ck_class_memberships_owner",
+                "(student_id IS NOT NULL AND guest_session_id IS NULL) OR "
+                "(student_id IS NULL AND guest_session_id IS NOT NULL)",
+            )
 
 
 def downgrade() -> None:

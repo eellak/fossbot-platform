@@ -1,8 +1,12 @@
+import os
 from pathlib import Path
+
+import pytest
 
 from alembic import command
 from alembic.config import Config
 from sqlalchemy import create_engine, inspect, text
+from sqlalchemy.engine import make_url
 from sqlalchemy.exc import IntegrityError
 
 from database.database import Base
@@ -111,3 +115,36 @@ def test_downgrade_is_safe_when_no_guests_exist(tmp_path):
     assert "guest_session_id" not in {column["name"] for column in inspector.get_columns("enrollments")}
     assert "guest_session_id" not in {column["name"] for column in inspector.get_columns("class_memberships")}
     assert "assignment_id" not in {column["name"] for column in inspector.get_columns("enrollments")}
+
+
+def test_fresh_postgresql_bootstrap_preserves_existing_model_constraints():
+    """Use an explicitly provided, empty disposable DB, never the application DB."""
+    url = os.getenv("FOSSBOT_GUEST_MIGRATION_TEST_DATABASE")
+    if not url:
+        pytest.skip("Provide an empty fossbot_test_guest_* PostgreSQL database")
+    parsed = make_url(url)
+    assert parsed.get_backend_name() == "postgresql"
+    assert (parsed.database or "").startswith("fossbot_test_guest_")
+    engine = create_engine(url)
+    try:
+        assert inspect(engine).get_table_names() == [], "Migration test requires an empty database"
+        # Production startup bootstraps metadata before running Alembic.
+        Base.metadata.create_all(engine)
+        config = config_for(url)
+        command.upgrade(config, "head")
+        command.upgrade(config, "head")
+        inspector = inspect(engine)
+        assert "uq_enrollments_guest_assignment" in {
+            item["name"] for item in inspector.get_unique_constraints("enrollments")
+        }
+        assert "ck_enrollments_owner" in {
+            item["name"] for item in inspector.get_check_constraints("enrollments")
+        }
+        assert "uq_class_membership_guest" in {
+            item["name"] for item in inspector.get_unique_constraints("class_memberships")
+        }
+        assert "ck_class_memberships_owner" in {
+            item["name"] for item in inspector.get_check_constraints("class_memberships")
+        }
+    finally:
+        engine.dispose()
