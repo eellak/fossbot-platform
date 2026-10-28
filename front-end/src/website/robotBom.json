@@ -1,0 +1,292 @@
+[
+  {
+    "id": 6,
+    "name": "R-78K5.0-2.0",
+    "quantity": 1
+  },
+  {
+    "id": 7,
+    "name": "R-78K3.3-2.0",
+    "quantity": 1
+  },
+  {
+    "id": 8,
+    "name": "SparkFun ROB-14450 — TB6612FNG dual motor driver",
+    "quantity": 1,
+    "refs": "U1"
+  },
+  {
+    "id": 9,
+    "name": "MCP3008 — 10-bit, 8-channel SPI ADC, DIP-16",
+    "quantity": 2,
+    "refs": "U7, U8"
+  },
+  {
+    "id": 10,
+    "name": "GL5516 Light Dependent Resistor LDR 5MM",
+    "quantity": 1
+  },
+  {
+    "id": 11,
+    "name": "Passive Buzzer AC 12MM*8.5MM 12085 16R Resistance 3V 5V 12V In Common Use",
+    "quantity": 1
+  },
+  {
+    "id": 12,
+    "name": "RGB Diffused Common Cathode 5mm LED",
+    "quantity": 1
+  },
+  {
+    "id": 13,
+    "name": "Electret Microphone Amplifier - MAX4466 with Adjustable Gain",
+    "quantity": 1
+  },
+  {
+    "id": 14,
+    "name": "MPU-6050 - 3 Axis Gyroscope+Accelerometer Module for Arduino",
+    "quantity": 1
+  },
+  {
+    "id": 15,
+    "name": "Logic Level Converter Bi-Directional",
+    "quantity": 1
+  },
+  {
+    "id": 16,
+    "name": "DIP Socket 16",
+    "quantity": 2
+  },
+  {
+    "id": 17,
+    "name": "Pin Header 1x8 Female 2.54mm",
+    "quantity": 3
+  },
+  {
+    "id": 18,
+    "name": "Pin Header Female 1x6 2.54mm",
+    "quantity": 2
+  },
+  {
+    "id": 19,
+    "name": "Pin Header 1x3 Female 2.54mm Right Angle",
+    "quantity": 1
+  },
+  {
+    "id": 20,
+    "name": "Slide Switch MFP 106 D",
+    "quantity": 1
+  },
+  {
+    "id": 21,
+    "name": "JST XH Connector 2-Pin Male 2.5mm",
+    "quantity": 6,
+    "refs": "Main: J5, J27, J28, J29, J30; battery: J1"
+  },
+  {
+    "id": 22,
+    "name": "JST XH Connector 4-Pin Male 2.5mm",
+    "quantity": 2
+  },
+  {
+    "id": 23,
+    "name": "JST XH Connector 3-Pin Male 2.5mm",
+    "quantity": 13
+  },
+  {
+    "id": 24,
+    "name": "1 kΩ resistor",
+    "quantity": 3,
+    "refs": "R4, R9, R12"
+  },
+  {
+    "id": 25,
+    "name": "3 kΩ resistor",
+    "quantity": 1,
+    "refs": "R2"
+  },
+  {
+    "id": 26,
+    "name": "10 kΩ resistor",
+    "quantity": 5,
+    "refs": "R3, R8, R14, R15, R17"
+  },
+  {
+    "id": 27,
+    "name": "270 Ω resistor",
+    "quantity": 3,
+    "refs": "R5, R6, R7"
+  },
+  {
+    "id": 28,
+    "name": "3.3 kΩ resistor",
+    "quantity": 1,
+    "refs": "R13"
+  },
+  {
+    "id": 29,
+    "name": "270 Ω resistor — DNP",
+    "quantity": 2,
+    "refs": "R10, R11",
+    "optional": true,
+    "noteEn": "Do not populate in the current board configuration.",
+    "noteEl": "Δεν τοποθετούνται στην τρέχουσα διαμόρφωση της πλακέτας."
+  },
+  {
+    "id": 30,
+    "name": "330 Ω resistor",
+    "quantity": 1,
+    "refs": "R1"
+  },
+  {
+    "id": 31,
+    "name": "Tact Switch 6x6mm 13mm",
+    "quantity": 4
+  },
+  {
+    "id": 32,
+    "name": "NPN transistor, TO-92 — exact model unconfirmed",
+    "quantity": 1,
+    "refs": "Q2",
+    "noteEn": "Board pinout: 1=C, 2=B, 3=E. The spreadsheet’s 2N2222A designation is not confirmed by the KiCad files.",
+    "noteEl": "Ακροδέκτες πλακέτας: 1=C, 2=B, 3=E. Η ονομασία 2N2222A του φύλλου δεν επιβεβαιώνεται από τα αρχεία KiCad."
+  },
+  {
+    "id": 33,
+    "name": "FR207 diode",
+    "quantity": 3,
+    "refs": "D5, D6, D7",
+    "noteEn": "FR207 confirmed by the project owner. KiCad still labels D5–D7 generically and uses DO-35 footprints; check the package against the board before assembly.",
+    "noteEl": "Το FR207 επιβεβαιώθηκε από τον υπεύθυνο του έργου. Το KiCad διατηρεί γενική ονομασία D5–D7 και αποτυπώματα DO-35· ελέγξτε το περίβλημα στην πλακέτα πριν από τη συναρμολόγηση."
+  },
+  {
+    "id": 34,
+    "name": "LED Diffused 5mm - Blue",
+    "quantity": 1
+  },
+  {
+    "id": 35,
+    "name": "LED Diffused 5mm Green",
+    "quantity": 1
+  },
+  {
+    "id": 36,
+    "name": "LED Diffused 5mm yellow",
+    "quantity": 1
+  },
+  {
+    "id": 37,
+    "name": "LED Diffused 5mm Red",
+    "quantity": 1
+  },
+  {
+    "id": 38,
+    "name": "Pin Header 2x20 Female 2.54mm",
+    "quantity": 1
+  },
+  {
+    "id": 39,
+    "name": "OLED Module 0.96\" 128x64 - I2C White",
+    "quantity": 1
+  },
+  {
+    "id": 40,
+    "name": "DC Gear Motor TT - 120 RPM (Metal Dual Shaft)",
+    "quantity": 2
+  },
+  {
+    "id": 41,
+    "name": "IR Infrared Obstacle Avoidance Sensor Module *Need hack for analogue pin",
+    "quantity": 7
+  },
+  {
+    "id": 42,
+    "name": "Plastic Encoder Wheel - 24mm",
+    "quantity": 2
+  },
+  {
+    "id": 43,
+    "name": "Photo Interrupter Sensor",
+    "quantity": 2
+  },
+  {
+    "id": 44,
+    "name": "Raspberry Pi Zero 2W",
+    "quantity": 1
+  },
+  {
+    "id": 45,
+    "name": "SanDisk microSD",
+    "quantity": 1
+  },
+  {
+    "id": 46,
+    "name": "Battery Holder 1x18650 for PCB",
+    "quantity": 3
+  },
+  {
+    "id": 47,
+    "name": "Li-ion Battery Charger Protection Module 3S 10A",
+    "quantity": 1
+  },
+  {
+    "id": 48,
+    "name": "Battery Lithium 18650 3.6V 3200mAh - INR18650-MH1",
+    "quantity": 3
+  },
+  {
+    "id": 49,
+    "name": "Ball Caster Metal 12mm",
+    "quantity": 1
+  },
+  {
+    "id": 50,
+    "name": "Bolts M3 L8mm",
+    "quantity": 30
+  },
+  {
+    "id": 51,
+    "name": "Battery PCB",
+    "quantity": 1
+  },
+  {
+    "id": 52,
+    "name": "Main PCB",
+    "quantity": 1
+  },
+  {
+    "id": 53,
+    "name": "Rubber Wheel 66x26mm - Yellow",
+    "quantity": 2
+  },
+  {
+    "id": 54,
+    "name": "DC Power Jack 5.5x2.1 - Plastic",
+    "quantity": 1
+  },
+  {
+    "id": 55,
+    "name": "cables sensors 3pin",
+    "quantity": 10
+  },
+  {
+    "id": 56,
+    "name": "cables sensors 4pin",
+    "quantity": 1
+  },
+  {
+    "id": 57,
+    "name": "battery cable",
+    "quantity": 1
+  },
+  {
+    "id": 58,
+    "name": "power motor",
+    "quantity": 3
+  },
+  {
+    "id": 59,
+    "name": "100 kΩ resistor",
+    "quantity": 1,
+    "refs": "R16"
+  }
+]

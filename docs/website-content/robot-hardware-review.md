@@ -1,0 +1,125 @@
+# Robot page preview and hardware review
+
+Local branch: `codex/robot-hardware-page`. Preview: http://localhost:3000/robot.
+The page uses one shared layout/data structure for English and Greek. It is a
+local React prototype, not a saved CMS entry. Nothing has been pushed or deployed.
+
+## Sources inspected on 2026-10-28
+
+- Parts spreadsheet, tab Φύλλο2, A1:AA100: https://docs.google.com/spreadsheets/d/17augG_ocdJ3oCD5DHhEigZHE9VfZIl3xvNlTa7Q-LeQ/edit?gid=1968737650#gid=1968737650
+  Only names and quantities were copied; inventory and supplier-order columns
+  were excluded. The original spreadsheet was not modified.
+- Images/STL filenames/production ZIP links: chronis10/fossbot-hardware,
+  branch fossbot-v2, commit 15bbd43413e2175997b116ff1632fdd07e0480fa.
+  Local PNG copies are in public/landing-media/robot-v2.
+- Current local KiCad schematic AND PCB files in /home/chronis10/fossbot-pcb,
+  branch dev_compact, commit 0cdc9e9. Both main and battery files were read.
+  KiCad 9.0.9 netlist export and pcbnew footprint inspection confirmed the
+  resistor values, references, DNP flags, ADCs and transistor footprint agree.
+  No files in that repository were changed.
+- The existing main-board CSV is stale; it lists Q1 AO3400A and older resistor
+  values, while the current schematic/PCB contain Q2 NPN in TO-92.
+
+## Confirmed corrections to the preview
+
+| Component | Spreadsheet | Current schematic AND PCB |
+| --- | --- | --- |
+| MCP3008 | 2 | U7/U8, 2 × DIP-16, 10-bit, 8-channel SPI ADC |
+| 1 kΩ | 4 | 3: R4, R9, R12 |
+| 3 kΩ | 2 | 1: R2 |
+| 3.3 kΩ | absent | 1: R13 |
+| 10 kΩ | 5 | 5: R3, R8, R14, R15, R17 |
+| 270 Ω | 3 + 2 | 3 fitted: R5–R7; R10/R11 are DNP, 2 not fitted |
+| 100 Ω | 1 | absent; R9 is 1 kΩ |
+| 330 Ω | 1 | 1: R1 |
+| 100 kΩ | absent | 1: R16 |
+| NPN transistor | 2N2222A, 1 | Q2, generic NPN, TO-92; exact model unconfirmed |
+| Diodes | FR207, 3 | D5–D7, generic D, DO-35, 7.62 mm pitch; owner confirms FR207 |
+| 2-pin JST XH | 5 | 6 total: main J5/J27/J28/J29/J30 plus battery J1 |
+| Motor driver | 474-ROB-14450 | U1, SparkFun ROB-14450, TB6612FNG module |
+
+The current standard fitted resistor set totals 15 resistors. DNP R10/R11 add
+2 only if deliberately populated for a reviewed alternative configuration.
+
+## Exact descriptions and unresolved selections
+
+- MCP3008 is **10-bit**, not 12-bit. The symbol's stale `ki_keywords` says
+  "12bit", but its value/description and Microchip agree on 10-bit.
+  https://www.microchip.com/en-us/product/MCP3008
+- Q2 drives the buzzer as a low-side NPN, with pad 1 collector, pad 2 base,
+  pad 3 emitter. Do not approve every "2N2222A" variant from that name alone.
+  onsemi P2N2222A has that pin numbering, but this is a candidate, not a
+  verified fitted part or a completed electrical substitution review.
+  https://www.onsemi.com/pdf/datasheet/p2n2222a-d.pdf
+- AO3400A in the old CSV is a SOT-23 N-channel MOSFET and belongs to a
+  different design iteration; it is not the current Q2 footprint/type.
+  https://www.aosmd.com/products/mosfets/low-voltage-mosfets-12v-30v/ao3400a
+- D5/D6 are in the input power paths; D7 is across the buzzer. The project owner explicitly confirmed FR207 on 2026-10-28; the preview
+  therefore lists FR207 ×3. This confirmation establishes the intended part,
+  not a completed package/footprint or electrical validation. KiCad still
+  uses generic D values and DO-35 footprints; check the actual selected
+  manufacturer package against these footprints before assembly.
+- Resistor supplier fields repeat C58595 and, across different values,
+  MFR0W4F2201A50. Treat these fields as copied/stale metadata, not an approved
+  purchase list. This review uses the resistor Value fields and board matches.
+- The battery board contains 3 cell-holder footprints, one BMS module footprint
+  and one 2-pin connector. It does not establish the cell capacity/brand or
+  BMS current rating. Those page entries remain sourced from the spreadsheet.
+- Main PCB has three rail-indicator LEDs D2/D3/D4 (3.3/5/12 V), not four
+  individually identified colour LEDs. Spreadsheet's four colour rows need
+  clarification before turning the complete list into a manufacturing BOM.
+- Connector footprint differences also remain: J2 is a straight 1×3 socket,
+  SCR1 is 1×4, J22 is 1×8, P2 is 1×12. The spreadsheet's 1×8 ×3, 1×6 ×2 and
+  right-angle 1×3 entries are not a fully reconciled board socket list.
+- This is a parts-description review, not a complete electrical/DRC/assembly
+  validation. Other modules, fasteners and cable quantities remain the user's
+  spreadsheet references.
+- The hardware repository production ZIPs have NOT been proven equivalent to
+  the local dev_compact revision. The preview labels this version limitation.
+  Do not order a board from those ZIPs assuming it matches this reviewed BOM.
+
+## Later CMS integration
+
+After design approval, model the parts/gallery/PCB sections as shared CMS
+structure with per-language text. The prototype deliberately does not write
+production content or migrate the database during a local visual review.
+
+## Images and ordering descriptions
+
+Every entry has bilingual technical text and an expandable ordering panel. The
+catalog distinguishes vendor/reference photos from original SVG identification
+illustrations. Illustrations are not dimensioned drawings or approved vendor
+SKUs. Photo attribution links are visible in each applicable details panel.
+
+Additional reference images:
+- RECOM R-78K family image: https://recom-power.com/product-images/R-78K-2.0.jpg
+- SparkFun ROB-14450 product image, from its official product page:
+  https://www.sparkfun.com/sparkfun-motor-driver-dual-tb6612fng-with-headers.html
+- MAX4466 module reference photo: https://www.adafruit.com/product/1063
+- PCB reference renders: the supplied fossbot-hardware repository.
+
+Other technical references included in ordering panels:
+- RECOM regulator input/output/package selection:
+  https://recom-power.com/pdf/Innoline/R-78K-2.0.pdf
+- JST XH pitch and series: https://www.jst-mfg.com/product/index.php?lang=2&series=277
+- Raspberry Pi Zero 2 W: https://www.raspberrypi.com/products/raspberry-pi-zero-2-w/
+- FR207 manufacturer example: https://www.smc-diodes.com/propdf/FR201-FR207%20N0445%20REV.A.pdf
+  This identifies the reference FR207 as DO-15, while the current KiCad files
+  use DO-35 footprints. The intended FR207 part is owner-confirmed, but the
+  mechanical fit still needs checking for the selected manufacturer.
+
+The page deliberately flags source gaps rather than inventing order codes,
+resistor tolerances/power ratings, motor voltage/stall current, microSD capacity,
+cable lengths, BMS identity or unspecified “power motor” details.
+
+## Verification
+
+- Production frontend build passed (pre-existing Blockly source-map and bundle
+  size warnings).
+- Data audit passed for all 54 entries: bilingual names, technical descriptions,
+  ordering checks, visual definitions, image-file existence, and exactly one
+  category per entry.
+- Browser checked English/Greek switching, search, empty results, categories,
+  pagination, and ordering details. Greek mobile at 390×844 had no horizontal
+  overflow, including the FR207 details dialog; all loaded images were valid.
+- Browser console had no errors during the final checks.

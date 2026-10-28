@@ -23,6 +23,7 @@ const AdminPanelPreview = Loadable(lazy(() => import('../views/ui-comparison/Adm
 const AdminPreviewFrame = Loadable(lazy(() => import('../views/ui-comparison/AdminPreviewFrame')));
 const WebsiteEditor = Loadable(lazy(() => import('../website/WebsiteEditor')));
 const WebsitePublic = Loadable(lazy(() => import('../website/WebsitePublic')));
+const RobotPage = Loadable(lazy(() => import('../views/robot-page/RobotPage')));
 const LandingPage = Loadable(lazy(() => import('../views/landing-page/LandingPage')));
 const AccountsSettingsPage = Loadable(lazy(() => import('../views/account-settings-page/AccountsSettingsPage')));
 const StageBuilderPage = Loadable(lazy(() => import('../views/stage-builder-page/StageBuilderPage')));
@@ -97,6 +98,7 @@ const Router = [
     children: [
       { path: '/', element: <Navigate to="/landing-page" /> },
       { path: '/landing-page', exact: true, element: <LandingPage /> },
+      { path: '/robot', element: <RobotPage /> },
       { path: '*', element: <Navigate to="/auth/404" /> },
     ],
   },
