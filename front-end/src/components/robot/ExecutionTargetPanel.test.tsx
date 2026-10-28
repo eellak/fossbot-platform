@@ -11,10 +11,12 @@ declare const it: any;
 declare const jest: any;
 
 let mockConnection: any;
+let mockIsGuest = false;
 jest.mock('src/robot/RobotConnectionContext', () => ({
   useRobotConnection: () => mockConnection,
   DISCOVERY_PREFIX_STORAGE_KEY: 'robot-test-network',
 }));
+jest.mock('src/authentication/AuthProvider', () => ({ useAuth: () => ({ isGuest: mockIsGuest }) }));
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 
 describe('Physical robot workspace views', () => {
@@ -24,6 +26,7 @@ describe('Physical robot workspace views', () => {
   const originalResizeObserver = globalThis.ResizeObserver;
 
   beforeEach(() => {
+    mockIsGuest = false;
     (globalThis as any).ResizeObserver = class {
       observe() {}
       disconnect() {}
@@ -71,6 +74,13 @@ describe('Physical robot workspace views', () => {
     expect(container.querySelectorAll('[role="tab"]')).toHaveLength(1);
     expect(container.querySelector('[role="tabpanel"]:not([hidden])')?.textContent).toContain('42.0');
     expect(container.querySelector('[role="tab"]')?.getAttribute('aria-selected')).toBe('true');
+  });
+
+  it('disables physical robot selection for guests', () => {
+    mockIsGuest = true;
+    render();
+    const targetSwitch = container.querySelector<HTMLInputElement>('input[role="switch"], input[type="checkbox"]');
+    expect(targetSwitch?.disabled).toBe(true);
   });
 
   it('retains the simulator view when simulation is selected', () => {

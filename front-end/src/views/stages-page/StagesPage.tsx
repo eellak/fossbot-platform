@@ -5,6 +5,7 @@ import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import PageContainer from 'src/components/container/PageContainer';
 import StageMarketplacePanel from 'src/components/dashboard/StageMarketplacePanel';
 import UserStagesDashboardPanel from 'src/components/dashboard/UserStagesDashboardPanel';
+import { guestCanView } from 'src/authentication/guest';
 import { useAuth } from 'src/authentication/AuthProvider';
 import { getModerationOverrides, getModerationReports, getMarketplacePermissions, getVerificationQueue, restoreMarketplaceStage, setModerationOverride, submitMarketplaceVerification, type MarketplaceModerationOverride, type MarketplaceReport, type MarketplaceVerificationQueueItem, type MarketplaceVerificationChecklist } from 'src/stages/MarketplaceApi';
 import { getLocalPublicationReviewQueue, reviewLocalPublication, type LocalPublicationReviewItem } from 'src/stages/LocalStagesApi';
@@ -228,7 +229,8 @@ function ModerationWorkspace({ canModerate, canVerify }: { canModerate: boolean;
 }
 
 export default function StagesPage() {
-  const { token, user } = useAuth();
+  const { token, user, isGuest, guestSettings } = useAuth();
+  const canBuild = !isGuest || guestCanView(guestSettings, 'stage_builder');
   const { marketplace } = useFeatureFlags();
   const [searchParams, setSearchParams] = useSearchParams();
   const userKey = stageListUserKey(user);
@@ -236,15 +238,15 @@ export default function StagesPage() {
   const [canModerate, setCanModerate] = useState(false);
   const [canVerify, setCanVerify] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const tab = marketplace && (requestedTab === 'explore' || (requestedTab === 'moderation' && (canModerate || canVerify))) ? requestedTab : 'mine';
+  const tab = marketplace && (requestedTab === 'explore' || !canBuild || (requestedTab === 'moderation' && (canModerate || canVerify))) ? (requestedTab === 'moderation' && (canModerate || canVerify) ? 'moderation' : 'explore') : 'mine';
   useEffect(() => {
-    if (!marketplace || !token) {
+    if (!marketplace || !token || isGuest) {
       setCanModerate(false);
       setCanVerify(false);
       return;
     }
     void getMarketplacePermissions(token).then((permissions) => { setCanModerate(permissions.roles.includes('moderator')); setCanVerify(permissions.roles.includes('verifier')); }).catch(() => { setCanModerate(false); setCanVerify(false); });
-  }, [marketplace, token]);
+  }, [isGuest, marketplace, token]);
   const refreshStages = async () => {
     if (!token) return;
     setRefreshing(true);
@@ -261,7 +263,7 @@ export default function StagesPage() {
         description="Discover public stages or manage stages stored here. GitHub is optional."
         titleAdornment={<BetaBadge feature="stages" />}
         action={marketplace && tab === 'explore' ? <Button variant="contained" onClick={() => void refreshStages()} disabled={refreshing}>{refreshing ? 'Refreshing…' : 'Refresh stages'}</Button> : undefined}
-        tabs={<Tabs value={tab} onChange={(_, value) => { const next = new URLSearchParams(searchParams); next.set('tab', value); next.delete('stage'); setSearchParams(next); }} aria-label="Stages sections" variant="scrollable" scrollButtons="auto" allowScrollButtonsMobile sx={pageTabsSx}><Tab value="mine" label={MARKETPLACE_COPY.myStages} />{marketplace && <Tab value="explore" label="Explore" />}{marketplace && (canModerate || canVerify) && <Tab value="moderation" label="Moderation" />}</Tabs>}
+        tabs={<Tabs value={tab} onChange={(_, value) => { const next = new URLSearchParams(searchParams); next.set('tab', value); next.delete('stage'); setSearchParams(next); }} aria-label="Stages sections" variant="scrollable" scrollButtons="auto" allowScrollButtonsMobile sx={pageTabsSx}>{canBuild && <Tab value="mine" label={MARKETPLACE_COPY.myStages} />}{marketplace && <Tab value="explore" label="Explore" />}{marketplace && (canModerate || canVerify) && <Tab value="moderation" label="Moderation" />}</Tabs>}
       />
       {marketplace && tab === 'explore' && <StageMarketplacePanel appearance="page" />}
       {tab === 'mine' && <UserStagesDashboardPanel showViewAll={false} appearance="page" />}

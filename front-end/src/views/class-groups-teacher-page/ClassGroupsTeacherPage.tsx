@@ -91,7 +91,7 @@ function GroupDetail({ group, courses, token, run, t }: { group: TeacherClassGro
       <Typography variant="h6">{t('education.classrooms.members', { count: group.members.length })}</Typography>
       <Stack spacing={1} sx={{ mt: 1 }}>
         {group.members.map((member) => <Stack key={member.id} direction="row" alignItems="center" gap={1} sx={{ py: 0.5 }}>
-          <Box sx={{ flex: 1 }}><Typography>{member.student_username}</Typography><Typography variant="caption" color="text.secondary">{member.display_alias}</Typography></Box>
+          <Box sx={{ flex: 1 }}><Stack direction="row" spacing={1} alignItems="center"><Typography>{member.student_username}</Typography>{member.is_guest && <Chip size="small" label={t('guest.session')} />}</Stack><Typography variant="caption" color="text.secondary">{member.display_alias}</Typography></Box>
           <Chip size="small" color={member.leaderboard_opt_in ? 'success' : 'default'} label={member.leaderboard_opt_in ? t('education.classrooms.optedIn') : t('education.classrooms.optedOut')} />
           <IconButton color="error" onClick={() => void run(() => removeClassMember(token, group.id, member.id))} aria-label={t('education.classrooms.removeMember')}><IconTrash size={17} /></IconButton>
         </Stack>)}

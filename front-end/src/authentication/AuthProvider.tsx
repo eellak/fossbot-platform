@@ -17,6 +17,7 @@ import {
   FirebaseProviderName,
   LoginResponse,
   AuthStatus,
+  GuestSession,
 } from './AuthInterfaces';
 import {
   createProject,
@@ -37,6 +38,8 @@ import {
   updateUserActivatedStatusById,
   updateUserAccessRevokedStatusById,
   updateUserMarketplaceRolesById,
+  createGuestSession,
+  getGuestSession,
 } from './AuthApi';
 import {
   getEmailFromFirebaseError,
@@ -47,6 +50,8 @@ import {
   subscribeToFirebaseAuthState,
 } from './firebase';
 import { clearUserStageCaches } from 'src/stages/stageListCache';
+import { GUEST_TOKEN_STORAGE_KEY, guestLandingPath } from './guest';
+import { guestProjectRepository } from 'src/guest/guestProjects';
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const revokedAccessMessage = 'Your access to the platform has been revoked.';
@@ -78,26 +83,40 @@ const readApiJson = async (response: Response): Promise<any> => {
 
 const AuthProvider = ({ children }: AuthProviderProps) => {
   const localStorageName = 'fossbot-platform';
+  const storedGuestToken = localStorage.getItem(GUEST_TOKEN_STORAGE_KEY) || '';
   const [user, setUser] = useState<User | null>(null);
-  const [token, setToken] = useState<string>(localStorage.getItem(localStorageName) || '');
+  const [guest, setGuest] = useState<GuestSession | null>(null);
+  const [token, setToken] = useState<string>(storedGuestToken || localStorage.getItem(localStorageName) || '');
   const [authStatus, setAuthStatus] = useState<AuthStatus>('loading');
   const firebaseLoginInProgress = useRef(false);
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (token) {
-      localStorage.setItem(localStorageName, token);
-    } else {
+    if (guest) {
+      localStorage.setItem(GUEST_TOKEN_STORAGE_KEY, token);
       localStorage.removeItem(localStorageName);
+    } else if (authStatus === 'authenticated' && token && !token.startsWith('guest_')) {
+      localStorage.setItem(localStorageName, token);
+      localStorage.removeItem(GUEST_TOKEN_STORAGE_KEY);
+    } else if (!token) {
+      localStorage.removeItem(localStorageName);
+      localStorage.removeItem(GUEST_TOKEN_STORAGE_KEY);
     }
-  }, [token]);
+  }, [authStatus, guest, token]);
 
   const clearSession = () => {
     setUser(null);
+    setGuest(null);
     setToken('');
     setAuthStatus('unauthenticated');
     localStorage.removeItem(localStorageName);
+    localStorage.removeItem(GUEST_TOKEN_STORAGE_KEY);
     clearUserStageCaches();
+  };
+
+  const clearGuestIdentity = () => {
+    setGuest(null);
+    localStorage.removeItem(GUEST_TOKEN_STORAGE_KEY);
   };
 
   const loadAuthenticatedUser = async (accessToken: string) => {
@@ -130,6 +149,8 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
       throw new Error(res.detail || 'Firebase login failed');
     }
 
+    clearGuestIdentity();
+    setUser(null);
     setToken(res.access_token);
     localStorage.setItem(localStorageName, res.access_token);
     return res.access_token;
@@ -137,7 +158,7 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
 
   useEffect(() => {
     const unsubscribe = subscribeToFirebaseAuthState(async (firebaseUser) => {
-      if (!firebaseUser || firebaseLoginInProgress.current) {
+      if (!firebaseUser || firebaseLoginInProgress.current || localStorage.getItem(GUEST_TOKEN_STORAGE_KEY)) {
         return;
       }
 
@@ -155,21 +176,37 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
   }, []);
 
   useEffect(() => {
+    let active = true;
+    if (!token) {
+      setAuthStatus('unauthenticated');
+      return undefined;
+    }
+    setAuthStatus('loading');
+    if (token.startsWith('guest_')) {
+      getGuestSession(token)
+        .then(async (response) => {
+          const data = await readApiJson(response);
+          if (!response.ok) throw new Error(data.detail || 'Guest session expired');
+          if (!active) return;
+          setGuest(data);
+          setAuthStatus('authenticated');
+        })
+        .catch((error) => {
+          console.error('Error restoring guest session:', error);
+          if (active) clearSession();
+        });
+      return () => { active = false; };
+    }
     const fetchUserData = async () => {
       try {
         await loadAuthenticatedUser(token);
       } catch (error) {
         console.error('Error fetching user data:', error);
-        clearSession();
+        if (active) clearSession();
       }
     };
-
-    if (token) {
-      setAuthStatus('loading');
-      fetchUserData();
-    } else {
-      setAuthStatus('unauthenticated');
-    }
+    fetchUserData();
+    return () => { active = false; };
   }, [token]);
 
   const loginAction = async (data: LoginData): Promise<LoginResponse> => {
@@ -178,6 +215,8 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
       const res = await readApiJson(response);
 
       if (res.access_token) {
+        clearGuestIdentity();
+        setUser(null);
         setToken(res.access_token);
         localStorage.setItem(localStorageName, res.access_token);
         await loadAuthenticatedUser(res.access_token);
@@ -196,7 +235,7 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
 
   const loginWithFirebaseAction = async (provider: FirebaseProviderName) => {
     try {
-      if (token) {
+      if (user && authStatus === 'authenticated') {
         navigate('/dashboard', { replace: true });
         return { success: true, detail: '' };
       }
@@ -253,6 +292,61 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
     navigate('/');
   };
 
+  const enterGuestAction = async (): Promise<LoginResponse> => {
+    try {
+      const response = await createGuestSession();
+      const res = await readApiJson(response);
+      if (!response.ok || !res.token || !res.guest) {
+        return { success: false, detail: res.detail || 'Guest access is not available.' };
+      }
+      firebaseLoginInProgress.current = true;
+      await signOutFromFirebase().catch(console.error);
+      setUser(null);
+      setGuest(res.guest);
+      setToken(res.token);
+      setAuthStatus('authenticated');
+      localStorage.removeItem(localStorageName);
+      localStorage.setItem(GUEST_TOKEN_STORAGE_KEY, res.token);
+      navigate(guestLandingPath(res.guest.settings));
+      return { success: true, detail: '' };
+    } catch (error) {
+      console.error(error);
+      return {
+        success: false,
+        detail: errorMessage(error, 'Could not start a guest session. Check that the platform API is running.'),
+      };
+    } finally {
+      firebaseLoginInProgress.current = false;
+    }
+  };
+
+  const refreshGuestAction = async (): Promise<GuestSession | null> => {
+    if (!guest || !token) return null;
+    try {
+      const response = await getGuestSession(token);
+      const res = await readApiJson(response);
+      if (!response.ok) {
+        if (response.status === 401) clearSession();
+        return null;
+      }
+      setGuest(res);
+      if (!res.settings.allowed_views.length && window.location.pathname !== '/guest-unavailable') {
+        navigate('/guest-unavailable', { replace: true });
+      }
+      return res;
+    } catch (error) {
+      console.error('Error refreshing guest policy:', error);
+      return null;
+    }
+  };
+
+  useEffect(() => {
+    if (!guest) return undefined;
+    const refreshOnFocus = () => { void refreshGuestAction(); };
+    window.addEventListener('focus', refreshOnFocus);
+    return () => window.removeEventListener('focus', refreshOnFocus);
+  }, [guest, refreshGuestAction]);
+
   const registerAction = async (data: RegisterData): Promise<LoginResponse> => {
     try {
       const response = await register(data);
@@ -271,6 +365,7 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
   };
 
   const getAllUsers = async (): Promise<User[] | undefined> => {
+    if (guest) return undefined;
     try {
       const response = await getUsers(token);
 
@@ -288,6 +383,9 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
   };
 
   const createProjectAction = async (data: NewProjectData): Promise<number | undefined> => {
+    if (guest) {
+      try { return guestProjectRepository.create(data).id; } catch (error) { console.error(error); return undefined; }
+    }
     try {
       const response = await createProject(data, token);
       const res = await response.json();
@@ -303,6 +401,9 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
   };
 
   const getProjectsAction = async (): Promise<Project[] | undefined> => {
+    if (guest) {
+      try { return guestProjectRepository.list(); } catch (error) { console.error(error); return undefined; }
+    }
     try {
       const response = await getProjects(token);
 
@@ -319,6 +420,9 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
   };
 
   const deleteProjectByIdAction = async (projectId: number) => {
+    if (guest) {
+      try { return guestProjectRepository.delete(projectId); } catch (error) { console.error(error); return false; }
+    }
     try {
       const response = await deleteProjectById(projectId, token);
 
@@ -335,6 +439,9 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
   };
 
   const getProjectByIdAction = async (projectId: number): Promise<Project | undefined> => {
+    if (guest) {
+      try { return guestProjectRepository.get(projectId); } catch (error) { console.error(error); return undefined; }
+    }
     try {
       const response = await getProjectById(projectId, token);
 
@@ -351,6 +458,9 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
   };
 
   const updateProjectByIdAction = async (projectId: number, data: NewProjectData) => {
+    if (guest) {
+      try { return guestProjectRepository.update(projectId, data); } catch (error) { console.error(error); return undefined; }
+    }
     try {
       const response = await updateProjectById(data, projectId, token);
 
@@ -368,6 +478,7 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
   };
 
   const getUserDataAction = async () => {
+    if (guest) return undefined;
     try {
       const response = await getUserData(token);
       const userData = await response.json();
@@ -385,6 +496,7 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
   };
 
   const updateUser = async (data: UserData): Promise<User | undefined> => {
+    if (guest) return undefined;
     try {
       const response = await updateUserData(data, token);
 
@@ -402,6 +514,7 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
   };
 
   const updateUserRole = async (userId: number, data: RoleData): Promise<User | undefined> => {
+    if (guest) return undefined;
     try {
       const response = await updateUserRoleById(userId, data, token);
 
@@ -418,6 +531,7 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
   };
 
   const updateUserMarketplaceRoles = async (userId: number, roles: MarketplaceRole[]): Promise<User | undefined> => {
+    if (guest) return undefined;
     try {
       const response = await updateUserMarketplaceRolesById(userId, roles, token);
       if (response.status === 200) return await response.json();
@@ -429,6 +543,7 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
   };
 
   const updateUserPassword = async (data: PassswordData): Promise<User | undefined> => {
+    if (guest) return undefined;
     try {
       const response = await updateUserPasswordData(data, token);
 
@@ -445,6 +560,7 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
   };
 
   const deleteUserByIdAction = async (projectId: number) => {
+    if (guest) return false;
     try {
       const response = await deleteUserById(projectId, token);
 
@@ -461,6 +577,7 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
   };
 
   const updateUserBetaTesterStatus = async (userId: number, data: BetaTesterData) => {
+    if (guest) return false;
     try {
       const response = await updateUserBetaTesterStatusById(userId, data, token);
 
@@ -477,6 +594,7 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
   };
 
   const updateUserActivatedStatus = async (userId: number, data: ActivatedData) => {
+    if (guest) return false;
     try {
       const response = await updateUserActivatedStatusById(userId, data, token);
 
@@ -493,6 +611,7 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
   };
 
   const updateUserAccessRevokedStatus = async (userId: number, data: AccessRevokedData) => {
+    if (guest) return false;
     try {
       const response = await updateUserAccessRevokedStatusById(userId, data, token);
 
@@ -508,15 +627,25 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
     }
   };
 
+  const guestSettings = useMemo(
+    () => guest?.settings ?? { beta_tester: false, allowed_views: [] },
+    [guest],
+  );
+
   const contextValue = useMemo(
     () => ({
       token,
       user,
+      guest,
+      guestSettings,
+      isGuest: Boolean(guest),
       authStatus,
       isAuthenticated: authStatus === 'authenticated',
       loginAction,
       loginWithFirebaseAction,
       registerAction,
+      enterGuestAction,
+      refreshGuestAction,
       createProjectAction,
       getProjectsAction,
       deleteProjectByIdAction,
@@ -534,7 +663,7 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
       updateUserActivatedStatus,
       updateUserAccessRevokedStatus,
     }),
-    [token, user, authStatus, loginAction, loginWithFirebaseAction, registerAction, createProjectAction, getProjectsAction,
+    [token, user, guest, guestSettings, authStatus, loginAction, loginWithFirebaseAction, registerAction, enterGuestAction, refreshGuestAction, createProjectAction, getProjectsAction,
       deleteProjectByIdAction, getProjectByIdAction, updateProjectByIdAction, logOutAction,
       getUserDataAction, updateUser, updateUserPassword, getAllUsers, deleteUserByIdAction,
       updateUserBetaTesterStatus, updateUserRole, updateUserMarketplaceRoles, updateUserActivatedStatus, updateUserAccessRevokedStatus]

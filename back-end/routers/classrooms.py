@@ -14,21 +14,29 @@ from database.database import (
     CourseAssignment,
     CourseRelease,
     Enrollment,
+    GuestSession,
     LessonProgress,
     LessonWorkspace,
     MissionAttempt,
     User,
 )
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from models.models import UserRole
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from routers.stage_sources import get_beta_user, get_current_user, get_db
+from routers.stage_sources import get_current_user, get_db
+from utils.guest_access import (
+    GUEST_JOIN_LIMIT,
+    Participant,
+    get_classroom_participant,
+    get_participant,
+    guest_throttle,
+)
 
 
-router = APIRouter(tags=["classrooms"], dependencies=[Depends(get_beta_user)])
+router = APIRouter(tags=["classrooms"], dependencies=[Depends(get_classroom_participant)])
 BOARD_TYPES = {
     "highest_score",
     "fastest",
@@ -115,7 +123,10 @@ def require_teacher(user: User) -> None:
         raise HTTPException(status_code=403, detail="Tutor or administrator role required")
 
 
-def require_student(user: User) -> None:
+def require_student(actor: User | Participant) -> None:
+    if isinstance(actor, Participant) and actor.is_guest:
+        return
+    user = actor.user if isinstance(actor, Participant) else actor
     if user.role != UserRole.USER:
         raise HTTPException(status_code=403, detail="Student role required")
 
@@ -130,12 +141,17 @@ def owned_group_or_404(db: Session, user: User, group_id: int) -> ClassGroup:
     return group
 
 
-def active_membership_or_404(db: Session, user: User, group_id: int) -> ClassMembership:
-    membership = db.query(ClassMembership).filter(
+def active_membership_or_404(db: Session, actor: User | Participant, group_id: int) -> ClassMembership:
+    query = db.query(ClassMembership).filter(
         ClassMembership.group_id == group_id,
-        ClassMembership.student_id == user.id,
         ClassMembership.removed_at.is_(None),
-    ).first()
+    )
+    if isinstance(actor, Participant) and actor.is_guest:
+        query = query.filter(ClassMembership.guest_session_id == actor.guest.id)
+    else:
+        user = actor.user if isinstance(actor, Participant) else actor
+        query = query.filter(ClassMembership.student_id == user.id)
+    membership = query.first()
     if membership is None:
         raise HTTPException(status_code=404, detail="Class group not found")
     return membership
@@ -187,15 +203,22 @@ def default_alias() -> str:
     return f"Learner-{secrets.token_hex(2).upper()}"
 
 
-def ensure_assignment_enrollment(db: Session, assignment: CourseAssignment, student_id: int) -> Enrollment:
-    enrollment = db.query(Enrollment).filter(
-        Enrollment.student_id == student_id,
-        Enrollment.course_id == assignment.course_id,
-    ).first()
+def ensure_assignment_enrollment(db: Session, assignment: CourseAssignment, membership: ClassMembership) -> Enrollment:
+    query = db.query(Enrollment).filter(Enrollment.course_id == assignment.course_id)
+    if membership.guest_session_id is not None:
+        query = query.filter(
+            Enrollment.guest_session_id == membership.guest_session_id,
+            Enrollment.assignment_id == assignment.id,
+        )
+    else:
+        query = query.filter(Enrollment.student_id == membership.student_id)
+    enrollment = query.first()
     if enrollment:
         return enrollment
     enrollment = Enrollment(
-        student_id=student_id,
+        student_id=membership.student_id,
+        guest_session_id=membership.guest_session_id,
+        assignment_id=assignment.id if membership.guest_session_id is not None else None,
         course_id=assignment.course_id,
         active_release_id=assignment.release_id,
     )
@@ -262,10 +285,16 @@ def teacher_group_payload(db: Session, group: ClassGroup) -> dict[str, Any]:
         ClassMembership.group_id == group.id,
         ClassMembership.removed_at.is_(None),
     ).order_by(ClassMembership.joined_at).all()
+    account_ids = [item.student_id for item in memberships if item.student_id is not None]
+    guest_ids = [item.guest_session_id for item in memberships if item.guest_session_id is not None]
     students = {
         student.id: student
-        for student in db.query(User).filter(User.id.in_([item.student_id for item in memberships])).all()
-    } if memberships else {}
+        for student in db.query(User).filter(User.id.in_(account_ids)).all()
+    } if account_ids else {}
+    guests = {
+        guest.id: guest
+        for guest in db.query(GuestSession).filter(GuestSession.id.in_(guest_ids)).all()
+    } if guest_ids else {}
     assignments = db.query(CourseAssignment).filter(
         CourseAssignment.group_id == group.id,
     ).order_by(CourseAssignment.created_at).all()
@@ -279,9 +308,14 @@ def teacher_group_payload(db: Session, group: ClassGroup) -> dict[str, Any]:
         "created_at": group.created_at,
         "members": [{
             "id": item.id,
-            "student_username": students[item.student_id].username,
+            "student_username": (
+                guests[item.guest_session_id].alias
+                if item.guest_session_id is not None
+                else students[item.student_id].username
+            ),
             "display_alias": item.display_alias,
             "leaderboard_opt_in": item.leaderboard_opt_in,
+            "is_guest": item.guest_session_id is not None,
             "joined_at": item.joined_at,
         } for item in memberships],
         "assignments": [assignment_payload(db, item, group.challenge_season) for item in assignments],
@@ -302,9 +336,21 @@ def student_group_payload(db: Session, membership: ClassMembership) -> dict[str,
         "membership": {
             "display_alias": membership.display_alias,
             "leaderboard_opt_in": membership.leaderboard_opt_in,
+            "is_guest": membership.guest_session_id is not None,
+            "alias_editable": membership.guest_session_id is None,
             "joined_at": membership.joined_at,
         },
-        "assignments": [assignment_payload(db, item, group.challenge_season) for item in assignments],
+        "assignments": [
+            {
+                **assignment_payload(db, item, group.challenge_season),
+                "enrollment_id": (
+                    enrollment.id
+                    if (enrollment := enrollment_for_membership(db, item, membership)) is not None
+                    else None
+                ),
+            }
+            for item in assignments
+        ],
     }
 
 
@@ -414,21 +460,30 @@ def reset_challenge_season(
 
 @router.post("/class-groups/join", status_code=status.HTTP_201_CREATED)
 def join_group(
-    request: JoinGroupRequest,
-    user: User = Depends(get_current_user),
+    payload: JoinGroupRequest,
+    http_request: Request,
+    participant: Participant = Depends(get_participant),
     db: Session = Depends(get_db),
 ):
-    require_student(user)
+    require_student(participant)
+    if participant.is_guest:
+        guest_throttle(http_request, "join", GUEST_JOIN_LIMIT)
     group = db.query(ClassGroup).filter(
-        ClassGroup.join_code == request.join_code.strip().upper(),
+        ClassGroup.join_code == payload.join_code.strip().upper(),
         ClassGroup.status == "active",
     ).first()
     if group is None:
         raise HTTPException(status_code=404, detail="Join code is not active")
-    membership = db.query(ClassMembership).filter(
-        ClassMembership.group_id == group.id,
-        ClassMembership.student_id == user.id,
-    ).first()
+    if participant.is_guest:
+        membership = db.query(ClassMembership).filter(
+            ClassMembership.group_id == group.id,
+            ClassMembership.guest_session_id == participant.guest.id,
+        ).first()
+    else:
+        membership = db.query(ClassMembership).filter(
+            ClassMembership.group_id == group.id,
+            ClassMembership.student_id == participant.user.id,
+        ).first()
     now = datetime.datetime.utcnow()
     if membership:
         membership.removed_at = None
@@ -437,27 +492,30 @@ def join_group(
     else:
         membership = ClassMembership(
             group_id=group.id,
-            student_id=user.id,
-            display_alias=default_alias(),
+            student_id=participant.user.id if not participant.is_guest else None,
+            guest_session_id=participant.guest.id if participant.is_guest else None,
+            display_alias=participant.guest.alias if participant.is_guest else default_alias(),
             leaderboard_opt_in=False,
             joined_at=now,
             updated_at=now,
         )
         db.add(membership)
     for assignment in db.query(CourseAssignment).filter(CourseAssignment.group_id == group.id).all():
-        ensure_assignment_enrollment(db, assignment, user.id)
+        ensure_assignment_enrollment(db, assignment, membership)
     db.commit()
     db.refresh(membership)
     return student_group_payload(db, membership)
 
 
 @router.get("/class-groups/joined")
-def list_joined_groups(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    require_student(user)
-    memberships = db.query(ClassMembership).filter(
-        ClassMembership.student_id == user.id,
-        ClassMembership.removed_at.is_(None),
-    ).order_by(ClassMembership.joined_at.desc()).all()
+def list_joined_groups(participant: Participant = Depends(get_participant), db: Session = Depends(get_db)):
+    require_student(participant)
+    query = db.query(ClassMembership).filter(ClassMembership.removed_at.is_(None))
+    if participant.is_guest:
+        query = query.filter(ClassMembership.guest_session_id == participant.guest.id)
+    else:
+        query = query.filter(ClassMembership.student_id == participant.user.id)
+    memberships = query.order_by(ClassMembership.joined_at.desc()).all()
     return [student_group_payload(db, item) for item in memberships]
 
 
@@ -465,11 +523,13 @@ def list_joined_groups(user: User = Depends(get_current_user), db: Session = Dep
 def update_own_membership(
     group_id: int,
     request: MembershipUpdateRequest,
-    user: User = Depends(get_current_user),
+    participant: Participant = Depends(get_participant),
     db: Session = Depends(get_db),
 ):
-    require_student(user)
-    membership = active_membership_or_404(db, user, group_id)
+    require_student(participant)
+    membership = active_membership_or_404(db, participant, group_id)
+    if participant.is_guest and "display_alias" in request.model_fields_set:
+        raise HTTPException(status_code=403, detail="Guest aliases cannot be changed")
     for field, value in request.model_dump(exclude_unset=True).items():
         setattr(membership, field, value)
     membership.updated_at = datetime.datetime.utcnow()
@@ -480,11 +540,11 @@ def update_own_membership(
 @router.delete("/class-groups/{group_id}/membership", status_code=status.HTTP_204_NO_CONTENT)
 def leave_group(
     group_id: int,
-    user: User = Depends(get_current_user),
+    participant: Participant = Depends(get_participant),
     db: Session = Depends(get_db),
 ):
-    require_student(user)
-    membership = active_membership_or_404(db, user, group_id)
+    require_student(participant)
+    membership = active_membership_or_404(db, participant, group_id)
     membership.removed_at = datetime.datetime.utcnow()
     membership.leaderboard_opt_in = False
     db.commit()
@@ -545,7 +605,7 @@ def create_assignment(
         ClassMembership.removed_at.is_(None),
     ).all()
     for membership in memberships:
-        ensure_assignment_enrollment(db, assignment, membership.student_id)
+        ensure_assignment_enrollment(db, assignment, membership)
     db.commit()
     db.refresh(assignment)
     return assignment_payload(db, assignment, group.challenge_season)
@@ -570,6 +630,13 @@ def update_assignment(
         if release is None:
             raise HTTPException(status_code=422, detail="Release does not belong to the assigned course")
         assignment.release_id = release.id
+        for enrollment in db.query(Enrollment).filter(
+            Enrollment.assignment_id == assignment.id,
+            Enrollment.guest_session_id.is_not(None),
+        ).all():
+            enrollment.active_release_id = release.id
+            enrollment.release_updated_at = datetime.datetime.utcnow()
+            enrollment.completed_at = None
     if "due_at" in values and values["due_at"] is not None:
         values["due_at"] = values["due_at"].replace(tzinfo=None)
     for field, value in values.items():
@@ -652,6 +719,30 @@ def leaderboard_value(attempt: MissionAttempt, board_type: str) -> Optional[floa
     return float(optional + attempt.metrics.get("collectibles", 0))
 
 
+def membership_identity(membership: ClassMembership) -> tuple[str, int]:
+    if membership.guest_session_id is not None:
+        return "guest", membership.guest_session_id
+    return "account", membership.student_id
+
+
+def enrollment_identity(enrollment: Enrollment) -> tuple[str, int]:
+    if enrollment.guest_session_id is not None:
+        return "guest", enrollment.guest_session_id
+    return "account", enrollment.student_id
+
+
+def enrollment_for_membership(db: Session, assignment: CourseAssignment, membership: ClassMembership) -> Optional[Enrollment]:
+    query = db.query(Enrollment).filter(Enrollment.course_id == assignment.course_id)
+    if membership.guest_session_id is not None:
+        query = query.filter(
+            Enrollment.guest_session_id == membership.guest_session_id,
+            Enrollment.assignment_id == assignment.id,
+        )
+    else:
+        query = query.filter(Enrollment.student_id == membership.student_id)
+    return query.first()
+
+
 @router.get("/class-challenges/{challenge_id}/statistics")
 def read_challenge_statistics(
     challenge_id: int,
@@ -665,19 +756,19 @@ def read_challenge_statistics(
         ClassMembership.group_id == group.id,
         ClassMembership.removed_at.is_(None),
     ).all()
-    student_ids = [item.student_id for item in memberships]
-    enrollments = db.query(Enrollment).filter(
-        Enrollment.student_id.in_(student_ids),
-        Enrollment.course_id == assignment.course_id,
-    ).all() if student_ids else []
-    enrollment_ids = [item.id for item in enrollments]
+    enrollment_identities = {
+        enrollment.id: enrollment_identity(enrollment)
+        for enrollment in (
+            enrollment_for_membership(db, assignment, membership) for membership in memberships
+        ) if enrollment is not None
+    }
+    enrollment_ids = list(enrollment_identities)
     attempts = db.query(MissionAttempt).filter(
         MissionAttempt.enrollment_id.in_(enrollment_ids),
         MissionAttempt.release_id == challenge.release_id,
         MissionAttempt.lesson_key == challenge.lesson_key,
         MissionAttempt.activity_key == challenge.activity_key,
     ).all() if enrollment_ids else []
-    enrollment_students = {item.id: item.student_id for item in enrollments}
     successful = [item for item in attempts if item.outcome == "succeeded"]
     values = [
         value for value in (leaderboard_value(item, challenge.board_type) for item in successful)
@@ -694,8 +785,8 @@ def read_challenge_statistics(
         "season": challenge.season,
         "member_count": len(memberships),
         "opted_in_count": sum(item.leaderboard_opt_in for item in memberships),
-        "participant_count": len({enrollment_students[item.enrollment_id] for item in attempts}),
-        "successful_participant_count": len({enrollment_students[item.enrollment_id] for item in successful}),
+        "participant_count": len({enrollment_identities[item.enrollment_id] for item in attempts}),
+        "successful_participant_count": len({enrollment_identities[item.enrollment_id] for item in successful}),
         "attempt_count": len(attempts),
         "successful_attempt_count": len(successful),
         "success_rate": round(len(successful) * 100 / len(attempts), 1) if attempts else 0,
@@ -708,18 +799,27 @@ def read_challenge_statistics(
 @router.get("/class-challenges/{challenge_id}/leaderboard")
 def read_leaderboard(
     challenge_id: int,
-    user: User = Depends(get_current_user),
+    participant: Participant = Depends(get_participant),
     db: Session = Depends(get_db),
 ):
     challenge = challenge_or_404(db, challenge_id)
     assignment = assignment_or_404(db, challenge.assignment_id)
     group = db.query(ClassGroup).filter(ClassGroup.id == assignment.group_id).one()
-    teacher_view = user.id == group.teacher_id and user.role in (UserRole.TUTOR, UserRole.ADMIN)
+    teacher_view = bool(
+        not participant.is_guest
+        and participant.user.id == group.teacher_id
+        and participant.user.role in (UserRole.TUTOR, UserRole.ADMIN)
+    )
     if not teacher_view:
-        require_student(user)
-        membership = active_membership_or_404(db, user, group.id)
+        require_student(participant)
+        membership = active_membership_or_404(db, participant, group.id)
         if not membership.leaderboard_opt_in:
             raise HTTPException(status_code=403, detail="Opt in before viewing this class challenge")
+        membership_enrollment = enrollment_for_membership(db, assignment, membership)
+        if membership_enrollment is None:
+            raise HTTPException(status_code=404, detail="Class challenge is not enabled")
+        if participant.is_guest and membership_enrollment.active_release_id != challenge.release_id:
+            raise HTTPException(status_code=404, detail="Class challenge is not enabled")
     if not group.leaderboards_enabled or not challenge.enabled or group.status != "active":
         raise HTTPException(status_code=404, detail="Class challenge is not enabled")
 
@@ -728,37 +828,42 @@ def read_leaderboard(
         ClassMembership.removed_at.is_(None),
         ClassMembership.leaderboard_opt_in.is_(True),
     ).all()
-    aliases = {item.student_id: item.display_alias for item in memberships}
-    enrollments = db.query(Enrollment).filter(
-        Enrollment.student_id.in_(list(aliases)),
-        Enrollment.course_id == assignment.course_id,
-    ).all() if aliases else []
-    students_by_enrollment = {item.id: item.student_id for item in enrollments}
+    aliases = {membership_identity(item): item.display_alias for item in memberships}
+    guest_flags = {membership_identity(item): item.guest_session_id is not None for item in memberships}
+    enrollment_identities = {
+        enrollment.id: enrollment_identity(enrollment)
+        for enrollment in (
+            enrollment_for_membership(db, assignment, membership) for membership in memberships
+        ) if enrollment is not None
+    }
     attempts = db.query(MissionAttempt).filter(
-        MissionAttempt.enrollment_id.in_(list(students_by_enrollment)),
+        MissionAttempt.enrollment_id.in_(list(enrollment_identities)),
         MissionAttempt.release_id == challenge.release_id,
         MissionAttempt.lesson_key == challenge.lesson_key,
         MissionAttempt.activity_key == challenge.activity_key,
         MissionAttempt.outcome == "succeeded",
-    ).all() if students_by_enrollment else []
+    ).all() if enrollment_identities else []
 
     higher_is_better = challenge.board_type in {"highest_score", "most_optional"}
-    best: dict[int, float] = {}
+    best: dict[tuple[str, int], float] = {}
     for attempt in attempts:
         value = leaderboard_value(attempt, challenge.board_type)
         if value is None:
             continue
-        student_id = students_by_enrollment[attempt.enrollment_id]
-        if student_id not in best or (value > best[student_id] if higher_is_better else value < best[student_id]):
-            best[student_id] = value
+        identity = enrollment_identities[attempt.enrollment_id]
+        if identity not in best or (value > best[identity] if higher_is_better else value < best[identity]):
+            best[identity] = value
     ordered = sorted(best.items(), key=lambda item: item[1], reverse=higher_is_better)
     entries = []
     previous_value: Optional[float] = None
     previous_rank = 0
-    for index, (student_id, value) in enumerate(ordered, start=1):
+    for index, (identity, value) in enumerate(ordered, start=1):
         tied = previous_value is not None and abs(value - previous_value) <= challenge.tie_tolerance
         rank = previous_rank if tied else index
-        entries.append({"rank": rank, "alias": aliases[student_id], "value": round(value, 3)})
+        entry = {"rank": rank, "alias": aliases[identity], "value": round(value, 3)}
+        if guest_flags[identity]:
+            entry["is_guest"] = True
+        entries.append(entry)
         previous_value, previous_rank = value, rank
 
     release = db.query(CourseRelease).filter(CourseRelease.id == challenge.release_id).one()
@@ -835,7 +940,20 @@ def enrollment_analytics(db: Session, enrollment: Enrollment, latest_release_id:
             + [item.created_at for item in attempts]
         ) if value is not None
     ]
-    student = db.query(User).filter(User.id == enrollment.student_id).one()
+    if enrollment.guest_session_id is not None:
+        guest = db.query(GuestSession).filter(GuestSession.id == enrollment.guest_session_id).one()
+        student_payload = {
+            "username": guest.alias,
+            "display_name": guest.alias,
+            "is_guest": True,
+        }
+    else:
+        student = db.query(User).filter(User.id == enrollment.student_id).one()
+        student_payload = {
+            "username": student.username,
+            "display_name": f"{student.firstname} {student.lastname}".strip() or student.username,
+            "is_guest": False,
+        }
     latest_attempt = successful[-1] if successful else (attempts[-1] if attempts else None)
     best_attempt = max(scored, key=lambda item: item.score_result["total"]) if scored else None
     outcome_reasons = Counter()
@@ -864,12 +982,9 @@ def enrollment_analytics(db: Session, enrollment: Enrollment, latest_release_id:
         outcome_reasons.update(signals)
     return {
         "enrollment_id": enrollment.id,
-        "student": {
-            "username": student.username,
-            "display_name": f"{student.firstname} {student.lastname}".strip() or student.username,
-        },
+        "student": student_payload,
         "active_release": {"id": release.id, "version": release.version},
-        "update_available": latest_release_id is not None and latest_release_id != release.id,
+        "update_available": enrollment.guest_session_id is None and latest_release_id is not None and latest_release_id != release.id,
         "enrolled_at": enrollment.enrolled_at,
         "last_activity_at": max(activity_times) if activity_times else enrollment.enrolled_at,
         "completion": {

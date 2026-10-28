@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import PageContainer from 'src/components/container/PageContainer';
 import { useAuth } from 'src/authentication/AuthProvider';
+import { guestCanView } from 'src/authentication/guest';
 import { listMyEnrollments, listPublishedCourses } from 'src/courses/CoursesApi';
 import type { Enrollment, StudentCourse } from 'src/courses/types';
 import ClassGroupsStudentPage from '../class-groups-student-page/ClassGroupsStudentPage';
@@ -12,9 +13,11 @@ import { pageTabsSx, TabbedPageHeader } from 'src/components/shared/PageHeader';
 
 export default function CoursesPage({ previewAppearance = true }: { previewAppearance?: boolean }) {
   const { t } = useTranslation();
-  const { token } = useAuth();
+  const { token, isGuest, guestSettings } = useAuth();
   const navigate = useNavigate();
-  const [tab, setTab] = useState(0);
+  const canBrowse = !isGuest || guestCanView(guestSettings, 'courses');
+  const canUseClasses = !isGuest || guestCanView(guestSettings, 'classrooms');
+  const [tab, setTab] = useState(canBrowse ? 0 : 2);
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
   const [courses, setCourses] = useState<StudentCourse[]>([]);
   const [search, setSearch] = useState('');
@@ -24,12 +27,16 @@ export default function CoursesPage({ previewAppearance = true }: { previewAppea
 
   useEffect(() => {
     let active = true;
-    Promise.all([listMyEnrollments(token), listPublishedCourses(token)])
+    setLoading(true);
+    Promise.all([
+      canUseClasses ? listMyEnrollments(token) : Promise.resolve([]),
+      canBrowse ? listPublishedCourses(token) : Promise.resolve([]),
+    ])
       .then(([mine, published]) => { if (active) { setEnrollments(mine); setCourses(published); } })
       .catch((reason) => { if (active) setError(reason instanceof Error ? reason.message : t('education.student.errors.load')); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [token, t]);
+  }, [canBrowse, canUseClasses, token, t]);
 
   const difficulties = useMemo(() => Array.from(new Set(courses.map((course) => course.difficulty).filter((value): value is string => Boolean(value)))), [courses]);
   const filtered = useMemo(() => courses.filter((course) => (
@@ -58,9 +65,9 @@ export default function CoursesPage({ previewAppearance = true }: { previewAppea
           titleAdornment={previewAppearance ? <BetaBadge feature="education" /> : undefined}
           tabs={
           <Tabs value={tab} onChange={(_, value) => setTab(value)} aria-label={t('education.student.coursesTitle')} variant="scrollable" scrollButtons="auto" allowScrollButtonsMobile sx={pageTabsSx}>
-            <Tab label={t('education.student.myCourses')} />
-            <Tab label={t('education.student.explore')} />
-            <Tab label={t('education.classrooms.studentTitle')} />
+            {canBrowse && <Tab label={t('education.student.myCourses')} />}
+            {canBrowse && <Tab label={t('education.student.explore')} />}
+            {canUseClasses && <Tab label={t('education.classrooms.studentTitle')} />}
           </Tabs>
           }
         />
@@ -79,7 +86,7 @@ export default function CoursesPage({ previewAppearance = true }: { previewAppea
                   <LinearProgress variant="determinate" value={enrollment.progress_percent} sx={{ mt: 3, mb: 1 }} />
                   <Typography variant="caption">{t('education.student.progress', { completed: enrollment.completed_count, total: enrollment.lesson_count })}</Typography>
                 </CardContent>
-                <CardActions sx={previewAppearance ? { px: 2.5, pb: 2.5, pt: 0 } : undefined}><Button variant={previewAppearance ? 'contained' : 'text'} onClick={() => navigate(`/courses/${enrollment.course_id}`)}>{enrollment.completed_at ? t('education.student.reviewCourse') : t('education.student.continueCourse')}</Button></CardActions>
+                <CardActions sx={previewAppearance ? { px: 2.5, pb: 2.5, pt: 0 } : undefined}><Button variant={previewAppearance ? 'contained' : 'text'} onClick={() => navigate(`/courses/${enrollment.course_id}${isGuest ? `?enrollment=${enrollment.id}` : ''}`)}>{enrollment.completed_at ? t('education.student.reviewCourse') : t('education.student.continueCourse')}</Button></CardActions>
               </Card>
             </Grid>
           ))}</Grid>

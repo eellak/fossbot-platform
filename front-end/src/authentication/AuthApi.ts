@@ -212,3 +212,37 @@ export async function updateUserAccessRevokedStatusById(userId: number, data: Ac
     });
     return response;
 }
+
+export async function getGuestSettings() {
+    return fetch(`${backendUrl}/guests/settings`);
+}
+
+export async function createGuestSession() {
+    return fetch(`${backendUrl}/guests/session`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+    });
+}
+
+export async function getGuestSession(token: string) {
+    return fetch(`${backendUrl}/guests/me`, {
+        headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+        },
+    });
+}
+
+export async function getAdminGuestSettings(token: string) {
+    return fetch(`${backendUrl}/guests/admin/settings`, {
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    });
+}
+
+export async function updateAdminGuestSettings(token: string, settings: { beta_tester: boolean; allowed_views: string[] }) {
+    return fetch(`${backendUrl}/guests/admin/settings`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(settings),
+    });
+}

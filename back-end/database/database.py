@@ -589,12 +589,43 @@ class CourseRelease(Base):
     created_by = relationship("User")
 
 
-class Enrollment(Base):
-    __tablename__ = "enrollments"
-    __table_args__ = (UniqueConstraint('student_id', 'course_id', name='uq_enrollments_student_course'),)
+class GuestSession(Base):
+    __tablename__ = "guest_sessions"
 
     id = Column(Integer, primary_key=True, index=True)
-    student_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    alias = Column(String(64), nullable=False)
+    token_hash = Column(String(64), nullable=False, unique=True, index=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.datetime.utcnow)
+    expires_at = Column(DateTime, nullable=False)
+
+
+class GuestInstanceSettings(Base):
+    __tablename__ = "guest_instance_settings"
+    __table_args__ = (CheckConstraint("id = 1", name="ck_guest_instance_settings_singleton"),)
+
+    id = Column(Integer, primary_key=True, default=1)
+    beta_tester = Column(Boolean, nullable=False, default=False)
+    allowed_views = Column(JSON_DOCUMENT, nullable=False, default=list)
+    updated_by_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow, nullable=False)
+
+
+class Enrollment(Base):
+    __tablename__ = "enrollments"
+    __table_args__ = (
+        UniqueConstraint('student_id', 'course_id', name='uq_enrollments_student_course'),
+        UniqueConstraint('guest_session_id', 'assignment_id', name='uq_enrollments_guest_assignment'),
+        CheckConstraint(
+            "(student_id IS NOT NULL AND guest_session_id IS NULL AND assignment_id IS NULL) OR "
+            "(student_id IS NULL AND guest_session_id IS NOT NULL AND assignment_id IS NOT NULL)",
+            name='ck_enrollments_owner',
+        ),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    student_id = Column(Integer, ForeignKey('users.id'), nullable=True)
+    guest_session_id = Column(Integer, ForeignKey('guest_sessions.id'), nullable=True, index=True)
+    assignment_id = Column(Integer, ForeignKey('course_assignments.id'), nullable=True)
     course_id = Column(Integer, ForeignKey('courses.id'), nullable=False)
     active_release_id = Column(Integer, ForeignKey('course_releases.id'), nullable=False)
     enrolled_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
@@ -729,11 +760,18 @@ class ClassMembership(Base):
     __tablename__ = "class_memberships"
     __table_args__ = (
         UniqueConstraint('group_id', 'student_id', name='uq_class_membership_student'),
+        UniqueConstraint('group_id', 'guest_session_id', name='uq_class_membership_guest'),
+        CheckConstraint(
+            "(student_id IS NOT NULL AND guest_session_id IS NULL) OR "
+            "(student_id IS NULL AND guest_session_id IS NOT NULL)",
+            name='ck_class_memberships_owner',
+        ),
     )
 
     id = Column(Integer, primary_key=True, index=True)
     group_id = Column(Integer, ForeignKey('class_groups.id'), nullable=False)
-    student_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    student_id = Column(Integer, ForeignKey('users.id'), nullable=True)
+    guest_session_id = Column(Integer, ForeignKey('guest_sessions.id'), nullable=True, index=True)
     display_alias = Column(String, nullable=False)
     leaderboard_opt_in = Column(Boolean, nullable=False, default=False)
     joined_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)

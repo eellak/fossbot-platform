@@ -15,6 +15,7 @@ import {
   useTheme,
 } from '@mui/material';
 import { useAuth } from 'src/authentication/AuthProvider'; // Assuming AuthProvider is in the same directory
+import { guestProjectRepository } from 'src/guest/guestProjects';
 import { v4 as uuidv4 } from 'uuid';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -111,7 +112,7 @@ const BlocklyPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppeara
   const runHadErrorRef = useRef(false);
   const runTargetRef = useRef<'simulation' | 'robot'>('simulation');
   const auth = useAuth();
-  const { token } = auth;
+  const { token, isGuest } = auth;
   const authRef = useRef(auth);
   const translationRef = useRef(t);
   authRef.current = auth;
@@ -264,8 +265,23 @@ const BlocklyPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppeara
             setSelectedStage(stageRef);
           }
         } else {
-          //setEditorValue( '<xml xmlns="https://developers.google.com/blockly/xml"></xml>');
-          setProjectTitle(translationRef.current('newProject'));
+          let restored = false;
+          if (authRef.current.isGuest) {
+            try {
+              const draft = guestProjectRepository.getDraft('blockly');
+              if (draft) {
+                setEditorValue(draft.code);
+                setProjectTitle(draft.name);
+                setProjectDescription(draft.description);
+                setSelectedStage(draft.stageReference || null);
+                restored = true;
+              }
+            } catch (storageError) {
+              console.error(storageError);
+              notify(t('guest.storageError'), { severity: 'error' });
+            }
+          }
+          if (!restored) setProjectTitle(translationRef.current('newProject'));
           setInitialStageConfig(null);
           setInitialStageAssetBaseUrl(null);
         }
@@ -280,6 +296,30 @@ const BlocklyPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppeara
     fetchProject();
   }, [projectId, navigate]);
 
+  useEffect(() => {
+    if (!isGuest || loading || previewAppearance === false) return undefined;
+    const timer = window.setTimeout(() => {
+      try {
+        const data = {
+          name: projectTitle,
+          description: projectDescription,
+          project_type: 'blockly',
+          code: editorValue,
+          stageReference: selectedStage,
+        };
+        if (projectId) {
+          if (!guestProjectRepository.update(Number(projectId), data)) throw new Error('Guest project not found');
+        } else {
+          guestProjectRepository.saveDraft('blockly', { ...data, editorType: 'blockly' });
+        }
+      } catch (storageError) {
+        console.error(storageError);
+        notify(t('guest.storageError'), { severity: 'error' });
+      }
+    }, 800);
+    return () => window.clearTimeout(timer);
+  }, [editorValue, isGuest, loading, notify, previewAppearance, projectDescription, projectId, projectTitle, selectedStage, t]);
+
   // Local and private GitHub stages are loaded through authenticated backend APIs.
   useEffect(() => {
     if (!stageNeedsAuthenticatedLoad(selectedStage)) {
@@ -287,7 +327,11 @@ const BlocklyPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppeara
       setInitialStageAssetBaseUrl(null);
       return;
     }
-    if (!token) return;
+    if (!token || isGuest) {
+      setInitialStageConfig(null);
+      setInitialStageAssetBaseUrl(null);
+      return;
+    }
 
     setInitialStageConfig(undefined);
     setInitialStageAssetBaseUrl(null);
@@ -309,7 +353,7 @@ const BlocklyPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppeara
         }
       });
     return () => { cancelled = true; };
-  }, [token, selectedStage?.localStageId, selectedStage?.repoOwner, selectedStage?.repoName, selectedStage?.sourceType]);
+  }, [isGuest, token, selectedStage?.localStageId, selectedStage?.repoOwner, selectedStage?.repoName, selectedStage?.sourceType]);
 
   useEffect(() => {
     const handleStageSelected = (event: Event) => {
@@ -647,7 +691,7 @@ const BlocklyPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppeara
             </Box>
           </Box>
         )}
-        {!loading && <AssistantPanel adapter={assistantAdapter} explainCapability="blockly.explain" suggestCapability="blockly.suggest_changes" />}
+        {!loading && !isGuest && <AssistantPanel adapter={assistantAdapter} explainCapability="blockly.explain" suggestCapability="blockly.suggest_changes" />}
       </PageContainer>
     );
   }
@@ -812,7 +856,7 @@ const BlocklyPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppeara
         )}
       </Box>
 
-      {!loading && <Box sx={{ mt: 2 }}><AssistantPanel adapter={assistantAdapter} explainCapability="blockly.explain" suggestCapability="blockly.suggest_changes" /></Box>}
+      {!loading && !isGuest && <Box sx={{ mt: 2 }}><AssistantPanel adapter={assistantAdapter} explainCapability="blockly.explain" suggestCapability="blockly.suggest_changes" /></Box>}
 
     </PageContainer>
   );

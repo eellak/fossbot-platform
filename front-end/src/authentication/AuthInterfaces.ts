@@ -1,14 +1,39 @@
 // Define the shape of your context data
 export type AuthStatus = 'loading' | 'authenticated' | 'unauthenticated';
+export type GuestView = 'dashboard' | 'python' | 'blockly' | 'interactive' | 'rc' | 'courses' | 'classrooms' | 'stages' | 'stage_builder';
+
+export interface GuestSettings {
+    beta_tester: boolean;
+    allowed_views: GuestView[];
+}
+
+export interface GuestSession {
+    is_guest: true;
+    alias: string;
+    created_at: string;
+    expires_at: string;
+    settings: GuestSettings;
+}
+
+export interface GuestSessionResponse {
+    token: string;
+    token_type: 'bearer';
+    guest: GuestSession;
+}
 
 export interface AuthContextType {
     user: User | null;
     token: string;
     authStatus: AuthStatus;
     isAuthenticated: boolean;
+    isGuest: boolean;
+    guest: GuestSession | null;
+    guestSettings: GuestSettings;
     loginAction: (data: LoginData) => Promise<LoginResponse>;
     loginWithFirebaseAction: (provider: FirebaseProviderName) => Promise<LoginResponse>;
     registerAction: (data: RegisterData) => Promise<LoginResponse>;
+    enterGuestAction: () => Promise<LoginResponse>;
+    refreshGuestAction: () => Promise<GuestSession | null>;
 
     logOutAction: () => void;
     getUserDataAction: () => Promise<User | undefined>;

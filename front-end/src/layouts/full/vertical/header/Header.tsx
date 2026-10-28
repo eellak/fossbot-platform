@@ -1,9 +1,9 @@
 import React from 'react';
-import { IconButton, Box, AppBar, useMediaQuery, Toolbar, styled, Stack } from '@mui/material';
+import { IconButton, Box, AppBar, useMediaQuery, Toolbar, styled, Stack, Chip } from '@mui/material';
 
 import { useSelector, useDispatch } from 'src/store/Store';
 import { toggleSidebar, toggleMobileSidebar } from 'src/store/customizer/CustomizerSlice';
- 
+
 import { IconMenu2 } from '@tabler/icons-react';
 import Notifications from './Notification';
 import UserMenu from 'src/components/user-menu/UserMenu';
@@ -14,6 +14,8 @@ import { AppState } from 'src/store/Store';
 import Navigation from './Navigation';
 import MobileRightSidebar from './MobileRightSidebar';
 import ToggleTheme from './ToggleTheme';
+import { useAuth } from 'src/authentication/AuthProvider';
+import { useTranslation } from 'react-i18next';
 
 const AppBarStyled = styled(AppBar)(({ theme }) => ({
   boxShadow: 'none',
@@ -28,6 +30,8 @@ const ToolbarStyled = styled(Toolbar)(({ theme }) => ({
 }));
 
 const Header = () => {
+  const { isGuest } = useAuth();
+  const { t } = useTranslation();
   const lgUp = useMediaQuery((theme: any) => theme.breakpoints.up('lg'));
   const lgDown = useMediaQuery((theme: any) => theme.breakpoints.down('lg'));
 
@@ -68,6 +72,14 @@ const Header = () => {
         ) : null} */}
         <Box flexGrow={1} />
         <Stack spacing={2} direction="row" alignItems="center">
+          {isGuest && (
+            <Chip
+              size="small"
+              label={t('guest.viewBadge')}
+              variant="outlined"
+              sx={{ display: { xs: 'none', sm: 'inline-flex' }, fontWeight: 600 }}
+            />
+          )}
           <ToggleTheme />
           <Language />
           {/* ------------------------------------------- */}

@@ -1,5 +1,9 @@
 # Education system student guide
 
+## Guest sessions
+
+**Continue as guest** opens an anonymous session with a generated alias. No nickname or email is required. Your Python/Blockly code, local stages, and lesson workspaces remain in this browser only; clearing browser storage deletes them permanently. The same guest can join a class with its join code, submit activities and missions, and opt into the class leaderboard. Guest results belong to that class assignment and are visible to the teacher. A guest session expires after 30 days and cannot be recovered or converted into an account. Guests can use the simulator but not a physical robot.
+
 ## Start and resume
 
 Open **Courses**, choose a public course or a shared unlisted link, and select **Start course**. **My courses** shows progress and returns you to the next unfinished lesson. Your progress and workspace are saved to your account, not GitHub.
@@ -8,7 +12,7 @@ Each lesson keeps instructions, code, simulator, sensor evidence, questions, and
 
 ## Code, simulator, and autosave
 
-The save status appears in the lesson header. If saving fails, retry when the connection returns. If another tab saved a newer revision, reload before editing further so one tab does not silently overwrite the other.
+The save status appears in the lesson header. If saving fails, retry when the connection returns. If another tab saved a newer revision, reload before editing further so one tab does not silently overwrite the other. For guest sessions, the same status refers to browser storage; a full or unavailable browser storage reports an error instead of claiming the work was saved.
 
 Some lessons **Start with the previous lesson's saved code**. Open and save the previous lesson first. The copy happens once; later edits in the old lesson do not replace the new workspace.
 

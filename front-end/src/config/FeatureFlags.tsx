@@ -11,9 +11,14 @@ const defaultFlags: FeatureFlags = { marketplace: false, ready: false };
 const FeatureFlagsContext = createContext<FeatureFlags>(defaultFlags);
 
 export function FeatureFlagsProvider({ children }: { children: ReactNode }) {
-  const { user, token } = useAuth();
-  const hasBetaAccess = user?.beta_tester || user?.role === UserRole.ADMIN;
-  const flags = { marketplace: Boolean(hasBetaAccess), ready: !token || user !== null };
+  const { user, token, isGuest, guestSettings, authStatus } = useAuth();
+  const hasBetaAccess = isGuest
+    ? guestSettings.allowed_views.includes('stages')
+    : user?.beta_tester || user?.role === UserRole.ADMIN;
+  const flags = {
+    marketplace: Boolean(hasBetaAccess),
+    ready: authStatus !== 'loading',
+  };
 
   return <FeatureFlagsContext.Provider value={flags}>{children}</FeatureFlagsContext.Provider>;
 }

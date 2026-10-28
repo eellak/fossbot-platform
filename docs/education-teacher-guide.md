@@ -35,3 +35,5 @@ If an optional remote stage is temporarily unavailable, readable lesson content 
 ## Classroom features
 
 Class groups and leaderboards are optional. Leaderboards are off by default, scoped to one teacher-owned class group, display aliases only, and require student opt-in. Personal results remain available without joining a leaderboard.
+
+Anonymous guests can join with a class join code. Their generated alias appears in the class roster, analytics, and opted-in leaderboard, and their results are scoped to that class assignment and release. Guests do not create workspace, project, or stage rows; their code stays in their browser. Removing a guest membership, archiving the group, or disabling the classroom guest view stops further participation. Guest results are retained with the class for teacher review and are not linked to an account.

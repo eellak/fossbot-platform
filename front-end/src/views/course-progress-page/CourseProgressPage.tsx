@@ -62,7 +62,7 @@ export default function CourseProgressPage() {
           <TableCell>{t('education.analytics.questions')}</TableCell>
         </TableRow></TableHead>
         <TableBody>{analytics.students.map((student) => <TableRow key={student.enrollment_id}>
-          <TableCell><Typography fontWeight={650}>{student.student.display_name}</Typography><Typography variant="caption" color="text.secondary">@{student.student.username}</Typography>{student.awaiting_review && <Chip size="small" color="warning" label={t('education.analytics.awaitingReview')} sx={{ ml: 1 }} />}</TableCell>
+          <TableCell><Typography fontWeight={650}>{student.student.display_name}</Typography><Typography variant="caption" color="text.secondary">@{student.student.username}</Typography>{student.student.is_guest && <Chip size="small" label={t('guest.session')} sx={{ ml: 1 }} />}{student.awaiting_review && <Chip size="small" color="warning" label={t('education.analytics.awaitingReview')} sx={{ ml: 1 }} />}</TableCell>
           <TableCell><Stack direction="row" gap={0.5} alignItems="center"><span>{t('education.student.version', { version: student.active_release.version })}</span>{student.update_available && <Chip size="small" color="info" label={t('education.student.updateAvailable')} />}</Stack></TableCell>
           <TableCell sx={{ minWidth: 180 }}><Typography variant="body2">{t('education.student.progress', { completed: student.completion.completed_lessons, total: student.completion.total_lessons })}</Typography><LinearProgress variant="determinate" value={student.completion.percent} sx={{ mt: 0.5 }} /></TableCell>
           <TableCell>{new Date(student.last_activity_at).toLocaleString()}</TableCell>

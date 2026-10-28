@@ -1,13 +1,15 @@
 import React, { ReactNode } from 'react';
 import { Navigate, Outlet } from 'react-router-dom';
 import { useAuth } from '../authentication/AuthProvider';
+import { guestLandingPath } from '../authentication/guest';
 
 interface PrivateRouteProps {
   children?: ReactNode;
+  guestAllowed?: boolean;
 }
 
-const PrivateRoute: React.FC<PrivateRouteProps> = ({ children }) => {
-  const { token, authStatus } = useAuth();
+const PrivateRoute: React.FC<PrivateRouteProps> = ({ children, guestAllowed = false }) => {
+  const { token, authStatus, isGuest, guestSettings } = useAuth();
 
   if (authStatus === 'loading') {
     return null;
@@ -15,6 +17,10 @@ const PrivateRoute: React.FC<PrivateRouteProps> = ({ children }) => {
   
   if (!token || authStatus !== 'authenticated') {
     return <Navigate to="/auth/login" />;
+  }
+
+  if (isGuest && (!guestAllowed || !guestSettings.allowed_views.length)) {
+    return <Navigate to={guestLandingPath(guestSettings)} replace />;
   }
 
   return children ? <>{children}</> : <Outlet />;

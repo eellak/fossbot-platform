@@ -14,13 +14,13 @@ type AssistantContextValue = {
 const AssistantContext = createContext<AssistantContextValue | undefined>(undefined);
 
 export default function AssistantProvider({ children }: { children: ReactNode }) {
-  const { token } = useAuth();
+  const { token, isGuest, authStatus } = useAuth();
   const [access, setAccess] = useState<AIAccessBootstrap | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   const refresh = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
-    if (!token) { setAccess(null); return null; }
+    if (!token || isGuest || authStatus === 'loading' || token.startsWith('guest_')) { setAccess(null); return null; }
     if (!silent) setLoading(true);
     setError('');
     try {
@@ -31,7 +31,7 @@ export default function AssistantProvider({ children }: { children: ReactNode })
       setError(reason instanceof Error ? reason.message : 'AI access could not be loaded');
       return null;
     } finally { if (!silent) setLoading(false); }
-  }, [token]);
+  }, [authStatus, isGuest, token]);
 
   useEffect(() => { void refresh(); }, [refresh]);
   const value = useMemo<AssistantContextValue>(() => ({

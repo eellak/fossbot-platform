@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import CustomCheckbox from '../../components/forms/theme-elements/CustomCheckbox';
 import CustomTextField from '../../components/forms/theme-elements/CustomTextField';
 import CustomFormLabel from '../../components/forms/theme-elements/CustomFormLabel';
@@ -9,25 +9,61 @@ import {
   FormGroup,
   FormControlLabel,
   Button,
+  Divider,
   Stack,
 } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 import { Link } from 'react-router-dom';
-import { IconMail } from '@tabler/icons-react';
+import { IconMail, IconUser } from '@tabler/icons-react';
 import { loginType } from 'src/types/auth/auth';
 import { useAuth } from '../../authentication/AuthProvider';
 import googleIcon from 'src/assets/images/svgs/google-icon.svg';
 import githubIcon from 'src/assets/images/svgs/github-icon.svg';
+import { useTranslation } from 'react-i18next';
+import { getGuestSettings } from 'src/authentication/AuthApi';
+import type { GuestSettings } from 'src/authentication/AuthInterfaces';
 
 const AuthLogin = ({ title, subtitle, subtext, handleShowErrorAlert }: loginType) => {
   const theme = useTheme();
+  const { t } = useTranslation();
 
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showUsernameLogin, setShowUsernameLogin] = useState(false);
   const [loginBannerError, setLoginBannerError] = useState('');
+  const [guestPolicy, setGuestPolicy] = useState<GuestSettings | null>(null);
+  const [guestPolicyLoading, setGuestPolicyLoading] = useState(true);
+  const [guestPolicyError, setGuestPolicyError] = useState('');
+  const [guestBusy, setGuestBusy] = useState(false);
 
   const auth = useAuth();
+
+  useEffect(() => {
+    let active = true;
+    getGuestSettings()
+      .then(async (response) => {
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const data = await response.json();
+        if (active) setGuestPolicy(data);
+      })
+      .catch((error) => {
+        console.error('Error loading guest access:', error);
+        if (active) setGuestPolicyError(t('authentication.login.guestUnavailable'));
+      })
+      .finally(() => { if (active) setGuestPolicyLoading(false); });
+    return () => { active = false; };
+  }, [t]);
+
+  const handleGuestLogin = async () => {
+    setGuestPolicyError('');
+    setGuestBusy(true);
+    try {
+      const result = await auth.enterGuestAction();
+      if (!result.success) setGuestPolicyError(result.detail || t('authentication.login.guestUnavailable'));
+    } finally {
+      setGuestBusy(false);
+    }
+  };
 
   const renderSocialIcon = (provider: 'google' | 'github') => (
     <Box
@@ -162,6 +198,41 @@ const AuthLogin = ({ title, subtitle, subtext, handleShowErrorAlert }: loginType
         >
           Continue with GitHub
         </Button>
+        <Divider sx={{ my: 0.5 }}>{t('authentication.login.or')}</Divider>
+        <Button
+          color="inherit"
+          variant="outlined"
+          size="large"
+          fullWidth
+          onClick={handleGuestLogin}
+          disabled={guestBusy || guestPolicyLoading || Boolean(guestPolicyError) || !guestPolicy?.allowed_views.length}
+          startIcon={<IconUser size={18} stroke={1.8} />}
+          aria-busy={guestBusy}
+          sx={{
+            justifyContent: 'center',
+            borderColor: '#2f3748',
+            color: '#2f3748',
+            textTransform: 'none',
+            boxShadow: 'none',
+            '&:hover': {
+              borderColor: '#2f3748',
+              backgroundColor: 'rgba(47, 55, 72, 0.03)',
+              boxShadow: 'none',
+            },
+          }}
+        >
+          {guestBusy ? t('authentication.login.startingGuest') : t('authentication.login.continueAsGuest')}
+        </Button>
+        {!guestPolicyLoading && guestPolicy && !guestPolicy.allowed_views.length && (
+          <Typography variant="body2" color="textSecondary">
+            {t('authentication.login.guestDisabled')}
+          </Typography>
+        )}
+        {guestPolicyError && (
+          <Typography variant="body2" color="error" role="alert">
+            {guestPolicyError}
+          </Typography>
+        )}
         {!showUsernameLogin && (
           <Button
             color="inherit"
