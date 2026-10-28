@@ -26,7 +26,7 @@ export default function RobotPage() {
   const selectedDetail = selected ? partDetails[selected.id] : null;
   const name = (part: typeof bom[number]) => locale === 'el' ? greekPartNames[part.id] || part.name : part.name;
   const detailLabel = locale === 'el' ? 'Στοιχεία παραγγελίας' : 'Ordering details';
-  const imageLabel = (id:number) => partDetails[id]?.photo ? (locale === 'el' ? 'Εικόνα αναφοράς' : 'Reference image') : (locale === 'el' ? 'Ενδεικτικό σχέδιο' : 'Illustration');
+  const imageLabel = (id:number) => partDetails[id].photoIsExample ? (locale === 'el' ? 'Φωτογραφία φύλλου · παράδειγμα' : 'Sheet photo · example') : (locale === 'el' ? 'Φωτογραφία από το φύλλο' : 'Photo from parts sheet');
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState<Category>('all');
   const [page, setPage] = useState(0);

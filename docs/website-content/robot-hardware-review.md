@@ -86,17 +86,24 @@ production content or migrate the database during a local visual review.
 
 ## Images and ordering descriptions
 
-Every entry has bilingual technical text and an expandable ordering panel. The
-catalog distinguishes vendor/reference photos from original SVG identification
-illustrations. Illustrations are not dimensioned drawings or approved vendor
-SKUs. Photo attribution links are visible in each applicable details panel.
+Every entry has bilingual technical text and an expandable ordering panel.
+All catalog photographs now come from the embedded images in the supplied
+spreadsheet, tab Φύλλο2. The earlier vendor photos and SVG illustrations were
+removed at the user's request.
 
-Additional reference images:
-- RECOM R-78K family image: https://recom-power.com/product-images/R-78K-2.0.jpg
-- SparkFun ROB-14450 product image, from its official product page:
-  https://www.sparkfun.com/sparkfun-motor-driver-dual-tb6612fng-with-headers.html
-- MAX4466 module reference photo: https://www.adafruit.com/product/1063
-- PCB reference renders: the supplied fossbot-hardware repository.
+The read-only XLSX export preserved 46 original PNG images. Their bytes were
+extracted without image editing. Drawing positions were mapped to part rows
+using row heights and EMU offsets, then visually checked against the part names.
+The two regulators share the same image in the sheet. One resistor photo spans
+rows 24–30; this is explicitly labelled as an example for each resistor value,
+including the KiCad-added 100 kΩ entry. The sheet's own photos remain reference
+images, not proof that a pictured package or colour is the approved selection.
+Photo-source links point back to the supplied sheet.
+
+Assets: `front-end/public/landing-media/robot-v2/sheet-photos/`.
+`source.json` records the spreadsheet, tab and row-to-image mapping.
+The temporary XLSX export remains outside the repository; inventory/order
+columns were not added to the page or committed.
 
 Other technical references included in ordering panels:
 - RECOM regulator input/output/package selection:
