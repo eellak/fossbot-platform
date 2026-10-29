@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, Button, Chip, LinearProgress, Skeleton, Stack, Typography } from '@mui/material';
-import { IconPlus, IconSchool } from '@tabler/icons-react';
+import { IconPlus, IconSchool, IconSearch } from '@tabler/icons-react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from 'src/authentication/AuthProvider';
@@ -85,6 +85,7 @@ export default function CoursesDashboardPanel({ previewAppearance = true }: { pr
   const action = (
     <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" justifyContent="flex-end">
       {isTeacher && <Button size="small" variant="contained" startIcon={<IconPlus size={18} />} sx={{ whiteSpace: 'nowrap' }} onClick={() => navigate('/teach/courses')}>{t('education.courseList.create')}</Button>}
+      {!isTeacher && canBrowseCourses && <Button size="small" variant="contained" startIcon={<IconSearch size={18} />} sx={{ whiteSpace: 'nowrap' }} onClick={() => navigate('/courses?tab=explore')}>{t('education.student.findCourses')}</Button>}
       <Button size="small" variant="outlined" sx={{ whiteSpace: 'nowrap' }} onClick={() => navigate(isTeacher ? '/teach/courses' : canBrowseCourses ? '/courses' : '/classrooms')}>{t('education.student.allCourses')}</Button>
     </Stack>
   );

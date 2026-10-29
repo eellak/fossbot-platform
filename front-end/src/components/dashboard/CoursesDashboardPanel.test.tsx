@@ -26,7 +26,7 @@ jest.mock('src/courses/CoursesApi', () => ({
   dropEnrollment: (...args: any[]) => mockDropEnrollment(...args),
 }));
 
-function Location() { return <span id="location">{useLocation().pathname}</span>; }
+function Location() { const location = useLocation(); return <span id="location">{location.pathname}{location.search}</span>; }
 
 async function render() {
   const container = document.createElement('div');
@@ -39,6 +39,7 @@ async function render() {
           <Route path="/dashboard" element={<CoursesDashboardPanel />} />
           <Route path="/teach/courses/:courseId" element={<div>editor</div>} />
           <Route path="/teach/courses/:courseId/progress" element={<div>teacher progress</div>} />
+          <Route path="/courses" element={<div>courses</div>} />
           <Route path="/courses/:courseId" element={<div>course</div>} />
           <Route path="/courses/:courseId/progress" element={<div>student progress</div>} />
         </Routes>
@@ -92,5 +93,18 @@ it('student dashboard course menu drops the enrollment', async () => {
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
     expect(mockDropEnrollment).toHaveBeenCalledWith('token', 9);
     expect(container.textContent).not.toContain('Robotics');
+  } finally { act(() => root.unmount()); container.remove(); }
+});
+
+it('student dashboard Find courses opens the explore tab', async () => {
+  mockAuthoredCourses = [];
+  mockEnrollments = [{ id: 9, course_id: 4, course: { title: 'Robotics', description: '' }, completed_count: 1, lesson_count: 3, progress_percent: 33, progress: [], active_release: { lessons: [] } }];
+  mockAuth = { token: 'token', user: { role: 'user' }, isGuest: false, guestSettings: null };
+  const { container, root } = await render();
+  try {
+    const find = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'education.student.findCourses')!;
+    expect(find).toBeDefined();
+    await act(async () => { find.click(); });
+    expect(container.querySelector('#location')?.textContent).toBe('/courses?tab=explore');
   } finally { act(() => root.unmount()); container.remove(); }
 });

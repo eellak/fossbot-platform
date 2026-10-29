@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, Box, Button, Card, CardActions, CardContent, Chip, CircularProgress, Grid, LinearProgress, MenuItem, Stack, Tab, Tabs, TextField, Typography } from '@mui/material';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import PageContainer from 'src/components/container/PageContainer';
 import { useAuth } from 'src/authentication/AuthProvider';
@@ -15,9 +15,15 @@ export default function CoursesPage({ previewAppearance = true }: { previewAppea
   const { t } = useTranslation();
   const { token, isGuest, guestSettings } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const canBrowse = !isGuest || guestCanView(guestSettings, 'courses');
   const canUseClasses = !isGuest || guestCanView(guestSettings, 'classrooms');
-  const [tab, setTab] = useState(canBrowse ? 0 : 2);
+  const requestedTab = searchParams.get('tab');
+  const [tab, setTab] = useState(
+    requestedTab === 'explore' && canBrowse ? 1
+      : requestedTab === 'classrooms' && canUseClasses ? 2
+        : canBrowse ? 0 : 2,
+  );
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
   const [courses, setCourses] = useState<StudentCourse[]>([]);
   const [search, setSearch] = useState('');
