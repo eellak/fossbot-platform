@@ -1073,6 +1073,15 @@
     "title": "FOSSBot Buddy",
     "subtitle": "Βοήθεια με βάση τον χώρο εργασίας που έχετε μπροστά σας",
     "open": "Άνοιγμα FOSSBot Buddy",
+    "dragHint": "Σύρε με!",
+    "openHint": "Κλικ για άνοιγμα",
+    "position": {
+      "label": "Καρφίτσωμα",
+      "top-left": "Πάνω αριστερά",
+      "top-right": "Πάνω δεξιά",
+      "bottom-left": "Κάτω αριστερά",
+      "bottom-right": "Κάτω δεξιά"
+    },
     "minimize": "Ελαχιστοποίηση FOSSBot Buddy",
     "settings": "Ρυθμίσεις Buddy",
     "provider": "Πάροχος ΤΝ",
@@ -1113,6 +1122,8 @@
     "question": "Σε τι θα θέλατε βοήθεια;",
     "ask": "Ρώτησε το Buddy",
     "message": "Μήνυμα στο Buddy",
+    "composerLimit": "{{count}} / {{max}}",
+    "composerLimitLabel": "Μήκος μηνύματος: {{count}} από {{max}} χαρακτήρες",
     "send": "Αποστολή",
     "actions": {
       "send": "Αποστολή στο Buddy",

@@ -415,6 +415,10 @@ const components: any = (theme: Theme, approved = false) => {
           color: theme.palette.background.paper,
           background: theme.palette.text.primary,
         },
+        // The arrow defaults to grey[700]; keep it with the themed bubble.
+        arrow: {
+          color: theme.palette.text.primary,
+        },
       },
     },
     MuiDrawer: {

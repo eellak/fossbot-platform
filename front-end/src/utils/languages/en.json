@@ -1073,6 +1073,15 @@
     "title": "FOSSBot Buddy",
     "subtitle": "Context-aware help for the workspace in front of you",
     "open": "Open FOSSBot Buddy",
+    "dragHint": "Drag me!",
+    "openHint": "Click to open",
+    "position": {
+      "label": "Stick to",
+      "top-left": "Top left",
+      "top-right": "Top right",
+      "bottom-left": "Bottom left",
+      "bottom-right": "Bottom right"
+    },
     "minimize": "Minimize FOSSBot Buddy",
     "settings": "Buddy settings",
     "provider": "AI provider",
@@ -1113,6 +1122,8 @@
     "question": "What would you like help with?",
     "ask": "Ask Buddy",
     "message": "Message Buddy",
+    "composerLimit": "{{count}} / {{max}}",
+    "composerLimitLabel": "Message length: {{count}} of {{max}} characters",
     "send": "Send",
     "actions": {
       "send": "Send to Buddy",
