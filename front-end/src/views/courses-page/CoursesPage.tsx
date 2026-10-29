@@ -83,7 +83,7 @@ export default function CoursesPage({ previewAppearance = true }: { previewAppea
                   <LinearProgress variant="determinate" value={enrollment.progress_percent} sx={{ mt: 3, mb: 1 }} />
                   <Typography variant="caption">{t('education.student.progress', { completed: enrollment.completed_count, total: enrollment.lesson_count })}</Typography>
                 </CardContent>
-                <CardActions sx={previewAppearance ? { px: 2.5, pb: 2.5, pt: 0 } : undefined}><Button variant={previewAppearance ? 'contained' : 'text'} onClick={() => navigate(`/courses/${enrollment.course_id}${isGuest ? `?enrollment=${enrollment.id}` : ''}`)}>{enrollment.completed_at ? t('education.student.reviewCourse') : t('education.student.continueCourse')}</Button></CardActions>
+                <CardActions sx={previewAppearance ? { px: 2.5, pb: 2.5, pt: 0 } : undefined}><Button variant={previewAppearance ? 'contained' : 'text'} onClick={() => navigate(`/courses/${enrollment.course_id}${isGuest ? `?enrollment=${enrollment.id}` : ''}`)}>{t('education.student.seeDetails')}</Button></CardActions>
               </Card>
             </Grid>
           ))}</Grid>
