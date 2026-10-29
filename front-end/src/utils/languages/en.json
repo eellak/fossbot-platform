@@ -2122,6 +2122,7 @@
       "saveFailed": "The class group change could not be saved.",
       "joinCode": "Join code: {{code}}",
       "copyCode": "Copy join code",
+      "copyJoinLink": "Copy join link",
       "rotateCode": "Rotate code",
       "enableBoards": "Enable classroom challenges",
       "disabledDefault": "Off by default for every class.",

@@ -15,12 +15,13 @@ declare const jest: any;
 jest.setTimeout(20000);
 
 let mockGroups: any[];
+const mockJoinClassGroup = jest.fn();
 jest.mock('src/authentication/AuthProvider', () => ({ useAuth: () => ({ token: 'guest-token' }) }));
 const mockT = (key: string) => key;
 jest.mock('react-i18next', () => ({ useTranslation: () => ({ t: mockT }) }));
 jest.mock('src/courses/CoursesApi', () => ({
   listJoinedClassGroups: () => Promise.resolve(mockGroups),
-  joinClassGroup: async () => undefined, leaveClassGroup: async () => undefined,
+  joinClassGroup: (...args: any[]) => mockJoinClassGroup(...args), leaveClassGroup: async () => undefined,
   updateClassMembership: async () => undefined, readClassLeaderboard: async () => undefined,
 }));
 
@@ -45,6 +46,8 @@ describe('guest class cards', () => {
         missions: [], challenges: [],
       }],
     }));
+    mockJoinClassGroup.mockReset();
+    mockJoinClassGroup.mockResolvedValue(undefined);
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
@@ -52,16 +55,17 @@ describe('guest class cards', () => {
 
   afterEach(() => { act(() => root.unmount()); container.remove(); });
 
-  const render = async () => {
+  const render = async (path = '/classrooms') => {
     await act(async () => { root.unmount(); });
     root = createRoot(container);
     await act(async () => {
       root.render(
-        <MemoryRouter initialEntries={['/classrooms']}>
+        <MemoryRouter initialEntries={[path]}>
           <Routes>
             <Route path="/classrooms" element={<ClassGroupsStudentPage />} />
             <Route path="/courses/:courseId" element={<LocationProbe />} />
           </Routes>
+          <LocationProbe />
         </MemoryRouter>,
       );
       await flush();
@@ -81,5 +85,12 @@ describe('guest class cards', () => {
     const second = Array.from(container.querySelectorAll('button')).filter((button) => button.textContent === 'education.student.viewCourse')[1];
     await act(async () => { second.click(); await flush(); });
     expect(container.querySelector('[data-testid="location"]')?.textContent).toBe('/courses/5?enrollment=12');
+  });
+
+  it('joins a class from a shared link and clears the query', async () => {
+    mockGroups = [];
+    await render('/classrooms?join=abc123');
+    expect(mockJoinClassGroup).toHaveBeenCalledWith('guest-token', 'ABC123');
+    expect(container.querySelector('[data-testid="location"]')?.textContent).toBe('/classrooms');
   });
 });

@@ -486,8 +486,9 @@ def join_group(
         ).first()
     now = datetime.datetime.utcnow()
     if membership:
-        membership.removed_at = None
-        membership.leaderboard_opt_in = False
+        if membership.removed_at is not None:
+            membership.removed_at = None
+            membership.leaderboard_opt_in = False
         membership.updated_at = now
     else:
         membership = ClassMembership(

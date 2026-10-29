@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Alert, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel, Paper, Skeleton, Stack, Switch, TextField, Typography,
 } from '@mui/material';
 import { IconLogin, IconTrophy } from '@tabler/icons-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from 'src/authentication/AuthProvider';
 import {
@@ -15,6 +15,8 @@ export default function ClassGroupsStudentPage({ embedded = false, previewAppear
   const { t } = useTranslation();
   const { token } = useAuth();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const attemptedJoin = useRef('');
   const [groups, setGroups] = useState<StudentClassGroup[]>([]);
   const [joinCode, setJoinCode] = useState('');
   const [leaderboard, setLeaderboard] = useState<ClassLeaderboard | null>(null);
@@ -29,6 +31,24 @@ export default function ClassGroupsStudentPage({ embedded = false, previewAppear
     finally { setLoading(false); }
   }, [t, token]);
   useEffect(() => { void load(); }, [load]);
+
+  useEffect(() => {
+    const code = (searchParams.get('join') || '').trim().toUpperCase();
+    if (!code || attemptedJoin.current === code) return;
+    attemptedJoin.current = code;
+    setJoinCode(code);
+    void (async () => {
+      setError('');
+      try {
+        await joinClassGroup(token, code);
+        setJoinCode('');
+        setSearchParams({}, { replace: true });
+        await load();
+      } catch (reason) {
+        setError(reason instanceof Error ? reason.message : t('education.classrooms.saveFailed'));
+      }
+    })();
+  }, [load, searchParams, setSearchParams, t, token]);
   const run = async (action: () => Promise<unknown>) => {
     setError('');
     try { await action(); await load(); }

@@ -1,9 +1,10 @@
 import React from 'react';
 import { act } from 'react-dom/test-utils';
 import { createRoot, type Root } from 'react-dom/client';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import AuthProvider, { useAuth } from './AuthProvider';
 import { GUEST_TOKEN_STORAGE_KEY } from './guest';
+import { rememberAuthReturnPath } from './authReturn';
 
 declare const afterEach: any;
 declare const beforeEach: any;
@@ -44,6 +45,11 @@ jest.mock('./firebase');
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 
+function LocationProbe() {
+  const location = useLocation();
+  return <span data-testid="location">{location.pathname}{location.search}</span>;
+}
+
 function Probe() {
   const auth = useAuth();
   return (
@@ -64,6 +70,7 @@ describe('guest authentication lifecycle', () => {
 
   beforeEach(async () => {
     localStorage.clear();
+    sessionStorage.clear();
     authApi = require('./AuthApi');
     firebase = require('./firebase');
     Object.values(authApi).forEach((fn: any) => fn.mockReset?.());
@@ -83,11 +90,12 @@ describe('guest authentication lifecycle', () => {
     await act(async () => { root.unmount(); });
     container.remove();
     localStorage.clear();
+    sessionStorage.clear();
   });
 
   const render = async () => {
     await act(async () => {
-      root.render(<MemoryRouter><AuthProvider><Probe /></AuthProvider></MemoryRouter>);
+      root.render(<MemoryRouter><AuthProvider><Probe /><LocationProbe /></AuthProvider></MemoryRouter>);
       await flush();
     });
   };
@@ -171,5 +179,13 @@ describe('guest authentication lifecycle', () => {
     expect(text('status')).toBe('unauthenticated');
     expect(localStorage.getItem(GUEST_TOKEN_STORAGE_KEY)).toBeNull();
     expect(localStorage.getItem('fossbot-guest-draft')).toBe('keep me');
+  });
+
+  it('returns a guest to the page that required sign-in', async () => {
+    rememberAuthReturnPath('/classrooms?join=ABC123');
+    authApi.createGuestSession.mockResolvedValue(jsonResponse({ token: 'guest_token_1', token_type: 'bearer', guest: guest(['classrooms']) }, 201));
+    await render();
+    await act(async () => { container.querySelectorAll('button')[0].click(); await flush(); });
+    expect(text('location')).toBe('/classrooms?join=ABC123');
   });
 });

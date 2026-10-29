@@ -587,6 +587,10 @@ def test_guest_joins_before_and_after_assignment_and_cannot_edit_alias(client_fo
     assert opted_in.status_code == 200
     assert opted_in.json()["membership"]["display_alias"] == "calm_otter"
 
+    joined_active = guest.post("/class-groups/join", json={"join_code": group["join_code"]}, headers=headers)
+    assert joined_active.status_code == 201
+    assert joined_active.json()["membership"]["leaderboard_opt_in"] is True
+
     assert guest.post("/class-groups/join", json={"join_code": "NOPE1234"}, headers=headers).status_code == 404
     teacher.put(f"/class-groups/{group['id']}", json={"status": "archived"})
     assert guest.post("/class-groups/join", json={"join_code": group["join_code"]}, headers=headers).status_code == 404
