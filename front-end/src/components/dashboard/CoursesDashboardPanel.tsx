@@ -122,7 +122,7 @@ export default function CoursesDashboardPanel({ previewAppearance = true }: { pr
     </Stack>
   ) : (
     <Stack spacing={1.25}>
-      {visibleEnrollments.map((enrollment, index) => (
+      {visibleEnrollments.map((enrollment) => (
         <ListCard
           key={enrollment.id}
           surface="card"
@@ -132,7 +132,7 @@ export default function CoursesDashboardPanel({ previewAppearance = true }: { pr
           meta={t('education.student.progress', { completed: enrollment.completed_count, total: enrollment.lesson_count })}
           onOpen={() => navigate(`/courses/${enrollment.course_id}${isGuest ? `?enrollment=${enrollment.id}` : ''}`)}
           action={<Stack direction="row" spacing={1} alignItems="center">
-            <Button size="small" variant={index === 0 ? 'contained' : 'outlined'} onClick={() => navigate(enrollment.resume_lesson_key && !enrollment.completed_at ? `/courses/${enrollment.course_id}/learn/${enrollment.resume_lesson_key}${isGuest ? `?enrollment=${enrollment.id}` : ''}` : `/courses/${enrollment.course_id}${isGuest ? `?enrollment=${enrollment.id}` : ''}`)}>{enrollment.completed_at ? t('education.student.reviewCourse') : t('education.student.continueCourse')}</Button>
+            <Button size="small" variant="contained" onClick={() => navigate(enrollment.resume_lesson_key && !enrollment.completed_at ? `/courses/${enrollment.course_id}/learn/${enrollment.resume_lesson_key}${isGuest ? `?enrollment=${enrollment.id}` : ''}` : `/courses/${enrollment.course_id}${isGuest ? `?enrollment=${enrollment.id}` : ''}`)}>{enrollment.completed_at ? t('education.student.reviewCourse') : t('education.student.continueCourse')}</Button>
             <CourseActionsMenu label={t('education.courseList.actions')} actions={[
               { key: 'open', label: t('education.student.viewCourse'), onClick: () => navigate(`/courses/${enrollment.course_id}${isGuest ? `?enrollment=${enrollment.id}` : ''}`) },
               { key: 'progress', label: t('education.student.progressTitle'), onClick: () => navigate(`/courses/${enrollment.course_id}/progress${isGuest ? `?enrollment=${enrollment.id}` : ''}`) },
