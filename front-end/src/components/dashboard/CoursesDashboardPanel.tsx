@@ -102,7 +102,6 @@ export default function CoursesDashboardPanel({ previewAppearance = true }: { pr
           title={enrollment.course.title}
           description={enrollment.course.description}
           fallbackIcon={<IconSchool size={20} />}
-          status={enrollment.update_available ? <Chip size="small" color="info" variant="outlined" label={t('education.student.updateAvailable')} /> : undefined}
           meta={t('education.student.progress', { completed: enrollment.completed_count, total: enrollment.lesson_count })}
           onOpen={() => navigate(`/courses/${enrollment.course_id}${isGuest ? `?enrollment=${enrollment.id}` : ''}`)}
           action={<Button size="small" variant={index === 0 ? 'contained' : 'outlined'} onClick={() => navigate(enrollment.resume_lesson_key && !enrollment.completed_at ? `/courses/${enrollment.course_id}/learn/${enrollment.resume_lesson_key}${isGuest ? `?enrollment=${enrollment.id}` : ''}` : `/courses/${enrollment.course_id}${isGuest ? `?enrollment=${enrollment.id}` : ''}`)}>{enrollment.completed_at ? t('education.student.reviewCourse') : t('education.student.continueCourse')}</Button>}

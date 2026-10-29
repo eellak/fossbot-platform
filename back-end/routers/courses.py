@@ -17,7 +17,7 @@ from models.models import LessonCreate as LegacyLessonCreate
 from models.models import LessonUpdate as LegacyLessonUpdate
 from models.models import UserRole
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
-from sqlalchemy import func
+from sqlalchemy import func, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -1318,6 +1318,7 @@ def read_published_course(
         Enrollment.course_id == course_id, Enrollment.student_id == participant.user.id,
     ).first()
     if enrollment:
+        auto_pull_enrollment_release(db, enrollment)
         release_id = enrollment.active_release_id
     elif course.status == "published" and course.latest_published_release_id:
         release_id = course.latest_published_release_id
@@ -1659,6 +1660,9 @@ def list_my_enrollments(participant: Participant = Depends(get_classroom_partici
             except HTTPException:
                 continue
         enrollments = active
+    else:
+        for item in enrollments:
+            auto_pull_enrollment_release(db, item)
     return [enrollment_payload(db, item) for item in enrollments]
 
 
@@ -2274,44 +2278,24 @@ def release_update_payload(active: CourseRelease, latest: CourseRelease) -> dict
     }
 
 
-@router.get("/enrollments/{enrollment_id}/updates")
-def read_enrollment_updates(
-    enrollment_id: int,
-    participant: Participant = Depends(get_participant),
-    db: Session = Depends(get_db),
-):
-    require_account_student(participant)
-    enrollment = owned_enrollment_or_404(db, participant, enrollment_id)
-    active = db.query(CourseRelease).filter(CourseRelease.id == enrollment.active_release_id).one()
-    course = db.query(Course).filter(Course.id == enrollment.course_id).one()
-    latest = db.query(CourseRelease).filter(CourseRelease.id == course.latest_published_release_id).one()
-    return release_update_payload(active, latest)
-
-
-@router.post("/enrollments/{enrollment_id}/update-release")
-def update_enrollment_release(
-    enrollment_id: int,
-    request: ReleaseUpdateRequest,
-    participant: Participant = Depends(get_participant),
-    db: Session = Depends(get_db),
-):
-    require_account_student(participant)
-    enrollment = owned_enrollment_or_404(db, participant, enrollment_id)
-    active = db.query(CourseRelease).filter(CourseRelease.id == enrollment.active_release_id).one()
-    if request.current_release_id != active.id:
-        raise HTTPException(status_code=409, detail={
-            "error": "active_release_changed",
-            "detail": "This enrollment changed after you reviewed the update. Review the available update again.",
-            "currentReleaseId": active.id,
-        })
-    latest = db.query(CourseRelease).filter(
-        CourseRelease.id == request.target_release_id,
-        CourseRelease.course_id == enrollment.course_id,
-    ).first()
-    if latest is None:
-        raise HTTPException(status_code=404, detail="Release not found")
-    if latest.version <= active.version:
-        raise HTTPException(status_code=409, detail="Enrollment already uses this or a newer release")
+def apply_release_update(db: Session, enrollment: Enrollment, active: CourseRelease, latest: CourseRelease) -> bool:
+    """Move an enrollment to a newer release, carrying only definition-compatible work."""
+    # Conditional update keeps concurrent loads idempotent: the loser copies nothing.
+    moved = db.execute(
+        update(Enrollment)
+        .where(Enrollment.id == enrollment.id, Enrollment.active_release_id == active.id)
+        .values(
+            active_release_id=latest.id,
+            release_updated_at=datetime.datetime.utcnow(),
+            completed_at=None,
+        )
+        .execution_options(synchronize_session=False)
+    )
+    if moved.rowcount != 1:
+        db.rollback()
+        db.refresh(enrollment)
+        return False
+    db.refresh(enrollment)
     active_by_key = {lesson["lessonKey"]: lesson for lesson in release_lessons(active)}
     old_progress = {item.lesson_key: item for item in db.query(LessonProgress).filter(
         LessonProgress.enrollment_id == enrollment.id,
@@ -2375,11 +2359,74 @@ def update_enrollment_release(
                 last_submitted_at=old_answer.last_submitted_at,
                 satisfied_at=old_answer.satisfied_at,
             ))
-    enrollment.active_release_id = latest.id
-    enrollment.release_updated_at = datetime.datetime.utcnow()
-    enrollment.completed_at = None
     refresh_course_completion(db, enrollment, latest)
     safe_commit(db)
+    return True
+
+
+def auto_pull_enrollment_release(db: Session, enrollment: Enrollment) -> bool:
+    """Move a student-owned enrollment onto the latest published release, if newer."""
+    if enrollment.guest_session_id is not None:
+        return False
+    latest_id = db.query(Course.latest_published_release_id).filter(
+        Course.id == enrollment.course_id,
+    ).scalar()
+    if latest_id is None:
+        return False
+    active = db.query(CourseRelease).filter(CourseRelease.id == enrollment.active_release_id).first()
+    latest = db.query(CourseRelease).filter(
+        CourseRelease.id == latest_id,
+        CourseRelease.course_id == enrollment.course_id,
+    ).first()
+    if active is None or latest is None or latest.version <= active.version:
+        return False
+    return apply_release_update(db, enrollment, active, latest)
+
+
+@router.get("/enrollments/{enrollment_id}/updates")
+def read_enrollment_updates(
+    enrollment_id: int,
+    participant: Participant = Depends(get_participant),
+    db: Session = Depends(get_db),
+):
+    require_account_student(participant)
+    enrollment = owned_enrollment_or_404(db, participant, enrollment_id)
+    active = db.query(CourseRelease).filter(CourseRelease.id == enrollment.active_release_id).one()
+    course = db.query(Course).filter(Course.id == enrollment.course_id).one()
+    latest = db.query(CourseRelease).filter(CourseRelease.id == course.latest_published_release_id).one()
+    return release_update_payload(active, latest)
+
+
+@router.post("/enrollments/{enrollment_id}/update-release")
+def update_enrollment_release(
+    enrollment_id: int,
+    request: ReleaseUpdateRequest,
+    participant: Participant = Depends(get_participant),
+    db: Session = Depends(get_db),
+):
+    require_account_student(participant)
+    enrollment = owned_enrollment_or_404(db, participant, enrollment_id)
+    active = db.query(CourseRelease).filter(CourseRelease.id == enrollment.active_release_id).one()
+    if request.current_release_id != active.id:
+        raise HTTPException(status_code=409, detail={
+            "error": "active_release_changed",
+            "detail": "This enrollment changed after you reviewed the update. Review the available update again.",
+            "currentReleaseId": active.id,
+        })
+    latest = db.query(CourseRelease).filter(
+        CourseRelease.id == request.target_release_id,
+        CourseRelease.course_id == enrollment.course_id,
+    ).first()
+    if latest is None:
+        raise HTTPException(status_code=404, detail="Release not found")
+    if latest.version <= active.version:
+        raise HTTPException(status_code=409, detail="Enrollment already uses this or a newer release")
+    if not apply_release_update(db, enrollment, active, latest):
+        raise HTTPException(status_code=409, detail={
+            "error": "active_release_changed",
+            "detail": "This enrollment changed after you reviewed the update. Review the available update again.",
+            "currentReleaseId": enrollment.active_release_id,
+        })
     return enrollment_payload(db, enrollment)
 
 

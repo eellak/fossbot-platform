@@ -8,7 +8,6 @@ import type {
   LessonSaveRequest,
   PublicationValidation,
   Enrollment,
-  ReleaseUpdate,
   StudentCourse,
   LessonWorkspace,
   LessonWorkspaceHistory,
@@ -148,16 +147,6 @@ export async function completeLesson(token: string, enrollmentId: number, lesson
 
 export async function uncompleteLesson(token: string, enrollmentId: number, lessonKey: string): Promise<Enrollment> {
   return parse(await fetch(`${backendUrl}/enrollments/${enrollmentId}/lessons/${encodeURIComponent(lessonKey)}/complete`, { method: 'DELETE', headers: headers(token) }));
-}
-
-export async function readReleaseUpdate(token: string, enrollmentId: number): Promise<ReleaseUpdate> {
-  return parse(await fetch(`${backendUrl}/enrollments/${enrollmentId}/updates`, { headers: headers(token) }));
-}
-
-export async function updateEnrollmentRelease(token: string, enrollmentId: number, currentReleaseId: number, targetReleaseId: number): Promise<Enrollment> {
-  return parse(await fetch(`${backendUrl}/enrollments/${enrollmentId}/update-release`, {
-    method: 'POST', headers: headers(token), body: JSON.stringify({ current_release_id: currentReleaseId, target_release_id: targetReleaseId }),
-  }));
 }
 
 export async function readLessonWorkspace(token: string, enrollmentId: number, lessonKey: string): Promise<LessonWorkspace> {

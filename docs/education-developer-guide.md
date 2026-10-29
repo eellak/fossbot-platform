@@ -31,11 +31,13 @@ Phase 8 adds no table or column. Old workspaces are already retained as release-
 
 ## Release updates
 
-`GET /enrollments/{id}/updates` compares the active release with the latest release and returns lesson-level `added`, `removed`, `changed`, or `unchanged` records. Stable lesson/activity keys plus definition hashes determine compatibility.
+Opening a course (`GET /courses/{id}`) or listing enrollments (`GET /enrollments/mine`) auto-pulls a student enrollment to `Course.latest_published_release_id`. The conditional `Enrollment` update and release-scoped unique keys make concurrent loads idempotent: only the request that moves the pointer copies work, and later loads are a no-op once the active version equals the latest. Guest enrollments are skipped because their release follows the class assignment.
 
-`POST /enrollments/{id}/update-release` requires both the reviewed `current_release_id` and explicit `target_release_id`. This prevents a newly published, unseen version from becoming the target between review and confirmation. The target must belong to the enrollment's course and be newer than the active version.
+`GET /enrollments/{id}/updates` remains a read-only comparison of the active release with the latest release and returns lesson-level `added`, `removed`, `changed`, or `unchanged` records. Stable lesson/activity keys plus definition hashes determine compatibility.
 
-Unchanged lesson progress and workspaces are copied into the target release. Answers copy only when their stable activity key and activity definition hash match. Changed lessons initialize normally from the new release; no code merge runs. Old release rows remain history. A focus refresh exposes a new update while a lesson is already open without changing the workspace.
+`POST /enrollments/{id}/update-release` remains an explicit override. It requires both the reviewed `current_release_id` and explicit `target_release_id`. This prevents a newly published, unseen version from becoming the target between review and confirmation. The target must belong to the enrollment's course and be newer than the active version.
+
+Unchanged lesson progress and workspaces are copied into the target release. Answers copy only when their stable activity key and activity definition hash match. Changed lessons initialize normally from the new release; no code merge runs. Old release rows remain history. `GET /enrollments/{id}` does not auto-pull, so a lesson already open in a browser keeps its release; its focus refresh exposes `update_available` until the student reopens the course.
 
 ## Simulator and telemetry boundary
 

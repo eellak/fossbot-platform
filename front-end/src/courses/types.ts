@@ -254,25 +254,6 @@ export interface Enrollment {
   update_available: boolean;
 }
 
-export interface ReleaseUpdate {
-  available: boolean;
-  current: { id: number; version: number; published_at: string };
-  latest: { id: number; version: number; published_at: string };
-  added_lessons: number;
-  removed_lessons: number;
-  changed_lessons: number;
-  unchanged_lessons: number;
-  stage_revisions_changed: boolean;
-  lesson_changes: Array<{
-    lesson_key: string;
-    title: string;
-    change: 'added' | 'removed' | 'changed' | 'unchanged';
-    stage_changed: boolean;
-    progress_preserved: boolean;
-    workspace_preserved: boolean;
-  }>;
-}
-
 export interface LessonWorkspace {
   id: number;
   enrollment_id: number;

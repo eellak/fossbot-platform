@@ -617,6 +617,54 @@ def test_release_update_preserves_only_unchanged_progress_and_history(client_for
     ).count() == 3
 
 
+def test_course_load_automatically_applies_newer_release_and_preserves_compatible_work(client_for, users, db):
+    tutor, _, student, _ = users
+    teacher = client_for(tutor)
+    learner = client_for(student)
+    course = create_course(teacher)
+    unchanged = add_lesson(teacher, course["id"], "Unchanged", editor_type="python", starter_content="print('one')")
+    changed = add_lesson(teacher, course["id"], "Will change", editor_type="python", starter_content="print('two')")
+    release_one = teacher.post(f"/courses/{course['id']}/publish").json()
+    enrollment = learner.post(f"/courses/{course['id']}/enroll").json()
+    path = f"/enrollments/{enrollment['id']}/lessons/{unchanged['lesson_key']}/workspace"
+    workspace = learner.get(path).json()
+    learner.put(path, json={"content": "print('student work')", "revision": workspace["revision"]})
+    assert learner.post(f"/enrollments/{enrollment['id']}/lessons/{unchanged['lesson_key']}/complete").status_code == 200
+
+    teacher.put(f"/courses/{course['id']}/lessons/{changed['id']}", json={"title": "Changed"})
+    release_two = teacher.post(f"/courses/{course['id']}/publish").json()
+
+    # Opening the course or listing enrollments pulls the new release without an explicit update step.
+    assert learner.get(f"/courses/{course['id']}").json()["latest_release"]["id"] == release_two["id"]
+    listed = learner.get("/enrollments/mine").json()[0]
+    assert listed["active_release"]["id"] == release_two["id"]
+    assert listed["update_available"] is False
+    states = {item["lesson_key"]: item["state"] for item in listed["progress"]}
+    assert states[unchanged["lesson_key"]] == "completed"
+    assert states[changed["lesson_key"]] == "not_started"
+    carried = learner.get(path).json()
+    assert carried["release_id"] == release_two["id"]
+    assert carried["content"] == "print('student work')"
+    assert learner.get(f"{path}-history").json()[0]["content"] == "print('student work')"
+    assert db.query(LessonWorkspace).filter(
+        LessonWorkspace.enrollment_id == enrollment["id"], LessonWorkspace.release_id == release_one["id"]
+    ).count() == 1
+
+    # A repeated load is a no-op and does not duplicate release-scoped rows.
+    before = (db.query(LessonProgress).count(), db.query(LessonWorkspace).count(), db.query(ActivityAnswer).count())
+    assert learner.get("/enrollments/mine").json()[0]["active_release"]["id"] == release_two["id"]
+    assert (db.query(LessonProgress).count(), db.query(LessonWorkspace).count(), db.query(ActivityAnswer).count()) == before
+
+    assert learner.post(f"/enrollments/{enrollment['id']}/lessons/{changed['lesson_key']}/complete").status_code == 200
+    teacher.put(f"/courses/{course['id']}", json={"description": "A metadata-only update."})
+    release_three = teacher.post(f"/courses/{course['id']}/publish").json()
+    completed = learner.get("/enrollments/mine").json()[0]
+    assert completed["active_release"]["id"] == release_three["id"]
+    assert completed["progress_percent"] == 100
+    assert completed["completed_at"] is not None
+    assert completed["release_updated_at"] is not None
+
+
 def test_update_review_targets_release_and_exposes_owned_read_only_code(client_for, users):
     tutor, _, student, admin = users
     teacher = client_for(tutor)

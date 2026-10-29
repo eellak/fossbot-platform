@@ -826,6 +826,36 @@ def test_guest_course_browsing_workspace_and_server_mutations_are_denied_without
     assert learning_table_counts(db) == before
 
 
+def test_guest_enrollment_does_not_auto_pull_a_newer_release(client_for, users, db):
+    from database.database import Enrollment
+
+    tutor, _, _, _ = users
+    teacher = client_for(tutor)
+    course, _, release_one = create_published_course(teacher)
+    group = teacher.post("/class-groups", json={"name": "Pinned release class"}).json()
+    assignment = teacher.post(
+        f"/class-groups/{group['id']}/assignments",
+        json={"course_id": course["id"], "update_policy": "pinned"},
+    ).json()
+    guest, headers, session = guest_client(db, users, ["classrooms", "courses"], include_courses=True)
+    guest.post("/class-groups/join", json={"join_code": group["join_code"]}, headers=headers)
+    from utils.guest_access import clear_guest_throttles
+    clear_guest_throttles()
+    enrollment = db.query(Enrollment).filter(
+        Enrollment.guest_session_id == session.id,
+        Enrollment.assignment_id == assignment["id"],
+    ).one()
+
+    teacher.put(f"/courses/{course['id']}", json={"description": "A newer course version."})
+    release_two = teacher.post(f"/courses/{course['id']}/publish").json()
+    assert release_two["version"] == 2
+    assert guest.get(f"/courses/{course['id']}", headers=headers).status_code == 200
+    listed = guest.get("/enrollments/mine", headers=headers).json()[0]
+    assert listed["active_release"]["id"] == release_one["id"]
+    db.refresh(enrollment)
+    assert enrollment.active_release_id == release_one["id"]
+
+
 def test_guest_mission_submission_is_scoped_idempotent_and_creates_no_workspace_rows(client_for, users, db, monkeypatch):
     from database.database import Enrollment, MissionAttempt
 

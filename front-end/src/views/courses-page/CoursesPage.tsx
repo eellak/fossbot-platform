@@ -78,10 +78,7 @@ export default function CoursesPage({ previewAppearance = true }: { previewAppea
             <Grid item xs={12} md={6} lg={4} key={enrollment.id}>
               <Card variant="outlined" sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
                 <CardContent sx={{ flex: 1 }}>
-                  <Stack direction="row" justifyContent="space-between" spacing={1}>
-                    <Typography variant="h5">{enrollment.course.title}</Typography>
-                    {enrollment.update_available ? <Chip size="small" color="info" label={t('education.student.updateAvailable')} /> : null}
-                  </Stack>
+                  <Typography variant="h5">{enrollment.course.title}</Typography>
                   <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>{enrollment.course.description}</Typography>
                   <LinearProgress variant="determinate" value={enrollment.progress_percent} sx={{ mt: 3, mb: 1 }} />
                   <Typography variant="caption">{t('education.student.progress', { completed: enrollment.completed_count, total: enrollment.lesson_count })}</Typography>
