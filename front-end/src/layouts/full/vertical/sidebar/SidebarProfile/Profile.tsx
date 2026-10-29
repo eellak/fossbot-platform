@@ -4,10 +4,12 @@ import { IconPower } from '@tabler/icons-react';
 import { AppState } from 'src/store/Store';
 import { Link } from 'react-router-dom';
 import { useAuth } from 'src/authentication/AuthProvider';
+import { useTranslation } from 'react-i18next';
 
 export const Profile = () => {
   const customizer = useSelector((state: AppState) => state.customizer);
-  const { user } = useAuth();
+  const { user, isGuest, guest } = useAuth();
+  const { t } = useTranslation();
   const lgUp = useMediaQuery((theme: any) => theme.breakpoints.up('lg'));
   const hideMenu = lgUp ? customizer.isCollapse && !customizer.isSidebarHover : '';
 
@@ -20,11 +22,11 @@ export const Profile = () => {
     >
       {!hideMenu ? (
         <>
-          <Avatar alt={user?.username || ''} src={user?.image_url} />
+          <Avatar alt={isGuest ? guest?.alias || '' : user?.username || ''} src={isGuest ? undefined : user?.image_url} />
 
           <Box>
-            <Typography variant="h6">{`${user?.firstname || ''} ${user?.lastname || ''}`.trim() || user?.username}</Typography>
-            <Typography variant="caption">{user?.email}</Typography>
+            <Typography variant="h6">{isGuest ? guest?.alias : `${user?.firstname || ''} ${user?.lastname || ''}`.trim() || user?.username}</Typography>
+            <Typography variant="caption">{isGuest ? t('guest.session') : user?.email}</Typography>
           </Box>
           <Box sx={{ ml: 'auto' }}>
             <Tooltip title="Logout" placement="top">

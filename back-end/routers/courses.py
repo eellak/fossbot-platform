@@ -6,10 +6,10 @@ import json
 import math
 import uuid
 import xml.etree.ElementTree as ElementTree
-from typing import Any, Literal, Optional
+from typing import Any, Literal, Optional, Union
 from urllib.parse import urlsplit
 
-from database.database import ActivityAnswer, ClassChallenge, Course, CourseAssignment, CourseRelease, Enrollment, Lesson, LessonProgress, LessonWorkspace, LocalStage, MarketplaceModerationOverride, MissionAttempt, User
+from database.database import ActivityAnswer, ClassChallenge, ClassGroup, ClassMembership, Course, CourseAssignment, CourseRelease, Enrollment, Lesson, LessonProgress, LessonWorkspace, LocalStage, MarketplaceModerationOverride, MissionAttempt, User
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError
@@ -26,7 +26,6 @@ from routers.stage_sources import (
     FOSSBOT_REPO_PREFIX,
     current_branch_commit_sha,
     get_current_user,
-    get_beta_user,
     get_db,
     github_raw_base_url,
     github_stage_error,
@@ -50,9 +49,16 @@ from utils.scoring import evaluate_score
 from utils.source_providers import get_provider
 from utils.source_providers.github_app import GitHubApiError
 from utils.utils_jwt import verify_access_token
+from utils.guest_access import (
+    Participant,
+    get_classroom_participant,
+    get_course_access,
+    get_course_view_participant,
+    get_participant,
+)
 
 
-router = APIRouter(tags=["courses"], dependencies=[Depends(get_beta_user)])
+router = APIRouter(tags=["courses"], dependencies=[Depends(get_course_access)])
 optional_oauth2 = OAuth2PasswordBearer(tokenUrl="token", auto_error=False)
 RELEASE_SCHEMA_VERSION = 3
 MISSION_ATTEMPT_SCHEMA_VERSION = 1
@@ -1277,6 +1283,7 @@ def list_public_courses(
     search: Optional[str] = Query(default=None, max_length=100),
     difficulty: Optional[str] = Query(default=None, max_length=50),
     age_range: Optional[str] = Query(default=None, max_length=50),
+    participant: Participant = Depends(get_course_view_participant),
     db: Session = Depends(get_db),
 ):
     query = db.query(Course).filter(
@@ -1299,11 +1306,17 @@ def list_public_courses(
 
 
 @router.get("/courses/{course_id}", response_model=StudentCourseResponse)
-def read_published_course(course_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def read_published_course(
+    course_id: int,
+    participant: Participant = Depends(get_course_access),
+    db: Session = Depends(get_db),
+):
     course = db.query(Course).filter(Course.id == course_id).first()
     if course is None:
         raise HTTPException(status_code=404, detail="Course not found")
-    enrollment = db.query(Enrollment).filter(Enrollment.course_id == course_id, Enrollment.student_id == user.id).first()
+    enrollment = None if participant.is_guest else db.query(Enrollment).filter(
+        Enrollment.course_id == course_id, Enrollment.student_id == participant.user.id,
+    ).first()
     if enrollment:
         release_id = enrollment.active_release_id
     elif course.status == "published" and course.latest_published_release_id:
@@ -1314,16 +1327,51 @@ def read_published_course(course_id: int, user: User = Depends(get_current_user)
     return release_course_payload(course, release)
 
 
-def require_student(user: User) -> None:
+def require_student(actor: Union[User, Participant]) -> None:
+    if isinstance(actor, Participant) and actor.is_guest:
+        return
+    user = actor.user if isinstance(actor, Participant) else actor
     if user.role != UserRole.USER:
         raise HTTPException(status_code=403, detail="Student role required")
 
 
-def owned_enrollment_or_404(db: Session, user: User, enrollment_id: int) -> Enrollment:
-    enrollment = db.query(Enrollment).filter(
-        Enrollment.id == enrollment_id,
-        Enrollment.student_id == user.id,
-    ).first()
+def require_account_student(actor: Participant) -> User:
+    if actor.is_guest:
+        raise HTTPException(status_code=403, detail="Guest progress is stored in this browser")
+    require_student(actor)
+    return actor.user
+
+
+def owned_enrollment_or_404(db: Session, actor: Union[User, Participant], enrollment_id: int) -> Enrollment:
+    if isinstance(actor, Participant) and actor.is_guest:
+        enrollment = db.query(Enrollment).filter(
+            Enrollment.id == enrollment_id,
+            Enrollment.guest_session_id == actor.guest.id,
+            Enrollment.assignment_id.is_not(None),
+        ).first()
+        if enrollment is not None:
+            assignment = db.query(CourseAssignment).filter(
+                CourseAssignment.id == enrollment.assignment_id,
+                CourseAssignment.course_id == enrollment.course_id,
+                CourseAssignment.release_id == enrollment.active_release_id,
+            ).first()
+            membership = assignment is not None and db.query(ClassMembership).filter(
+                ClassMembership.group_id == assignment.group_id,
+                ClassMembership.guest_session_id == actor.guest.id,
+                ClassMembership.removed_at.is_(None),
+            ).first() is not None
+            group = assignment is not None and db.query(ClassGroup).filter(
+                ClassGroup.id == assignment.group_id,
+                ClassGroup.status == "active",
+            ).first() is not None
+            if not (membership and group):
+                enrollment = None
+    else:
+        user = actor.user if isinstance(actor, Participant) else actor
+        enrollment = db.query(Enrollment).filter(
+            Enrollment.id == enrollment_id,
+            Enrollment.student_id == user.id,
+        ).first()
     if enrollment is None:
         raise HTTPException(status_code=404, detail="Enrollment not found")
     return enrollment
@@ -1564,13 +1612,18 @@ def enrollment_payload(db: Session, enrollment: Enrollment) -> dict[str, Any]:
         "enrolled_at": enrollment.enrolled_at,
         "completed_at": enrollment.completed_at,
         "release_updated_at": enrollment.release_updated_at,
-        "update_available": bool(latest and latest.version > release.version),
+        "update_available": enrollment.guest_session_id is None and bool(latest and latest.version > release.version),
     }
 
 
 @router.post("/courses/{course_id}/enroll", status_code=status.HTTP_201_CREATED)
-def enroll_in_course(course_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    require_student(user)
+def enroll_in_course(
+    course_id: int,
+    participant: Participant = Depends(get_participant),
+    db: Session = Depends(get_db),
+):
+    require_account_student(participant)
+    user = participant.user
     course = db.query(Course).filter(
         Course.id == course_id,
         Course.status == "published",
@@ -1589,22 +1642,45 @@ def enroll_in_course(course_id: int, user: User = Depends(get_current_user), db:
 
 
 @router.get("/enrollments/mine")
-def list_my_enrollments(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    require_student(user)
-    enrollments = db.query(Enrollment).filter(Enrollment.student_id == user.id).order_by(Enrollment.enrolled_at.desc()).all()
+def list_my_enrollments(participant: Participant = Depends(get_classroom_participant), db: Session = Depends(get_db)):
+    require_student(participant)
+    query = db.query(Enrollment)
+    if participant.is_guest:
+        query = query.filter(Enrollment.guest_session_id == participant.guest.id)
+    else:
+        query = query.filter(Enrollment.student_id == participant.user.id)
+    enrollments = query.order_by(Enrollment.enrolled_at.desc()).all()
+    if participant.is_guest:
+        active = []
+        for item in enrollments:
+            try:
+                owned_enrollment_or_404(db, participant, item.id)
+                active.append(item)
+            except HTTPException:
+                continue
+        enrollments = active
     return [enrollment_payload(db, item) for item in enrollments]
 
 
 @router.get("/enrollments/{enrollment_id}")
-def read_enrollment(enrollment_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    require_student(user)
-    return enrollment_payload(db, owned_enrollment_or_404(db, user, enrollment_id))
+def read_enrollment(
+    enrollment_id: int,
+    participant: Participant = Depends(get_classroom_participant),
+    db: Session = Depends(get_db),
+):
+    require_student(participant)
+    return enrollment_payload(db, owned_enrollment_or_404(db, participant, enrollment_id))
 
 
 @router.post("/enrollments/{enrollment_id}/lessons/{lesson_key}/start")
-def start_lesson(enrollment_id: int, lesson_key: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    require_student(user)
-    enrollment = owned_enrollment_or_404(db, user, enrollment_id)
+def start_lesson(
+    enrollment_id: int,
+    lesson_key: str,
+    participant: Participant = Depends(get_participant),
+    db: Session = Depends(get_db),
+):
+    require_account_student(participant)
+    enrollment = owned_enrollment_or_404(db, participant, enrollment_id)
     release = db.query(CourseRelease).filter(CourseRelease.id == enrollment.active_release_id).one()
     lesson_for_release_or_404(release, lesson_key)
     progress = progress_row(db, enrollment, lesson_key)
@@ -1622,18 +1698,29 @@ def start_lesson(enrollment_id: int, lesson_key: str, user: User = Depends(get_c
 
 
 @router.get("/enrollments/{enrollment_id}/lessons/{lesson_key}/workspace")
-def read_lesson_workspace(enrollment_id: int, lesson_key: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    require_student(user)
-    enrollment = owned_enrollment_or_404(db, user, enrollment_id)
+def read_lesson_workspace(
+    enrollment_id: int,
+    lesson_key: str,
+    participant: Participant = Depends(get_participant),
+    db: Session = Depends(get_db),
+):
+    require_account_student(participant)
+    enrollment = owned_enrollment_or_404(db, participant, enrollment_id)
     release = db.query(CourseRelease).filter(CourseRelease.id == enrollment.active_release_id).one()
     lesson = lesson_for_release_or_404(release, lesson_key)
     return workspace_payload(initialize_workspace(db, enrollment, release, lesson))
 
 
 @router.put("/enrollments/{enrollment_id}/lessons/{lesson_key}/workspace")
-def save_lesson_workspace(enrollment_id: int, lesson_key: str, request: WorkspaceSaveRequest, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    require_student(user)
-    enrollment = owned_enrollment_or_404(db, user, enrollment_id)
+def save_lesson_workspace(
+    enrollment_id: int,
+    lesson_key: str,
+    request: WorkspaceSaveRequest,
+    participant: Participant = Depends(get_participant),
+    db: Session = Depends(get_db),
+):
+    require_account_student(participant)
+    enrollment = owned_enrollment_or_404(db, participant, enrollment_id)
     release = db.query(CourseRelease).filter(CourseRelease.id == enrollment.active_release_id).one()
     lesson = lesson_for_release_or_404(release, lesson_key)
     workspace = initialize_workspace(db, enrollment, release, lesson)
@@ -1655,9 +1742,15 @@ def save_lesson_workspace(enrollment_id: int, lesson_key: str, request: Workspac
 
 
 @router.post("/enrollments/{enrollment_id}/lessons/{lesson_key}/workspace/reset")
-def reset_lesson_workspace(enrollment_id: int, lesson_key: str, request: WorkspaceSaveRequest, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    require_student(user)
-    enrollment = owned_enrollment_or_404(db, user, enrollment_id)
+def reset_lesson_workspace(
+    enrollment_id: int,
+    lesson_key: str,
+    request: WorkspaceSaveRequest,
+    participant: Participant = Depends(get_participant),
+    db: Session = Depends(get_db),
+):
+    require_account_student(participant)
+    enrollment = owned_enrollment_or_404(db, participant, enrollment_id)
     release = db.query(CourseRelease).filter(CourseRelease.id == enrollment.active_release_id).one()
     lesson = lesson_for_release_or_404(release, lesson_key)
     workspace = initialize_workspace(db, enrollment, release, lesson)
@@ -1671,9 +1764,14 @@ def reset_lesson_workspace(enrollment_id: int, lesson_key: str, request: Workspa
 
 
 @router.get("/enrollments/{enrollment_id}/lessons/{lesson_key}/activities")
-def read_activity_states(enrollment_id: int, lesson_key: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    require_student(user)
-    enrollment = owned_enrollment_or_404(db, user, enrollment_id)
+def read_activity_states(
+    enrollment_id: int,
+    lesson_key: str,
+    participant: Participant = Depends(get_classroom_participant),
+    db: Session = Depends(get_db),
+):
+    require_student(participant)
+    enrollment = owned_enrollment_or_404(db, participant, enrollment_id)
     release = db.query(CourseRelease).filter(CourseRelease.id == enrollment.active_release_id).one()
     lesson = lesson_for_release_or_404(release, lesson_key)
     stored = {
@@ -1693,11 +1791,11 @@ def submit_activity(
     lesson_key: str,
     activity_key: str,
     request: ActivitySubmissionRequest,
-    user: User = Depends(get_current_user),
+    participant: Participant = Depends(get_classroom_participant),
     db: Session = Depends(get_db),
 ):
-    require_student(user)
-    enrollment = owned_enrollment_or_404(db, user, enrollment_id)
+    require_student(participant)
+    enrollment = owned_enrollment_or_404(db, participant, enrollment_id)
     release = db.query(CourseRelease).filter(CourseRelease.id == enrollment.active_release_id).one()
     lesson = lesson_for_release_or_404(release, lesson_key)
     try:
@@ -1863,11 +1961,11 @@ def read_mission_attempts(
     enrollment_id: int,
     lesson_key: str,
     activity_key: str,
-    user: User = Depends(get_current_user),
+    participant: Participant = Depends(get_classroom_participant),
     db: Session = Depends(get_db),
 ):
-    require_student(user)
-    enrollment = owned_enrollment_or_404(db, user, enrollment_id)
+    require_student(participant)
+    enrollment = owned_enrollment_or_404(db, participant, enrollment_id)
     release = db.query(CourseRelease).filter(CourseRelease.id == enrollment.active_release_id).one()
     lesson = lesson_for_release_or_404(release, lesson_key)
     try:
@@ -1890,11 +1988,11 @@ def read_mission_summary(
     enrollment_id: int,
     lesson_key: str,
     activity_key: str,
-    user: User = Depends(get_current_user),
+    participant: Participant = Depends(get_classroom_participant),
     db: Session = Depends(get_db),
 ):
-    require_student(user)
-    enrollment = owned_enrollment_or_404(db, user, enrollment_id)
+    require_student(participant)
+    enrollment = owned_enrollment_or_404(db, participant, enrollment_id)
     release = db.query(CourseRelease).filter(CourseRelease.id == enrollment.active_release_id).one()
     lesson = lesson_for_release_or_404(release, lesson_key)
     try:
@@ -1930,11 +2028,11 @@ def submit_mission_attempt(
     lesson_key: str,
     activity_key: str,
     request: MissionAttemptRequest,
-    user: User = Depends(get_current_user),
+    participant: Participant = Depends(get_classroom_participant),
     db: Session = Depends(get_db),
 ):
-    require_student(user)
-    enrollment = owned_enrollment_or_404(db, user, enrollment_id)
+    require_student(participant)
+    enrollment = owned_enrollment_or_404(db, participant, enrollment_id)
     release = db.query(CourseRelease).filter(CourseRelease.id == enrollment.active_release_id).one()
     lesson = lesson_for_release_or_404(release, lesson_key)
     try:
@@ -2085,9 +2183,14 @@ def submit_mission_attempt(
 
 
 @router.post("/enrollments/{enrollment_id}/lessons/{lesson_key}/complete")
-def complete_lesson(enrollment_id: int, lesson_key: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    require_student(user)
-    enrollment = owned_enrollment_or_404(db, user, enrollment_id)
+def complete_lesson(
+    enrollment_id: int,
+    lesson_key: str,
+    participant: Participant = Depends(get_participant),
+    db: Session = Depends(get_db),
+):
+    require_account_student(participant)
+    enrollment = owned_enrollment_or_404(db, participant, enrollment_id)
     release = db.query(CourseRelease).filter(CourseRelease.id == enrollment.active_release_id).one()
     lesson = lesson_for_release_or_404(release, lesson_key)
     if lesson["completionPolicy"] not in ("self", "hybrid"):
@@ -2103,9 +2206,14 @@ def complete_lesson(enrollment_id: int, lesson_key: str, user: User = Depends(ge
 
 
 @router.delete("/enrollments/{enrollment_id}/lessons/{lesson_key}/complete")
-def uncomplete_lesson(enrollment_id: int, lesson_key: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    require_student(user)
-    enrollment = owned_enrollment_or_404(db, user, enrollment_id)
+def uncomplete_lesson(
+    enrollment_id: int,
+    lesson_key: str,
+    participant: Participant = Depends(get_participant),
+    db: Session = Depends(get_db),
+):
+    require_account_student(participant)
+    enrollment = owned_enrollment_or_404(db, participant, enrollment_id)
     release = db.query(CourseRelease).filter(CourseRelease.id == enrollment.active_release_id).one()
     lesson = lesson_for_release_or_404(release, lesson_key)
     progress = progress_row(db, enrollment, lesson_key)
@@ -2167,9 +2275,13 @@ def release_update_payload(active: CourseRelease, latest: CourseRelease) -> dict
 
 
 @router.get("/enrollments/{enrollment_id}/updates")
-def read_enrollment_updates(enrollment_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    require_student(user)
-    enrollment = owned_enrollment_or_404(db, user, enrollment_id)
+def read_enrollment_updates(
+    enrollment_id: int,
+    participant: Participant = Depends(get_participant),
+    db: Session = Depends(get_db),
+):
+    require_account_student(participant)
+    enrollment = owned_enrollment_or_404(db, participant, enrollment_id)
     active = db.query(CourseRelease).filter(CourseRelease.id == enrollment.active_release_id).one()
     course = db.query(Course).filter(Course.id == enrollment.course_id).one()
     latest = db.query(CourseRelease).filter(CourseRelease.id == course.latest_published_release_id).one()
@@ -2177,9 +2289,14 @@ def read_enrollment_updates(enrollment_id: int, user: User = Depends(get_current
 
 
 @router.post("/enrollments/{enrollment_id}/update-release")
-def update_enrollment_release(enrollment_id: int, request: ReleaseUpdateRequest, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    require_student(user)
-    enrollment = owned_enrollment_or_404(db, user, enrollment_id)
+def update_enrollment_release(
+    enrollment_id: int,
+    request: ReleaseUpdateRequest,
+    participant: Participant = Depends(get_participant),
+    db: Session = Depends(get_db),
+):
+    require_account_student(participant)
+    enrollment = owned_enrollment_or_404(db, participant, enrollment_id)
     active = db.query(CourseRelease).filter(CourseRelease.id == enrollment.active_release_id).one()
     if request.current_release_id != active.id:
         raise HTTPException(status_code=409, detail={
@@ -2267,9 +2384,14 @@ def update_enrollment_release(enrollment_id: int, request: ReleaseUpdateRequest,
 
 
 @router.get("/enrollments/{enrollment_id}/lessons/{lesson_key}/workspace-history")
-def read_lesson_workspace_history(enrollment_id: int, lesson_key: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    require_student(user)
-    enrollment = owned_enrollment_or_404(db, user, enrollment_id)
+def read_lesson_workspace_history(
+    enrollment_id: int,
+    lesson_key: str,
+    participant: Participant = Depends(get_participant),
+    db: Session = Depends(get_db),
+):
+    require_account_student(participant)
+    enrollment = owned_enrollment_or_404(db, participant, enrollment_id)
     rows = db.query(LessonWorkspace, CourseRelease).join(
         CourseRelease, CourseRelease.id == LessonWorkspace.release_id,
     ).filter(

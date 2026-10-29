@@ -47,6 +47,7 @@ import {
   IconX,
 } from '@tabler/icons-react';
 import { useAuth } from 'src/authentication/AuthProvider';
+import { guestCanView } from 'src/authentication/guest';
 import type { Project } from 'src/authentication/AuthInterfaces';
 import { Link as RouterLink } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -105,6 +106,8 @@ const ProjectsCard = ({ previewAppearance = true }: { previewAppearance?: boolea
         if (fetchedProjects) {
           setProjects(fetchedProjects);
           setPage(1);
+        } else if (auth.isGuest) {
+          notify(t('alertMessages.projectsFetchError'), { severity: 'error' });
         }
       } catch (error) {
         notify(t('alertMessages.projectsFetchError'), { severity: 'error' });
@@ -365,6 +368,7 @@ const ProjectsCard = ({ previewAppearance = true }: { previewAppearance?: boolea
               >
                 {visibleProjects.map((project) => {
                   const isPython = project.project_type === 'python';
+                  const canOpen = !auth.isGuest || guestCanView(auth.guestSettings, isPython ? 'python' : 'blockly');
                   const projectType = isPython ? 'Python' : t('blockly');
 
                   return (
@@ -388,6 +392,7 @@ const ProjectsCard = ({ previewAppearance = true }: { previewAppearance?: boolea
                       <ButtonBase
                         component={RouterLink}
                         to={getProjectUrl(project)}
+                        disabled={!canOpen}
                         aria-label={t('projects-card.openProject', { title: project.name })}
                         sx={{
                           minWidth: 0,
@@ -437,7 +442,7 @@ const ProjectsCard = ({ previewAppearance = true }: { previewAppearance?: boolea
                           </Typography>
                           <Stack direction="row" alignItems="center" gap={{ xs: 1, sm: 1.5 }} flexWrap="wrap" sx={{ mt: 0.5 }}>
                             <Typography variant="caption" color="text.secondary" fontWeight={600}>
-                              {projectType}
+                              {projectType}{!canOpen && ` · ${t('projects-card.editorUnavailable')}`}
                             </Typography>
                             <Stack direction="row" spacing={0.5} alignItems="center" color="text.secondary">
                               <IconCodeDots size={15} aria-hidden="true" />

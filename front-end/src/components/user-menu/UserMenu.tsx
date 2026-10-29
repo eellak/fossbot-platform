@@ -39,7 +39,7 @@ const UserMenu = () => {
 
   useEffect(() => {
     const fetchUserData = async () => {
-      if (auth.authStatus !== 'authenticated' || !auth.token) {
+      if (auth.authStatus !== 'authenticated' || !auth.token || auth.isGuest) {
         return;
       }
 
@@ -52,7 +52,7 @@ const UserMenu = () => {
     };
 
     fetchUserData();
-  }, [auth.authStatus, auth.token]);
+  }, [auth.authStatus, auth.isGuest, auth.token]);
 
   return (
     <Box>
@@ -70,8 +70,8 @@ const UserMenu = () => {
         onClick={handleClick2}
       >
         <Avatar
-          src={user?.image_url}
-          alt={user?.username}
+          src={auth.isGuest ? undefined : user?.image_url}
+          alt={auth.isGuest ? auth.guest?.alias : user?.username}
           sx={{
             width: 35,
             height: 35,
@@ -95,30 +95,36 @@ const UserMenu = () => {
           },
         }}
       >
-        <Typography variant="h5">{t('userProfile')}</Typography>
+        <Typography variant="h5">{auth.isGuest ? t('guest.menuTitle') : t('userProfile')}</Typography>
         <Stack direction="row" py={3} spacing={2} alignItems="center">
-          <Avatar src={user?.image_url} alt={user?.username} sx={{ width: 95, height: 95 }} />
+          <Avatar src={auth.isGuest ? undefined : user?.image_url} alt={auth.isGuest ? auth.guest?.alias : user?.username} sx={{ width: 95, height: 95 }} />
           <Box>
             <Typography variant="subtitle2" color="textPrimary" fontWeight={600}>
-              {`${user?.firstname} ${user?.lastname}`}
+              {auth.isGuest ? auth.guest?.alias : `${user?.firstname} ${user?.lastname}`}
             </Typography>
             <Typography variant="subtitle2" color="textSecondary">
-              {user?.role}
+              {auth.isGuest ? t('guest.session') : user?.role}
             </Typography>
-            <Typography
-              variant="subtitle2"
-              color="textSecondary"
-              display="flex"
-              alignItems="center"
-              gap={1}
-            >
-              <IconMail width={15} height={15} />
-              {user?.email}
-            </Typography>
+            {auth.isGuest ? (
+              <Typography variant="body2" color="textSecondary" sx={{ mt: 0.5 }}>
+                {t('guest.localOnly')}
+              </Typography>
+            ) : (
+              <Typography
+                variant="subtitle2"
+                color="textSecondary"
+                display="flex"
+                alignItems="center"
+                gap={1}
+              >
+                <IconMail width={15} height={15} />
+                {user?.email}
+              </Typography>
+            )}
           </Box>
         </Stack>
         <Divider />
-        {dropdownData.profileMenuPages.map((profile) => (
+        {!auth.isGuest && dropdownData.profileMenuPages.map((profile) => (
           <Box key={profile.title}>
             <Box sx={{ py: 2, px: 0 }} className="hover-text-primary">
               <Link to={profile.href}>
@@ -171,7 +177,7 @@ const UserMenu = () => {
             </Box>
           </Box>
         ))}
-        {user && user.role === UserRole.ADMIN ? (
+        {!auth.isGuest && user && user.role === UserRole.ADMIN ? (
           <div>
             {dropdownData.adminPages.map((admin) => (
               <Box key={admin.title}>
@@ -230,7 +236,7 @@ const UserMenu = () => {
         ) : <div> </div>}
         <Box mt={2}>
           <Button variant="outlined" color="primary" onClick={() => auth.logOutAction()} fullWidth>
-            {t('logOut')}
+            {auth.isGuest ? t('guest.exit') : t('logOut')}
           </Button>
         </Box>
       </Menu>

@@ -11,6 +11,7 @@ import {
   IconBooks,
 } from '@tabler/icons-react';
 import type { BetaFeature } from 'src/config/betaFeatures';
+import type { GuestView } from 'src/authentication/AuthInterfaces';
 
 interface MenuitemsType {
   [x: string]: any;
@@ -28,6 +29,8 @@ interface MenuitemsType {
   allowedRoles?: string[];
   betaOnly?: boolean;
   betaFeature?: BetaFeature;
+  guestView?: GuestView;
+  guestOnly?: boolean;
 }
 
 const Menuitems: MenuitemsType[] = [
@@ -49,6 +52,7 @@ const Menuitems: MenuitemsType[] = [
     icon: IconLayoutDashboard,
     href: '/dashboard',
     chipColor: 'secondary',
+    guestView: 'dashboard',
   },
   {
     id: uniqueId(),
@@ -57,6 +61,7 @@ const Menuitems: MenuitemsType[] = [
     href: '/stages',
     betaOnly: true,
     betaFeature: 'stages',
+    guestView: 'stages',
   },
   {
     navlabel: true,
@@ -70,6 +75,7 @@ const Menuitems: MenuitemsType[] = [
     // chipColor: 'primary',
     icon: IconCode,
     href: '/monaco-page',
+    guestView: 'python',
   },
   {
     id: uniqueId(),
@@ -77,6 +83,7 @@ const Menuitems: MenuitemsType[] = [
     subtitle: 'menu.blocksBased',
     icon: IconPuzzle,
     href: '/blockly-page',
+    guestView: 'blockly',
   },
 
   {
@@ -87,6 +94,7 @@ const Menuitems: MenuitemsType[] = [
     href: '/interactive-page',
     disabled: false,
     betaFeature: 'interactive',
+    guestView: 'interactive',
   },
   {
     id: uniqueId(),
@@ -95,8 +103,17 @@ const Menuitems: MenuitemsType[] = [
     icon: IconDeviceGamepad2,
     href: '/rc-page',
     disabled: false,
+    guestView: 'rc',
   },
 
+  {
+    id: uniqueId(),
+    title: 'menu.stageBuilder',
+    icon: IconWorld,
+    href: '/stage-builder',
+    guestView: 'stage_builder',
+    guestOnly: true,
+  },
   {
     navlabel: true,
     subheader: 'menu.educationalMaterial',
@@ -109,6 +126,18 @@ const Menuitems: MenuitemsType[] = [
     allowedRoles: ['user'],
     betaOnly: true,
     betaFeature: 'education',
+    guestView: 'courses',
+  },
+  {
+    id: uniqueId(),
+    title: 'menu.classGroups',
+    icon: IconBooks,
+    href: '/classrooms',
+    allowedRoles: ['user'],
+    betaOnly: true,
+    betaFeature: 'education',
+    guestView: 'classrooms',
+    guestOnly: true,
   },
   {
     id: uniqueId(),

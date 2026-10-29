@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
-  Alert, Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel, Paper, Skeleton, Stack, Switch, TextField, Typography,
+  Alert, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel, Paper, Skeleton, Stack, Switch, TextField, Typography,
 } from '@mui/material';
 import { IconLogin, IconTrophy } from '@tabler/icons-react';
 import { useNavigate } from 'react-router-dom';
@@ -77,7 +77,7 @@ export default function ClassGroupsStudentPage({ embedded = false, previewAppear
         {leaderboard && <Stack spacing={1}>
           <Typography color="text.secondary">{t(`education.classrooms.boards.${leaderboard.board_type}`)} · {t('education.classrooms.releaseContext', { version: leaderboard.release_version, season: leaderboard.season })}</Typography>
           <Alert severity="info">{t('education.classrooms.friendlyNote')}</Alert>
-          {leaderboard.entries.map((entry) => <Paper key={`${entry.rank}-${entry.alias}`} variant="outlined" sx={{ p: 1.25 }}><Stack direction="row" justifyContent="space-between"><Typography fontWeight={650}>{entry.rank}. {entry.alias}</Typography><Typography>{entry.value}</Typography></Stack></Paper>)}
+          {leaderboard.entries.map((entry) => <Paper key={`${entry.rank}-${entry.alias}`} variant="outlined" sx={{ p: 1.25 }}><Stack direction="row" justifyContent="space-between" alignItems="center" gap={1}><Stack direction="row" spacing={1} alignItems="center"><Typography fontWeight={650}>{entry.rank}. {entry.alias}</Typography>{entry.is_guest && <Chip size="small" label={t('guest.session')} />}</Stack><Typography>{entry.value}</Typography></Stack></Paper>)}
           {!leaderboard.entries.length && <Typography color="text.secondary">{t('education.classrooms.noResults')}</Typography>}
         </Stack>}
       </DialogContent>
@@ -94,12 +94,12 @@ function StudentGroupCard({ group, token, navigate, run, showBoard, t }: { group
       <Button color="error" onClick={() => void run(() => leaveClassGroup(token, group.id))}>{t('education.classrooms.leave')}</Button>
     </Stack>
     <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} alignItems={{ sm: 'center' }} sx={{ my: 2 }}>
-      <TextField size="small" label={t('education.classrooms.alias')} value={alias} onChange={(event) => setAlias(event.target.value)} onBlur={() => alias.trim() !== group.membership.display_alias && alias.trim().length >= 2 && void run(() => updateClassMembership(token, group.id, { display_alias: alias.trim() }))} />
+      <TextField size="small" label={t('education.classrooms.alias')} value={alias} disabled={Boolean(group.membership.is_guest)} onChange={(event) => setAlias(event.target.value)} onBlur={() => !group.membership.is_guest && alias.trim() !== group.membership.display_alias && alias.trim().length >= 2 && void run(() => updateClassMembership(token, group.id, { display_alias: alias.trim() }))} />
       <FormControlLabel control={<Switch checked={group.membership.leaderboard_opt_in} onChange={(event) => void run(() => updateClassMembership(token, group.id, { leaderboard_opt_in: event.target.checked }))} />} label={t('education.classrooms.optIn')} />
     </Stack>
     <Alert severity="info" sx={{ mb: 2 }}>{group.membership.leaderboard_opt_in ? t('education.classrooms.optInHelp') : t('education.classrooms.optOutHelp')}</Alert>
     <Stack spacing={1}>{group.assignments.map((assignment) => <Paper key={assignment.id} variant="outlined" sx={{ p: 1.5 }}>
-      <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" gap={1}><Box><Typography fontWeight={700}>{assignment.course_title}</Typography><Typography variant="caption" color="text.secondary">{t('education.student.version', { version: assignment.release_version })}</Typography></Box><Button onClick={() => navigate(`/courses/${assignment.course_id}`)}>{t('education.student.viewCourse')}</Button></Stack>
+      <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" gap={1}><Box><Typography fontWeight={700}>{assignment.course_title}</Typography><Typography variant="caption" color="text.secondary">{t('education.student.version', { version: assignment.release_version })}</Typography></Box><Button onClick={() => navigate(`/courses/${assignment.course_id}${group.membership.is_guest && assignment.enrollment_id ? `?enrollment=${assignment.enrollment_id}` : ''}`)}>{t('education.student.viewCourse')}</Button></Stack>
       <Stack direction="row" gap={1} flexWrap="wrap" sx={{ mt: 1 }}>
         {assignment.challenges.filter((challenge) => challenge.enabled).map((challenge) => <Button key={challenge.id} size="small" variant="outlined" startIcon={<IconTrophy size={16} />} disabled={!group.leaderboards_enabled || !group.membership.leaderboard_opt_in} onClick={() => void showBoard(challenge.id)}>{challenge.activity_title}</Button>)}
       </Stack>

@@ -10,6 +10,7 @@ import { Grid, Box, Typography, Stack } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from 'src/authentication/AuthProvider';
 import { useNotifications } from 'src/components/notifications/NotificationProvider';
+import { guestLandingPath } from 'src/authentication/guest';
 
 const Login = () => {
   const { t } = useTranslation();
@@ -19,9 +20,9 @@ const Login = () => {
 
   useEffect(() => {
     if (auth.authStatus === 'authenticated') {
-      navigate('/dashboard', { replace: true });
+      navigate(auth.isGuest ? guestLandingPath(auth.guestSettings) : '/dashboard', { replace: true });
     }
-  }, [auth.authStatus, navigate]);
+  }, [auth.authStatus, auth.guestSettings, auth.isGuest, navigate]);
 
   const handleShowErrorAlert = (message: string) => {
     notify(message, { severity: 'error' });

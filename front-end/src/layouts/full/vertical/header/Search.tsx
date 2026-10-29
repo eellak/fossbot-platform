@@ -13,7 +13,7 @@ import {
   TextField,
   ListItemButton,
 } from '@mui/material';
- 
+
 import { IconSearch, IconX } from '@tabler/icons-react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -29,7 +29,7 @@ interface menuType {
 
 const Search = () => {
   const { t } = useTranslation();
-  const { user } = useAuth();
+  const { user, isGuest, guestSettings } = useAuth();
 
   // drawer top
   const [showDrawer2, setShowDrawer2] = useState(false);
@@ -47,7 +47,10 @@ const Search = () => {
 
     return rotr;
   };
-  const searchData = filterRoutes(Menuitems.filter((item: any) => !item.allowedRoles || (user && item.allowedRoles.includes(user.role))), search);
+  const searchableItems = isGuest
+    ? Menuitems.filter((item: any) => item.guestView && guestSettings.allowed_views.includes(item.guestView))
+    : Menuitems.filter((item: any) => !item.guestOnly).filter((item: any) => !item.allowedRoles || (user && item.allowedRoles.includes(user.role)));
+  const searchData = filterRoutes(searchableItems, search);
 
   return (
     <>

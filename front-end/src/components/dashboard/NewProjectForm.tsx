@@ -18,6 +18,9 @@ import { useAuth } from 'src/authentication/AuthProvider';
 import type { ProjectStageReference } from 'src/authentication/AuthInterfaces';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { useNotifications } from 'src/components/notifications/NotificationProvider';
+import { guestProjectRepository } from 'src/guest/guestProjects';
+import { guestCanView } from 'src/authentication/guest';
 
 interface NewProjectFormProps {
   isDescriptionDisabled: boolean,
@@ -28,8 +31,13 @@ interface NewProjectFormProps {
 
 const NewProjectForm = ({ isDescriptionDisabled, editorInitialValue, code, stageReference }: NewProjectFormProps) => {
   const { t } = useTranslation();
-
-  const [selectedOption, setSelectedOption] = useState(editorInitialValue);
+  const auth = useAuth();
+  const canPython = !auth.isGuest || guestCanView(auth.guestSettings, 'python');
+  const canBlockly = !auth.isGuest || guestCanView(auth.guestSettings, 'blockly');
+  const [selectedOption, setSelectedOption] = useState(
+    isDescriptionDisabled || (editorInitialValue === 'python' && canPython) || (editorInitialValue === 'blockly' && canBlockly)
+      ? editorInitialValue : canPython ? 'python' : canBlockly ? 'blockly' : '',
+  );
   const [projectName, setProjectName] = useState('');
   const [description, setDescription] = useState('');
   const [projectNameError, setProjectNameError] = useState(false);
@@ -38,7 +46,7 @@ const NewProjectForm = ({ isDescriptionDisabled, editorInitialValue, code, stage
 
   const navigate = useNavigate();
   const location = useLocation();
-  const auth = useAuth();
+  const { notify } = useNotifications();
 
   const handleProjectNameChange = (event: any) => {
     setProjectName(event.target.value);
@@ -63,6 +71,7 @@ const NewProjectForm = ({ isDescriptionDisabled, editorInitialValue, code, stage
 
   const handleSubmit = async (event) => {
     event.preventDefault();
+    if ((selectedOption === 'python' && !canPython) || (selectedOption === 'blockly' && !canBlockly)) return;
 
     // Check for empty fields and set errors
     setProjectNameError(projectName.trim() === '');
@@ -78,6 +87,13 @@ const NewProjectForm = ({ isDescriptionDisabled, editorInitialValue, code, stage
           code: code,
           stageReference: stageReference || null,
         });
+        if (!projectID) {
+          if (auth.isGuest) notify(t('guest.storageError'), { severity: 'error' });
+          return;
+        }
+        if (auth.isGuest) {
+          try { guestProjectRepository.clearDraft(selectedOption as 'python' | 'blockly'); } catch { /* Draft cleanup must not block opening the saved project. */ }
+        }
 
         const monacoPageUrl = `/monaco-page/${projectID}`;
         const blocklyPageUrl = `/blockly-page/${projectID}`;
@@ -171,13 +187,13 @@ const NewProjectForm = ({ isDescriptionDisabled, editorInitialValue, code, stage
                   disabled={isDescriptionDisabled}
                   error={editorError}
                 >
-                  <MenuItem value={'python'}>{t('monaco')}</MenuItem>
-                  <MenuItem value={'blockly'}>{t('blockly')}</MenuItem>
+                  <MenuItem value={'python'} disabled={!canPython}>{t('monaco')}</MenuItem>
+                  <MenuItem value={'blockly'} disabled={!canBlockly}>{t('blockly')}</MenuItem>
                 </Select>
               </Grid>
               <Grid item xs={12} sm={3}></Grid>
               <Grid item xs={12} sm={9}>
-                <Button variant="contained" color="primary" onClick={handleSubmit}>
+                <Button variant="contained" color="primary" onClick={handleSubmit} disabled={!selectedOption || (selectedOption === 'python' ? !canPython : !canBlockly)}>
                   {t('submit')}
                 </Button>
               </Grid>

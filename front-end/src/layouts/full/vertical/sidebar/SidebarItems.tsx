@@ -27,15 +27,20 @@ const SidebarItems = ({ previewAppearance = true }: { previewAppearance?: boolea
   const closeMobileSidebar = () => {
     if (!lgUp && customizer.isMobileSidebar) dispatch(toggleMobileSidebar());
   };
-  const { user, token } = useAuth();
+  const { user, token, isGuest, guestSettings } = useAuth();
   const [websiteAccess, setWebsiteAccess] = useState(false);
-  useEffect(() => { let active = true; setWebsiteAccess(false); if (token) cms<{role:string}>('/access', token).then(data => { if (active) setWebsiteAccess(data.role !== 'none'); }).catch(() => {}); return () => { active = false; }; }, [token]); // Access user info
+  useEffect(() => { let active = true; setWebsiteAccess(false); if (token && !isGuest) cms<{role:string}>('/access', token).then(data => { if (active) setWebsiteAccess(data.role !== 'none'); }).catch(() => {}); return () => { active = false; }; }, [isGuest, token]); // Access user info
 
-  const hasBetaAccess = user?.beta_tester || user?.role === UserRole.ADMIN;
-  const visibleItems = [...Menuitems, ...(websiteAccess ? [{ id: 'website-content', title: 'website.title', icon: IconWorld, href: '/website-admin' }] : [])].filter((item) => !item.allowedRoles || (user && item.allowedRoles.includes(user.role))).filter((item) => !item.betaOnly || hasBetaAccess);
+  const hasBetaAccess = isGuest || user?.beta_tester || user?.role === UserRole.ADMIN;
+  const visibleItems = isGuest
+    ? Menuitems.filter((item) => !item.subheader && item.guestView && guestSettings.allowed_views.includes(item.guestView))
+    : [...Menuitems, ...(websiteAccess ? [{ id: 'website-content', title: 'website.title', icon: IconWorld, href: '/website-admin' }] : [])]
+      .filter((item) => !item.guestOnly)
+      .filter((item) => !item.allowedRoles || (user && item.allowedRoles.includes(user.role)))
+      .filter((item) => !item.betaOnly || hasBetaAccess);
   const hasEducationItems = visibleItems.some((item) => item.href === '/courses' || item.href === '/teach/courses');
   let modifiedMenuItems = visibleItems.filter((item) => item.subheader !== 'menu.educationalMaterial' || hasEducationItems);
-  if (previewAppearance) {
+  if (!isGuest && previewAppearance) {
     const approvedItems = visibleItems.map((item) => item.href === '/monaco-page' ? { ...item, title: 'menu.pythonEditor' } : item);
     const courses = approvedItems
       .filter((item) => item.href === '/courses' || item.href === '/teach/courses')

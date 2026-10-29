@@ -20,6 +20,7 @@ import MonacoEditorComponent, { type MonacoEditorHandle } from 'src/components/e
 import Buttons from 'src/components/editors/RightColButtons';
 import PythonExecutor from 'src/components/editors/PythonExecutor';
 import { useAuth } from 'src/authentication/AuthProvider';
+import { guestProjectRepository } from 'src/guest/guestProjects';
 import {
   WebGLApp,
   type SimulatorControlHandle,
@@ -116,7 +117,7 @@ const MonacoPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppearan
   const runHadErrorRef = useRef(false);
   const runTargetRef = useRef<'simulation' | 'robot'>('simulation');
   const auth = useAuth();
-  const { token } = auth;
+  const { token, isGuest } = auth;
   const authRef = useRef(auth);
   const translationRef = useRef(t);
   authRef.current = auth;
@@ -278,7 +279,23 @@ const MonacoPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppearan
             setSelectedStage(stageRef);
           }
         } else {
-          setEditorValue(textart);
+          let restored = false;
+          if (authRef.current.isGuest) {
+            try {
+              const draft = guestProjectRepository.getDraft('python');
+              if (draft) {
+                setEditorValue(draft.code || textart);
+                setProjectTitle(draft.name);
+                setProjectDescription(draft.description);
+                setSelectedStage(draft.stageReference || null);
+                restored = true;
+              }
+            } catch (storageError) {
+              console.error(storageError);
+              notify(t('guest.storageError'), { severity: 'error' });
+            }
+          }
+          if (!restored) setEditorValue(textart);
           setProjectTitle(translationRef.current('newProject'));
           setInitialStageConfig(null);
           setInitialStageAssetBaseUrl(null);
@@ -294,6 +311,30 @@ const MonacoPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppearan
     fetchProject();
   }, [projectId, navigate]);
 
+  useEffect(() => {
+    if (!isGuest || loading || previewAppearance === false) return undefined;
+    const timer = window.setTimeout(() => {
+      try {
+        const data = {
+          name: projectTitle,
+          description: projectDescription,
+          project_type: 'python',
+          code: editorValue,
+          stageReference: selectedStage,
+        };
+        if (projectId) {
+          if (!guestProjectRepository.update(Number(projectId), data)) throw new Error('Guest project not found');
+        } else {
+          guestProjectRepository.saveDraft('python', { ...data, editorType: 'python' });
+        }
+      } catch (storageError) {
+        console.error(storageError);
+        notify(t('guest.storageError'), { severity: 'error' });
+      }
+    }, 800);
+    return () => window.clearTimeout(timer);
+  }, [editorValue, isGuest, loading, notify, previewAppearance, projectDescription, projectId, projectTitle, selectedStage, t]);
+
   // Local and private GitHub stages are loaded through authenticated backend APIs.
   useEffect(() => {
     if (!stageNeedsAuthenticatedLoad(selectedStage)) {
@@ -301,7 +342,11 @@ const MonacoPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppearan
       setInitialStageAssetBaseUrl(null);
       return;
     }
-    if (!token) return;
+    if (!token || isGuest) {
+      setInitialStageConfig(null);
+      setInitialStageAssetBaseUrl(null);
+      return;
+    }
 
     setInitialStageConfig(undefined);
     setInitialStageAssetBaseUrl(null);
@@ -323,7 +368,7 @@ const MonacoPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppearan
         }
       });
     return () => { cancelled = true; };
-  }, [token, selectedStage?.localStageId, selectedStage?.repoOwner, selectedStage?.repoName, selectedStage?.sourceType]);
+  }, [isGuest, token, selectedStage?.localStageId, selectedStage?.repoOwner, selectedStage?.repoName, selectedStage?.sourceType]);
 
   useEffect(() => {
     const handleStageSelected = (event: Event) => {
@@ -650,7 +695,7 @@ const MonacoPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppearan
             </Box>
           </Box>
         )}
-        {!loading && <AssistantPanel adapter={assistantAdapter} explainCapability="code.explain" suggestCapability="code.suggest_changes" />}
+        {!loading && !isGuest && <AssistantPanel adapter={assistantAdapter} explainCapability="code.explain" suggestCapability="code.suggest_changes" />}
       </PageContainer>
     );
   }
@@ -827,7 +872,7 @@ const MonacoPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppearan
         )}
       </Box>
 
-      {!loading && <Box sx={{ mt: 2 }}><AssistantPanel adapter={assistantAdapter} explainCapability="code.explain" suggestCapability="code.suggest_changes" /></Box>}
+      {!loading && !isGuest && <Box sx={{ mt: 2 }}><AssistantPanel adapter={assistantAdapter} explainCapability="code.explain" suggestCapability="code.suggest_changes" /></Box>}
 
     </PageContainer>
   );

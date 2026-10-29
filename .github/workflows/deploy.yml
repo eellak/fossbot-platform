@@ -16,6 +16,8 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    env:
+      DEPLOY_SSH_PORT: ${{ vars.SSH_PORT || '2022' }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -48,11 +50,11 @@ jobs:
           mkdir -p ~/.ssh
           echo "${{ secrets.SSH_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
+          ssh-keyscan -T 10 -t ed25519 -p "$DEPLOY_SSH_PORT" -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
 
       - name: SSH and Deploy
         run: |
-          ssh -i ~/.ssh/id_rsa ${{ secrets.SSH_USERNAME }}@${{ secrets.SSH_HOST }} 'bash -se' << 'EOF'
+          ssh -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -p "$DEPLOY_SSH_PORT" -i ~/.ssh/id_rsa ${{ secrets.SSH_USERNAME }}@${{ secrets.SSH_HOST }} 'bash -se' << 'EOF'
             set -euo pipefail
             cd /fossbot-platform
 

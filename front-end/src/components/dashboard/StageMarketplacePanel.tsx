@@ -207,6 +207,7 @@ function MarketplaceDetailDrawer({
   reporting,
   onReport,
   canModerate,
+  readOnly = false,
   moderationBusy,
   moderationError,
   onModerate,
@@ -227,6 +228,7 @@ function MarketplaceDetailDrawer({
   reporting: MarketplacePermissions | null;
   onReport: () => void;
   canModerate: boolean;
+  readOnly?: boolean;
   moderationBusy: boolean;
   moderationError: string;
   onModerate: (state: 'hidden' | 'removed') => void;
@@ -281,13 +283,13 @@ function MarketplaceDetailDrawer({
                 </Stack>
               </Box>
               <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
-                <Button component="a" href={stageTestUrl} target="_blank" rel="noreferrer" variant="contained" startIcon={<PlayArrowIcon />}>
+                {!readOnly && <Button component="a" href={stageTestUrl} target="_blank" rel="noreferrer" variant="contained" startIcon={<PlayArrowIcon />}>
                   Test stage
-                </Button>
-                <Button variant="outlined" onClick={() => onCopyLocal(entry)} disabled={localCopyBusy} startIcon={<ContentCopyIcon />}>
+                </Button>}
+                {!readOnly && <Button variant="outlined" onClick={() => onCopyLocal(entry)} disabled={localCopyBusy} startIcon={<ContentCopyIcon />}>
                   {localCopyBusy ? 'Copying…' : 'Copy to my stages'}
-                </Button>
-                {entry.sourceType !== 'local' && !forkStep && (
+                </Button>}
+                {!readOnly && entry.sourceType !== 'local' && !forkStep && (
                   <Button variant="outlined" onClick={() => onOpenFork(entry)} disabled={forkBusy} startIcon={<GitHubIcon />}>
                     {forkBusy ? 'Checking GitHub…' : 'Fork on GitHub'}
                   </Button>
@@ -388,7 +390,7 @@ export default function StageMarketplacePanel({ embedded = false, preview = fals
   const { t } = useTranslation();
   const inPage = appearance === 'page';
   const confirmDialog = useConfirmDialog();
-  const { token, user } = useAuth();
+  const { token, user, isGuest } = useAuth();
   const userKey = stageListUserKey(user);
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -403,7 +405,7 @@ export default function StageMarketplacePanel({ embedded = false, preview = fals
   const [detailLookupKey, setDetailLookupKey] = useState('');
   const [detailUnavailable, setDetailUnavailable] = useState(false);
   const [selected, setSelected] = useState<MarketplaceStageEntry | null>(null);
-  const [forkFlow, setForkFlow] = useState<ForkFlow | null>(readForkFlow);
+  const [forkFlow, setForkFlow] = useState<ForkFlow | null>(() => isGuest ? null : readForkFlow());
   const [forkBusy, setForkBusy] = useState(false);
   const [forkError, setForkError] = useState('');
   const [localCopyBusy, setLocalCopyBusy] = useState(false);
@@ -422,9 +424,12 @@ export default function StageMarketplacePanel({ embedded = false, preview = fals
   const [moderationError, setModerationError] = useState('');
 
   useEffect(() => {
-    if (!token || preview) return;
+    if (!token || preview || isGuest) {
+      setReporting(null);
+      return;
+    }
     void getMarketplacePermissions(token).then(setReporting).catch(() => setReporting(null));
-  }, [preview, token]);
+  }, [isGuest, preview, token]);
 
   const setActiveForkFlow = (flow: ForkFlow | null) => {
     setForkFlow(flow);
@@ -432,7 +437,7 @@ export default function StageMarketplacePanel({ embedded = false, preview = fals
   };
 
   const handleOpenFork = async (entry: MarketplaceStageEntry) => {
-    if (!token) {
+    if (!token || isGuest) {
       setForkError('Sign in and connect GitHub before forking a stage.');
       return;
     }
@@ -462,7 +467,7 @@ export default function StageMarketplacePanel({ embedded = false, preview = fals
   };
 
   const handleCopyLocal = async (entry: MarketplaceStageEntry) => {
-    if (!token) {
+    if (!token || isGuest) {
       setLocalCopyError('Sign in before copying a stage to your account.');
       return;
     }
@@ -479,7 +484,7 @@ export default function StageMarketplacePanel({ embedded = false, preview = fals
   };
 
   const handleCompleteFork = async (entry: MarketplaceStageEntry) => {
-    if (!token) return;
+    if (!token || isGuest) return;
     setForkBusy(true);
     setForkError('');
     try {
@@ -505,7 +510,7 @@ export default function StageMarketplacePanel({ embedded = false, preview = fals
   };
 
   useEffect(() => {
-    if (!token || !forkFlow || forkFlow.step !== 'select' || forkFlow.installationUrl) return;
+    if (!token || isGuest || !forkFlow || forkFlow.step !== 'select' || forkFlow.installationUrl) return;
     let active = true;
     getMarketplaceForkStatus(token, forkFlow.repoOwner, forkFlow.repoName)
       .then((status) => {
@@ -521,7 +526,7 @@ export default function StageMarketplacePanel({ embedded = false, preview = fals
       })
       .catch(() => undefined);
     return () => { active = false; };
-  }, [forkFlow, token]);
+  }, [forkFlow, isGuest, token]);
 
   const canonicalRequest = preview || (!query.trim() && !activeTag && sort === 'updated' && page === 1);
 
@@ -722,6 +727,7 @@ export default function StageMarketplacePanel({ embedded = false, preview = fals
         reporting={reporting}
         onReport={() => { setReportCategory('broken_misleading'); setReportExplanation(''); setReportTouched(false); setReportError(''); setReportSent(false); setReportOpen(true); }}
         canModerate={!!reporting?.roles.includes('moderator')}
+        readOnly={isGuest}
         moderationBusy={moderationBusy}
         moderationError={moderationError}
         onModerate={(state) => void moderateSelected(state)}

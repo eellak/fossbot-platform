@@ -1,0 +1,24 @@
+declare const jest: any;
+
+export const backendUrl = '';
+export const login = jest.fn();
+export const loginWithFirebaseToken = jest.fn();
+export const register = jest.fn();
+export const createProject = jest.fn();
+export const deleteProjectById = jest.fn();
+export const getProjectById = jest.fn();
+export const getProjects = jest.fn();
+export const updateProjectById = jest.fn();
+export const getUserData = jest.fn();
+export const updateUserData = jest.fn();
+export const updateUserPasswordData = jest.fn();
+export const getUsers = jest.fn();
+export const deleteUserById = jest.fn();
+export const updateUserRoleById = jest.fn();
+export const updateUserBetaTesterStatusById = jest.fn();
+export const updateUserActivatedStatusById = jest.fn();
+export const updateUserAccessRevokedStatusById = jest.fn();
+export const updateUserMarketplaceRolesById = jest.fn();
+export const createGuestSession = jest.fn();
+export const getGuestSession = jest.fn();
+export const getGuestSettings = jest.fn();

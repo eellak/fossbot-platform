@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type PointerEventHandler } from 'react';
 import { Alert, Box, Button, Chip, Collapse, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, LinearProgress, Skeleton, Stack, Tab, Tabs, Tooltip, Typography, useMediaQuery, useTheme } from '@mui/material';
 import { IconArrowLeft, IconArrowRight, IconCamera, IconCircleCheck, IconLayoutSidebarLeftCollapse, IconLayoutSidebarLeftExpand, IconPlayerPlay, IconPlayerStop, IconRefresh, IconRestore, IconX } from '@tabler/icons-react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { v4 as uuidv4 } from 'uuid';
 import StudentCourseOutline from 'src/components/courses/StudentCourseOutline';
@@ -28,6 +28,7 @@ import { allowedBlocklyBlockTypes, applyPythonEdits, previewPythonSuggestion, va
 import type { MonacoEditorHandle } from 'src/components/editors/MonacoEditor';
 import type { BlocklyEditorHandle } from 'src/components/editors/BlocklyEditor';
 import { useSelector, type AppState } from 'src/store/Store';
+import { GuestWorkspaceError, guestWorkspaceRepository } from 'src/guest/guestWorkspaces';
 
 type SaveState = 'saved' | 'unsaved' | 'saving' | 'failed' | 'conflict';
 type Pane = 'instructions' | 'code' | 'simulator' | 'results';
@@ -54,9 +55,11 @@ type LessonWorkspacePageProps = {
 
 export default function LessonWorkspacePage({ previewAppearance = true, courseIdOverride, lessonKeyOverride, previewFixture, fillParent = false, onExitPreview, onPreviewLessonChange }: LessonWorkspacePageProps = {}) {
   const { t } = useTranslation();
-  const { token } = useAuth();
+  const { token, isGuest } = useAuth();
   const navigate = useNavigate();
   const { courseId: courseParam, lessonKey: lessonKeyParam = '' } = useParams();
+  const [searchParams] = useSearchParams();
+  const requestedEnrollmentId = Number(searchParams.get('enrollment')) || null;
   const courseId = courseIdOverride ?? Number(courseParam);
   const lessonKey = lessonKeyOverride ?? lessonKeyParam;
   const theme = useTheme();
@@ -148,8 +151,27 @@ export default function LessonWorkspacePage({ previewAppearance = true, courseId
   const load = useCallback(async () => {
     setLoading(true); setError(''); setPreviousRequired(null);
     try {
-      const current = (await listMyEnrollments(token)).find((item) => item.course_id === courseId);
+      const enrollments = await listMyEnrollments(token);
+      const current = requestedEnrollmentId
+        ? enrollments.find((item) => item.id === requestedEnrollmentId)
+        : enrollments.find((item) => item.course_id === courseId);
       if (!current) { navigate(`/courses/${courseId}`, { replace: true }); return; }
+      if (isGuest) {
+        const lessons = current.active_release.lessons;
+        const guestLesson = lessons.find((item) => item.lessonKey === lessonKey);
+        setEnrollment(current);
+        if (!guestLesson) { setError(t('education.student.errors.lesson')); return; }
+        try {
+          const loaded = guestWorkspaceRepository.read(current, guestLesson, lessons);
+          setWorkspaceHistory([]);
+          setWorkspace(loaded); setContent(loaded.content); lastSaved.current = contentKey(loaded.content); setSaveState('saved');
+        } catch (reason) {
+          if (reason instanceof GuestWorkspaceError && reason.code === 'previous_workspace_required') {
+            setPreviousRequired(reason.previousLessonKey || null);
+          } else throw reason;
+        }
+        return;
+      }
       const started = await startLesson(token, current.id, lessonKey);
       setEnrollment(started);
       const [loaded, history] = await Promise.all([
@@ -166,7 +188,7 @@ export default function LessonWorkspacePage({ previewAppearance = true, courseId
         setEnrollment(current || null); setPreviousRequired(lessons[index - 1]?.lessonKey || null);
       } else setError(t('education.student.errors.lesson'));
     } finally { setLoading(false); }
-  }, [courseId, lessonKey, navigate, t, token]);
+  }, [courseId, isGuest, lessonKey, navigate, requestedEnrollmentId, t, token]);
   useEffect(() => { if (!previewFixture) void load(); }, [load, previewFixture]);
 
   useEffect(() => {
@@ -183,7 +205,8 @@ export default function LessonWorkspacePage({ previewAppearance = true, courseId
   const openLesson = (key: string) => {
     setOutlineOpen(false);
     if (previewFixture) { onPreviewLessonChange?.(key); return; }
-    navigate(`/courses/${courseId}/learn/${key}`);
+    const enrollmentQuery = isGuest && enrollment ? `?enrollment=${enrollment.id}` : '';
+    navigate(`/courses/${courseId}/learn/${key}${enrollmentQuery}`);
   };
   const stage = lesson?.stageReference || null;
   const stageSourceType = stage?.sourceType;
@@ -210,6 +233,9 @@ export default function LessonWorkspacePage({ previewAppearance = true, courseId
     // Local stages are embedded in the published release so students can open them
     // without access to the author's library.
     if (hasEmbeddedStage) { setStageConfig(lesson?.stageConfig as RawStageConfig); setStageAssetBase(null); setStageError(''); return; }
+    if (isGuest && (stageSourceType === 'local' || (stageSourceType === 'github' && stageVisibility === 'private'))) {
+      setStageConfig(null); setStageAssetBase(null); setStageError('Private stage sources are unavailable in guest sessions.'); return;
+    }
     let cancelled = false;
     setStageConfig(undefined); setStageAssetBase(null); setStageError('');
     const request = stageSourceType === 'github' && stageVisibility === 'private' && stageRepoOwner && stageRepoName
@@ -224,7 +250,7 @@ export default function LessonWorkspacePage({ previewAppearance = true, courseId
     request.then(({ config, base }) => { if (!cancelled) { setStageConfig(config); setStageAssetBase(base); } })
       .catch((reason) => { if (!cancelled) { setStageConfig(null); setStageError(reason instanceof Error ? reason.message : String(reason)); } });
     return () => { cancelled = true; };
-  }, [hasEmbeddedStage, simulatorKey, stageCommitSha, stageLocalStageId, stageRepoName, stageRepoOwner, stageSourceType, stageUrl, stageVisibility, token]);
+  }, [hasEmbeddedStage, isGuest, simulatorKey, stageCommitSha, stageLocalStageId, stageRepoName, stageRepoOwner, stageSourceType, stageUrl, stageVisibility, token]);
 
   useEffect(() => {
     if (previewFixture || !workspace || contentKey(content) === lastSaved.current) return;
@@ -232,20 +258,34 @@ export default function LessonWorkspacePage({ previewAppearance = true, courseId
     const timer = window.setTimeout(async () => {
       setSaveState('saving');
       try {
-        const saved = await saveLessonWorkspace(token, workspace.enrollment_id, lessonKey, content, workspace.revision);
+        const saved = isGuest && enrollment && lesson
+          ? guestWorkspaceRepository.save(enrollment, lesson, content, workspace.revision)
+          : await saveLessonWorkspace(token, workspace.enrollment_id, lessonKey, content, workspace.revision);
         setWorkspace(saved); lastSaved.current = contentKey(saved.content); setSaveState('saved');
-      } catch (reason) { setSaveState(reason instanceof CourseRequestError && reason.code === 'workspace_revision_conflict' ? 'conflict' : 'failed'); }
+      } catch (reason) {
+        const conflict = reason instanceof GuestWorkspaceError
+          ? reason.code === 'workspace_revision_conflict'
+          : reason instanceof CourseRequestError && reason.code === 'workspace_revision_conflict';
+        setSaveState(conflict ? 'conflict' : 'failed');
+      }
     }, 800);
     return () => window.clearTimeout(timer);
-  }, [content, lessonKey, previewFixture, token, workspace]);
+  }, [content, enrollment, isGuest, lesson, lessonKey, previewFixture, token, workspace]);
 
   const retrySave = async () => {
     if (!workspace) return;
     setSaveState('saving');
     try {
-      const saved = await saveLessonWorkspace(token, workspace.enrollment_id, lessonKey, content, workspace.revision);
+      const saved = isGuest && enrollment && lesson
+        ? guestWorkspaceRepository.save(enrollment, lesson, content, workspace.revision)
+        : await saveLessonWorkspace(token, workspace.enrollment_id, lessonKey, content, workspace.revision);
       setWorkspace(saved); lastSaved.current = contentKey(saved.content); setSaveState('saved');
-    } catch (reason) { setSaveState(reason instanceof CourseRequestError && reason.code === 'workspace_revision_conflict' ? 'conflict' : 'failed'); }
+    } catch (reason) {
+      const conflict = reason instanceof GuestWorkspaceError
+        ? reason.code === 'workspace_revision_conflict'
+        : reason instanceof CourseRequestError && reason.code === 'workspace_revision_conflict';
+      setSaveState(conflict ? 'conflict' : 'failed');
+    }
   };
   const resetCode = async () => {
     if (!workspace) return;
@@ -253,6 +293,13 @@ export default function LessonWorkspacePage({ previewAppearance = true, courseId
       setContent(lesson.starterContent ?? (lesson.editorType === 'python' ? '' : null));
       setGeneratedPython('');
       setResetOpen(false);
+      return;
+    }
+    if (isGuest && enrollment && lesson) {
+      try {
+        const reset = guestWorkspaceRepository.reset(enrollment, lesson, workspace.revision);
+        setWorkspace(reset); setContent(reset.content); lastSaved.current = contentKey(reset.content); setSaveState('saved'); setResetOpen(false);
+      } catch { setSaveState('failed'); }
       return;
     }
     try {
@@ -294,7 +341,7 @@ export default function LessonWorkspacePage({ previewAppearance = true, courseId
     if ((target === 'rows' || target === 'corner') && axis === 'y') setRowSplit((value) => clamp(value + delta * 2, 40, 72));
   };
   const setCompletion = async (complete: boolean) => {
-    if (!enrollment) return;
+    if (!enrollment || isGuest) return;
     if (previewFixture) {
       setEnrollment((current) => {
         if (!current) return current;
@@ -313,7 +360,7 @@ export default function LessonWorkspacePage({ previewAppearance = true, courseId
   };
 
   if (loading) return <Stack sx={{ p: 3 }} spacing={2}><Skeleton variant="rounded" height={52} /><Skeleton variant="rounded" height="65vh" /></Stack>;
-  if (previousRequired) return <Alert severity="info" sx={{ m: 3 }} action={<Button onClick={() => navigate(`/courses/${courseId}/learn/${previousRequired}`)}>{t('education.workspace.openPrevious')}</Button>}>{t('education.workspace.previousRequired')}</Alert>;
+  if (previousRequired) return <Alert severity="info" sx={{ m: 3 }} action={<Button onClick={() => { const enrollmentQuery = isGuest && enrollment ? `?enrollment=${enrollment.id}` : ''; navigate(`/courses/${courseId}/learn/${previousRequired}${enrollmentQuery}`); }}>{t('education.workspace.openPrevious')}</Button>}>{t('education.workspace.previousRequired')}</Alert>;
   if (!enrollment || !lesson || !workspace) return <Alert severity="error" sx={{ m: 3 }} action={<Button onClick={() => void load()}>{t('education.student.retry')}</Button>}>{error || t('education.student.errors.lesson')}</Alert>;
 
   const previous = enrollment.active_release.lessons[lessonIndex - 1];
@@ -422,7 +469,7 @@ export default function LessonWorkspacePage({ previewAppearance = true, courseId
   const hasWorkPane = hasStage || hasEditor;
   const desktopAreas = hasStage && hasEditor ? '"instructions simulator" "editor results"' : hasStage ? '"instructions simulator"' : hasEditor ? '"instructions editor" "instructions results"' : '"instructions"';
   const previousControl = <Button startIcon={<IconArrowLeft size={18} />} disabled={!previous} onClick={() => previous && openLesson(previous.lessonKey)}>{t('education.student.previous')}</Button>;
-  const lessonActions = <Stack direction="row" spacing={1} justifyContent="center" flexWrap="wrap">{workspaceHistory.length > 0 && <Button onClick={() => setHistoryOpen(true)}>{t('education.workspace.previousCode')}</Button>}{hasEditor && <Button startIcon={<IconRestore size={18} />} disabled={saveState === 'saving'} onClick={() => setResetOpen(true)}>{t('education.workspace.resetWorkspace')}</Button>}{(lesson.completionPolicy === 'self' || lesson.completionPolicy === 'hybrid') && (progress?.state === 'completed' ? <Button onClick={() => void setCompletion(false)}>{t('education.student.undoCompletion')}</Button> : <Button variant="contained" startIcon={<IconCircleCheck size={18} />} onClick={() => void setCompletion(true)}>{t('education.student.finished')}</Button>)}</Stack>;
+  const lessonActions = <Stack direction="row" spacing={1} justifyContent="center" flexWrap="wrap">{workspaceHistory.length > 0 && <Button onClick={() => setHistoryOpen(true)}>{t('education.workspace.previousCode')}</Button>}{hasEditor && <Button startIcon={<IconRestore size={18} />} disabled={saveState === 'saving'} onClick={() => setResetOpen(true)}>{t('education.workspace.resetWorkspace')}</Button>}{!isGuest && (lesson.completionPolicy === 'self' || lesson.completionPolicy === 'hybrid') && (progress?.state === 'completed' ? <Button onClick={() => void setCompletion(false)}>{t('education.student.undoCompletion')}</Button> : <Button variant="contained" startIcon={<IconCircleCheck size={18} />} onClick={() => void setCompletion(true)}>{t('education.student.finished')}</Button>)}</Stack>;
   const nextControl = <Button endIcon={<IconArrowRight size={18} />} disabled={!next} onClick={() => next && openLesson(next.lessonKey)}>{t('education.student.next')}</Button>;
 
   // Compact workspaces scroll as a page so the lesson and actions cannot overlap.
@@ -447,7 +494,7 @@ export default function LessonWorkspacePage({ previewAppearance = true, courseId
       <Typography component="h1" variant="h4" fontWeight={700} sx={{ mt: 1 }}>{lesson.title}</Typography>
     </Box>
     <LinearProgress variant="determinate" value={enrollment.progress_percent} sx={{ height: 3 }} />
-    {assistantAdapter && !previewFixture && (previewAppearance ? <AssistantPanel adapter={assistantAdapter} explainCapability={lesson.editorType === 'python' ? 'code.explain' : 'blockly.explain'} suggestCapability={lesson.editorType === 'python' ? 'code.suggest_changes' : 'blockly.suggest_changes'} /> : <Box sx={{ px: 2, py: 1 }}><AssistantPanel adapter={assistantAdapter} explainCapability={lesson.editorType === 'python' ? 'code.explain' : 'blockly.explain'} suggestCapability={lesson.editorType === 'python' ? 'code.suggest_changes' : 'blockly.suggest_changes'} /></Box>)}
+    {assistantAdapter && !previewFixture && !isGuest && (previewAppearance ? <AssistantPanel adapter={assistantAdapter} explainCapability={lesson.editorType === 'python' ? 'code.explain' : 'blockly.explain'} suggestCapability={lesson.editorType === 'python' ? 'code.suggest_changes' : 'blockly.suggest_changes'} /> : <Box sx={{ px: 2, py: 1 }}><AssistantPanel adapter={assistantAdapter} explainCapability={lesson.editorType === 'python' ? 'code.explain' : 'blockly.explain'} suggestCapability={lesson.editorType === 'python' ? 'code.suggest_changes' : 'blockly.suggest_changes'} /></Box>)}
     {enrollment.update_available && <Alert severity="info" action={<Button color="inherit" onClick={() => navigate(`/courses/${courseId}`)}>{t('education.student.reviewChanges')}</Button>}>{t('education.workspace.updateWhileOpen')}</Alert>}
     {saveState === 'conflict' && <Alert severity="error" action={<Button color="inherit" onClick={() => void load()}>{t('education.conflict.reload')}</Button>}>{t('education.workspace.staleTab')}</Alert>}
     {compact && <Collapse in={outlineOpen} unmountOnExit><Box id="course-outline-panel" component="aside" sx={{ maxHeight: 240, overflowY: 'auto', p: 2, borderBottom: '1px solid', borderColor: 'divider' }}><StudentCourseOutline lessons={enrollment.active_release.lessons} progress={enrollment.progress} selectedKey={lessonKey} title={t('education.student.outline')} completedLabel={t('education.student.completed')} onSelect={openLesson} /></Box></Collapse>}

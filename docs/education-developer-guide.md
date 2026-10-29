@@ -24,6 +24,8 @@ Tracked migrations run in this order:
 4. `20260725_04` — activity answers and compact sensor summaries.
 5. `20260727_05` — summary-only mission attempts.
 6. `20260727_06` — scoring fields, class groups, memberships, assignments, and challenges.
+7. `20260731_07`–`20260731_11` — local stage storage, AI foundation/usage retention, and stage previews.
+8. `20260731_12` — anonymous guest sessions, guest settings, and assignment-scoped guest memberships/enrollments.
 
 Phase 8 adds no table or column. Old workspaces are already retained as release-scoped rows and are exposed read-only through an ownership-checked history route.
 
@@ -52,8 +54,19 @@ Raw sensor samples stay in memory for the current bounded chart/run and are disc
 | Teacher course analytics | course author only | hidden (404) | denied | denied |
 | Class group, membership, assignment, challenge mutation | owning teacher only | hidden (404) | own membership preferences only | denied |
 | Leaderboard | owning teacher; opted-in aliases | denied | opted-in member in group | denied |
+| Guest session/settings | public settings read; guest token creation; admin settings write | admin write only | n/a | 30-day anonymous session |
+| Guest classroom participation | denied | join/leave/opt-in/submit in a joined assignment | n/a | own guest membership and assignment only |
+| Guest code/stage/workspace | n/a | n/a | n/a | browser localStorage only; server workspace APIs denied |
 
 Nested routes resolve ownership before returning data. Student-safe release payloads remove answer keys and expected numeric values. Private provider tokens and URLs are never returned in education release payloads.
+
+## Guest sessions
+
+`GuestSession` stores only a generated `adjective_animal` alias, a SHA-256 digest of an opaque `guest_` bearer token, and creation/expiry timestamps. Guest tokens expire after 30 days; there is no refresh, recovery, account linking, or automatic cleanup job. `GuestInstanceSettings` is a singleton containing `beta_tester` and a finite `allowed_views` list. Defaults enable all safe guest views and leave the beta treatment off. An empty `allowed_views` list disables new guest sessions, while existing sessions remain valid until expiry so their results stay attributable to the class.
+
+Guest enrollments and memberships use nullable `guest_session_id` with XOR constraints against `student_id`; guest enrollments also carry `assignment_id` and are unique per guest assignment, not per course. This keeps two classes that assign the same course separate. Guest join/read/submit access requires an active group membership and an active assignment/release match. Guests cannot create enrollments directly, switch releases, start server lesson progress, or call any workspace API (the server `GET workspace` route would otherwise create a row). Accepted activity/mission submissions remain the only server-side learning records guests create, alongside derived progress.
+
+Guest route dependencies (`get_classroom_participant`, `get_course_access`, `get_marketplace_access`) are narrow exceptions layered over the normal account-only `get_current_user`. Mutating routes are enumerated in `tests/test_guest_route_authorization.py`; only class join/leave/opt-in and activity/mission submission are guest-reachable.
 
 ## Content safety and URL policy
 
@@ -66,6 +79,8 @@ Rich text accepts plain text or a constrained Tiptap document containing paragra
 - Activity answers retain the latest submitted value and counters per release/activity, not an unbounded submission log.
 - Mission attempts retain one compact summary per terminal run. Raw event and sensor streams are not persisted.
 - Analytics are derived from the above summaries; leaderboards use class aliases and exclude opted-out students.
+- Guest aliases, class-scoped membership, answers, attempts, and derived progress remain in the platform database for teacher review and leaderboards. Guest code, projects, and local stages do not. Clearing a guest browser deletes the only copy of that local work.
+- Guest sessions expire after 30 days, but expired rows are not deleted automatically. Guest creation/join throttling is in-memory and worker-local; a multi-worker deployment needs a shared limiter if abuse protection becomes a requirement.
 - Account/enrollment deletion and timed archival are deployment policy boundaries still requiring an operator cleanup job; the application does not currently run automatic age-based deletion.
 
 ## Example content
