@@ -30,12 +30,13 @@ import type { BlocklyEditorHandle } from 'src/components/editors/BlocklyEditor';
 import { useSelector, type AppState } from 'src/store/Store';
 import { GuestWorkspaceError, guestWorkspaceRepository } from 'src/guest/guestWorkspaces';
 
-type SaveState = 'saved' | 'unsaved' | 'saving' | 'failed' | 'conflict';
+type SaveState = 'saved' | 'unsaved' | 'saving' | 'failed' | 'conflict' | 'release_changed';
 type Pane = 'instructions' | 'code' | 'simulator' | 'results';
 type ResizeTarget = 'outline' | 'columns' | 'rows' | 'corner';
 type ResizeState = { target: ResizeTarget; startX: number; startY: number; startValue: number; startSecondary?: number };
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 const contentKey = (content: LessonWorkspace['content']) => JSON.stringify(content ?? null);
+const draftText = (content: LessonWorkspace['content']) => typeof content === 'string' ? content : JSON.stringify(content ?? null, null, 2);
 
 type LessonWorkspacePageProps = {
   previewAppearance?: boolean;
@@ -81,6 +82,8 @@ export default function LessonWorkspacePage({ previewAppearance = true, courseId
   const [resetOpen, setResetOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [workspaceHistory, setWorkspaceHistory] = useState<LessonWorkspaceHistory[]>([]);
+  const [staleDraftText, setStaleDraftText] = useState<string | null>(null);
+  const [staleDraftOpen, setStaleDraftOpen] = useState(false);
   const [simulatorKey, setSimulatorKey] = useState(0);
   const [stageConfig, setStageConfig] = useState<RawStageConfig | null | undefined>(null);
   const [stageAssetBase, setStageAssetBase] = useState<string | null>(null);
@@ -202,6 +205,8 @@ export default function LessonWorkspacePage({ previewAppearance = true, courseId
 
   const lessonIndex = enrollment?.active_release.lessons.findIndex((item) => item.lessonKey === lessonKey) ?? -1;
   const lesson = lessonIndex >= 0 ? enrollment?.active_release.lessons[lessonIndex] : undefined;
+  // A focused tab can learn that the enrollment moved release while this workspace stayed on the old one.
+  const releaseMismatch = Boolean(enrollment && workspace && enrollment.active_release.id !== workspace.release_id);
   const openLesson = (key: string) => {
     setOutlineOpen(false);
     if (previewFixture) { onPreviewLessonChange?.(key); return; }
@@ -253,16 +258,24 @@ export default function LessonWorkspacePage({ previewAppearance = true, courseId
   }, [hasEmbeddedStage, isGuest, simulatorKey, stageCommitSha, stageLocalStageId, stageRepoName, stageRepoOwner, stageSourceType, stageUrl, stageVisibility, token]);
 
   useEffect(() => {
-    if (previewFixture || !workspace || contentKey(content) === lastSaved.current) return;
+    if (previewFixture || !workspace) return undefined;
+    if (releaseMismatch) { setSaveState('release_changed'); return undefined; }
+    if (contentKey(content) === lastSaved.current) return undefined;
     setSaveState('unsaved');
     const timer = window.setTimeout(async () => {
       setSaveState('saving');
       try {
         const saved = isGuest && enrollment && lesson
           ? guestWorkspaceRepository.save(enrollment, lesson, content, workspace.revision)
-          : await saveLessonWorkspace(token, workspace.enrollment_id, lessonKey, content, workspace.revision);
+          : await saveLessonWorkspace(token, workspace.enrollment_id, lessonKey, content, workspace.revision, workspace.release_id);
         setWorkspace(saved); lastSaved.current = contentKey(saved.content); setSaveState('saved');
       } catch (reason) {
+        if (reason instanceof CourseRequestError && reason.code === 'release_changed') {
+          setStaleDraftText(draftText(content));
+          await load();
+          setSaveState('release_changed');
+          return;
+        }
         const conflict = reason instanceof GuestWorkspaceError
           ? reason.code === 'workspace_revision_conflict'
           : reason instanceof CourseRequestError && reason.code === 'workspace_revision_conflict';
@@ -270,7 +283,7 @@ export default function LessonWorkspacePage({ previewAppearance = true, courseId
       }
     }, 800);
     return () => window.clearTimeout(timer);
-  }, [content, enrollment, isGuest, lesson, lessonKey, previewFixture, token, workspace]);
+  }, [content, enrollment, isGuest, lesson, lessonKey, load, previewFixture, releaseMismatch, token, workspace]);
 
   const retrySave = async () => {
     if (!workspace) return;
@@ -278,9 +291,15 @@ export default function LessonWorkspacePage({ previewAppearance = true, courseId
     try {
       const saved = isGuest && enrollment && lesson
         ? guestWorkspaceRepository.save(enrollment, lesson, content, workspace.revision)
-        : await saveLessonWorkspace(token, workspace.enrollment_id, lessonKey, content, workspace.revision);
+        : await saveLessonWorkspace(token, workspace.enrollment_id, lessonKey, content, workspace.revision, workspace.release_id);
       setWorkspace(saved); lastSaved.current = contentKey(saved.content); setSaveState('saved');
     } catch (reason) {
+      if (reason instanceof CourseRequestError && reason.code === 'release_changed') {
+        setStaleDraftText(draftText(content));
+        await load();
+        setSaveState('release_changed');
+        return;
+      }
       const conflict = reason instanceof GuestWorkspaceError
         ? reason.code === 'workspace_revision_conflict'
         : reason instanceof CourseRequestError && reason.code === 'workspace_revision_conflict';
@@ -303,9 +322,21 @@ export default function LessonWorkspacePage({ previewAppearance = true, courseId
       return;
     }
     try {
-      const reset = await resetLessonWorkspace(token, workspace.enrollment_id, lessonKey, workspace.revision);
+      const reset = await resetLessonWorkspace(token, workspace.enrollment_id, lessonKey, workspace.revision, workspace.release_id);
       setWorkspace(reset); setContent(reset.content); lastSaved.current = contentKey(reset.content); setSaveState('saved'); setResetOpen(false);
-    } catch { setSaveState('failed'); }
+    } catch (reason) {
+      if (reason instanceof CourseRequestError && reason.code === 'release_changed') {
+        setResetOpen(false);
+        await load();
+        setSaveState('release_changed');
+        return;
+      }
+      setSaveState('failed');
+    }
+  };
+  const copyStaleDraft = () => {
+    if (staleDraftText === null) return;
+    void navigator.clipboard?.writeText(staleDraftText).catch(() => undefined);
   };
   const resetSimulation = (rememberSummary = true) => {
     const summary = endSensorRun();
@@ -458,18 +489,19 @@ export default function LessonWorkspacePage({ previewAppearance = true, courseId
     { key: 'simulator' as Pane, label: t('education.workspace.simulator'), show: hasStage },
     { key: 'results' as Pane, label: t('education.workspace.results'), show: hasEditor },
   ];
-  const saveLabel = saveState === 'conflict' ? t('education.workspace.conflict') : t(`education.save.${saveState === 'unsaved' ? 'unsaved' : saveState}`);
+  const saveLabel = saveState === 'conflict' ? t('education.workspace.conflict') : saveState === 'release_changed' ? t('education.workspace.releaseChangedLabel') : t(`education.save.${saveState === 'unsaved' ? 'unsaved' : saveState}`);
   const refreshProgress = async () => { if (!previewFixture) setEnrollment(await readEnrollment(token, enrollment.id)); };
   const instructions = <Stack spacing={2} sx={{ width: '100%', maxWidth: '72ch', mx: 'auto' }}>{!previewAppearance && <Typography variant="h4">{lesson.title}</Typography>}<StudentActivities token={previewFixture ? undefined : token} enrollmentId={previewFixture ? undefined : enrollment.id} preview={Boolean(previewFixture)} flattenActivities={previewAppearance} lessonKey={lessonKey} activities={lesson.activities} telemetry={telemetry} previousSummary={previousSummary || telemetry?.previousSummary || null} helpersVisible={sensorHelpersVisible} onHelpersVisible={setSensorHelpersVisible} onReadingsRunning={(running) => { if (running) resumeSensorRun(); else pauseSensorRun(); }} stageRevision={stageRevision} allowManualMissionFinish={!hasEditor} onMissionRetry={() => resetSimulation(true)} onProgressChange={() => void refreshProgress()} t={t} /></Stack>;
-  const editorContent = <LessonEditor editorType={lesson.editorType} content={content} onChange={setContent} onPythonChange={setGeneratedPython} monacoRef={monacoRef} blocklyRef={blocklyRef} />;
-  const editor = previewAppearance && lesson.editorType === 'python' ? <PythonWorkspaceEditor code={typeof content === 'string' ? content : ''} onChange={(code) => setContent(code)} editorRef={monacoRef} /> : editorContent;
+  const editorLock = releaseMismatch ? <Box sx={{ position: 'absolute', inset: 0, zIndex: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', p: 2, bgcolor: 'background.paper', opacity: 0.92 }}><Stack spacing={1} alignItems="center"><Typography align="center">{t('education.workspace.releaseReloadPrompt')}</Typography><Button variant="contained" onClick={() => void load()}>{t('education.workspace.reloadLesson')}</Button></Stack></Box> : null;
+  const editorContent = <Box sx={{ position: 'relative', height: '100%' }}><LessonEditor editorType={lesson.editorType} content={content} onChange={setContent} onPythonChange={setGeneratedPython} monacoRef={monacoRef} blocklyRef={blocklyRef} />{editorLock}</Box>;
+  const editor = previewAppearance && lesson.editorType === 'python' ? <Box sx={{ position: 'relative', height: '100%' }}><PythonWorkspaceEditor code={typeof content === 'string' ? content : ''} onChange={(code) => setContent(code)} editorRef={monacoRef} />{editorLock}</Box> : editorContent;
   const simulatorContent = stageConfig === undefined ? <Stack spacing={1} sx={{ p: 2 }}><Skeleton variant="rounded" height={320} /><Typography variant="caption">{t('education.workspace.loadingStage')}</Typography></Stack> : stageError ? <Alert severity="warning" action={<Button onClick={() => setSimulatorKey((value) => value + 1)}>{t('education.student.retry')}</Button>}>{stage?.visibility === 'private' ? t('education.workspace.privateStageFailed') : t('education.workspace.stageFailed')}</Alert> : <Box sx={{ height: '100%', minHeight: 0 }}><WebGLApp key={simulatorKey} appsessionId={sessionId} initialStageUrl={stage?.url} initialStageConfig={stageConfig} initialStageAssetBaseUrl={stageAssetBase} showControls={!hasEditor || lesson.simulatorSettings?.showRemoteControls === true} autoStartMissionAttempt={!hasEditor && hasMission} allowStageSelection={false} sensorHelpersVisible={sensorHelpersVisible} sensorTelemetryAutoStart={false} onTelemetry={setTelemetry} onMountChange={(mounted) => { if (!mounted) return; if (cameraAppliedKey.current !== simulatorKey) { cameraAppliedKey.current = simulatorKey; for (let step = 0; step < cameraStep; step += 1) changeCameraView(); } if (pendingRun.current) { const run = pendingRun.current; pendingRun.current = null; run(); } }} /></Box>;
   const simulator = simulatorContent;
   const results = <LessonExecution ref={executionRef} code={code} sessionId={sessionId} hasStage={hasStage} hasMission={hasMission} showCommandHelper={!previewAppearance && lesson.editorType === 'python'} showPrimaryControls={!previewAppearance} showSecondaryControls={!previewAppearance} useEditorControlLayout={previewAppearance} onBeforeRun={runAfterReset} onResetSimulation={() => resetSimulation(true)} onChangeCamera={changeCamera} onExecutionEvent={handleExecutionEvent} />;
   const hasWorkPane = hasStage || hasEditor;
   const desktopAreas = hasStage && hasEditor ? '"instructions simulator" "editor results"' : hasStage ? '"instructions simulator"' : hasEditor ? '"instructions editor" "instructions results"' : '"instructions"';
   const previousControl = <Button startIcon={<IconArrowLeft size={18} />} disabled={!previous} onClick={() => previous && openLesson(previous.lessonKey)}>{t('education.student.previous')}</Button>;
-  const lessonActions = <Stack direction="row" spacing={1} justifyContent="center" flexWrap="wrap">{workspaceHistory.length > 0 && <Button onClick={() => setHistoryOpen(true)}>{t('education.workspace.previousCode')}</Button>}{hasEditor && <Button startIcon={<IconRestore size={18} />} disabled={saveState === 'saving'} onClick={() => setResetOpen(true)}>{t('education.workspace.resetWorkspace')}</Button>}{!isGuest && (lesson.completionPolicy === 'self' || lesson.completionPolicy === 'hybrid') && (progress?.state === 'completed' ? <Button onClick={() => void setCompletion(false)}>{t('education.student.undoCompletion')}</Button> : <Button variant="contained" startIcon={<IconCircleCheck size={18} />} onClick={() => void setCompletion(true)}>{t('education.student.finished')}</Button>)}</Stack>;
+  const lessonActions = <Stack direction="row" spacing={1} justifyContent="center" flexWrap="wrap">{workspaceHistory.length > 0 && <Button onClick={() => setHistoryOpen(true)}>{t('education.workspace.previousCode')}</Button>}{hasEditor && <Button startIcon={<IconRestore size={18} />} disabled={saveState === 'saving' || releaseMismatch} onClick={() => setResetOpen(true)}>{t('education.workspace.resetWorkspace')}</Button>}{!isGuest && (lesson.completionPolicy === 'self' || lesson.completionPolicy === 'hybrid') && (progress?.state === 'completed' ? <Button onClick={() => void setCompletion(false)}>{t('education.student.undoCompletion')}</Button> : <Button variant="contained" startIcon={<IconCircleCheck size={18} />} onClick={() => void setCompletion(true)}>{t('education.student.finished')}</Button>)}</Stack>;
   const nextControl = <Button endIcon={<IconArrowRight size={18} />} disabled={!next} onClick={() => next && openLesson(next.lessonKey)}>{t('education.student.next')}</Button>;
 
   // Compact workspaces scroll as a page so the lesson and actions cannot overlap.
@@ -487,7 +519,7 @@ export default function LessonWorkspacePage({ previewAppearance = true, courseId
         </Box>
         <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 1 }}>
           {!compact && <Chip size="small" variant="outlined" label={t('education.student.progress', { completed: enrollment.completed_count, total: enrollment.lesson_count })} />}
-          <Chip size="small" color={saveState === 'failed' || saveState === 'conflict' ? 'error' : saveState === 'saved' ? 'success' : 'default'} label={saveLabel} />
+          <Chip size="small" color={saveState === 'failed' || saveState === 'conflict' || saveState === 'release_changed' ? 'error' : saveState === 'saved' ? 'success' : 'default'} label={saveLabel} />
           {saveState === 'failed' && <Button size="small" onClick={() => void retrySave()}>{t('education.student.retry')}</Button>}
         </Box>
       </Box>
@@ -496,6 +528,8 @@ export default function LessonWorkspacePage({ previewAppearance = true, courseId
     <LinearProgress variant="determinate" value={enrollment.progress_percent} sx={{ height: 3 }} />
     {assistantAdapter && !previewFixture && !isGuest && (previewAppearance ? <AssistantPanel adapter={assistantAdapter} contextKey={`${workspace.release_id}:${lessonKey}`} explainCapability={lesson.editorType === 'python' ? 'code.explain' : 'blockly.explain'} suggestCapability={lesson.editorType === 'python' ? 'code.suggest_changes' : 'blockly.suggest_changes'} /> : <Box sx={{ px: 2, py: 1 }}><AssistantPanel adapter={assistantAdapter} contextKey={`${workspace.release_id}:${lessonKey}`} explainCapability={lesson.editorType === 'python' ? 'code.explain' : 'blockly.explain'} suggestCapability={lesson.editorType === 'python' ? 'code.suggest_changes' : 'blockly.suggest_changes'} /></Box>)}
     {enrollment.update_available && <Alert severity="info" action={<Button color="inherit" onClick={() => navigate(`/courses/${courseId}`)}>{t('education.workspace.openLatest')}</Button>}>{t('education.workspace.updateWhileOpen')}</Alert>}
+    {releaseMismatch && <Alert severity="warning" action={<Button color="inherit" onClick={() => void load()}>{t('education.workspace.reloadLesson')}</Button>}>{t('education.workspace.releaseReloadPrompt')}</Alert>}
+    {staleDraftText !== null && <Alert severity="warning" action={<Stack direction="row"><Button color="inherit" size="small" onClick={copyStaleDraft}>{t('education.workspace.copyUnsaved')}</Button><Button color="inherit" size="small" onClick={() => setStaleDraftOpen(true)}>{t('education.workspace.showUnsaved')}</Button><Button color="inherit" size="small" onClick={() => setStaleDraftText(null)}>{t('education.workspace.dismiss')}</Button></Stack>}>{t('education.workspace.releaseChanged')}</Alert>}
     {saveState === 'conflict' && <Alert severity="error" action={<Button color="inherit" onClick={() => void load()}>{t('education.conflict.reload')}</Button>}>{t('education.workspace.staleTab')}</Alert>}
     {compact && <Collapse in={outlineOpen} unmountOnExit><Box id="course-outline-panel" component="aside" sx={{ maxHeight: 240, overflowY: 'auto', p: 2, borderBottom: '1px solid', borderColor: 'divider' }}><StudentCourseOutline lessons={enrollment.active_release.lessons} progress={enrollment.progress} selectedKey={lessonKey} title={t('education.student.outline')} completedLabel={t('education.student.completed')} onSelect={openLesson} /></Box></Collapse>}
     {previewAppearance && hasEditor && <Box sx={{ px: workspaceLayout.horizontalPadding, py: workspaceLayout.verticalPadding, display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 1.5, borderBottom: '1px solid', borderColor: 'divider' }}>
@@ -533,6 +567,7 @@ export default function LessonWorkspacePage({ previewAppearance = true, courseId
       </Box>
     </Box>
     <Dialog open={resetOpen} onClose={() => setResetOpen(false)}><DialogTitle>{t('education.workspace.resetWorkspace')}</DialogTitle><DialogContent><Typography>{t('education.workspace.resetConfirm')}</Typography></DialogContent><DialogActions><Button onClick={() => setResetOpen(false)}>{t('education.workspace.cancel')}</Button><Button color="error" onClick={() => void resetCode()}>{t('education.workspace.resetWorkspace')}</Button></DialogActions></Dialog>
+    <Dialog open={staleDraftOpen} onClose={() => setStaleDraftOpen(false)} fullWidth maxWidth="md" aria-labelledby="stale-draft-title"><DialogTitle id="stale-draft-title">{t('education.workspace.unsavedCodeTitle')}</DialogTitle><DialogContent><Alert severity="info" sx={{ mb: 2 }}>{t('education.workspace.unsavedCodeHelp')}</Alert><Box component="pre" tabIndex={0} sx={{ p: 2, overflow: 'auto', bgcolor: 'action.hover', borderRadius: 1, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{staleDraftText}</Box></DialogContent><DialogActions><Button onClick={copyStaleDraft}>{t('education.workspace.copyUnsaved')}</Button><Button onClick={() => setStaleDraftOpen(false)}>{t('education.workspace.close')}</Button></DialogActions></Dialog>
     <Dialog open={historyOpen} onClose={() => setHistoryOpen(false)} fullWidth maxWidth="md" aria-labelledby="workspace-history-title"><DialogTitle id="workspace-history-title">{t('education.workspace.previousCodeTitle')}</DialogTitle><DialogContent><Alert severity="info" sx={{ mb: 2 }}>{t('education.workspace.previousCodeHelp')}</Alert><Stack spacing={2}>{workspaceHistory.map((item) => <Box key={item.workspace_id}><Typography variant="subtitle2">{t('education.student.version', { version: item.release_version })}</Typography><Box component="pre" tabIndex={0} aria-label={t('education.workspace.previousCodeVersion', { version: item.release_version })} sx={{ p: 2, overflow: 'auto', bgcolor: 'action.hover', borderRadius: 1, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{typeof item.content === 'string' ? item.content : JSON.stringify(item.content, null, 2)}</Box></Box>)}</Stack></DialogContent><DialogActions><Button onClick={() => setHistoryOpen(false)}>{t('education.workspace.close')}</Button></DialogActions></Dialog>
   </Box>;
 }

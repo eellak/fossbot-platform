@@ -1925,7 +1925,16 @@
       "previousCode": "View previous code",
       "previousCodeTitle": "Previous saved code",
       "previousCodeHelp": "This older code is read-only. Copy anything useful into the current workspace; it will never be merged automatically.",
-      "previousCodeVersion": "Read-only saved code from version {{version}}"
+      "previousCodeVersion": "Read-only saved code from version {{version}}",
+      "releaseChangedLabel": "Version changed",
+      "releaseChanged": "A newer course version is now active. This lesson moved to the new version; your unsaved changes were not saved there.",
+      "releaseReloadPrompt": "A newer course version is active. Editing is paused until you reload this lesson.",
+      "reloadLesson": "Reload lesson",
+      "copyUnsaved": "Copy unsaved code",
+      "showUnsaved": "Show unsaved code",
+      "dismiss": "Dismiss",
+      "unsavedCodeTitle": "Unsaved code from the previous version",
+      "unsavedCodeHelp": "This code was not saved in the new version. Copy anything you still need into the current workspace; it is never merged automatically."
     },
     "completion": {
       "label": "How students finish",

@@ -250,6 +250,7 @@ class ReorderRequest(BaseModel):
 class WorkspaceSaveRequest(BaseModel):
     content: Any = None
     revision: int = Field(ge=1)
+    release_id: int = Field(ge=1)
 
 
 class ReleaseUpdateRequest(BaseModel):
@@ -1486,6 +1487,15 @@ def workspace_payload(workspace: LessonWorkspace) -> dict[str, Any]:
     }
 
 
+def require_loaded_release(enrollment: Enrollment, loaded_release_id: int) -> None:
+    if loaded_release_id != enrollment.active_release_id:
+        raise HTTPException(status_code=409, detail={
+            "error": "release_changed",
+            "detail": "This lesson was loaded from an older course version. Reload it before saving.",
+            "currentReleaseId": enrollment.active_release_id,
+        })
+
+
 def workspace_row(db: Session, enrollment_id: int, release_id: int, lesson_key: str) -> Optional[LessonWorkspace]:
     return db.query(LessonWorkspace).filter(
         LessonWorkspace.enrollment_id == enrollment_id,
@@ -1725,6 +1735,7 @@ def save_lesson_workspace(
 ):
     require_account_student(participant)
     enrollment = owned_enrollment_or_404(db, participant, enrollment_id)
+    require_loaded_release(enrollment, request.release_id)
     release = db.query(CourseRelease).filter(CourseRelease.id == enrollment.active_release_id).one()
     lesson = lesson_for_release_or_404(release, lesson_key)
     workspace = initialize_workspace(db, enrollment, release, lesson)
@@ -1755,6 +1766,7 @@ def reset_lesson_workspace(
 ):
     require_account_student(participant)
     enrollment = owned_enrollment_or_404(db, participant, enrollment_id)
+    require_loaded_release(enrollment, request.release_id)
     release = db.query(CourseRelease).filter(CourseRelease.id == enrollment.active_release_id).one()
     lesson = lesson_for_release_or_404(release, lesson_key)
     workspace = initialize_workspace(db, enrollment, release, lesson)

@@ -794,8 +794,8 @@ def test_guest_course_browsing_workspace_and_server_mutations_are_denied_without
 
     workspace = f"/enrollments/{enrollment.id}/lessons/{lesson['lesson_key']}/workspace"
     assert guest.get(workspace, headers=headers).status_code == 403
-    assert guest.put(workspace, json={"content": "print('guest')", "revision": 1}, headers=headers).status_code == 403
-    assert guest.post(f"{workspace}/reset", json={"revision": 1}, headers=headers).status_code == 403
+    assert guest.put(workspace, json={"content": "print('guest')", "revision": 1, "release_id": release["id"]}, headers=headers).status_code == 403
+    assert guest.post(f"{workspace}/reset", json={"revision": 1, "release_id": release["id"]}, headers=headers).status_code == 403
     assert guest.get(
         f"/enrollments/{enrollment.id}/lessons/{lesson['lesson_key']}/workspace-history", headers=headers,
     ).status_code == 403

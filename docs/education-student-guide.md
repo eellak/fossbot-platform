@@ -28,6 +28,8 @@ Mission feedback separates required objectives, failure conditions, and optional
 
 ## Course updates and privacy
 
-Course updates are automatic. When a teacher publishes a newer version, it is applied the next time you open the course or a lesson. Unchanged compatible work is preserved. A changed lesson starts from its new setup without automatically merging code. Use **View previous code** to read and copy older saved work when available. A lesson that is already open does not change while you work; reopen it to load the latest version.
+Course updates are automatic. When a teacher publishes a newer version, it is applied the next time you open the course or a lesson. Unchanged compatible work is preserved. A changed lesson starts from its new setup without automatically merging code. Use **View previous code** to read and copy older saved work when available.
+
+A lesson that is already open keeps the version it was loaded with. If another tab or the teacher moves the course to a newer version, the open lesson pauses editing and asks you to reload before it can save. A save that started before the reload is rejected instead of overwriting the newer version; the platform then reloads the latest version and offers the rejected unsaved code so you can copy anything you still need. Reopen the lesson to load the latest version.
 
 Class leaderboards use an alias, are visible only inside the class group, and require opt-in. Opting out keeps your personal results private and hides the board.

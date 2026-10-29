@@ -26,7 +26,7 @@ Sensor observations select specific platform sensors and may show live values, a
 
 ## Updates, preview, and archived courses
 
-Publishing an update moves enrolled students to the new version automatically the next time they open the course or a lesson. Compatible progress, answers, and workspaces move only when stable keys and definition hashes match. Changed lessons start from the new definition; older saved code remains read-only for recovery. A lesson that is already open is not changed while the student works; the student sees a notice and can reopen the latest version. Anonymous guest enrollments stay pinned to the class assignment release until you update the assignment.
+Publishing an update moves enrolled students to the new version automatically the next time they open the course or a lesson. Compatible progress, answers, and workspaces move only when stable keys and definition hashes match. Changed lessons start from the new definition; older saved code remains read-only for recovery. A lesson that is already open stays on the version it loaded while the student works. If the course moves to a newer version meanwhile, that open lesson pauses editing and asks the student to reload; a save from the old version is rejected rather than overwriting the new one, and the rejected unsaved code stays available to copy. Anonymous guest enrollments stay pinned to the class assignment release until you update the assignment.
 
 Preview does not save student progress, answers, or attempts. Archiving stops new publication and discovery but keeps immutable releases readable for already enrolled students.
 
