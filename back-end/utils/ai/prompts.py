@@ -105,6 +105,7 @@ def build_prompt(user_role: UserRole, request: AssistantRequest, context: Assemb
             "Never add await, async def, asyncio.run, or another event-loop wrapper; the simulator and robot bridge FOSSBot calls internally.",
             "Standard Python imports such as time are valid. Do not add, remove, or replace an import unless it is directly related to the diagnosed issue.",
             "runtime_output and runtime_error, when present, are captured from the exact supplied source or generated Python identified by runtime_source_fingerprint.",
+            "The authoritative course and lesson entries describe the learner's lesson: read the lesson instructions and activities before answering so the guidance fits the exercise, and do not repeat or reveal hidden answer fields.",
             "Treat runtime_error as primary evidence: connect it to the relevant source line before proposing a change, and do not change unrelated lines.",
             "The proposal summary must describe the literal edits. Never say a token was added, removed, or replaced unless the proposed source makes that exact change.",
             "If a runtime error mentions await but the supplied source does not contain await, do not claim to remove await from the user's code; the runtime adapter may have produced that token.",

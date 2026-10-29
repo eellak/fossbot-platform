@@ -124,17 +124,74 @@ def test_published_lesson_context_is_student_safe(db, users):
         created_by_id=tutor.id,
         published_at=datetime.datetime.utcnow(),
         snapshot={
+            "course": {"title": "Robotics", "description": "Measure before you move.", "learningObjectives": ["Learn sensors"], "difficulty": "Beginner"},
+            "lessons": [{
+                "lessonKey": "sensor-basics",
+                "title": "Sensors",
+                "position": 1,
+                "editorType": "python",
+                "activities": [
+                    {"key": "intro", "type": "rich_text", "content": "Read the distance, then print it."},
+                    {
+                        "key": "q1",
+                        "type": "multiple_choice",
+                        "prompt": "Which sensor?",
+                        "correctOptionKey": "ultrasonic",
+                        "feedbackCorrect": "secret answer feedback",
+                    },
+                ],
+            }],
+        },
+    )
+    db.add(release)
+    db.flush()
+    course.latest_published_release_id = release.id
+    db.commit()
+
+    source = "print('safe')"
+    student_request = request("python", "code.explain", {
+        "source": source,
+        "releaseId": release.id,
+        "lessonKey": "sensor-basics",
+        "runtimeOutput": "safe",
+        "runtimeSourceFingerprint": hashlib.sha256(source.encode()).hexdigest(),
+    })
+    assembled = assemble_context(db, student, student_request)
+    serialized = str(assembled.payload)
+    assert "Sensors" in serialized
+    assert "Measure before you move." in serialized
+    assert "Read the distance, then print it." in serialized
+    assert "correctOptionKey" not in serialized
+    assert "secret answer feedback" not in serialized
+
+    prompt = build_prompt(student.role, student_request, assembled).system
+    assert '"authoritative"' in prompt
+    assert "Measure before you move." in prompt
+    assert "Read the distance, then print it." in prompt
+    assert '"runtime_output":"safe"' in prompt
+    assert source in prompt
+
+
+def test_published_lesson_activities_are_bounded(db, users):
+    tutor, _, student, _ = users
+    course = Course(title="Robotics", description="Course", author_id=tutor.id, learning_objectives=["Learn sensors"], status="published", visibility="public")
+    db.add(course)
+    db.flush()
+    release = CourseRelease(
+        course_id=course.id,
+        version=1,
+        schema_version=3,
+        created_by_id=tutor.id,
+        published_at=datetime.datetime.utcnow(),
+        snapshot={
             "course": {"title": "Robotics", "learningObjectives": ["Learn sensors"]},
             "lessons": [{
                 "lessonKey": "sensor-basics",
                 "title": "Sensors",
-                "activities": [{
-                    "key": "q1",
-                    "type": "multiple_choice",
-                    "prompt": "Which sensor?",
-                    "correctOptionKey": "ultrasonic",
-                    "feedbackCorrect": "secret answer feedback",
-                }],
+                "activities": [
+                    {"key": "intro", "type": "rich_text", "content": "Short introduction."},
+                    {"key": "long", "type": "rich_text", "content": "x" * 20_000},
+                ],
             }],
         },
     )
@@ -148,10 +205,9 @@ def test_published_lesson_context_is_student_safe(db, users):
         "releaseId": release.id,
         "lessonKey": "sensor-basics",
     }))
-    serialized = str(assembled.payload)
-    assert "Sensors" in serialized
-    assert "correctOptionKey" not in serialized
-    assert "secret answer feedback" not in serialized
+    assert [activity["key"] for activity in assembled.payload["authoritative"]["lesson"]["activities"]] == ["intro"]
+    assert assembled.report.truncated == ["lesson_activities"]
+    assert assembled.report.characters <= 48_000
 
 
 def test_authoring_context_is_bounded_revision_tied_and_author_only(db, users):

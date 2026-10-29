@@ -26,6 +26,9 @@ from utils.ai.schemas import (
 
 CONTEXT_VERSION = "1"
 MAX_CONTEXT_CHARACTERS = 48_000
+MAX_LESSON_CONTEXT_CHARACTERS = 8_000
+COURSE_DETAIL_FIELDS = ("title", "description", "difficulty", "ageRange")
+LESSON_DETAIL_FIELDS = ("title", "position", "editorType", "completionPolicy", "startMode")
 IDENTITY_KEYS = {"firstname", "lastname", "email", "username", "alias", "joincode", "join_code"}
 SECRET_KEYS = {"secret", "password", "credential", "authorization", "apikey", "api_key", "token"}
 SURFACE_CAPABILITIES = {
@@ -71,6 +74,26 @@ def _sanitize(value: Any) -> Any:
     return str(value)
 
 
+def _course_details(course: dict[str, Any]) -> dict[str, Any]:
+    details = {field: course[field] for field in COURSE_DETAIL_FIELDS if field in course}
+    details["objectives"] = course.get("learningObjectives", [])
+    return details
+
+
+def _lesson_details(lesson: dict[str, Any]) -> tuple[dict[str, Any], bool]:
+    """Student-safe lesson instructions, bounded so a long lesson cannot exceed the context budget."""
+    details = {field: lesson[field] for field in LESSON_DETAIL_FIELDS if field in lesson}
+    activities: list[dict[str, Any]] = []
+    size = 2
+    for activity in lesson.get("activities", []):
+        item = {key: value for key, value in activity.items() if key != "definitionHash"}
+        size += len(json.dumps(item, ensure_ascii=False)) + 1
+        if size > MAX_LESSON_CONTEXT_CHARACTERS:
+            return {**details, "activities": activities}, True
+        activities.append(item)
+    return {**details, "activities": activities}, False
+
+
 def _load_lesson(db: Session, user: User, context: PublishedLessonContext) -> dict[str, Any]:
     if not context.release_id or not context.lesson_key:
         return {}
@@ -95,13 +118,12 @@ def _load_lesson(db: Session, user: User, context: PublishedLessonContext) -> di
     lesson = next((item for item in lessons if item.get("lessonKey") == context.lesson_key), None)
     if lesson is None:
         raise ContextError("Published lesson context was not found")
+    lesson_details, activities_truncated = _lesson_details(lesson)
     return {
-        "course": {
-            "title": release.snapshot.get("course", {}).get("title", ""),
-            "objectives": release.snapshot.get("course", {}).get("learningObjectives", []),
-        },
-        "lesson": lesson,
+        "course": _course_details(release.snapshot.get("course") or {}),
+        "lesson": lesson_details,
         "releaseVersion": release.version,
+        "contextTruncated": activities_truncated,
     }
 
 
@@ -282,16 +304,15 @@ def assemble_context(db: Session, user: User, request: AssistantRequest) -> Asse
         if surface.runtime_source_fingerprint != expected:
             raise ContextError("Blockly runtime diagnostics are missing or stale")
     authoritative: dict[str, Any] = {}
+    lesson_activities_truncated = False
     if isinstance(surface, LessonContext):
         authoritative = _load_authoring_course(db, user, surface)
     elif isinstance(surface, (PythonContext, BlocklyContext)) and surface.release_id and surface.lesson_key:
         loaded = _load_lesson(db, user, PublishedLessonContext(releaseId=surface.release_id, lessonKey=surface.lesson_key))
+        lesson_activities_truncated = bool(loaded.get("contextTruncated"))
         authoritative = {
             "course": loaded.get("course", {}),
-            "lesson": {
-                "title": loaded.get("lesson", {}).get("title", ""),
-                "editorType": loaded.get("lesson", {}).get("editorType", "none"),
-            },
+            "lesson": loaded.get("lesson", {}),
             "releaseVersion": loaded.get("releaseVersion"),
         }
     elif isinstance(surface, StageContext):
@@ -305,6 +326,11 @@ def assemble_context(db: Session, user: User, request: AssistantRequest) -> Asse
     encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     if len(encoded) > MAX_CONTEXT_CHARACTERS:
         raise ContextError("Assistant context exceeds the allowed size")
+    truncated = []
+    if isinstance(surface, StageContext) and surface.context_truncated:
+        truncated.append("stage_objects")
+    if lesson_activities_truncated:
+        truncated.append("lesson_activities")
     return AssembledContext(
         payload=payload,
         report=ContextReport(
@@ -312,6 +338,6 @@ def assemble_context(db: Session, user: User, request: AssistantRequest) -> Asse
             surface=request.surface,
             characters=len(encoded),
             estimated_tokens=(len(encoded) + 3) // 4,
-            truncated=["stage_objects"] if isinstance(surface, StageContext) and surface.context_truncated else [],
+            truncated=truncated,
         ),
     )

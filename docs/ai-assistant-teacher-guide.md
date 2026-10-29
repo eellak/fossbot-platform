@@ -24,6 +24,6 @@ Generated stages must include a robot spawn and target. Data URLs, unknown objec
 
 ## Student access implications
 
-Student access is set by administrators using instance/role/group/user policy. The lesson context given to a student is intentionally smaller than authoring context: it excludes answer keys, teacher notes/analytics, other students, and unpublished sensitive data. Teach students to treat output as a suggestion, test it, and report fabricated commands or leaked information immediately.
+Student access is set by administrators using instance/role/group/user policy. A student's course code context is intentionally smaller than authoring context: it carries the student-safe course and lesson details (title, description, objectives, and the lesson instructions) plus their own code and runtime output, and excludes answer keys, teacher notes/analytics, other students, and unpublished sensitive data. Teach students to treat output as a suggestion, test it, and report fabricated commands or leaked information immediately.
 
 Browser and user-local runtimes can keep inference off the hosted backend, but model downloads or a user-chosen local endpoint still have device/network implications. The assistant always shows attribution; do not describe a runtime as private without checking its displayed route.
