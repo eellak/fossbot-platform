@@ -17,7 +17,7 @@ services:
       # previews/records). Includes the /api gateway prefix nginx expects.
       - FOSSBOT_BACKEND_URL=${FOSSBOT_BACKEND_URL:-https://fossbot.gr/api}
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     volumes:
       - ./back-end/test.db:/usr/src/app/back-end/test.db
 
