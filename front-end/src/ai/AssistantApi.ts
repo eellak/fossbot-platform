@@ -67,6 +67,10 @@ export function readAIAccess(token: string): Promise<AIAccessBootstrap> {
   return fetch(`${backendUrl}/api/ai/access`, { headers: headers(token) }).then(parse<AIAccessBootstrap>);
 }
 
+export function readAIProviders(token: string): Promise<AIProviderConfig[]> {
+  return fetch(`${backendUrl}/api/admin/ai/providers`, { headers: headers(token) }).then(parse<AIProviderConfig[]>);
+}
+
 export function createAIProvider(token: string, input: AIProviderInput): Promise<AIProviderConfig> {
   return fetch(`${backendUrl}/api/admin/ai/providers`, { method: 'POST', headers: headers(token), body: JSON.stringify(input) }).then(parse<AIProviderConfig>);
 }

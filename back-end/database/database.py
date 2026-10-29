@@ -281,7 +281,8 @@ class AIUsageEvent(Base):
     __tablename__ = "ai_usage_events"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=True, index=True)
+    guest_session_id = Column(Integer, ForeignKey('guest_sessions.id'), nullable=True, index=True)
     provider_id = Column(Integer, ForeignKey('ai_provider_configs.id'))
     capability = Column(String(80), nullable=False)
     provider_name = Column(String(120))
@@ -606,6 +607,8 @@ class GuestInstanceSettings(Base):
     id = Column(Integer, primary_key=True, default=1)
     beta_tester = Column(Boolean, nullable=False, default=False)
     allowed_views = Column(JSON_DOCUMENT, nullable=False, default=list)
+    ai_enabled = Column(Boolean, nullable=False, default=False)
+    ai_provider_ids = Column(JSON_DOCUMENT, nullable=False, default=list)
     updated_by_id = Column(Integer, ForeignKey('users.id'), nullable=False)
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow, nullable=False)
 

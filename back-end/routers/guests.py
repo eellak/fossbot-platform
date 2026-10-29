@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from utils.guest_access import (
     GUEST_CREATE_LIMIT,
     GUEST_SESSION_DAYS,
+    admin_guest_settings_payload,
     get_guest_session,
     guest_session_payload,
     guest_settings_payload,
@@ -84,7 +85,7 @@ def read_guest_settings(
 ):
     no_store(response)
     require_admin(user)
-    return guest_settings_payload(guest_settings_row(db))
+    return admin_guest_settings_payload(guest_settings_row(db))
 
 
 @router.put("/admin/settings")
@@ -96,4 +97,4 @@ def update_guest_settings(
 ):
     no_store(response)
     require_admin(user)
-    return guest_settings_payload(save_guest_settings(db, request, user.id))
+    return admin_guest_settings_payload(save_guest_settings(db, request, user.id))

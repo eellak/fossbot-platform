@@ -21,10 +21,11 @@ from fastapi.responses import StreamingResponse
 from models.models import UserRole
 from sqlalchemy.orm import Session
 
-from routers.stage_sources import get_current_user, get_db
+from routers.stage_sources import get_db
 from utils.ai.admin_debug import AdminDebugTrace, debug_error
 from utils.ai.capabilities import AI_ACCESS_SCHEMA_VERSION, CAPABILITIES, CAPABILITY_REGISTRY_VERSION
 from utils.ai.context import ContextError, assemble_context
+from utils.ai.guest_policy import guest_providers, guest_settings_row, resolve_for_guest
 from utils.ai.policy import PolicyRuleInput, ProviderInventoryItem, resolve_capability
 from utils.ai.prompts import build_prompt
 from utils.ai.providers import hosted_provider
@@ -34,6 +35,7 @@ from utils.ai.secrets import decrypt_ai_secret
 from utils.ai.suggestion_contracts import is_suggestion_capability, suggestion_json_schema
 from utils.ai.suggestions import MAX_SUGGESTION_REPAIR_ATTEMPTS, SuggestionError, build_suggestion_repair_request, output_token_budget, parse_suggestion_with_normalizations, repair_incomplete_json_object, suggestion_payload, suggestion_response_character_limit
 from utils.ai.usage import QuotaError, ensure_quota, record_usage
+from utils.guest_access import Participant, get_participant
 
 
 router = APIRouter(prefix="/api/ai", tags=["ai"])
@@ -322,6 +324,18 @@ def resolve_for_user(db: Session, user: User, capability: str):
     )
 
 
+def resolve_for_participant(db: Session, participant: Participant, capability: str):
+    if participant.guest is not None:
+        return resolve_for_guest(db, participant.guest, capability)
+    return resolve_for_user(db, participant.user, capability)
+
+
+def actor_identity(participant: Participant) -> dict:
+    if participant.guest is not None:
+        return {"guest": {"id": participant.guest.id, "alias": participant.guest.alias}}
+    return {"user": {"id": participant.user.id, "username": participant.user.username, "role": participant.user.role}}
+
+
 def decision_payload(capability: str, decision) -> dict:
     return {
         "capability": capability,
@@ -347,18 +361,22 @@ def sse_event(event_type: str, data: dict) -> str:
 
 @router.get("/access")
 def read_ai_access(
-    current_user: User = Depends(get_current_user),
+    participant: Participant = Depends(get_participant),
     db: Session = Depends(get_db),
 ):
     settings = db.query(AIInstanceSettings).filter(AIInstanceSettings.id == 1).first()
-    providers = db.query(AIProviderConfig).filter(AIProviderConfig.enabled.is_(True)).order_by(AIProviderConfig.id).all()
+    if participant.guest is not None:
+        guest_row = guest_settings_row(db)
+        providers = guest_providers(db, guest_row) if guest_row is not None and guest_row.ai_enabled else []
+    else:
+        providers = db.query(AIProviderConfig).filter(AIProviderConfig.enabled.is_(True)).order_by(AIProviderConfig.id).all()
     return {
         "schemaVersion": AI_ACCESS_SCHEMA_VERSION,
         "registryVersion": CAPABILITY_REGISTRY_VERSION,
         "instanceEnabled": bool(settings and settings.enabled),
-        "reportLocalUsage": bool(settings and settings.report_local_usage),
+        "reportLocalUsage": bool(settings and settings.report_local_usage and participant.guest is None),
         "capabilities": [
-            decision_payload(capability.id, resolve_for_user(db, current_user, capability.id))
+            decision_payload(capability.id, resolve_for_participant(db, participant, capability.id))
             for capability in CAPABILITIES
         ],
         "providers": [
@@ -378,12 +396,12 @@ def read_ai_access(
 @router.post("/validate")
 def validate_artifact(
     payload: CodeValidationRequest,
-    current_user: User = Depends(get_current_user),
+    participant: Participant = Depends(get_participant),
     db: Session = Depends(get_db),
 ):
     """Syntax-check code taken from an assistant answer before it becomes a proposal."""
     capability = "code.suggest_changes" if payload.surface == "python" else "blockly.suggest_changes"
-    decision = resolve_for_user(db, current_user, capability)
+    decision = resolve_for_participant(db, participant, capability)
     if not decision.allowed:
         raise HTTPException(status_code=403, detail={"code": decision.reason_code, "message": "Assistant access is not available."})
     if payload.surface == "python":
@@ -406,9 +424,12 @@ def validate_artifact(
 @router.post("/usage", status_code=204)
 def report_local_usage(
     payload: LocalUsageReport,
-    current_user: User = Depends(get_current_user),
+    participant: Participant = Depends(get_participant),
     db: Session = Depends(get_db),
 ):
+    if participant.guest is not None:
+        raise HTTPException(status_code=403, detail="Guest sessions cannot report local usage")
+    current_user = participant.user
     try:
         payload.validate_capability()
     except ValueError as error:
@@ -416,7 +437,7 @@ def report_local_usage(
     settings = db.query(AIInstanceSettings).filter(AIInstanceSettings.id == 1).first()
     if not settings or not settings.enabled or not settings.report_local_usage:
         raise HTTPException(status_code=403, detail="Local usage reporting is disabled")
-    decision = resolve_for_user(db, current_user, payload.capability)
+    decision = resolve_for_participant(db, participant, payload.capability)
     if not decision.allowed or payload.provider_id not in decision.provider_ids:
         raise HTTPException(status_code=403, detail="Provider is not allowed")
     provider = db.query(AIProviderConfig).filter(
@@ -452,19 +473,21 @@ def report_local_usage(
 async def stream_assistance(
     payload: AssistantRequest,
     request: Request,
-    current_user: User = Depends(get_current_user),
+    participant: Participant = Depends(get_participant),
     db: Session = Depends(get_db),
 ):
+    current_user = participant.user
+    guest_session = participant.guest
     try:
         payload.validate_capability()
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
-    if (payload.debug or payload.benchmark) and current_user.role != UserRole.ADMIN:
+    if (payload.debug or payload.benchmark) and (current_user is None or current_user.role != UserRole.ADMIN):
         raise HTTPException(
             status_code=403,
             detail={"code": "admin_debug_forbidden", "message": "Assistant debug and benchmark requests are available only to administrators."},
         )
-    decision = resolve_for_user(db, current_user, payload.capability)
+    decision = resolve_for_participant(db, participant, payload.capability)
     if not decision.allowed:
         raise HTTPException(status_code=403, detail={"code": decision.reason_code, "message": "Assistant access is not available."})
     provider_id = payload.provider_id or decision.default_provider_id
@@ -481,10 +504,12 @@ async def stream_assistance(
         raise HTTPException(status_code=503, detail={"code": "instance_disabled", "message": "Assistant access is not available."})
     try:
         context = assemble_context(db, current_user, payload)
-        prompt = build_prompt(current_user.role, payload, context)
+        # Guests are learners too: keep the hint-first pedagogy for them.
+        prompt = build_prompt(current_user.role if current_user else UserRole.USER, payload, context)
         ensure_quota(
             db,
-            user_id=current_user.id,
+            user_id=current_user.id if current_user else None,
+            guest_session_id=guest_session.id if guest_session else None,
             capability=payload.capability,
             provider=provider,
             settings=settings,
@@ -539,7 +564,7 @@ async def stream_assistance(
         for source, step, data in (
             ("backend", "request.accepted", {
                 "requestId": request_id,
-                "user": {"id": current_user.id, "username": current_user.username, "role": current_user.role},
+                **actor_identity(participant),
                 "request": payload,
             }),
             ("backend", "policy.resolved", {
@@ -744,7 +769,8 @@ async def stream_assistance(
             try:
                 record_usage(
                     db,
-                    user_id=current_user.id,
+                    user_id=current_user.id if current_user else None,
+                    guest_session_id=guest_session.id if guest_session else None,
                     provider=provider,
                     capability=payload.capability,
                     request_id=request_id,

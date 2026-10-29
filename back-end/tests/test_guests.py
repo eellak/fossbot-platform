@@ -89,12 +89,12 @@ def test_settings_are_admin_only_and_take_effect_for_existing_sessions(client, u
         headers=admin,
     )
     assert saved.status_code == 200
-    assert saved.json() == {"beta_tester": True, "allowed_views": ["python", "classrooms"]}
+    assert saved.json() == {"beta_tester": True, "allowed_views": ["python", "classrooms"], "ai_enabled": False, "ai_provider_ids": []}
 
     me = client.get("/guests/me", headers=headers)
     assert me.status_code == 200
-    assert me.json()["settings"] == {"beta_tester": True, "allowed_views": ["python", "classrooms"]}
-    assert client.get("/guests/settings").json() == {"beta_tester": True, "allowed_views": ["python", "classrooms"]}
+    assert me.json()["settings"] == {"beta_tester": True, "allowed_views": ["python", "classrooms"], "ai_enabled": False}
+    assert client.get("/guests/settings").json() == {"beta_tester": True, "allowed_views": ["python", "classrooms"], "ai_enabled": False}
     row = db.query(GuestInstanceSettings).one()
     assert row.updated_by_id == users[3].id
 

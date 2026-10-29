@@ -22,6 +22,7 @@ let mockAuth: any;
 let mockNotify: any;
 let mockGet: any;
 let mockUpdate: any;
+let mockReadProviders: any;
 
 jest.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 jest.mock('src/authentication/AuthProvider', () => ({ useAuth: () => mockAuth }));
@@ -30,6 +31,7 @@ jest.mock('src/authentication/AuthApi', () => ({
   getAdminGuestSettings: (...args: any[]) => mockGet(...args),
   updateAdminGuestSettings: (...args: any[]) => mockUpdate(...args),
 }));
+jest.mock('src/ai/AssistantApi', () => ({ readAIProviders: (...args: any[]) => mockReadProviders(...args) }));
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -40,8 +42,9 @@ describe('guest access settings card', () => {
   beforeEach(() => {
     mockAuth = { token: 'admin-token', user: { role: 'admin' } };
     mockNotify = jest.fn();
-    mockGet = jest.fn().mockResolvedValue(jsonResponse({ beta_tester: false, allowed_views: ['python'] }));
+    mockGet = jest.fn().mockResolvedValue(jsonResponse({ beta_tester: false, allowed_views: ['python'], ai_enabled: false, ai_provider_ids: [] }));
     mockUpdate = jest.fn().mockImplementation(async (_token, settings) => jsonResponse(settings));
+    mockReadProviders = jest.fn().mockResolvedValue([]);
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
@@ -84,9 +87,9 @@ describe('guest access settings card', () => {
     expect(container.textContent).toContain('Save failed');
     expect(byLabel('views_blockly')?.checked).toBe(true);
 
-    mockUpdate.mockResolvedValueOnce(jsonResponse({ beta_tester: false, allowed_views: ['python', 'blockly'] }));
+    mockUpdate.mockResolvedValueOnce(jsonResponse({ beta_tester: false, allowed_views: ['python', 'blockly'], ai_enabled: false, ai_provider_ids: [] }));
     await act(async () => { saveButton()?.click(); await flush(); });
-    expect(mockUpdate).toHaveBeenLastCalledWith('admin-token', { beta_tester: false, allowed_views: ['python', 'blockly'] });
+    expect(mockUpdate).toHaveBeenLastCalledWith('admin-token', { beta_tester: false, allowed_views: ['python', 'blockly'], ai_enabled: false, ai_provider_ids: [] });
     expect(mockNotify).toHaveBeenCalled();
     expect(saveButton()?.disabled).toBe(true);
 
@@ -124,7 +127,7 @@ describe('guest access settings card', () => {
     expect(checkboxes().every((box) => box.disabled)).toBe(true);
 
     await act(async () => {
-      finishSave(jsonResponse({ beta_tester: false, allowed_views: ['python', 'blockly'] }));
+      finishSave(jsonResponse({ beta_tester: false, allowed_views: ['python', 'blockly'], ai_enabled: false, ai_provider_ids: [] }));
       await flush();
     });
     expect(checkboxes().some((box) => box.disabled)).toBe(false);
@@ -132,7 +135,7 @@ describe('guest access settings card', () => {
   });
 
   it('selects and clears every view', async () => {
-    mockGet.mockResolvedValue(jsonResponse({ beta_tester: false, allowed_views: [] }));
+    mockGet.mockResolvedValue(jsonResponse({ beta_tester: false, allowed_views: [], ai_enabled: false, ai_provider_ids: [] }));
     await render();
     const boxes = () => Array.from(container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'));
     const button = (label: string) => Array.from(container.querySelectorAll('button')).find((item) => item.textContent === label);
@@ -154,7 +157,7 @@ describe('guest access settings card', () => {
     expect(container.querySelectorAll('input')).toHaveLength(0);
     expect(saveButton()).toBeUndefined();
 
-    mockGet.mockResolvedValueOnce(jsonResponse({ beta_tester: false, allowed_views: ['python'] }));
+    mockGet.mockResolvedValueOnce(jsonResponse({ beta_tester: false, allowed_views: ['python'], ai_enabled: false, ai_provider_ids: [] }));
     await act(async () => {
       Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'admin-panel.guest.retry')?.click();
       await flush();
@@ -163,12 +166,44 @@ describe('guest access settings card', () => {
     expect(saveButton()).toBeDefined();
   });
 
+  it('allows guest Buddy only with the hosted providers an administrator ticks', async () => {
+    mockReadProviders.mockResolvedValue([
+      { id: 4, name: 'Class hosted', providerType: 'openai', runtime: 'hosted', enabled: true, model: 'gpt-test', settings: {}, hasSecret: true },
+      { id: 5, name: 'Guest browser', providerType: 'webllm', runtime: 'browser', enabled: true, model: 'llama-test', settings: {}, hasSecret: false },
+    ]);
+    await render();
+    expect(mockReadProviders).toHaveBeenCalledWith('admin-token');
+    expect(container.textContent).not.toContain('admin-panel.guest.aiNoProviders');
+    expect(byLabel('Class hosted')).toBeUndefined();
+
+    act(() => byLabel('admin-panel.guest.ai')?.click());
+    expect(byLabel('Class hosted')).toBeDefined();
+    expect(byLabel('Guest browser')).toBeUndefined();
+    expect(saveButton()?.disabled).toBe(false);
+
+    act(() => byLabel('Class hosted')?.click());
+    await act(async () => { saveButton()?.click(); await flush(); });
+    expect(mockUpdate).toHaveBeenLastCalledWith('admin-token', {
+      beta_tester: false,
+      allowed_views: ['python'],
+      ai_enabled: true,
+      ai_provider_ids: [4],
+    });
+  });
+
+  it('explains that guest Buddy needs a hosted provider', async () => {
+    mockGet.mockResolvedValue(jsonResponse({ beta_tester: false, allowed_views: ['python'], ai_enabled: true, ai_provider_ids: [] }));
+    await render();
+    expect(container.textContent).toContain('admin-panel.guest.aiNoProviders');
+  });
+
   it('explains an empty selection and disables new guest entry', async () => {
-    mockGet.mockResolvedValue(jsonResponse({ beta_tester: false, allowed_views: [] }));
+    mockGet.mockResolvedValue(jsonResponse({ beta_tester: false, allowed_views: [], ai_enabled: false, ai_provider_ids: [] }));
     await render();
     expect(container.textContent).toContain('admin-panel.guest.empty');
     expect(Array.from(container.querySelectorAll('h2')).map((node) => node.textContent)).toEqual([
       'admin-panel.guest.views',
+      'admin-panel.guest.aiSection',
       'admin-panel.guest.betaSection',
     ]);
     expect(container.querySelectorAll('h3')).toHaveLength(4);

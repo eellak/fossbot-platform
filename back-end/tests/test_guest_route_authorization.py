@@ -39,6 +39,11 @@ GUEST_REJECTED_PARTICIPANT_MUTATIONS = {
     ("POST", "/enrollments/{enrollment_id}/lessons/{lesson_key}/complete"),
     ("DELETE", "/enrollments/{enrollment_id}/lessons/{lesson_key}/complete"),
     ("POST", "/enrollments/{enrollment_id}/update-release"),
+    # Buddy reaches the shared AI gate, which denies guests unless an administrator
+    # enabled guest access and the requested provider is on the guest allowlist.
+    ("POST", "/api/ai/assist/stream"),
+    ("POST", "/api/ai/validate"),
+    ("POST", "/api/ai/usage"),
 }
 
 

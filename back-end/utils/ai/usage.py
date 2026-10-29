@@ -42,7 +42,8 @@ def _usage_totals(query) -> tuple[int, int]:
 def ensure_quota(
     db: Session,
     *,
-    user_id: int,
+    user_id: Optional[int] = None,
+    guest_session_id: Optional[int] = None,
     capability: str,
     provider: AIProviderConfig,
     settings: AIInstanceSettings,
@@ -54,8 +55,13 @@ def ensure_quota(
     base = db.query(AIUsageEvent).filter(AIUsageEvent.started_at >= since)
     instance_count, instance_tokens = _usage_totals(base)
     provider_count, provider_tokens = _usage_totals(base.filter(AIUsageEvent.provider_id == provider.id))
+    identity = (
+        AIUsageEvent.guest_session_id == guest_session_id
+        if guest_session_id is not None
+        else AIUsageEvent.user_id == user_id
+    )
     user_count, user_tokens = _usage_totals(base.filter(
-        AIUsageEvent.user_id == user_id,
+        identity,
         AIUsageEvent.provider_id == provider.id,
         AIUsageEvent.capability == capability,
     ))
@@ -75,7 +81,8 @@ def ensure_quota(
 def record_usage(
     db: Session,
     *,
-    user_id: int,
+    user_id: Optional[int] = None,
+    guest_session_id: Optional[int] = None,
     provider: AIProviderConfig,
     capability: str,
     request_id: str,
@@ -91,6 +98,7 @@ def record_usage(
     purge_expired_usage(db, settings.usage_retention_days if settings else DEFAULT_USAGE_RETENTION_DAYS, now=completed_at)
     db.add(AIUsageEvent(
         user_id=user_id,
+        guest_session_id=guest_session_id,
         provider_id=provider.id,
         capability=capability,
         provider_name=provider.name,

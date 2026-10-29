@@ -27,7 +27,7 @@ const guest = (views = ['python'], alias = 'calm_otter') => ({
   alias,
   created_at: '2026-01-01T00:00:00',
   expires_at: '2026-01-31T00:00:00',
-  settings: { beta_tester: false, allowed_views: views },
+  settings: { beta_tester: false, allowed_views: views, ai_enabled: false },
 });
 
 const account = {

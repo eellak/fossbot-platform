@@ -628,7 +628,7 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
   };
 
   const guestSettings = useMemo(
-    () => guest?.settings ?? { beta_tester: false, allowed_views: [] },
+    () => guest?.settings ?? { beta_tester: false, allowed_views: [], ai_enabled: false },
     [guest],
   );
 

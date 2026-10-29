@@ -23,6 +23,7 @@ import { CAMERA_MODES } from 'src/simulator/ui/cameraTypes';
 import { changeCameraView, endSensorRun, pauseSensorRun, resumeSensorRun, WebGLApp } from 'src/simulator-adapter/Simulator';
 import type { SensorRunSummary, SensorTelemetrySnapshot } from 'src/simulator/sensors/telemetry';
 import AssistantPanel, { type AssistantSurfaceAdapter } from 'src/components/ai/AssistantPanel';
+import { guestAssistantEnabled } from 'src/ai/guestAccess';
 import { fingerprintText } from 'src/ai/fingerprint';
 import { allowedBlocklyBlockTypes, applyPythonEdits, previewPythonSuggestion, validateBlocklySuggestion } from 'src/ai/suggestions/codeSuggestions';
 import type { MonacoEditorHandle } from 'src/components/editors/MonacoEditor';
@@ -55,7 +56,7 @@ type LessonWorkspacePageProps = {
 
 export default function LessonWorkspacePage({ previewAppearance = true, courseIdOverride, lessonKeyOverride, previewFixture, fillParent = false, onExitPreview, onPreviewLessonChange }: LessonWorkspacePageProps = {}) {
   const { t } = useTranslation();
-  const { token, isGuest } = useAuth();
+  const { token, isGuest, guestSettings } = useAuth();
   const navigate = useNavigate();
   const { courseId: courseParam, lessonKey: lessonKeyParam = '' } = useParams();
   const [searchParams] = useSearchParams();
@@ -494,7 +495,7 @@ export default function LessonWorkspacePage({ previewAppearance = true, courseId
       <Typography component="h1" variant="h4" fontWeight={700} sx={{ mt: 1 }}>{lesson.title}</Typography>
     </Box>
     <LinearProgress variant="determinate" value={enrollment.progress_percent} sx={{ height: 3 }} />
-    {assistantAdapter && !previewFixture && !isGuest && (previewAppearance ? <AssistantPanel adapter={assistantAdapter} explainCapability={lesson.editorType === 'python' ? 'code.explain' : 'blockly.explain'} suggestCapability={lesson.editorType === 'python' ? 'code.suggest_changes' : 'blockly.suggest_changes'} /> : <Box sx={{ px: 2, py: 1 }}><AssistantPanel adapter={assistantAdapter} explainCapability={lesson.editorType === 'python' ? 'code.explain' : 'blockly.explain'} suggestCapability={lesson.editorType === 'python' ? 'code.suggest_changes' : 'blockly.suggest_changes'} /></Box>)}
+    {assistantAdapter && !previewFixture && guestAssistantEnabled(isGuest, guestSettings) && (previewAppearance ? <AssistantPanel adapter={assistantAdapter} explainCapability={lesson.editorType === 'python' ? 'code.explain' : 'blockly.explain'} suggestCapability={lesson.editorType === 'python' ? 'code.suggest_changes' : 'blockly.suggest_changes'} /> : <Box sx={{ px: 2, py: 1 }}><AssistantPanel adapter={assistantAdapter} explainCapability={lesson.editorType === 'python' ? 'code.explain' : 'blockly.explain'} suggestCapability={lesson.editorType === 'python' ? 'code.suggest_changes' : 'blockly.suggest_changes'} /></Box>)}
     {enrollment.update_available && <Alert severity="info" action={<Button color="inherit" onClick={() => navigate(`/courses/${courseId}`)}>{t('education.student.reviewChanges')}</Button>}>{t('education.workspace.updateWhileOpen')}</Alert>}
     {saveState === 'conflict' && <Alert severity="error" action={<Button color="inherit" onClick={() => void load()}>{t('education.conflict.reload')}</Button>}>{t('education.workspace.staleTab')}</Alert>}
     {compact && <Collapse in={outlineOpen} unmountOnExit><Box id="course-outline-panel" component="aside" sx={{ maxHeight: 240, overflowY: 'auto', p: 2, borderBottom: '1px solid', borderColor: 'divider' }}><StudentCourseOutline lessons={enrollment.active_release.lessons} progress={enrollment.progress} selectedKey={lessonKey} title={t('education.student.outline')} completedLabel={t('education.student.completed')} onSelect={openLesson} /></Box></Collapse>}

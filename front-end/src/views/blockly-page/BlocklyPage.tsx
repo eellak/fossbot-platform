@@ -61,6 +61,7 @@ import { useRobotConnection } from 'src/robot/RobotConnectionContext';
 import ProjectStageIndicator from 'src/components/editors/ProjectStageIndicator';
 import SearchBar from 'src/components/monaco-functions/MonacoSearchBar';
 import AssistantPanel, { type AssistantSurfaceAdapter } from 'src/components/ai/AssistantPanel';
+import { guestAssistantEnabled } from 'src/ai/guestAccess';
 import { fingerprintText } from 'src/ai/fingerprint';
 import { allowedBlocklyBlockTypes, validateBlocklySuggestion } from 'src/ai/suggestions/codeSuggestions';
 import WorkspaceResizeHandle from 'src/components/workspace/WorkspaceResizeHandle';
@@ -112,7 +113,7 @@ const BlocklyPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppeara
   const runHadErrorRef = useRef(false);
   const runTargetRef = useRef<'simulation' | 'robot'>('simulation');
   const auth = useAuth();
-  const { token, isGuest } = auth;
+  const { token, isGuest, guestSettings } = auth;
   const authRef = useRef(auth);
   const translationRef = useRef(t);
   authRef.current = auth;
@@ -691,7 +692,7 @@ const BlocklyPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppeara
             </Box>
           </Box>
         )}
-        {!loading && !isGuest && <AssistantPanel adapter={assistantAdapter} explainCapability="blockly.explain" suggestCapability="blockly.suggest_changes" />}
+        {!loading && guestAssistantEnabled(isGuest, guestSettings) && <AssistantPanel adapter={assistantAdapter} explainCapability="blockly.explain" suggestCapability="blockly.suggest_changes" />}
       </PageContainer>
     );
   }
@@ -856,7 +857,7 @@ const BlocklyPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppeara
         )}
       </Box>
 
-      {!loading && !isGuest && <Box sx={{ mt: 2 }}><AssistantPanel adapter={assistantAdapter} explainCapability="blockly.explain" suggestCapability="blockly.suggest_changes" /></Box>}
+      {!loading && guestAssistantEnabled(isGuest, guestSettings) && <Box sx={{ mt: 2 }}><AssistantPanel adapter={assistantAdapter} explainCapability="blockly.explain" suggestCapability="blockly.suggest_changes" /></Box>}
 
     </PageContainer>
   );
