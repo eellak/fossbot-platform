@@ -48,17 +48,27 @@ export interface LocalPublicationReviewItem {
   recordUrl: string;
 }
 
+export interface LocalStageReferences {
+  projects: { id: number; title: string; projectType: string }[];
+  lessons: { id: number; title: string; courseId: number; courseTitle: string; archived: boolean }[];
+}
+
 export class LocalStageRequestError extends Error {
   status: number;
   code?: string;
   currentRevision?: number;
 
-  constructor(message: string, status: number, code?: string, currentRevision?: number) {
+  references?: LocalStageReferences;
+  otherReferenceCount: number;
+
+  constructor(message: string, status: number, code?: string, currentRevision?: number, references?: LocalStageReferences, otherReferenceCount = 0) {
     super(message);
     this.name = 'LocalStageRequestError';
     this.status = status;
     this.code = code;
     this.currentRevision = currentRevision;
+    this.references = references;
+    this.otherReferenceCount = otherReferenceCount;
   }
 }
 
@@ -67,7 +77,7 @@ async function parseJsonResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
     const detail = payload?.detail;
     if (detail && typeof detail === 'object') {
-      throw new LocalStageRequestError(detail.detail || JSON.stringify(detail), response.status, detail.error, detail.currentRevision);
+      throw new LocalStageRequestError(detail.detail || JSON.stringify(detail), response.status, detail.error, detail.currentRevision, detail.references, detail.otherReferenceCount);
     }
     throw new LocalStageRequestError(typeof detail === 'string' ? detail : 'Local stage request failed.', response.status);
   }
@@ -81,6 +91,10 @@ function authHeaders(token: string): HeadersInit {
 export async function listLocalStages(token: string): Promise<LocalStageSummary[]> {
   const response = await fetch(`${backendUrl}/api/local-stages`, { headers: authHeaders(token) });
   return (await parseJsonResponse<{ stages: LocalStageSummary[] }>(response)).stages;
+}
+
+export async function deleteLocalStage(token: string, stageId: number): Promise<void> {
+  await parseJsonResponse(await fetch(`${backendUrl}/api/local-stages/${stageId}`, { method: 'DELETE', headers: authHeaders(token) }));
 }
 
 export async function loadLocalStage(token: string, stageId: number): Promise<LocalStage> {

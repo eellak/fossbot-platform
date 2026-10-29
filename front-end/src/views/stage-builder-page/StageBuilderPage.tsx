@@ -49,6 +49,7 @@ import { OpenLocalStageDialog } from 'src/stages/OpenLocalStageDialog';
 import { useFeatureFlags } from 'src/config/FeatureFlags';
 import StageAuthoringAssistant from 'src/components/ai/StageAuthoringAssistant';
 import { useNotifications } from 'src/components/notifications/NotificationProvider';
+import { useDeleteStage } from 'src/stages/useDeleteStage';
 import { useConfirmDialog } from 'src/components/shared/ConfirmDialog';
 import type { StageAuthoringTarget } from 'src/ai/suggestions/stageSuggestions';
 
@@ -386,6 +387,7 @@ function GitHubStageLoadScreen({ state, onRetry, onBack, onOpenPicker }: { state
 const StageBuilderPage = () => {
   const { notify } = useNotifications();
   const confirmDialog = useConfirmDialog();
+  const { deleteStage, busy: deletingStage } = useDeleteStage();
   const { t } = useTranslation();
   const { user, token, isGuest } = useAuth();
   const { marketplace: marketplaceAllowed, ready: featureFlagsReady } = useFeatureFlags();
@@ -1182,6 +1184,17 @@ const StageBuilderPage = () => {
     return getGitHubBootstrapLinks(token, slug, visibility);
   };
 
+  const handleDeleteStage = async () => {
+    if (localStageSaving || providerSaving || marketplacePublishing) return;
+    const target = isGuest && guestLocalStageId
+      ? { source: 'browser' as const, id: guestLocalStageId, title: stage.title }
+      : localStage ? { source: 'account' as const, id: localStage.id, title: localStage.title } : null;
+    if (target && await deleteStage(target)) {
+      clearStageBuilderDraft(scope);
+      navigate('/dashboard', { replace: true });
+    }
+  };
+
   const handleLocalSave = async () => {
     if (isGuest) {
       setLocalStageSaving(true);
@@ -1734,7 +1747,7 @@ const StageBuilderPage = () => {
   };
 
   useEffect(() => {
-    if (!prefs.keyboardShortcutsEnabled) return undefined;
+    if (!prefs.keyboardShortcutsEnabled || deletingStage) return undefined;
     const onKey = (event: KeyboardEvent) => {
       if (isTypingTarget(event.target)) return;
       const key = event.key.toLowerCase();
@@ -1755,7 +1768,7 @@ const StageBuilderPage = () => {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [prefs.keyboardShortcutsEnabled, stage, selectedId, selectedIds, selectedGroupId, snapSettings, historyVersion, lookThroughCameraId]);
+  }, [prefs.keyboardShortcutsEnabled, deletingStage, stage, selectedId, selectedIds, selectedGroupId, snapSettings, historyVersion, lookThroughCameraId]);
 
   const leftPanel = (
     <EditorLeftPanel
@@ -1845,7 +1858,7 @@ const StageBuilderPage = () => {
         providerLabel={providerLabel}
         providerConnected={!!providerStatus?.connected}
         providerBusy={providerSaving || providerStatusLoading}
-        localStageBusy={localStageSaving}
+        localStageBusy={localStageSaving || deletingStage}
         marketplaceEnabled={marketplaceEnabled}
         marketplaceBusy={marketplacePublishing}
         marketplaceStatusLoading={marketplaceStatusLoading}
@@ -1867,6 +1880,8 @@ const StageBuilderPage = () => {
         onRedo={redo}
         onDuplicate={duplicateSelected}
         onDelete={deleteSelected}
+        onDeleteStage={localStage || (isGuest && guestLocalStageId) ? handleDeleteStage : undefined}
+        deleteStageBusy={deletingStage}
         onOpenValidation={() => setInspectorTab('validation')}
         onOpenSettings={handleOpenSettings}
         onOpenStageSettings={handleOpenStageSettings}

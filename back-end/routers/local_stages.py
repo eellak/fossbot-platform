@@ -4,7 +4,7 @@ import urllib.error
 import urllib.request
 from typing import Any, Literal, Optional
 
-from database.database import Lesson, LocalMarketplacePublication, LocalMarketplaceSubmission, LocalStage, MarketplaceModerationOverride, Projects, User
+from database.database import Course, Lesson, LocalMarketplacePublication, LocalMarketplaceSubmission, LocalStage, MarketplaceModerationOverride, Projects, User
 from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import func
@@ -359,15 +359,37 @@ async def update_local_stage(stage_id: int, request: LocalStageSaveRequest, curr
     return _stage_payload(db, stage) | {"unchanged": False}
 
 
+def _stage_reference_error(db: Session, user: User, stage_id: int) -> Optional[HTTPException]:
+    projects = db.query(Projects.id, Projects.name, Projects.project_type, Projects.user_id).filter(Projects.stage_local_id == stage_id).order_by(Projects.name, Projects.id).all()
+    lessons = db.query(Lesson.id, Lesson.title, Lesson.archived, Course.id.label("course_id"), Course.title.label("course_title"), Course.author_id).join(Course, Lesson.course_id == Course.id).filter(Lesson.stage_local_id == stage_id).order_by(Course.title, Course.id, Lesson.position, Lesson.id).all()
+    if not projects and not lessons:
+        return None
+    # Only reveal names and edit targets the stage owner can access.
+    visible_projects = [item for item in projects if item.user_id == user.id]
+    visible_lessons = [item for item in lessons if item.author_id == user.id]
+    return stage_error(409, "stage_is_referenced", "Replace or clear this stage in the following projects and lesson settings, save your changes, then try deleting it again.", extra={
+        "references": {
+            "projects": [{"id": item.id, "title": item.name, "projectType": item.project_type} for item in visible_projects],
+            "lessons": [{"id": item.id, "title": item.title, "courseId": item.course_id, "courseTitle": item.course_title, "archived": item.archived} for item in visible_lessons],
+        },
+        "otherReferenceCount": len(projects) + len(lessons) - len(visible_projects) - len(visible_lessons),
+    })
+
+
 @router.delete("/api/local-stages/{stage_id}")
 async def delete_local_stage(stage_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     stage = _owned_stage(db, current_user, stage_id)
-    if db.query(Projects.id).filter(Projects.stage_local_id == stage.id).first() or db.query(Lesson.id).filter(Lesson.stage_local_id == stage.id).first():
-        raise stage_error(409, "stage_is_referenced", "Remove this local stage from every project and lesson before deleting it.")
+    reference_error = _stage_reference_error(db, current_user, stage.id)
+    if reference_error:
+        raise reference_error
     if db.query(LocalMarketplacePublication.id).filter(LocalMarketplacePublication.stage_id == stage.id).first() or db.query(LocalMarketplaceSubmission.id).filter(LocalMarketplaceSubmission.stage_id == stage.id).first():
         raise stage_error(409, "stage_has_publication_history", "Published and reviewed stages are retained to preserve immutable marketplace references and audit history.")
     db.delete(stage)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as error:
+        db.rollback()
+        raise (_stage_reference_error(db, current_user, stage_id) or stage_error(409, "stage_is_referenced", "This stage is now referenced by a project, lesson, or publication. Reload your stages and try again.")) from error
     return {"detail": "Local stage deleted."}
 
 

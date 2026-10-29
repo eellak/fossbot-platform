@@ -8,7 +8,7 @@ import {
   IconAlertTriangle, IconArrowDown, IconArrowLeft, IconArrowUp, IconCheck, IconChevronDown, IconChevronRight, IconCopy, IconEye,
   IconGripVertical, IconPlus, IconTrash, IconArrowBackUp, IconArrowForwardUp,
 } from '@tabler/icons-react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from 'src/authentication/AuthProvider';
 import {
@@ -106,6 +106,8 @@ export default function CourseEditorPage() {
   const confirmDialog = useConfirmDialog();
   const { token, user } = useAuth();
   const { courseId } = useParams();
+  const [searchParams] = useSearchParams();
+  const requestedLessonId = Number(searchParams.get('lesson'));
   const navigate = useNavigate();
   const theme = useTheme();
   const compact = useMediaQuery(theme.breakpoints.down('lg'));
@@ -212,12 +214,14 @@ export default function CourseEditorPage() {
     try {
       const draft = await readCourseDraft(token, id);
       setCourse(draft); courseRef.current = draft;
-      setSelectedId((current) => draft.lessons.some((lesson) => lesson.id === current) ? current : draft.lessons[0]?.id || null);
+      const requestedLesson = draft.lessons.find((lesson) => lesson.id === requestedLessonId);
+      setSelectedId((current) => requestedLesson?.id ?? (draft.lessons.some((lesson) => lesson.id === current) ? current : draft.lessons[0]?.id || null));
+      if (requestedLesson) { setSettingsTab('lesson'); setMobilePanel('settings'); }
       courseGeneration.current = 0; lessonGenerations.current.clear(); setSaveState('saved');
       historyRef.current = loadAuthoringHistory(historyStorageKey, draft); historyGroupRef.current = null; setHistoryRevision((value) => value + 1);
     } catch { setError(t('education.errors.loadCourse')); setErrorRecovery('load'); }
     finally { setLoading(false); }
-  }, [historyStorageKey, id, token, t]);
+  }, [historyStorageKey, id, requestedLessonId, token, t]);
   useEffect(() => { load(); }, [load]);
 
   const markCourse = (patch: Partial<CourseDraft>) => {
