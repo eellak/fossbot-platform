@@ -20,6 +20,7 @@ import type {
   MissionPersonalFeedback,
   TeacherClassGroup,
   StudentClassGroup,
+  ClassGroupPreview,
   ClassChallenge,
   ClassLeaderboard,
   ClassChallengeStatistics,
@@ -317,6 +318,10 @@ export async function updateClassChallenge(
 
 export async function listJoinedClassGroups(token: string): Promise<StudentClassGroup[]> {
   return parse(await fetch(`${backendUrl}/class-groups/joined`, { headers: headers(token) }));
+}
+
+export async function previewClassGroup(token: string, joinCode: string): Promise<ClassGroupPreview> {
+  return parse(await fetch(`${backendUrl}/class-groups/preview?join_code=${encodeURIComponent(joinCode)}`, { headers: headers(token) }));
 }
 
 export async function joinClassGroup(token: string, joinCode: string): Promise<StudentClassGroup> {

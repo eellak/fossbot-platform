@@ -544,6 +544,17 @@ export interface StudentClassGroup {
   assignments: CourseAssignment[];
 }
 
+export interface ClassGroupPreview {
+  id: number;
+  name: string;
+  teacher_name: string;
+  member_count: number;
+  challenge_season: number;
+  leaderboards_enabled: boolean;
+  already_member: boolean;
+  assignments: Array<{ course_title: string; release_version: number }>;
+}
+
 export interface ClassLeaderboard {
   challenge_id: number;
   group_name: string;

@@ -286,6 +286,33 @@ def test_numeric_accuracy_is_derived_from_stored_lesson_answers(client_for, user
     }
 
 
+def test_student_previews_class_group_before_joining(client_for, users):
+    tutor, _, student, _ = users
+    teacher = client_for(tutor)
+    learner = client_for(student)
+    course, _, release = create_published_course(teacher)
+    group = teacher.post("/class-groups", json={"name": "Preview class"}).json()
+    teacher.post(
+        f"/class-groups/{group['id']}/assignments",
+        json={"course_id": course["id"], "update_policy": "pinned"},
+    )
+
+    preview = learner.get("/class-groups/preview", params={"join_code": group["join_code"]})
+    assert preview.status_code == 200, preview.text
+    payload = preview.json()
+    assert payload["name"] == "Preview class"
+    assert payload["teacher_name"] == "Teach Er"
+    assert payload["member_count"] == 0
+    assert payload["already_member"] is False
+    assert payload["assignments"] == [{"course_title": course["title"], "release_version": release["version"]}]
+
+    assert learner.post("/class-groups/join", json={"join_code": group["join_code"]}).status_code == 201
+    joined_preview = learner.get("/class-groups/preview", params={"join_code": group["join_code"]}).json()
+    assert joined_preview["member_count"] == 1
+    assert joined_preview["already_member"] is True
+    assert learner.get("/class-groups/preview", params={"join_code": "NOPE1234"}).status_code == 404
+
+
 def test_class_group_privacy_opt_in_release_scope_and_analytics(client_for, users, db):
     tutor, other_tutor, student, _ = users
     teacher = client_for(tutor)

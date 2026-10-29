@@ -16,11 +16,13 @@ jest.setTimeout(20000);
 
 let mockGroups: any[];
 const mockJoinClassGroup = jest.fn();
+const mockPreviewClassGroup = jest.fn();
 jest.mock('src/authentication/AuthProvider', () => ({ useAuth: () => ({ token: 'guest-token' }) }));
 const mockT = (key: string) => key;
 jest.mock('react-i18next', () => ({ useTranslation: () => ({ t: mockT }) }));
 jest.mock('src/courses/CoursesApi', () => ({
   listJoinedClassGroups: () => Promise.resolve(mockGroups),
+  previewClassGroup: (...args: any[]) => mockPreviewClassGroup(...args),
   joinClassGroup: (...args: any[]) => mockJoinClassGroup(...args), leaveClassGroup: async () => undefined,
   updateClassMembership: async () => undefined, readClassLeaderboard: async () => undefined,
 }));
@@ -48,6 +50,12 @@ describe('guest class cards', () => {
     }));
     mockJoinClassGroup.mockReset();
     mockJoinClassGroup.mockResolvedValue(undefined);
+    mockPreviewClassGroup.mockReset();
+    mockPreviewClassGroup.mockResolvedValue({
+      id: 3, name: 'Linked Class', teacher_name: 'Teacher', member_count: 2,
+      challenge_season: 1, leaderboards_enabled: false, already_member: false,
+      assignments: [{ course_title: 'Robot Basics', release_version: 1 }],
+    });
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
@@ -87,9 +95,18 @@ describe('guest class cards', () => {
     expect(container.querySelector('[data-testid="location"]')?.textContent).toBe('/courses/5?enrollment=12');
   });
 
-  it('joins a class from a shared link and clears the query', async () => {
+  it('previews a shared link and joins only after confirmation', async () => {
     mockGroups = [];
     await render('/classrooms?join=abc123');
+    expect(mockPreviewClassGroup).toHaveBeenCalledWith('guest-token', 'ABC123');
+    expect(mockJoinClassGroup).not.toHaveBeenCalled();
+    expect(document.body.textContent).toContain('Linked Class');
+    expect(document.body.textContent).toContain('Robot Basics');
+
+    const dialog = document.querySelector('[role="dialog"]');
+    const join = Array.from(dialog?.querySelectorAll('button') || []).find((button) => button.textContent === 'education.classrooms.join')!;
+    expect(join).toBeDefined();
+    await act(async () => { join.click(); await flush(); });
     expect(mockJoinClassGroup).toHaveBeenCalledWith('guest-token', 'ABC123');
     expect(container.querySelector('[data-testid="location"]')?.textContent).toBe('/classrooms');
   });
