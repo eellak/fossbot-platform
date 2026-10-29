@@ -222,3 +222,5 @@ These questions are intentionally preserved from the migration. They describe de
 - Whether the sidebar's current 7px item radius and `StageCard`'s local 12/16px radii are intentional exceptions or remaining drift from the approved 8px surface rule.
 
 Visual regression automation is a separate deferred task. Until it exists, the production implementation and canonical pages remain the review baseline.
+
+Public website header update (2026-10-29): the landing/robot header uses the full viewport width with standard responsive Container gutters, logo aligned left and navigation plus language selector aligned right. Narrow screens retain the drawer navigation.

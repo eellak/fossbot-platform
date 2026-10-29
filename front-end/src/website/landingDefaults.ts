@@ -1,10 +1,11 @@
 import type { Section } from './api';
 import { menuIconId } from './menuIcons';
+import { withRobotNavigation, isNavigationMetadata } from './robotNavigation';
 export const landingGroups = ['navigation','hero','about','features','cta','footer'] as const;
 export function landingSections(t:(key:string)=>string):Section[] {
   const section=(group:string,keys:string[],extra:Record<string,string>={}):Section=>({type:'landing',group,values:{...Object.fromEntries(keys.map(key=>[key,t(key)])),...extra}});
   return [
-    {...section('navigation',['login'],{'href:login':'/dashboard'}),menu:[['github','https://github.com/eellak/fossbot'],['harokopioUniversity','https://www.hua.gr/index.php/en/'],['gfoss','https://gfoss.eu/'],['aboutUs','https://hot.dit.hua.gr/']].map(([key,href])=>({title:t(key),href,icon:menuIconId({title:'',href}),linkType:'url' as const}))},
+    withRobotNavigation({...section('navigation',['login'],{'href:login':'/dashboard'}),menu:[['github','https://github.com/eellak/fossbot'],['harokopioUniversity','https://www.hua.gr/index.php/en/'],['gfoss','https://gfoss.eu/'],['aboutUs','https://hot.dit.hua.gr/']].map(([key,href])=>({title:t(key),href,icon:menuIconId({title:'',href}),linkType:'url' as const}))},t('website.robotPage')),
     section('hero',['foss','bot','banner-content.openTechnologies','banner-content.democratizeEducation','banner-content.tryItNow'],{'href:hero':'/dashboard','image:hua':'/landing-media/cms/hua.png','image:bot':'/landing-media/cms/bot.png','image:gfoss':'/landing-media/cms/gfoss.png'}),
     section('about',['title','intro','robotTitle','robotBody','fact2','fact3','fact4','fact5','robotImageAlt','platformTitle','platformBody','mode1','mode2','mode3','mode4','openTitle','openBody','openLink'].map(key=>'landing_about.'+key),{'image:robot':'/landing-media/cms/robot.png','href:open':'https://github.com/eellak/fossbot'}),
     section('features',['landing_features.title','landing_features.intro',...['programming','stages','learning','buddy'].flatMap(story=>['title','description','point1','point2','point3','screenshot'].map(key=>`landing_features.stories.${story}.${key}`))],Object.fromEntries(['python-editor','stage-builder','student-lesson','buddy-panel'].map((name,i)=>['image:'+['programming','stages','learning','buddy'][i],`/landing-media/candidates/${name}-720p.png`]))),
@@ -21,5 +22,5 @@ const stable=(value:unknown):string=>JSON.stringify(value,(_,v)=>v&&typeof v==='
 
 export function landingFields(section:Section,t:(key:string)=>string):[string,string][] {
   const defaults=landingSections(t).find(s=>s.group===section.group)?.values||{};
-  return Object.entries({...defaults,...section.values});
+  return Object.entries({...defaults,...section.values}).filter(([key])=>!isNavigationMetadata(key));
 }

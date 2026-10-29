@@ -17,6 +17,7 @@ import WebsiteComponentLibrary from './WebsiteComponentLibrary';
 import { componentId, insertWebsiteComponent, siteSetting } from './componentCatalog';
 import WebsiteProfileCardsEditor from './WebsiteProfileCardsEditor';
 import WebsiteMenuItemEditor from './WebsiteMenuItemEditor';
+import { withRobotNavigation } from './robotNavigation';
 import { landingSections, landingFields } from './landingDefaults';
 import { LandingProvider, PublishedLandingProvider, landingImage } from './LandingContext';
 import LpHeader from 'src/components/landingpage/header/Header';
@@ -70,7 +71,11 @@ export default function WebsiteEditor() {
     if(busy || !await mayLeave())return;
     const original=entry.translations.find(x=>x.locale===lang);
     const next=structuredClone(original||blank(entry,lang));
-    setHomeArea(area);setKey(entry.key);setLocale(lang);setForm(next);setDirty(!original);setError('');setMessage('');
+    const fixed=i18n.getFixedT(lang==='el'?'gr':lang);
+    const sectionsBefore=JSON.stringify(next.sections);
+    if(entry.kind==='home')next.sections=next.sections.map(s=>withRobotNavigation(s,String(fixed('website.robotPage'))));
+    const menuUpgraded=sectionsBefore!==JSON.stringify(next.sections);
+    setHomeArea(area);setKey(entry.key);setLocale(lang);setForm(next);setDirty(!original||menuUpgraded);setError('');setMessage('');
   };
   const change = (patch:Partial<Translation>) => {if(busy)return;setForm(current=>current?{...current,...patch}:current);setDirty(true);setMessage('');};
   const section = (index:number,patch:Partial<Section>) => {

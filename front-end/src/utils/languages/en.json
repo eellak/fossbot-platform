@@ -305,7 +305,8 @@
     "addProject": "Add project",
     "visitProject": "Visit project website",
     "fundingImage": "EU / funding image (optional)",
-    "fundingText": "Funding acknowledgement (optional)"
+    "fundingText": "Funding acknowledgement (optional)",
+    "robotPage": "The robot"
   },
   "english": "English (UK)",
   "greek": "Greek (GR)",

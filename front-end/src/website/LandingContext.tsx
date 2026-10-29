@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from '
 import { useTranslation } from 'react-i18next';
 import { backendUrl } from 'src/utils/backendUrl';
 import { cms, contentLocale, type PublicEntry, type Section } from './api';
+import { withRobotNavigation } from './robotNavigation';
 import { landingSections } from './landingDefaults';
 const safeHref=(href:string)=>!/[\x00-\x1f]/.test(href)&&((href.startsWith('/')&&!href.startsWith('//')&&!href.startsWith('/\\'))||href.startsWith('https://'))?href:'';
 const Context=createContext<Section[]|undefined>(undefined);
@@ -14,7 +15,8 @@ export function PublishedLandingProvider({children}:{children:ReactNode}) {
 export function useLanding(group:string) {
   const sections=useContext(Context),{t:translate}=useTranslation();
   const fallback=landingSections(key=>String(translate(key))).find(s=>s.group===group)!;
-  const section=sections?.find(s=>s.type==='landing'&&s.group===group);
+  const stored=sections?.find(s=>s.type==='landing'&&s.group===group);
+  const section=stored?withRobotNavigation(stored,String(translate('website.robotPage'))):undefined;
   const values={...fallback.values,...section?.values};
   return {t:(key:string)=>values[key]??String(translate(key)),value:(key:string)=>key.startsWith('href:')?safeHref(values[key]||''):values[key]||'',menu:(section?.menu??fallback.menu??[]).map(item=>({...item,href:safeHref(item.href)}))};
 }

@@ -130,3 +130,35 @@ cable lengths, BMS identity or unspecified “power motor” details.
   pagination, and ordering details. Greek mobile at 390×844 had no horizontal
   overflow, including the FR207 details dialog; all loaded images were valid.
 - Browser console had no errors during the final checks.
+
+## Owner confirmation — 2026-10-29
+
+The owner confirmed the transistor listing “100PCS 2N2222 2N2222A”. The bilingual preview now lists 2N2222 / 2N2222A, one per robot; 100PCS is the seller pack quantity. This supersedes the unresolved designation above, but does not identify a manufacturer or verify its physical pin order against Q2 (1=C, 2=B, 3=E). The owner also confirmed socket-mounted MCP chips: two through-hole MCP3008 DIP-16 chips, inserted into sockets soldered to the PCB.
+
+## Resistor buying specification and FR207 fit — 2026-10-29
+
+The bilingual catalog now recommends metal-film axial through-hole resistors,
+±1% tolerance, rated at least 0.125 W, with a DIN0204 body approximately
+3.6 × 1.6 mm and leads formed for 5.08 mm PCB hole spacing. These tolerance
+and minimum-power requirements are recommendations, not validated original
+CAD purchasing fields. Higher-rated parts may be used if the dimensions fit.
+R10/R11 remain DNP. Reference: https://www.vishay.com/docs/28766/mbxsma.pdf
+
+A fresh pcbnew inspection found D5/D6/D7 all use
+D_DO-35_SOD27_P7.62mm_Horizontal, with 0.8 mm drills and 1.6 mm copper pads.
+The SMC FR207 DO-15 datasheet gives body length 5.5–7.62 mm, body diameter
+2.6–3.6 mm, and lead diameter 0.7–0.9 mm. Thus the current PCB does not
+provide a guaranteed fit: maximum leads exceed the hole diameter, and a
+maximum-length body leaves no room for ordinary horizontal lead bends.
+The selected manufacturer's actual dimensions and surrounding clearance must
+be reviewed and the footprint corrected before manufacturing a matching PCB.
+No CAD or manufacturing files were changed. Reference:
+https://www.smc-diodes.com/propdf/FR201-FR207%20N0445%20REV.A.pdf
+
+## Catalog copy simplification — 2026-10-29
+
+At the owner’s request, ordering dialogs now show concise bilingual part-identification specifications only. Removed the review badges, ordering-check section and datasheet/reference action, including their unused fields. Spreadsheet photos, quantities, PCB references and DNP indicators remain. The engineering findings above remain review notes; removing them from the public dialog does not establish electrical or mechanical compatibility.
+
+## Display correction — 2026-10-29
+
+Owner supplied https://grobotronics.com/oled-module-1.3-128x64-i2c-white.html as the correct display. Supplier technical data identifies 1.3-inch, 128×64 white OLED, I2C, SH1106 driver, 3.3–5 V DC, four pins (SKU 39-00013372). Both language entries now use those specs, superseding the earlier 0.96-inch/SSD1306 entry inferred from CAD. Original spreadsheet image retained. No robot firmware or CAD changes made.

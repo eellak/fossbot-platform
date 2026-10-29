@@ -55,7 +55,7 @@ const LpHeader = () => {
 
   return (
     <AppBarStyled position="sticky" elevation={0} sx={{ borderBottom: '1px solid', borderColor: 'divider' }}>
-      <Container maxWidth="lg">
+      <Container maxWidth={false}>
         <ToolbarStyled>
           <Logo />
           <Box flexGrow={1} />

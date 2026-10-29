@@ -17,114 +17,114 @@
   },
   {
     "id": 9,
-    "name": "MCP3008 — 10-bit, 8-channel SPI ADC, DIP-16",
+    "name": "MCP3008-I/P — through-hole PDIP-16 ADC",
     "quantity": 2,
     "refs": "U7, U8"
   },
   {
     "id": 10,
-    "name": "GL5516 Light Dependent Resistor LDR 5MM",
+    "name": "GL5516 light-dependent resistor (LDR), 5 mm",
     "quantity": 1
   },
   {
     "id": 11,
-    "name": "Passive Buzzer AC 12MM*8.5MM 12085 16R Resistance 3V 5V 12V In Common Use",
+    "name": "Passive buzzer 12085, 16 Ω, 12 × 8.5 mm",
     "quantity": 1
   },
   {
     "id": 12,
-    "name": "RGB Diffused Common Cathode 5mm LED",
+    "name": "RGB LED, common cathode, 5 mm",
     "quantity": 1
   },
   {
     "id": 13,
-    "name": "Electret Microphone Amplifier - MAX4466 with Adjustable Gain",
+    "name": "MAX4466 microphone amplifier with adjustable gain",
     "quantity": 1
   },
   {
     "id": 14,
-    "name": "MPU-6050 - 3 Axis Gyroscope+Accelerometer Module for Arduino",
+    "name": "MPU-6050 gyroscope and accelerometer module",
     "quantity": 1
   },
   {
     "id": 15,
-    "name": "Logic Level Converter Bi-Directional",
+    "name": "Bidirectional logic-level converter",
     "quantity": 1
   },
   {
     "id": 16,
-    "name": "DIP Socket 16",
+    "name": "DIP-16 IC socket",
     "quantity": 2
   },
   {
     "id": 17,
-    "name": "Pin Header 1x8 Female 2.54mm",
+    "name": "Female pin socket 1×8, 2.54 mm",
     "quantity": 3
   },
   {
     "id": 18,
-    "name": "Pin Header Female 1x6 2.54mm",
+    "name": "Female pin socket 1×6, 2.54 mm",
     "quantity": 2
   },
   {
     "id": 19,
-    "name": "Pin Header 1x3 Female 2.54mm Right Angle",
+    "name": "Right-angle female pin socket 1×3, 2.54 mm",
     "quantity": 1
   },
   {
     "id": 20,
-    "name": "Slide Switch MFP 106 D",
+    "name": "Slide switch MFP 106 D",
     "quantity": 1
   },
   {
     "id": 21,
-    "name": "JST XH Connector 2-Pin Male 2.5mm",
+    "name": "JST XH 2-pin male connector, 2.5 mm",
     "quantity": 6,
     "refs": "Main: J5, J27, J28, J29, J30; battery: J1"
   },
   {
     "id": 22,
-    "name": "JST XH Connector 4-Pin Male 2.5mm",
+    "name": "JST XH 4-pin male connector, 2.5 mm",
     "quantity": 2
   },
   {
     "id": 23,
-    "name": "JST XH Connector 3-Pin Male 2.5mm",
+    "name": "JST XH 3-pin male connector, 2.5 mm",
     "quantity": 13
   },
   {
     "id": 24,
-    "name": "1 kΩ resistor",
+    "name": "Resistor — 1 kΩ",
     "quantity": 3,
     "refs": "R4, R9, R12"
   },
   {
     "id": 25,
-    "name": "3 kΩ resistor",
+    "name": "Resistor — 3 kΩ",
     "quantity": 1,
     "refs": "R2"
   },
   {
     "id": 26,
-    "name": "10 kΩ resistor",
+    "name": "Resistor — 10 kΩ",
     "quantity": 5,
     "refs": "R3, R8, R14, R15, R17"
   },
   {
     "id": 27,
-    "name": "270 Ω resistor",
+    "name": "Resistor — 270 Ω",
     "quantity": 3,
     "refs": "R5, R6, R7"
   },
   {
     "id": 28,
-    "name": "3.3 kΩ resistor",
+    "name": "Resistor — 3.3 kΩ",
     "quantity": 1,
     "refs": "R13"
   },
   {
     "id": 29,
-    "name": "270 Ω resistor — DNP",
+    "name": "Resistor — 270 Ω (DNP)",
     "quantity": 2,
     "refs": "R10, R11",
     "optional": true,
@@ -133,22 +133,22 @@
   },
   {
     "id": 30,
-    "name": "330 Ω resistor",
+    "name": "Resistor — 330 Ω",
     "quantity": 1,
     "refs": "R1"
   },
   {
     "id": 31,
-    "name": "Tact Switch 6x6mm 13mm",
+    "name": "Tactile pushbutton, 6×6 mm, height 13 mm",
     "quantity": 4
   },
   {
     "id": 32,
-    "name": "NPN transistor, TO-92 — exact model unconfirmed",
+    "name": "2N2222 / 2N2222A NPN transistor — TO-92",
     "quantity": 1,
     "refs": "Q2",
-    "noteEn": "Board pinout: 1=C, 2=B, 3=E. The spreadsheet’s 2N2222A designation is not confirmed by the KiCad files.",
-    "noteEl": "Ακροδέκτες πλακέτας: 1=C, 2=B, 3=E. Η ονομασία 2N2222A του φύλλου δεν επιβεβαιώνεται από τα αρχεία KiCad."
+    "noteEn": "Part designation confirmed by the project owner. One per robot; “100PCS” is the supplier pack size. Check the selected manufacturer’s pinout against PCB pads 1=C, 2=B, 3=E.",
+    "noteEl": "Ονομασία επιβεβαιωμένη από τον υπεύθυνο του έργου. Ένα ανά ρομπότ· το «100PCS» είναι συσκευασία προμηθευτή. Ελέγξτε τους ακροδέκτες του συγκεκριμένου κατασκευαστή έναντι των pad 1=C, 2=B, 3=E."
   },
   {
     "id": 33,
@@ -160,87 +160,87 @@
   },
   {
     "id": 34,
-    "name": "LED Diffused 5mm - Blue",
+    "name": "Diffused blue LED, 5 mm",
     "quantity": 1
   },
   {
     "id": 35,
-    "name": "LED Diffused 5mm Green",
+    "name": "Diffused green LED, 5 mm",
     "quantity": 1
   },
   {
     "id": 36,
-    "name": "LED Diffused 5mm yellow",
+    "name": "Diffused yellow LED, 5 mm",
     "quantity": 1
   },
   {
     "id": 37,
-    "name": "LED Diffused 5mm Red",
+    "name": "Diffused red LED, 5 mm",
     "quantity": 1
   },
   {
     "id": 38,
-    "name": "Pin Header 2x20 Female 2.54mm",
+    "name": "Female GPIO socket 2×20, 2.54 mm",
     "quantity": 1
   },
   {
     "id": 39,
-    "name": "OLED Module 0.96\" 128x64 - I2C White",
+    "name": "OLED display, 1.3 inch, 128×64, I2C, white",
     "quantity": 1
   },
   {
     "id": 40,
-    "name": "DC Gear Motor TT - 120 RPM (Metal Dual Shaft)",
+    "name": "TT geared DC motor, 120 RPM, metal dual shaft",
     "quantity": 2
   },
   {
     "id": 41,
-    "name": "IR Infrared Obstacle Avoidance Sensor Module *Need hack for analogue pin",
+    "name": "Infrared obstacle sensor — analogue-output modification required",
     "quantity": 7
   },
   {
     "id": 42,
-    "name": "Plastic Encoder Wheel - 24mm",
+    "name": "Plastic encoder disc, 24 mm",
     "quantity": 2
   },
   {
     "id": 43,
-    "name": "Photo Interrupter Sensor",
+    "name": "Optical interrupter sensor",
     "quantity": 2
   },
   {
     "id": 44,
-    "name": "Raspberry Pi Zero 2W",
+    "name": "Raspberry Pi Zero 2 W",
     "quantity": 1
   },
   {
     "id": 45,
-    "name": "SanDisk microSD",
+    "name": "SanDisk microSD card",
     "quantity": 1
   },
   {
     "id": 46,
-    "name": "Battery Holder 1x18650 for PCB",
+    "name": "PCB battery holder, 1×18650",
     "quantity": 3
   },
   {
     "id": 47,
-    "name": "Li-ion Battery Charger Protection Module 3S 10A",
+    "name": "Li-ion battery protection module (BMS), 3S, 10 A",
     "quantity": 1
   },
   {
     "id": 48,
-    "name": "Battery Lithium 18650 3.6V 3200mAh - INR18650-MH1",
+    "name": "INR18650-MH1 Li-ion cell, 3.6 V, 3200 mAh",
     "quantity": 3
   },
   {
     "id": 49,
-    "name": "Ball Caster Metal 12mm",
+    "name": "Metal ball caster, 12 mm",
     "quantity": 1
   },
   {
     "id": 50,
-    "name": "Bolts M3 L8mm",
+    "name": "M3 bolts, 8 mm",
     "quantity": 30
   },
   {
@@ -255,37 +255,37 @@
   },
   {
     "id": 53,
-    "name": "Rubber Wheel 66x26mm - Yellow",
+    "name": "Yellow rubber wheel, 66×26 mm",
     "quantity": 2
   },
   {
     "id": 54,
-    "name": "DC Power Jack 5.5x2.1 - Plastic",
+    "name": "DC power jack, 5.5×2.1 mm, plastic",
     "quantity": 1
   },
   {
     "id": 55,
-    "name": "cables sensors 3pin",
+    "name": "Sensor cable — JST 3-pin to Dupont female",
     "quantity": 10
   },
   {
     "id": 56,
-    "name": "cables sensors 4pin",
+    "name": "Sensor cable — JST 4-pin to Dupont female",
     "quantity": 1
   },
   {
     "id": 57,
-    "name": "battery cable",
+    "name": "Battery cable — JST female 2-pin to JST female 2-pin",
     "quantity": 1
   },
   {
     "id": 58,
-    "name": "power motor",
+    "name": "Motor and power-input cable — JST to bare wires",
     "quantity": 3
   },
   {
     "id": 59,
-    "name": "100 kΩ resistor",
+    "name": "Resistor — 100 kΩ",
     "quantity": 1,
     "refs": "R16"
   }

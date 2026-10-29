@@ -44,6 +44,7 @@
     "i18next": "22.0.6",
     "jquery": "^3.7.1",
     "jquery.terminal": "^2.37.2",
+    "jspdf": "^4.2.1",
     "lil-gui": "^0.19.2",
     "lodash": "4.17.21",
     "monaco-editor": "^0.44.0",

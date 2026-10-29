@@ -32,7 +32,7 @@ it('includes every native landing section and preserves custom drafts during sta
  const t=(key:string)=>key;
  const sections=landingSections(t);
  expect(sections.map((s:any)=>s.group)).toEqual(['navigation','hero','about','features','cta','footer']);
- expect(sections[0].menu).toHaveLength(4);
+ expect(sections[0].menu).toHaveLength(5);
  expect(sections[2].values['landing_about.mode4']).toBe('landing_about.mode4');
  expect(sections[3].values['landing_features.stories.buddy.point3']).toBe('landing_features.stories.buddy.point3');
  const old:any[]=[{type:'banner',title:'FOSSBot banner-content.openTechnologies',text:t('banner-content.democratizeEducation'),buttonLabel:t('banner-content.tryItNow'),href:'/dashboard'},{type:'text',title:t('landing_about.title'),content:{content:[{content:[{text:t('landing_about.intro'),type:'text'}],type:'paragraph'}],type:'doc'}}];

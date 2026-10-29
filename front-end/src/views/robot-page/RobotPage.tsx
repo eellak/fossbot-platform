@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Box, Button, Card, CardContent, Chip, Container, Dialog, DialogActions, DialogContent, DialogTitle, Grid, Link, MenuItem, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TablePagination, TableRow, TextField, Typography } from '@mui/material';
+import { Alert, Box, Button, Card, CardContent, Chip, Container, Dialog, DialogActions, DialogContent, DialogTitle, Grid, Link, MenuItem, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TablePagination, TableRow, TextField, Typography } from '@mui/material';
 import { IconArrowDown, IconArrowUpRight, IconCpu, IconRadar, IconTool } from '@tabler/icons-react';
 import PageContainer from 'src/components/container/PageContainer';
 import Header from 'src/components/landingpage/header/Header';
@@ -10,11 +10,31 @@ import PartImage from './PartImage';
 import { partDetails } from './partDetails';
 import bomRows from 'src/website/robotBom.json';
 const bom: {id:number;name:string;quantity:number;refs?:string;optional?:boolean;noteEn?:string;noteEl?:string}[] = bomRows;
-import { categories, categoryRows, copy, greekPartNames, hardwareDownload, hardwareFile, hardwareRoot, partsSheet, printedParts, type Category } from './robotContent';
+import { categories, categoryRows, copy, greekPartNames, hardwareDownload, hardwareFile, hardwareRoot, printedParts, type Category } from './robotContent';
 
 const image = (file: string) => `/landing-media/robot-v2/${file}`;
 const sectionSx = { py: { xs: 6, md: 9 }, scrollMarginTop: '100px' };
 const external = { target: '_blank', rel: 'noopener noreferrer' };
+
+// Frame the original transparent PNGs around their visible CAD renders.
+const renderBounds: Record<string, string> = {
+  'full_bot.png': '532 145 1147 772',
+  'base1.png': '599 234 1187 686',
+  'base2.png': '605 176 1192 703',
+  'base3.png': '576 246 1217 675',
+  'battery_cover.png': '723 382 1014 520',
+  'eyes.png': '616 303 1265 508',
+  'lego_top.png': '730 291 885 469',
+  'pen_tool.png': '958 353 227 532',
+  'fenders.png': '532 294 1147 585',
+};
+function HardwareRender({ file, label, hero = false }: { file: string; label: string; hero?: boolean }) {
+  return <Box component="svg" role="img" aria-label={label} viewBox={renderBounds[file]}
+    sx={{ display: 'block', width: '100%', height: hero ? { xs: 280, sm: 380, md: 400 } : 220, p: hero ? 0 : 1 }}>
+    <image href={image(file)} width="2224" height="1094" />
+  </Box>;
+}
+
 
 export default function RobotPage() {
   const { i18n } = useTranslation();
@@ -28,6 +48,16 @@ export default function RobotPage() {
   const detailLabel = locale === 'el' ? 'Στοιχεία παραγγελίας' : 'Ordering details';
   const imageLabel = (id:number) => partDetails[id].photoIsExample ? (locale === 'el' ? 'Φωτογραφία φύλλου · παράδειγμα' : 'Sheet photo · example') : (locale === 'el' ? 'Φωτογραφία από το φύλλο' : 'Photo from parts sheet');
   const [query, setQuery] = useState('');
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState('');
+  const downloadChecklist = async () => {
+    setExporting(true); setExportError('');
+    try {
+      const { createRobotChecklistPdf } = await import('./robotChecklistPdf');
+      const pdf = await createRobotChecklistPdf(locale);
+      pdf.save(`fossbot-parts-checklist-${locale}.pdf`);
+    } catch { setExportError(c.pdfError); } finally { setExporting(false); }
+  };
   const [category, setCategory] = useState<Category>('all');
   const [page, setPage] = useState(0);
   const [rows, setRows] = useState(10);
@@ -44,11 +74,10 @@ export default function RobotPage() {
           <Stack component="nav" aria-label={locale === 'el' ? 'Ενότητες ρομπότ' : 'Robot sections'} direction="row" flexWrap="wrap" spacing={1} sx={{ pt: 3 }}>
             {navIds.map((id, index) => <Button key={id} href={`#${id}`} color="inherit">{c.nav[index]}</Button>)}
           </Stack>
-          <Box id="overview" component="section" sx={sectionSx}>
-            <Grid container spacing={4} alignItems="center">
+          <Box id="overview" component="section" sx={{ ...sectionSx, pt: { xs: 2, md: 3 } }}>
+            <Grid container spacing={4} alignItems="flex-start">
               <Grid item xs={12} md={6}>
                 <Stack spacing={3} alignItems="flex-start">
-                  <Chip label={c.eyebrow} variant="outlined" />
                   <WebsiteSectionHeading component="h1">{c.title}</WebsiteSectionHeading>
                   <Typography component="p" variant="h5" sx={{ maxWidth: '32ch' }}>{c.intro}</Typography>
                   <Typography color="text.secondary" sx={{ maxWidth: '52ch' }}>{c.description}</Typography>
@@ -59,16 +88,24 @@ export default function RobotPage() {
                 </Stack>
               </Grid>
               <Grid item xs={12} md={6}>
-                <Box component="img" src={image('full_bot.png')} alt={locale === 'el' ? 'Συναρμολογημένο FOSSBot v2 με μπλε σώμα, κίτρινους τροχούς και επάνω μέρος LEGO' : 'Assembled FOSSBot v2 with a blue body, yellow wheels and LEGO-compatible top'} sx={{ display: 'block', width: '100%', height: { xs: 300, sm: 400, md: 460 }, objectFit: 'contain' }} />
+                <HardwareRender file="full_bot.png" hero label={locale === 'el' ? 'Συναρμολογημένο FOSSBot v2 με μπλε σώμα, κίτρινους τροχούς και επάνω μέρος LEGO' : 'Assembled FOSSBot v2 with a blue body, yellow wheels and LEGO-compatible top'} />
               </Grid>
             </Grid>
-            <Grid container spacing={3} sx={{ mt: 4 }}>
-              {[[bom.length, c.partCount], [10, c.printCount], [2, c.pcbCount]].map(([number, label]) => <Grid item xs={4} key={label}><Box sx={{ borderTop: '1px solid', borderColor: 'divider', pt: 2 }}><Typography component="p" variant="h3">{number}</Typography><Typography variant="body2" color="text.secondary">{label}</Typography></Box></Grid>)}
-            </Grid>
+
           </Box>
           <Grid container spacing={4} sx={{ pb: { xs: 6, md: 9 } }}>
             {featureIcons.map((Icon, index) => <Grid item xs={12} md={4} key={index}><Stack spacing={2}><Box color="primary.main"><Icon size={28} stroke={1.5} /></Box><Typography component="h2" variant="h5">{c.featureTitles[index]}</Typography><Typography color="text.secondary">{c.featureText[index]}</Typography></Stack></Grid>)}
           </Grid>
+        </Container>
+
+        <Container maxWidth="lg" component="section" id="assembly" sx={sectionSx}>
+          <Stack spacing={3}>
+            <WebsiteSectionHeading>{c.assemblyTitle}</WebsiteSectionHeading>
+            <Box component="iframe" src="https://www.youtube-nocookie.com/embed/0wdUeGlyvR4" title={c.assemblyTitle}
+              loading="lazy" allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen
+              sx={{ display: 'block', width: '100%', aspectRatio: '16 / 9', border: 0 }} />
+            <Typography variant="body2" color="text.secondary">{c.assemblyNotice}</Typography>
+          </Stack>
         </Container>
 
         <Box sx={{ bgcolor: 'background.default' }}>
@@ -109,7 +146,8 @@ export default function RobotPage() {
                 </TableContainer>
                 <TablePagination component="div" count={filtered.length} page={page} rowsPerPage={rows} onPageChange={(_, value) => setPage(value)} onRowsPerPageChange={event => { setRows(Number(event.target.value)); setPage(0); }} rowsPerPageOptions={[10, 25, { value: -1, label: c.all }]} labelRowsPerPage={c.rows} labelDisplayedRows={({ from, to, count }) => c.range(from, to, count)} getItemAriaLabel={type => type === 'next' ? c.next : c.previous} sx={{ '& .MuiTablePagination-toolbar': { flexWrap: 'wrap', px: 1 }, '& .MuiTablePagination-selectLabel': { display: { xs: 'none', sm: 'block' } }, '& .MuiTablePagination-spacer': { display: { xs: 'none', sm: 'block' } } }} />
               </Card>
-              <Stack spacing={0.5}><Link href={partsSheet} {...external}>{c.source}</Link><Typography variant="caption" color="text.secondary">{c.sourceNote}</Typography></Stack>
+              <Box><Button variant="outlined" disabled={exporting} onClick={downloadChecklist} startIcon={<IconArrowDown size={18} />}>{exporting ? c.pdfPreparing : c.pdfDownload}</Button></Box>
+              {exportError && <Alert severity="error">{exportError}</Alert>}
             </Stack>
           </Container>
         </Box>
@@ -120,7 +158,7 @@ export default function RobotPage() {
             <Typography color="text.secondary" sx={{ maxWidth: '72ch' }}>{c.printText}</Typography>
             <Grid container spacing={3} sx={{ width: 'auto' }}>
               {printedParts.map(part => <Grid item xs={12} sm={6} md={3} key={part.image}><Card variant="outlined" sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-                <Box component="img" loading="lazy" src={image(part.image)} alt={part[locale]} sx={{ width: '100%', height: 190, objectFit: 'contain', p: 2 }} />
+                <HardwareRender file={part.image} label={part[locale]} />
                 <CardContent sx={{ flex: 1 }}><Stack spacing={2}><Typography component="h3" variant="h5">{part[locale]}</Typography><Stack direction="row" flexWrap="wrap" spacing={1}>{part.files.map((file, index) => <Link key={file} href={hardwareFile(`stl/${file}`)} {...external}>{part.files.length === 1 ? c.stl : index === 0 ? c.left : c.right}</Link>)}</Stack></Stack></CardContent>
               </Card></Grid>)}
             </Grid>
@@ -153,7 +191,6 @@ export default function RobotPage() {
               <Grid item xs={12} sm={4}>
                 <PartImage detail={selectedDetail} id={selected.id} label={name(selected)} large />
                 <Typography variant="caption" component="p" textAlign="center" color="text.secondary">{imageLabel(selected.id)} · {locale==='el'?'όχι υπό κλίμακα':'not to scale'}</Typography>
-                {selectedDetail.photoSource && <Box textAlign="center" mt={1}><Link variant="caption" href={selectedDetail.photoSource} {...external}>{locale==='el'?'Πηγή εικόνας':'Image source'}</Link></Box>}
               </Grid>
               <Grid item xs={12} sm={8}>
                 <Stack spacing={2} alignItems="flex-start">
@@ -161,10 +198,7 @@ export default function RobotPage() {
                   {selected.refs && <Typography variant="body2" color="text.secondary">{selected.refs}</Typography>}
                   <Typography variant="h5" component="h3">{locale==='el'?'Τεχνική περιγραφή':'Technical description'}</Typography>
                   <Typography>{selectedDetail.specs[textIndex]}</Typography>
-                  <Typography variant="h5" component="h3">{locale==='el'?'Τι να ελέγξετε στην παραγγελία':'What to match when ordering'}</Typography>
-                  {selectedDetail.review && <Chip size="small" color="warning" variant="outlined" label={locale==='el'?'Χρειάζεται έλεγχος επιλογής':'Selection needs review'} />}
-                  <Typography>{selectedDetail.check[textIndex]}</Typography>
-                  {selectedDetail.source && <Link href={selectedDetail.source} {...external}>{locale==='el'?'Φύλλο δεδομένων / αναφορά':'Datasheet / reference'}</Link>}
+
                 </Stack>
               </Grid>
             </Grid>
