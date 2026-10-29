@@ -1686,6 +1686,42 @@ def read_enrollment(
     return enrollment_payload(db, owned_enrollment_or_404(db, participant, enrollment_id))
 
 
+def delete_enrollment_records(db: Session, enrollment: Enrollment) -> None:
+    # Child rows have no database cascade, so remove them before the enrollment.
+    for model in (MissionAttempt, ActivityAnswer, LessonWorkspace, LessonProgress):
+        db.query(model).filter(model.enrollment_id == enrollment.id).delete(synchronize_session=False)
+    db.delete(enrollment)
+    safe_commit(db)
+
+
+@router.delete("/enrollments/{enrollment_id}", status_code=status.HTTP_204_NO_CONTENT)
+def drop_enrollment(
+    enrollment_id: int,
+    participant: Participant = Depends(get_participant),
+    db: Session = Depends(get_db),
+):
+    require_account_student(participant)
+    delete_enrollment_records(db, owned_enrollment_or_404(db, participant, enrollment_id))
+
+
+@router.delete("/teach/courses/{course_id}/enrollments/{enrollment_id}", status_code=status.HTTP_204_NO_CONTENT)
+def remove_course_enrollment(
+    course_id: int,
+    enrollment_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    require_teacher(user)
+    authored_course_or_404(db, user, course_id)
+    enrollment = db.query(Enrollment).filter(
+        Enrollment.id == enrollment_id,
+        Enrollment.course_id == course_id,
+    ).first()
+    if enrollment is None:
+        raise HTTPException(status_code=404, detail="Enrollment not found")
+    delete_enrollment_records(db, enrollment)
+
+
 @router.post("/enrollments/{enrollment_id}/lessons/{lesson_key}/start")
 def start_lesson(
     enrollment_id: int,

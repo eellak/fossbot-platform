@@ -38,6 +38,7 @@ GUEST_REJECTED_PARTICIPANT_MUTATIONS = {
     ("POST", "/enrollments/{enrollment_id}/lessons/{lesson_key}/workspace/reset"),
     ("POST", "/enrollments/{enrollment_id}/lessons/{lesson_key}/complete"),
     ("DELETE", "/enrollments/{enrollment_id}/lessons/{lesson_key}/complete"),
+    ("DELETE", "/enrollments/{enrollment_id}"),
     ("POST", "/enrollments/{enrollment_id}/update-release"),
 }
 

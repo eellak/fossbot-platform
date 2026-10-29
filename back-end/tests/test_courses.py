@@ -558,6 +558,57 @@ def test_student_enrollment_progress_resume_and_ownership(client_for, users, db)
     assert teacher.post(f"/courses/{course['id']}/enroll").status_code == 403
 
 
+def test_teacher_can_remove_enrolled_student(client_for, users, db):
+    tutor, other_tutor, student, _ = users
+    teacher = client_for(tutor)
+    other_teacher = client_for(other_tutor)
+    learner = client_for(student)
+    course = create_course(teacher)
+    lesson = add_lesson(teacher, course["id"], editor_type="python", starter_content="print('one')")
+    assert teacher.post(f"/courses/{course['id']}/publish").status_code == 201
+    enrollment = learner.post(f"/courses/{course['id']}/enroll").json()
+    base = f"/enrollments/{enrollment['id']}/lessons/{lesson['lesson_key']}"
+    learner.post(f"{base}/start")
+    workspace = learner.get(f"{base}/workspace").json()
+    learner.put(f"{base}/workspace", json={"content": "print('work')", "revision": workspace["revision"], "release_id": workspace["release_id"]})
+    assert db.query(LessonProgress).filter(LessonProgress.enrollment_id == enrollment["id"]).count() == 1
+    assert db.query(LessonWorkspace).filter(LessonWorkspace.enrollment_id == enrollment["id"]).count() == 1
+
+    other_course = create_course(other_teacher, title="Another course")
+    assert other_teacher.delete(f"/teach/courses/{course['id']}/enrollments/{enrollment['id']}").status_code == 404
+    assert teacher.delete(f"/teach/courses/{other_course['id']}/enrollments/{enrollment['id']}").status_code == 404
+    assert teacher.delete(f"/teach/courses/{course['id']}/enrollments/{enrollment['id']}").status_code == 204
+
+    assert db.query(Enrollment).filter(Enrollment.id == enrollment["id"]).count() == 0
+    assert db.query(LessonProgress).filter(LessonProgress.enrollment_id == enrollment["id"]).count() == 0
+    assert db.query(LessonWorkspace).filter(LessonWorkspace.enrollment_id == enrollment["id"]).count() == 0
+    assert teacher.get(f"/teach/courses/{course['id']}/progress").json()["enrollment_count"] == 0
+
+
+def test_student_can_drop_own_enrollment(client_for, users, db):
+    tutor, _, student, _ = users
+    teacher = client_for(tutor)
+    learner = client_for(student)
+    course = create_course(teacher)
+    add_lesson(teacher, course["id"])
+    assert teacher.post(f"/courses/{course['id']}/publish").status_code == 201
+    enrollment = learner.post(f"/courses/{course['id']}/enroll").json()
+
+    other_student = User(
+        username="drop-other", firstname="Drop", lastname="Other", email="drop-other@example.test",
+        hashed_password="unused", role=UserRole.USER, beta_tester=True, activated=True,
+    )
+    db.add(other_student)
+    db.commit()
+
+    assert teacher.delete(f"/enrollments/{enrollment['id']}").status_code == 403
+    assert client_for(other_student).delete(f"/enrollments/{enrollment['id']}").status_code == 404
+    assert learner.delete(f"/enrollments/{enrollment['id']}").status_code == 204
+    assert learner.get("/enrollments/mine").json() == []
+    assert learner.delete(f"/enrollments/{enrollment['id']}").status_code == 404
+    assert db.query(Enrollment).filter(Enrollment.id == enrollment["id"]).count() == 0
+
+
 def test_unlisted_course_is_link_accessible_but_not_discoverable(client_for, users):
     tutor, _, student, _ = users
     teacher = client_for(tutor)

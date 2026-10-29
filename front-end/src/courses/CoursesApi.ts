@@ -137,6 +137,16 @@ export async function readEnrollment(token: string, enrollmentId: number): Promi
   return parse(await fetch(`${backendUrl}/enrollments/${enrollmentId}`, { headers: headers(token) }));
 }
 
+export async function dropEnrollment(token: string, enrollmentId: number): Promise<void> {
+  const response = await fetch(`${backendUrl}/enrollments/${enrollmentId}`, { method: 'DELETE', headers: headers(token) });
+  if (!response.ok) await parse(response);
+}
+
+export async function removeCourseStudent(token: string, courseId: number, enrollmentId: number): Promise<void> {
+  const response = await fetch(`${backendUrl}/teach/courses/${courseId}/enrollments/${enrollmentId}`, { method: 'DELETE', headers: headers(token) });
+  if (!response.ok) await parse(response);
+}
+
 export async function startLesson(token: string, enrollmentId: number, lessonKey: string): Promise<Enrollment> {
   return parse(await fetch(`${backendUrl}/enrollments/${enrollmentId}/lessons/${encodeURIComponent(lessonKey)}/start`, { method: 'POST', headers: headers(token) }));
 }

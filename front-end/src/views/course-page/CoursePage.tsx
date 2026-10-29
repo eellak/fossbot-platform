@@ -1,17 +1,19 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Alert, Box, Button, Chip, CircularProgress, Divider, Grid, Paper, Stack, Typography, useTheme } from '@mui/material';
-import { IconChartBar } from '@tabler/icons-react';
+import { IconChartBar, IconUserMinus } from '@tabler/icons-react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import PageContainer from 'src/components/container/PageContainer';
 import StudentCourseOutline from 'src/components/courses/StudentCourseOutline';
+import { useConfirmDialog } from 'src/components/shared/ConfirmDialog';
 import { useAuth } from 'src/authentication/AuthProvider';
-import { enrollInCourse, listMyEnrollments, readPublishedCourse } from 'src/courses/CoursesApi';
+import { dropEnrollment, enrollInCourse, listMyEnrollments, readPublishedCourse } from 'src/courses/CoursesApi';
 import type { Enrollment, StudentCourse } from 'src/courses/types';
 import { guestCanView } from 'src/authentication/guest';
 
 export default function CoursePage() {
   const { t } = useTranslation();
+  const confirmDialog = useConfirmDialog();
   const { token, user, isGuest, guestSettings } = useAuth();
   const theme = useTheme();
   const navigate = useNavigate();
@@ -22,6 +24,7 @@ export default function CoursePage() {
   const [enrollment, setEnrollment] = useState<Enrollment | null>(null);
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState(false);
+  const [dropWorking, setDropWorking] = useState(false);
   const [error, setError] = useState('');
 
   const load = useCallback(async () => {
@@ -57,6 +60,28 @@ export default function CoursePage() {
     finally { setWorking(false); }
   };
 
+  const drop = async () => {
+    if (!enrollment || !course) return;
+    const confirmed = await confirmDialog.confirm({
+      title: t('education.student.dropTitle'),
+      message: t('education.student.dropConfirm', { title: course.title }),
+      confirmLabel: t('education.student.dropCourse'),
+      cancelLabel: t('cancel'),
+      danger: true,
+    });
+    if (!confirmed) return;
+    setDropWorking(true);
+    setError('');
+    try {
+      await dropEnrollment(token, enrollment.id);
+      navigate(isGuest && !guestCanView(guestSettings, 'courses') ? '/classrooms' : '/courses');
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : t('education.student.dropFailed'));
+    } finally {
+      setDropWorking(false);
+    }
+  };
+
   if (loading) return <Box sx={{ py: 10, textAlign: 'center' }}><CircularProgress /></Box>;
   if (!course) return <Alert severity="error">{error || t('education.student.errors.load')}</Alert>;
   const lessons = enrollment?.active_release.lessons || course.latest_release.lessons;
@@ -85,6 +110,7 @@ export default function CoursePage() {
                 {(user?.role === 'user' || (isGuest && enrollment)) ? <Stack direction="row" spacing={1} flexWrap="wrap">
                   <Button variant="contained" size="large" disabled={working} onClick={start} sx={{ alignSelf: 'flex-start' }}>{working ? t('education.student.saving') : enrollment?.completed_at ? t('education.student.reviewCourse') : enrollment ? t('education.student.continueCourse') : t('education.student.startCourse')}</Button>
                   {enrollment ? <Button variant="outlined" size="large" startIcon={<IconChartBar size={18} />} onClick={() => navigate(`/courses/${course.id}/progress${isGuest ? `?enrollment=${enrollment.id}` : ''}`)}>{t('education.student.progressTitle')}</Button> : null}
+                  {enrollment && !isGuest ? <Button variant="text" color="error" size="large" startIcon={<IconUserMinus size={18} />} disabled={working || dropWorking} onClick={() => void drop()}>{t('education.student.dropCourse')}</Button> : null}
                 </Stack> : null}
               </Stack>
             </Grid>
