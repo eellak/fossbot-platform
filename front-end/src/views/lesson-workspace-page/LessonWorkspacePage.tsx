@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type PointerEventHandler } from 'react';
 import { Alert, Box, Button, Chip, Collapse, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, LinearProgress, Skeleton, Stack, Tab, Tabs, Tooltip, Typography, useMediaQuery, useTheme } from '@mui/material';
-import { IconArrowLeft, IconArrowRight, IconCamera, IconCircleCheck, IconLayoutSidebarLeftCollapse, IconLayoutSidebarLeftExpand, IconPlayerPlay, IconPlayerStop, IconRefresh, IconRestore, IconX } from '@tabler/icons-react';
+import { IconArrowLeft, IconArrowRight, IconCamera, IconChartBar, IconCircleCheck, IconLayoutSidebarLeftCollapse, IconLayoutSidebarLeftExpand, IconPlayerPlay, IconPlayerStop, IconRefresh, IconRestore, IconX } from '@tabler/icons-react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { v4 as uuidv4 } from 'uuid';
@@ -518,7 +518,7 @@ export default function LessonWorkspacePage({ previewAppearance = true, courseId
           <Typography variant="subtitle2" fontWeight={700} noWrap>{enrollment.course.title}</Typography>
         </Box>
         <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 1 }}>
-          {!compact && <Chip size="small" variant="outlined" label={t('education.student.progress', { completed: enrollment.completed_count, total: enrollment.lesson_count })} />}
+          {!compact && <Button size="small" variant="outlined" startIcon={<IconChartBar size={16} />} onClick={() => navigate(`/courses/${courseId}/progress${isGuest ? `?enrollment=${enrollment.id}` : ''}`)}>{t('education.student.progress', { completed: enrollment.completed_count, total: enrollment.lesson_count })}</Button>}
           <Chip size="small" color={saveState === 'failed' || saveState === 'conflict' || saveState === 'release_changed' ? 'error' : saveState === 'saved' ? 'success' : 'default'} label={saveLabel} />
           {saveState === 'failed' && <Button size="small" onClick={() => void retrySave()}>{t('education.student.retry')}</Button>}
         </Box>

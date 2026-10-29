@@ -10,6 +10,7 @@ import type { CourseSummary, Enrollment } from 'src/courses/types';
 import DashboardCard from 'src/components/shared/DashboardCardWithChildren';
 import ListCard from 'src/components/shared/ListCard';
 import BetaBadge from 'src/components/shared/BetaBadge';
+import CourseActionsMenu from 'src/components/courses/CourseActionsMenu';
 import { guestCanView } from 'src/authentication/guest';
 
 const MAX_ROWS = 3;
@@ -90,6 +91,10 @@ export default function CoursesDashboardPanel({ previewAppearance = true }: { pr
           meta={course.latest_published_release_version ? t('education.courseList.latestRelease', { version: course.latest_published_release_version }) : t('education.courseList.noRelease')}
           openLabel={t('education.courseList.edit')}
           onOpen={() => navigate(`/teach/courses/${course.id}`)}
+          action={<CourseActionsMenu label={t('education.courseList.actions')} actions={[
+            { key: 'edit', label: t('education.courseList.edit'), onClick: () => navigate(`/teach/courses/${course.id}`) },
+            { key: 'progress', label: t('education.analytics.title'), onClick: () => navigate(`/teach/courses/${course.id}/progress`) },
+          ]} />}
         />
       ))}
     </Stack>
@@ -104,7 +109,13 @@ export default function CoursesDashboardPanel({ previewAppearance = true }: { pr
           fallbackIcon={<IconSchool size={20} />}
           meta={t('education.student.progress', { completed: enrollment.completed_count, total: enrollment.lesson_count })}
           onOpen={() => navigate(`/courses/${enrollment.course_id}${isGuest ? `?enrollment=${enrollment.id}` : ''}`)}
-          action={<Button size="small" variant={index === 0 ? 'contained' : 'outlined'} onClick={() => navigate(enrollment.resume_lesson_key && !enrollment.completed_at ? `/courses/${enrollment.course_id}/learn/${enrollment.resume_lesson_key}${isGuest ? `?enrollment=${enrollment.id}` : ''}` : `/courses/${enrollment.course_id}${isGuest ? `?enrollment=${enrollment.id}` : ''}`)}>{enrollment.completed_at ? t('education.student.reviewCourse') : t('education.student.continueCourse')}</Button>}
+          action={<Stack direction="row" spacing={1} alignItems="center">
+            <Button size="small" variant={index === 0 ? 'contained' : 'outlined'} onClick={() => navigate(enrollment.resume_lesson_key && !enrollment.completed_at ? `/courses/${enrollment.course_id}/learn/${enrollment.resume_lesson_key}${isGuest ? `?enrollment=${enrollment.id}` : ''}` : `/courses/${enrollment.course_id}${isGuest ? `?enrollment=${enrollment.id}` : ''}`)}>{enrollment.completed_at ? t('education.student.reviewCourse') : t('education.student.continueCourse')}</Button>
+            <CourseActionsMenu label={t('education.courseList.actions')} actions={[
+              { key: 'open', label: t('education.student.viewCourse'), onClick: () => navigate(`/courses/${enrollment.course_id}${isGuest ? `?enrollment=${enrollment.id}` : ''}`) },
+              { key: 'progress', label: t('education.student.progressTitle'), onClick: () => navigate(`/courses/${enrollment.course_id}/progress${isGuest ? `?enrollment=${enrollment.id}` : ''}`) },
+            ]} />
+          </Stack>}
         >
           <LinearProgress variant="determinate" value={enrollment.progress_percent} sx={{ mt: 1, maxWidth: 320 }} />
         </ListCard>

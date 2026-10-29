@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Alert, Box, Button, Chip, CircularProgress, Divider, Grid, Paper, Stack, Typography, useTheme } from '@mui/material';
+import { IconChartBar } from '@tabler/icons-react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import PageContainer from 'src/components/container/PageContainer';
@@ -81,7 +82,10 @@ export default function CoursePage() {
                 <Typography variant="h5">{t('education.student.objectives')}</Typography>
                 <Box component="ul" sx={{ m: 0, pl: 3 }}>{course.learning_objectives.map((objective) => <li key={objective}><Typography>{objective}</Typography></li>)}</Box>
                 {course.prerequisites ? <><Typography variant="h6">{t('education.student.prerequisites')}</Typography><Typography>{course.prerequisites}</Typography></> : null}
-                {(user?.role === 'user' || (isGuest && enrollment)) ? <Button variant="contained" size="large" disabled={working} onClick={start} sx={{ alignSelf: 'flex-start' }}>{working ? t('education.student.saving') : enrollment?.completed_at ? t('education.student.reviewCourse') : enrollment ? t('education.student.continueCourse') : t('education.student.startCourse')}</Button> : null}
+                {(user?.role === 'user' || (isGuest && enrollment)) ? <Stack direction="row" spacing={1} flexWrap="wrap">
+                  <Button variant="contained" size="large" disabled={working} onClick={start} sx={{ alignSelf: 'flex-start' }}>{working ? t('education.student.saving') : enrollment?.completed_at ? t('education.student.reviewCourse') : enrollment ? t('education.student.continueCourse') : t('education.student.startCourse')}</Button>
+                  {enrollment ? <Button variant="outlined" size="large" startIcon={<IconChartBar size={18} />} onClick={() => navigate(`/courses/${course.id}/progress${isGuest ? `?enrollment=${enrollment.id}` : ''}`)}>{t('education.student.progressTitle')}</Button> : null}
+                </Stack> : null}
               </Stack>
             </Grid>
             <Grid item xs={12} md={4}><StudentCourseOutline collapsible defaultOpen={false} lessons={lessons} progress={enrollment?.progress} title={t('education.student.outline')} completedLabel={t('education.student.completed')} onSelect={enrollment ? (key) => navigate(`/courses/${course.id}/learn/${key}${isGuest ? `?enrollment=${enrollment.id}` : ''}`) : undefined} /></Grid>
