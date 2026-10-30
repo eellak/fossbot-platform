@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 from database.database import AIPolicyRule, AIProviderConfig, AIInstanceSettings, ClassGroup, ClassMembership
 from routers import ai, ai_admin, ai_teaching
 from utils.ai.capabilities import CAPABILITIES
+from utils.guest_access import Participant
 
 
 def client_for(db, user):
@@ -19,7 +20,9 @@ def client_for(db, user):
 
     for module in (ai, ai_admin, ai_teaching):
         app.dependency_overrides[module.get_db] = override_db
-        app.dependency_overrides[module.get_current_user] = lambda: user
+        if module is not ai:
+            app.dependency_overrides[module.get_current_user] = lambda: user
+    app.dependency_overrides[ai.get_participant] = lambda: Participant(user=user)
     return TestClient(app)
 
 

@@ -1,13 +1,13 @@
 """Revocable live project links.
 
 Revision ID: 20261030_13
-Revises: 20260731_12
+Revises: 20260801_13
 """
 from alembic import op
 import sqlalchemy as sa
 
 revision = "20261030_13"
-down_revision = "20260731_12"
+down_revision = "20260801_13"
 branch_labels = None
 depends_on = None
 

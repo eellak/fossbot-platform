@@ -5,6 +5,7 @@ import { MemoryRouter, useLocation } from 'react-router-dom';
 import AuthProvider, { useAuth } from './AuthProvider';
 import { GUEST_TOKEN_STORAGE_KEY } from './guest';
 import { rememberAuthReturnPath } from './authReturn';
+import { rememberSharedReturn } from './sharedProjectReturn';
 
 declare const afterEach: any;
 declare const beforeEach: any;
@@ -188,4 +189,14 @@ describe('guest authentication lifecycle', () => {
     await act(async () => { container.querySelectorAll('button')[0].click(); await flush(); });
     expect(text('location')).toBe('/classrooms?join=ABC123');
   });
+  it('preserves shared-project login over the normal dashboard redirect', async () => {
+    const path = '/shared-projects/' + 'a'.repeat(43);
+    rememberAuthReturnPath(path);
+    rememberSharedReturn(path);
+    authApi.createGuestSession.mockResolvedValue(jsonResponse({ token: 'guest_token_1', token_type: 'bearer', guest: guest(['python']) }, 201));
+    await render();
+    await act(async () => { container.querySelectorAll('button')[0].click(); await flush(); });
+    expect(text('location')).toBe(path);
+  });
+
 });

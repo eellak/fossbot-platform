@@ -1094,8 +1094,7 @@
       "provider_unavailable": "Allowed provider unavailable",
       "guest_allowed": "Allowed for guests",
       "guest_disabled": "Buddy is disabled for guests",
-      "guest_capability_denied": "Not available to guests"
-,
+      "guest_capability_denied": "Not available to guests",
       "students_blocked": "Blocked for students by an administrator"
     },
     "messages": {

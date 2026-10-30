@@ -1,15 +1,15 @@
 """delegated Buddy provider access and student blocking
 
-Revision ID: 20260801_13
-Revises: 20260731_12
+Revision ID: 20261030_14
+Revises: 20261030_13
 Create Date: 2026-08-01
 """
 from alembic import op
 import sqlalchemy as sa
 
 
-revision = "20260801_13"
-down_revision = "20260731_12"
+revision = "20261030_14"
+down_revision = "20261030_13"
 branch_labels = None
 depends_on = None
 

@@ -16,7 +16,7 @@ it('uses the receiver token and rejects guest private-stage loads', async () => 
   const stage = { sourceType: 'local', localStageId: 7 };
   expect((await loadSharedProjectStage(stage, 'receiver')).config).toEqual([]);
   expect(loadLocalStage).toHaveBeenCalledWith('receiver', 7);
-  await expect(loadSharedProjectStage(stage, 'guest', { beta_tester: false, allowed_views: ['python'] })).rejects.toThrow();
+  await expect(loadSharedProjectStage(stage, 'guest', { beta_tester: false, allowed_views: ['python'], ai_enabled: false })).rejects.toThrow();
   (loadStageFromProvider as any).mockResolvedValue({ record: { config: [] }, rawBaseUrl: null });
   await loadSharedProjectStage({ sourceType: 'github', repoOwner: 'owner', repoName: 'fossbot-stage' }, 'receiver');
   expect(loadStageFromProvider).toHaveBeenCalledWith('receiver', 'owner', 'fossbot-stage');

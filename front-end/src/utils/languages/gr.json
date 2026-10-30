@@ -1094,8 +1094,7 @@
       "provider_unavailable": "Ο επιτρεπόμενος πάροχος δεν είναι διαθέσιμος",
       "guest_allowed": "Επιτρέπεται για επισκέπτες",
       "guest_disabled": "Το Buddy είναι ανενεργό για επισκέπτες",
-      "guest_capability_denied": "Δεν είναι διαθέσιμο σε επισκέπτες"
-,
+      "guest_capability_denied": "Δεν είναι διαθέσιμο σε επισκέπτες",
       "students_blocked": "Αποκλεισμός για μαθητές από διαχειριστή"
     },
     "messages": {
