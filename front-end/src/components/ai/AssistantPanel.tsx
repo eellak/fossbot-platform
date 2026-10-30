@@ -299,7 +299,7 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
   const [runtimeStatus, setRuntimeStatus] = useState<AIRuntimeStatus>({ readiness: 'idle' });
   const [debugEnabled, setDebugEnabled] = useState(false);
   const [debugEntries, setDebugEntries] = useState<AIDebugTraceEntry[]>([]);
-  const [consent, setConsent] = useState<{ provider: AIPublicProvider; question: string; mode: RequestMode; kind: 'download' | 'local'; benchmark?: boolean } | null>(null);
+  const [consent, setConsent] = useState<{ provider: AIPublicProvider; question: string; mode: RequestMode; benchmark?: boolean } | null>(null);
   // Lifecycle view overrides. `compose` lets the user return to the ask state without losing the
   // previous answer; `applied` distinguishes a completed apply from a plain answer.
   const [compose, setCompose] = useState(false);
@@ -411,13 +411,6 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
       appendDebug('client', 'provider.selected', provider);
       const runtime = runtimeFor(provider, token);
       runtimeRef.current = runtime;
-      if (!consentGranted && provider.runtime === 'user_local') {
-        await runtime.prepare({ signal: controller.signal, onStatus: setRuntimeStatus });
-        if (followUp) setConversation((current) => current.filter((entry) => entry.id !== entryId));
-        setConsent({ provider, question: trimmed, mode: nextMode, kind: 'local', benchmark });
-        setStatus('idle');
-        return;
-      }
       if (!consentGranted && runtime instanceof WebLLMRuntime) {
         setRuntimeStatus({ readiness: 'checking' });
         await runtime.checkSupport();
@@ -425,7 +418,7 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
         setRuntimeStatus({ readiness: 'idle', cached });
         if (localStorage.getItem(webLLMConsentKey(provider)) !== 'accepted' && !cached) {
           if (followUp) setConversation((current) => current.filter((entry) => entry.id !== entryId));
-          setConsent({ provider, question: trimmed, mode: nextMode, kind: 'download', benchmark });
+          setConsent({ provider, question: trimmed, mode: nextMode, benchmark });
           setStatus('idle');
           return;
         }
@@ -1036,7 +1029,7 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
       </Box>
     </Portal>
     <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)}><DialogTitle>{t('aiAssistant.confirmTitle')}</DialogTitle><DialogContent><Typography>{confirmationBody || t('aiAssistant.confirmBody')}</Typography></DialogContent><DialogActions><Button onClick={() => setConfirmOpen(false)}>{t('cancel')}</Button><Button variant="contained" onClick={() => void apply()}>{t('aiAssistant.apply')}</Button></DialogActions></Dialog>
-    <Dialog open={Boolean(consent)} onClose={() => setConsent(null)} fullWidth maxWidth="sm"><DialogTitle>{t(consent?.kind === 'download' ? 'aiAssistant.consent.downloadTitle' : 'aiAssistant.consent.localTitle')}</DialogTitle><DialogContent><Stack spacing={1.5}>{consent?.kind === 'download' ? <><Typography>{t('aiAssistant.consent.downloadBody', { size: formatBytes(webLLMDownloadGuidance(consent.provider).downloadBytes), memory: formatBytes(webLLMDownloadGuidance(consent.provider).memoryBytes) })}</Typography><Typography variant="caption" sx={{ overflowWrap: 'anywhere' }}>{t('aiAssistant.consent.source', { source: webLLMDownloadGuidance(consent.provider).source })}</Typography></> : <Alert severity="warning">{t('aiAssistant.consent.localBody')}</Alert>}</Stack></DialogContent><DialogActions><Button onClick={() => setConsent(null)}>{t('cancel')}</Button><Button variant="contained" onClick={() => { if (!consent) return; const pending = consent; if (pending.kind === 'download') localStorage.setItem(webLLMConsentKey(pending.provider), 'accepted'); setSelectedProviderId(pending.provider.id); setConsent(null); void run(pending.question, pending.mode, true, pending.provider.id, Boolean(pending.benchmark)); }}>{t(consent?.kind === 'download' ? 'aiAssistant.consent.download' : 'aiAssistant.consent.send')}</Button></DialogActions></Dialog>
+    <Dialog open={Boolean(consent)} onClose={() => setConsent(null)} fullWidth maxWidth="sm"><DialogTitle>{t('aiAssistant.consent.downloadTitle')}</DialogTitle><DialogContent>{consent && <Stack spacing={1.5}><Typography>{t('aiAssistant.consent.downloadBody', { size: formatBytes(webLLMDownloadGuidance(consent.provider).downloadBytes), memory: formatBytes(webLLMDownloadGuidance(consent.provider).memoryBytes) })}</Typography><Typography variant="caption" sx={{ overflowWrap: 'anywhere' }}>{t('aiAssistant.consent.source', { source: webLLMDownloadGuidance(consent.provider).source })}</Typography></Stack>}</DialogContent><DialogActions><Button onClick={() => setConsent(null)}>{t('cancel')}</Button><Button variant="contained" onClick={() => { if (!consent) return; const pending = consent; localStorage.setItem(webLLMConsentKey(pending.provider), 'accepted'); setSelectedProviderId(pending.provider.id); setConsent(null); void run(pending.question, pending.mode, true, pending.provider.id, Boolean(pending.benchmark)); }}>{t('aiAssistant.consent.download')}</Button></DialogActions></Dialog>
   </>;
 }
 

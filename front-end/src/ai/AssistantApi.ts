@@ -11,6 +11,7 @@ import type {
   AIProviderInput,
   AIScopeType,
   AIStreamEvent,
+  ClassBuddyState,
 } from './types';
 
 import { backendUrl } from '../utils/backendUrl';
@@ -84,7 +85,7 @@ export async function deleteAIProvider(token: string, providerId: number): Promi
   if (!response.ok) await parse(response);
 }
 
-export function updateAISettings(token: string, settings: Pick<AIInstanceSettings, 'enabled' | 'defaultProviderId' | 'requestLimit' | 'tokenLimit' | 'reportLocalUsage' | 'usageRetentionDays'>): Promise<AIInstanceSettings> {
+export function updateAISettings(token: string, settings: Pick<AIInstanceSettings, 'enabled' | 'defaultProviderId' | 'requestLimit' | 'tokenLimit' | 'reportLocalUsage' | 'studentsBlocked' | 'usageRetentionDays'>): Promise<AIInstanceSettings> {
   return fetch(`${backendUrl}/api/admin/ai/settings`, { method: 'PUT', headers: headers(token), body: JSON.stringify(settings) }).then(parse<AIInstanceSettings>);
 }
 
@@ -117,6 +118,23 @@ export async function deleteAIPolicy(token: string, scopeType: AIScopeType, scop
   const query = new URLSearchParams({ scopeType, scopeKey, capability });
   const response = await fetch(`${backendUrl}/api/admin/ai/policies?${query}`, { method: 'DELETE', headers: headers(token) });
   if (!response.ok) await parse(response);
+}
+
+export function readClassBuddy(token: string, groupId: number): Promise<ClassBuddyState> {
+  return fetch(`${backendUrl}/api/class-groups/${groupId}/ai`, { headers: headers(token) }).then(parse<ClassBuddyState>);
+}
+
+export function assignClassBuddyProvider(token: string, groupId: number, providerId: number): Promise<ClassBuddyState> {
+  return fetch(`${backendUrl}/api/class-groups/${groupId}/ai`, { method: 'PUT', headers: headers(token), body: JSON.stringify({ providerId }) }).then(parse<ClassBuddyState>);
+}
+
+export async function clearClassBuddyProvider(token: string, groupId: number): Promise<void> {
+  const response = await fetch(`${backendUrl}/api/class-groups/${groupId}/ai`, { method: 'DELETE', headers: headers(token) });
+  if (!response.ok) await parse(response);
+}
+
+export function setClassBuddyBlock(token: string, groupId: number, blocked: boolean): Promise<{ blocked: boolean }> {
+  return fetch(`${backendUrl}/api/class-groups/${groupId}/ai/block`, { method: 'PUT', headers: headers(token), body: JSON.stringify({ blocked }) }).then(parse<{ blocked: boolean }>);
 }
 
 export function resolveAIAccess(token: string, userId: number, capability: AICapabilityId): Promise<AIAccessDecision> {

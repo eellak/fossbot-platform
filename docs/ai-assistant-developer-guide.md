@@ -2,11 +2,12 @@
 
 ## Architecture and versions
 
-The backend owns policy resolution, hosted provider credentials/requests, context assembly, prompt construction, quotas, suggestion validation, and content-free usage records. The frontend owns surface integration, previews/apply/undo, WebLLM workers/cache, and browser-direct user-local requests.
+The backend owns policy resolution, hosted provider credentials/requests, context assembly, prompt construction, quotas, suggestion validation, and content-free usage records. The frontend owns surface integration, previews/apply/undo, and WebLLM workers/cache.
 
 Current contracts:
 
 - capability registry, access/admin schema, and policy: version `1`;
+- access payload: version `2`, providers filtered to the caller's allowed set;
 - context: version `1`, maximum encoded context 48,000 characters;
 - prompt: `fossbot-assistant-v2`, FOSSBot API reference version `1`;
 - suggestion schemas: version `1`, maximum provider suggestion 32,000 characters;
@@ -26,7 +27,13 @@ Python and Blockly requests that carry a `releaseId` and `lessonKey` are grounde
 5. Suggestions are parsed twice: backend structural/domain validation and frontend surface validation against the current fingerprint/revision.
 6. The surface shows a preview. Apply/undo remains local to the editor; save/publish stays in the normal product workflow.
 
-WebLLM and user-local runtimes implement the same event interface in the browser. Optional `POST /api/ai/usage` reports only bounded counts/outcomes after policy is checked.
+WebLLM implements the same event interface in the browser. Optional `POST /api/ai/usage` reports only bounded counts/outcomes after policy is checked.
+
+## Delegated class access
+
+`PUT /api/class-groups/{id}/ai` lets the owning teacher (`require_teacher` plus ownership, administrators bypass) assign one assignable hosted provider for all capabilities. It writes `class_group` allow rules with `authority='class_teacher'`; an administrator write sets `authority='admin'`, and a teacher write against an existing administrative rule returns `409`. `DELETE` removes only teacher-authored rules. `PUT /api/class-groups/{id}/ai/block` sets `class_groups.ai_blocked`, which removes that group's contribution from resolution instead of denying globally.
+
+`AIInstanceSettings.students_blocked` is a pre-check for the `user` role. In `resolve_capability`, a teacher-authored rule whose provider is disabled or no longer `class_assignable` is skipped so the next scope applies.
 
 ## Adding a provider or capability
 

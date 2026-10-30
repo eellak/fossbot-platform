@@ -61,6 +61,7 @@ from routers.courses import router as courses_router
 from routers.classrooms import router as classrooms_router
 from routers.ai import router as ai_router
 from routers.ai_admin import router as ai_admin_router
+from routers.ai_teaching import router as ai_teaching_router
 from routers.website import router as website_router
 from routers.guests import router as guests_router
 from utils.github_app_auth import create_github_app_jwt
@@ -97,6 +98,7 @@ app.include_router(courses_router)
 app.include_router(classrooms_router)
 app.include_router(ai_router)
 app.include_router(ai_admin_router)
+app.include_router(ai_teaching_router)
 app.include_router(website_router)
 app.include_router(guests_router)
 

@@ -161,6 +161,47 @@ def test_provider_response_is_secret_free_and_validated(db, users):
         assert unsafe_browser.status_code == 422
 
 
+def test_access_returns_only_allowed_providers_and_hides_hosted_settings(db, users):
+    _, other_tutor, student, admin = users
+    allowed = seed_provider(db, admin)
+    hidden = AIProviderConfig(
+        name="Unrelated hosted",
+        provider_type="google",
+        runtime="hosted",
+        enabled=True,
+        model="other-model",
+        encrypted_secret="never-returned",
+        settings={"version": "1"},
+        created_by_id=admin.id,
+        updated_by_id=admin.id,
+    )
+    db.add(hidden)
+    db.flush()
+    db.add_all([
+        AIInstanceSettings(id=1, enabled=True, default_provider_id=allowed.id, registry_version="1", updated_by_id=admin.id),
+        AIPolicyRule(
+            scope_type="role",
+            scope_key="user",
+            capability="code.explain",
+            effect="allow",
+            provider_ids=[allowed.id],
+            created_by_id=admin.id,
+            updated_by_id=admin.id,
+        ),
+    ])
+    db.commit()
+
+    with client_for(db, student) as client:
+        payload = client.get("/api/ai/access").json()
+    providers = {provider["id"]: provider for provider in payload["providers"]}
+    assert set(providers) == {allowed.id}
+    assert providers[allowed.id]["settings"] == {}
+
+    with client_for(db, other_tutor) as client:
+        denied = client.get("/api/ai/access").json()
+    assert denied["providers"] == []
+
+
 def test_policy_routes_reject_unknown_references(db, users):
     admin = users[3]
     provider = seed_provider(db, admin)
@@ -196,7 +237,7 @@ def test_access_is_current_user_only_and_uses_active_memberships(db, users):
         response = client.get("/api/ai/access")
         assert response.status_code == 200
         payload = response.json()
-        assert payload["schemaVersion"] == "1"
+        assert payload["schemaVersion"] == "2"
         decision = next(item for item in payload["capabilities"] if item["capability"] == "code.explain")
         assert decision["reasonCode"] == "class_group_denied"
         assert all("secret" not in str(item).lower() for item in payload["providers"])

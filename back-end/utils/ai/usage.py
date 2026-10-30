@@ -53,8 +53,11 @@ def ensure_quota(
 ) -> None:
     since = datetime.datetime.utcnow() - datetime.timedelta(seconds=USAGE_WINDOW_SECONDS)
     base = db.query(AIUsageEvent).filter(AIUsageEvent.started_at >= since)
-    instance_count, instance_tokens = _usage_totals(base)
-    provider_count, provider_tokens = _usage_totals(base.filter(AIUsageEvent.provider_id == provider.id))
+    # Reported browser/user-local runs cost nothing on a hosted provider, so they must not
+    # consume the shared instance or provider budget. The per-user check stays unchanged.
+    hosted = base.filter(AIUsageEvent.runtime.notin_(("browser", "user_local")))
+    instance_count, instance_tokens = _usage_totals(hosted)
+    provider_count, provider_tokens = _usage_totals(hosted.filter(AIUsageEvent.provider_id == provider.id))
     identity = (
         AIUsageEvent.guest_session_id == guest_session_id
         if guest_session_id is not None
