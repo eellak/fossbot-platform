@@ -4,13 +4,14 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from database.database import Base, LocalMarketplacePublication, LocalMarketplaceSubmission, LocalStage, MarketplaceModerationOverride, Projects, User
+from database.database import Base, Course, Lesson, LocalMarketplacePublication, LocalMarketplaceSubmission, LocalStage, MarketplaceModerationOverride, Projects, User
 from fastapi import HTTPException
 from models.models import UserRole
 from routers.courses import StageReference, marketplace_reference
 from routers.local_stages import LocalMarketplacePublishRequest, LocalMarketplaceReviewRequest, LocalStageSaveRequest, copy_installed_github_stage, create_local_stage, delete_local_stage, get_local_release_record, get_local_stage, get_local_stage_preview, github_stage_provenance, list_local_stages, publish_local_stage, review_local_publication, unpublish_local_stage
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.exc import IntegrityError
 from utils.local_stage_storage import (
     MAX_STAGE_RECORD_BYTES,
     LocalStageValidationError,
@@ -252,6 +253,81 @@ class LocalPublicationLifecycleTests(unittest.TestCase):
         self.db.commit()
         with self.assertRaises(HTTPException):
             asyncio.run(get_local_release_record(pending["submission"]["id"], self.db))
+
+    def test_owned_unreferenced_stage_is_deleted_with_preview(self):
+        stage_id = self.stage.id
+        self.stage.preview_image = b"preview"
+        self.stage.preview_mime = "image/png"
+        self.db.commit()
+        response = asyncio.run(delete_local_stage(stage_id, self.owner, self.db))
+        self.assertEqual(response["detail"], "Local stage deleted.")
+        self.assertIsNone(self.db.get(LocalStage, stage_id))
+        self.assertEqual(asyncio.run(list_local_stages(self.owner, self.db))["stages"], [])
+
+    def test_other_owner_and_missing_stage_cannot_be_deleted(self):
+        for stage_id, user in ((self.stage.id, self.reviewer), (99999, self.owner)):
+            with self.assertRaises(HTTPException) as raised:
+                asyncio.run(delete_local_stage(stage_id, user, self.db))
+            self.assertEqual(raised.exception.status_code, 404)
+        self.assertIsNotNone(self.db.get(LocalStage, self.stage.id))
+
+    def test_lesson_reference_blocks_stage_deletion(self):
+        course = Course(author_id=self.owner.id, title="Course", description="", learning_objectives=[])
+        self.db.add(course)
+        self.db.flush()
+        self.db.add(Lesson(lesson_key="lesson", course_id=course.id, title="Lesson", position=0, activities=[], stage_local_id=self.stage.id))
+        self.db.commit()
+        with self.assertRaises(HTTPException) as raised:
+            asyncio.run(delete_local_stage(self.stage.id, self.owner, self.db))
+        self.assertEqual(raised.exception.detail["error"], "stage_is_referenced")
+        lesson = self.db.query(Lesson).filter(Lesson.course_id == course.id).one()
+        self.assertEqual(raised.exception.detail["references"], {
+            "projects": [],
+            "lessons": [{"id": lesson.id, "title": "Lesson", "courseId": course.id, "courseTitle": "Course", "archived": False}],
+        })
+
+    def test_delete_conflict_lists_all_owned_references_without_disclosing_other_authors(self):
+        own_course = Course(author_id=self.owner.id, title="Robot Basics", description="", learning_objectives=[])
+        other_course = Course(author_id=self.reviewer.id, title="Private course", description="", learning_objectives=[])
+        self.db.add_all([own_course, other_course])
+        self.db.flush()
+        self.db.add_all([
+            Lesson(lesson_key="forward", course_id=own_course.id, title="Move forward", position=0, activities=[], stage_local_id=self.stage.id),
+            Lesson(lesson_key="turn", course_id=own_course.id, title="Turn", position=1, activities=[], stage_local_id=self.stage.id),
+            Lesson(lesson_key="old", course_id=own_course.id, title="Old lesson", position=2, activities=[], archived=True, stage_local_id=self.stage.id),
+            Lesson(lesson_key="private", course_id=other_course.id, title="Private lesson", position=0, activities=[], stage_local_id=self.stage.id),
+            Projects(name="Python project", project_type="python", user_id=self.owner.id, stage_local_id=self.stage.id),
+            Projects(name="Blockly project", project_type="blockly", user_id=self.owner.id, stage_local_id=self.stage.id),
+            Projects(name="Private project", project_type="python", user_id=self.reviewer.id, stage_local_id=self.stage.id),
+        ])
+        self.db.commit()
+        with self.assertRaises(HTTPException) as raised:
+            asyncio.run(delete_local_stage(self.stage.id, self.owner, self.db))
+        detail = raised.exception.detail
+        self.assertEqual([item["title"] for item in detail["references"]["lessons"]], ["Move forward", "Turn", "Old lesson"])
+        self.assertTrue(detail["references"]["lessons"][-1]["archived"])
+        self.assertEqual([item["title"] for item in detail["references"]["projects"]], ["Blockly project", "Python project"])
+        self.assertEqual(detail["otherReferenceCount"], 2)
+        self.assertNotIn("Private", str(detail))
+        self.assertIsNotNone(self.db.get(LocalStage, self.stage.id))
+
+    def test_publication_history_blocks_stage_deletion(self):
+        submission = asyncio.run(publish_local_stage(self.stage.id, self.request(), self.owner, self.db))
+        for approved in (False, True):
+            if approved:
+                self.approve(submission["submission"]["id"])
+            with self.assertRaises(HTTPException) as raised:
+                asyncio.run(delete_local_stage(self.stage.id, self.owner, self.db))
+            self.assertEqual(raised.exception.detail["error"], "stage_has_publication_history")
+        self.assertIsNotNone(self.db.get(LocalStage, self.stage.id))
+
+    def test_delete_rolls_back_a_concurrent_reference_conflict(self):
+        stage_id = self.stage.id
+        with patch.object(self.db, "commit", side_effect=IntegrityError("DELETE", {}, Exception("foreign key"))):
+            with self.assertRaises(HTTPException) as raised:
+                asyncio.run(delete_local_stage(stage_id, self.owner, self.db))
+        self.assertEqual(raised.exception.status_code, 409)
+        self.assertIsNotNone(self.db.get(LocalStage, stage_id))
 
     def test_referenced_stage_cannot_be_deleted(self):
         self.db.add(Projects(name="Project", description="", project_type="python", code="", user_id=self.owner.id, stage_local_id=self.stage.id))

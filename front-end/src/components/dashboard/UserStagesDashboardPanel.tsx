@@ -37,6 +37,7 @@ import StageListCard from 'src/stages/StageListCard';
 import { LocalStageDetailsDialog } from 'src/stages/StageDetailsDialog';
 import { localStageRepository } from 'src/components/stage-builder/localStages';
 import type { LocalStageRecord } from 'src/components/stage-builder/types';
+import { useDeleteStage } from 'src/stages/useDeleteStage';
 import { useStagePreviews } from 'src/stages/useStagePreviews';
 import { MARKETPLACE_COPY } from 'src/stages/marketplaceCopy';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -51,6 +52,7 @@ type DashboardStage = {
   detail: string;
   description?: string;
   localStage?: LocalStageSummary;
+  browserStageId?: string;
   notice?: string;
   status?: string;
   statusKey: 'draft' | 'published' | 'pending' | 'rejected';
@@ -102,6 +104,7 @@ function localStatus(stage: LocalStageSummary): Pick<DashboardStage, 'status' | 
 export default function UserStagesDashboardPanel({ showViewAll = true, appearance = 'card' }: { showViewAll?: boolean; appearance?: 'card' | 'page' }) {
   const { t } = useTranslation();
   const confirmDialog = useConfirmDialog();
+  const { deleteStage, busy: deletingStage } = useDeleteStage();
   const { notify } = useNotifications();
   const { token, user, isGuest } = useAuth();
   const location = useLocation();
@@ -299,6 +302,7 @@ export default function UserStagesDashboardPanel({ showViewAll = true, appearanc
         description: stage.description,
         updatedAt: stage.updatedAt,
         href: `/stage-builder?guestStage=${encodeURIComponent(stage.id)}`,
+        browserStageId: stage.id,
         source: 'local' as const,
         detail: '',
         statusKey: 'draft' as const,
@@ -430,7 +434,7 @@ export default function UserStagesDashboardPanel({ showViewAll = true, appearanc
       onOpen={() => navigate(stage.href)}
       surface={viewMode === 'cards' ? 'card' : 'row'}
       divided={viewMode !== 'cards' && index > 0}
-      action={!isGuest && stage.source === 'local' ? (
+      action={stage.source === 'local' ? (
         <Tooltip title="More actions">
           <span>
             <IconButton
@@ -438,7 +442,7 @@ export default function UserStagesDashboardPanel({ showViewAll = true, appearanc
               aria-controls={stageMenu?.stage.key === stage.key ? 'local-stage-actions-menu' : undefined}
               aria-haspopup="menu"
               aria-expanded={stageMenu?.stage.key === stage.key ? 'true' : undefined}
-              disabled={localStageBusy !== null}
+              disabled={localStageBusy !== null || deletingStage}
               onClick={(event) => setStageMenu({ anchorEl: event.currentTarget, stage })}
               sx={{ width: 44, height: 44 }}
             >
@@ -568,6 +572,24 @@ export default function UserStagesDashboardPanel({ showViewAll = true, appearanc
       >
         {stageMenu.stage.localStage.publication?.active ? <DeleteOutlineIcon fontSize="small" sx={{ mr: 1 }} /> : <CloseIcon fontSize="small" sx={{ mr: 1 }} />}
         {stageMenu.stage.localStage.publication?.active ? 'Unpublish' : 'Cancel request'}
+      </MenuItem>}
+      {stageMenu?.stage.source === 'local' && <MenuItem
+        sx={{ color: 'error.main' }}
+        disabled={deletingStage || localStageBusy !== null}
+        onClick={async () => {
+          const stage = stageMenu.stage;
+          setStageMenu(null);
+          const target = stage.localStage
+            ? { source: 'account' as const, id: stage.localStage.id, title: stage.title }
+            : stage.browserStageId ? { source: 'browser' as const, id: stage.browserStageId, title: stage.title } : null;
+          if (target && await deleteStage(target)) {
+            setLocalStages((current) => current.filter((item) => item.id !== target.id));
+            setBrowserStages((current) => current.filter((item) => item.id !== target.id));
+          }
+        }}
+      >
+        <DeleteOutlineIcon fontSize="small" sx={{ mr: 1 }} />
+        Delete stage
       </MenuItem>}
     </Menu>
     {detailsStage?.localStage && token && (

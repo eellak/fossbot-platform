@@ -11,6 +11,7 @@ import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import PublishIcon from '@mui/icons-material/Publish';
 import SaveIcon from '@mui/icons-material/Save';
 import FolderOpenIcon from '@mui/icons-material/FolderOpen';
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import { activeValidationResults, validationSummary, type StageBuilderValidationResult } from './stageBuilderValidation';
 import { useEditorTheme } from './stageBuilderEditorTheme';
 import { MARKETPLACE_COPY } from 'src/stages/marketplaceCopy';
@@ -53,6 +54,8 @@ export interface EditorTopBarProps {
   onRedo: () => void;
   onDuplicate: () => void;
   onDelete: () => void;
+  onDeleteStage?: () => void;
+  deleteStageBusy?: boolean;
   onOpenValidation: () => void;
   onOpenSettings: () => void;
   onOpenStageSettings: () => void;
@@ -151,6 +154,8 @@ export function EditorTopBar({
   onRedo,
   onDuplicate,
   onDelete,
+  onDeleteStage,
+  deleteStageBusy,
   onOpenValidation,
   onOpenSettings,
   onOpenStageSettings,
@@ -294,6 +299,8 @@ export function EditorTopBar({
         <MenuItem onClick={() => { overflow.closeMenu(); onToggleRightPanel(); }}>{rightPanelVisible ? 'Hide' : 'Show'} inspector</MenuItem>
         <MenuItem onClick={() => { overflow.closeMenu(); onOpenPreviewSettings(); }}>Preview settings</MenuItem>
         <MenuItem onClick={() => { overflow.closeMenu(); onOpenSettings(); }}>Editor settings</MenuItem>
+        {onDeleteStage && <Divider />}
+        {onDeleteStage && <MenuItem sx={{ color: 'error.main' }} disabled={deleteStageBusy || localStageBusy || providerBusy || marketplaceBusy} onClick={() => { overflow.closeMenu(); onDeleteStage(); }}><DeleteOutlineIcon fontSize="small" sx={{ mr: 1 }} />{deleteStageBusy ? 'Deleting stage…' : 'Delete stage'}</MenuItem>}
       </Menu>
     </Toolbar>
   );
