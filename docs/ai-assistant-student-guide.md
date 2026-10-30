@@ -6,6 +6,6 @@ The assistant receives only the context shown for your current workspace: a boun
 
 Ask for a hint before a full change. For suggested edits, inspect the preview and choose **Apply** yourself. The suggestion is rejected if your workspace changed after it was generated. You can use **Undo AI change** after applying. FOSSBot Buddy cannot submit answers, change progress/scores, publish, or alter your class access.
 
-The panel names the provider, model, and runtime. **Hosted** sends the safe context to the configured provider through FOSSBot. **On-device** downloads and runs a model in your browser after consent. **User local** connects the browser directly to an endpoint you configure. Never paste passwords, API keys, personal information, or private student data into a question.
+The panel names the provider, model, and runtime. **Hosted** sends the safe context to the configured provider through FOSSBot. **On-device** downloads and runs a model in your browser after consent. Never paste passwords, personal information, or private student data into a question.
 
 If output looks unsafe, invented, unrelated, or reveals hidden information, stop, do not apply it, and report the provider/model plus what you were doing. Do not include secrets in the report.

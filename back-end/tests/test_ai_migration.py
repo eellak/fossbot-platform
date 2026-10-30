@@ -39,3 +39,19 @@ def test_ai_foundation_upgrade_and_downgrade_on_sqlite(tmp_path):
 
     command.downgrade(config, "20260731_07")
     assert AI_TABLES.isdisjoint(inspect(engine).get_table_names())
+
+
+def test_buddy_class_access_downgrade_removes_columns(tmp_path):
+    url = f"sqlite:///{tmp_path / 'buddy-migration.db'}"
+    config = config_for(url)
+    engine = create_engine(url)
+    Base.metadata.create_all(engine)
+    for table_name in ("ai_usage_events", "ai_policy_rules", "ai_instance_settings", "ai_provider_configs"):
+        Base.metadata.tables[table_name].drop(engine)
+    command.stamp(config, "20260731_07")
+    command.upgrade(config, "head")
+    command.downgrade(config, "20260731_12")
+    inspector = inspect(engine)
+    assert "authority" not in {column["name"] for column in inspector.get_columns("ai_policy_rules")}
+    assert "class_assignable" not in {column["name"] for column in inspector.get_columns("ai_provider_configs")}
+    assert "students_blocked" not in {column["name"] for column in inspector.get_columns("ai_instance_settings")}

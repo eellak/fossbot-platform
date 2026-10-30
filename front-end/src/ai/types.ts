@@ -25,6 +25,7 @@ export interface AIProviderConfig {
   providerType: AIProviderType;
   runtime: AIRuntime;
   enabled: boolean;
+  classAssignable: boolean;
   model: string;
   baseUrl?: string | null;
   settings: Record<string, unknown>;
@@ -47,6 +48,7 @@ export interface AIPublicProvider {
 export interface AIInstanceSettings {
   enabled: boolean;
   reportLocalUsage: boolean;
+  studentsBlocked: boolean;
   usageRetentionDays: number;
   defaultProviderId?: number | null;
   requestLimit?: number | null;
@@ -61,6 +63,7 @@ export interface AIPolicyRule {
   scopeKey: string;
   capability: AICapabilityId;
   effect: AIPolicyEffect;
+  authority?: 'admin' | 'class_teacher';
   providerIds: number[];
   runtimes: AIRuntime[];
   updatedAt: string;
@@ -97,7 +100,7 @@ export interface AIAccessDecision {
 }
 
 export interface AIAccessBootstrap {
-  schemaVersion: '1';
+  schemaVersion: '2';
   registryVersion: string;
   instanceEnabled: boolean;
   reportLocalUsage: boolean;
@@ -110,6 +113,7 @@ export interface AIProviderInput {
   providerType: AIProviderType;
   runtime: AIRuntime;
   enabled: boolean;
+  classAssignable?: boolean;
   model: string;
   baseUrl?: string | null;
   settings: Record<string, unknown> & { version: '1' };
@@ -119,6 +123,13 @@ export interface AIProviderInput {
 
 export type AIStreamEventType = 'start' | 'text_delta' | 'answer' | 'suggestion' | 'usage' | 'done' | 'error' | 'debug';
 export interface AIStreamEvent { type: AIStreamEventType; data: Record<string, unknown> }
+
+export interface ClassBuddyState {
+  blocked: boolean;
+  adminSet: boolean;
+  assignment: { providerId: number; providerName: string | null; status: 'active' | 'disabled' | 'not_assignable' | 'removed' } | null;
+  providers: Array<{ id: number; name: string; runtime: AIRuntime; model: string }>;
+}
 
 export interface AIDebugTraceEntry {
   version: '1';

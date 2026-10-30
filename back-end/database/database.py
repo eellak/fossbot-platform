@@ -13,6 +13,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     create_engine,
+    false,
     inspect,
     text,
 )
@@ -225,6 +226,7 @@ class AIProviderConfig(Base):
     provider_type = Column(String(32), nullable=False)
     runtime = Column(String(24), nullable=False)
     enabled = Column(Boolean, default=False, nullable=False)
+    class_assignable = Column(Boolean, default=False, nullable=False, server_default=false())
     model = Column(String(160), nullable=False)
     base_url = Column(String(500))
     encrypted_secret = Column(Text)
@@ -247,6 +249,7 @@ class AIInstanceSettings(Base):
     request_limit = Column(Integer)
     token_limit = Column(Integer)
     report_local_usage = Column(Boolean, nullable=False, default=False)
+    students_blocked = Column(Boolean, nullable=False, default=False, server_default=false())
     usage_retention_days = Column(Integer, nullable=False, default=30)
     registry_version = Column(String(32), nullable=False, default="1")
     updated_by_id = Column(Integer, ForeignKey('users.id'), nullable=False)
@@ -269,6 +272,7 @@ class AIPolicyRule(Base):
     scope_key = Column(String(80), nullable=False)
     capability = Column(String(80), nullable=False)
     effect = Column(String(16), nullable=False)
+    authority = Column(String(24), nullable=False, default="admin")
     provider_ids = Column(JSON_DOCUMENT)
     runtimes = Column(JSON_DOCUMENT)
     created_by_id = Column(Integer, ForeignKey('users.id'), nullable=False)
@@ -751,6 +755,7 @@ class ClassGroup(Base):
     status = Column(String, nullable=False, default="active")
     join_code = Column(String, nullable=False, unique=True, index=True)
     leaderboards_enabled = Column(Boolean, nullable=False, default=False)
+    ai_blocked = Column(Boolean, nullable=False, default=False, server_default=false())
     challenge_season = Column(Integer, nullable=False, default=1)
     created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow, nullable=False)

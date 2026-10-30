@@ -272,6 +272,7 @@ def provider_inventory(provider: AIProviderConfig) -> ProviderInventoryItem:
         runtime=provider.runtime,
         model=provider.model,
         enabled=provider.enabled,
+        class_assignable=provider.class_assignable,
         request_limit=provider.request_limit,
         token_limit=provider.token_limit,
     )
@@ -286,12 +287,13 @@ def rule_input(rule: AIPolicyRule) -> PolicyRuleInput:
         effect=rule.effect,
         provider_ids=tuple(rule.provider_ids or ()),
         runtimes=tuple(rule.runtimes or ()),
+        authority=rule.authority,
     )
 
 
-def active_group_ids(db: Session, user_id: int) -> list[int]:
+def active_group_state(db: Session, user_id: int) -> tuple[list[int], list[int]]:
     rows = (
-        db.query(ClassMembership.group_id)
+        db.query(ClassMembership.group_id, ClassGroup.ai_blocked)
         .join(ClassGroup, ClassGroup.id == ClassMembership.group_id)
         .filter(
             ClassMembership.student_id == user_id,
@@ -300,25 +302,31 @@ def active_group_ids(db: Session, user_id: int) -> list[int]:
         )
         .all()
     )
-    return [row[0] for row in rows]
+    return [row[0] for row in rows], [row[0] for row in rows if row[1]]
 
 
 def resolve_for_user(db: Session, user: User, capability: str):
     settings = db.query(AIInstanceSettings).filter(AIInstanceSettings.id == 1).first()
-    providers = db.query(AIProviderConfig).order_by(AIProviderConfig.id).all()
+    providers = db.query(AIProviderConfig).filter(AIProviderConfig.runtime != "user_local").order_by(AIProviderConfig.id).all()
     rules = db.query(AIPolicyRule).filter(AIPolicyRule.capability == capability).all()
     role = getattr(user.role, "value", user.role)
+    group_ids: list[int] = []
+    blocked_group_ids: list[int] = []
+    if str(role) == "user":
+        group_ids, blocked_group_ids = active_group_state(db, user.id)
     return resolve_capability(
         instance_enabled=bool(settings and settings.enabled),
         user_id=user.id,
         role=str(role),
-        active_group_ids=active_group_ids(db, user.id) if str(role) == "user" else (),
+        active_group_ids=group_ids,
+        blocked_group_ids=blocked_group_ids,
         capability=capability,
         providers=[provider_inventory(provider) for provider in providers],
         rules=[rule_input(rule) for rule in rules],
         default_provider_id=settings.default_provider_id if settings else None,
         instance_request_limit=settings.request_limit if settings else None,
         instance_token_limit=settings.token_limit if settings else None,
+        students_blocked=bool(settings and settings.students_blocked),
     )
 
 
@@ -351,16 +359,23 @@ def read_ai_access(
     db: Session = Depends(get_db),
 ):
     settings = db.query(AIInstanceSettings).filter(AIInstanceSettings.id == 1).first()
-    providers = db.query(AIProviderConfig).filter(AIProviderConfig.enabled.is_(True)).order_by(AIProviderConfig.id).all()
+    decisions = [
+        decision_payload(capability.id, resolve_for_user(db, current_user, capability.id))
+        for capability in CAPABILITIES
+    ]
+    allowed_provider_ids = {provider_id for decision in decisions for provider_id in decision["providerIds"]}
+    providers = (
+        db.query(AIProviderConfig)
+        .filter(AIProviderConfig.enabled.is_(True), AIProviderConfig.id.in_(allowed_provider_ids), AIProviderConfig.runtime != "user_local")
+        .order_by(AIProviderConfig.id)
+        .all()
+    )
     return {
         "schemaVersion": AI_ACCESS_SCHEMA_VERSION,
         "registryVersion": CAPABILITY_REGISTRY_VERSION,
         "instanceEnabled": bool(settings and settings.enabled),
         "reportLocalUsage": bool(settings and settings.report_local_usage),
-        "capabilities": [
-            decision_payload(capability.id, resolve_for_user(db, current_user, capability.id))
-            for capability in CAPABILITIES
-        ],
+        "capabilities": decisions,
         "providers": [
             {
                 "id": provider.id,
@@ -368,7 +383,9 @@ def read_ai_access(
                 "providerType": provider.provider_type,
                 "runtime": provider.runtime,
                 "model": provider.model,
-                "settings": provider.settings or {},
+                # Hosted providers are called by the backend; only browser and user-local
+                # runtimes need their manifest or relative path in the client.
+                "settings": (provider.settings or {}) if provider.runtime == "browser" else {},
             }
             for provider in providers
         ],
@@ -422,7 +439,7 @@ def report_local_usage(
     provider = db.query(AIProviderConfig).filter(
         AIProviderConfig.id == payload.provider_id,
         AIProviderConfig.enabled.is_(True),
-        AIProviderConfig.runtime.in_(("browser", "user_local")),
+        AIProviderConfig.runtime == "browser",
     ).first()
     if provider is None:
         raise HTTPException(status_code=422, detail="A browser or user-local provider is required")

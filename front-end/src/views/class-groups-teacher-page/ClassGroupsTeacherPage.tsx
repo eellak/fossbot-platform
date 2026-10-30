@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, Divider, FormControlLabel, IconButton, MenuItem, Paper, Skeleton, Stack, Switch, TextField, Typography,
 } from '@mui/material';
-import { IconChartBar, IconCopy, IconPlus, IconRefresh, IconTrash, IconUsersGroup } from '@tabler/icons-react';
+import { IconChartBar, IconCopy, IconPlus, IconRefresh, IconRobot, IconTrash, IconUsersGroup } from '@tabler/icons-react';
 import { useTranslation } from 'react-i18next';
 import { copyText } from 'src/utils/platform';
 import { useAuth } from 'src/authentication/AuthProvider';
@@ -11,6 +11,10 @@ import {
   readClassChallengeStatistics, regenerateClassJoinCode, removeClassMember, resetClassChallengeSeason, updateClassChallenge, updateClassGroup,
   updateCourseAssignment,
 } from 'src/courses/CoursesApi';
+import {
+  assignClassBuddyProvider, clearClassBuddyProvider, readClassBuddy, setClassBuddyBlock,
+} from 'src/ai/AssistantApi';
+import type { ClassBuddyState } from 'src/ai/types';
 import type { ClassChallengeStatistics, CourseAssignment, CourseSummary, LeaderboardType, TeacherClassGroup } from 'src/courses/types';
 
 const boardTypes: LeaderboardType[] = ['highest_score', 'fastest', 'fewest_movements', 'shortest_path', 'most_optional'];
@@ -87,6 +91,7 @@ function GroupDetail({ group, courses, token, run, t }: { group: TeacherClassGro
       </Stack>
       <Alert severity="info" sx={{ mt: 2 }}>{t('education.classrooms.aliasPrivacy')}</Alert>
     </Paper>
+    <BuddyCard group={group} token={token} t={t} />
     <Paper variant="outlined" sx={{ p: 2 }}>
       <Typography variant="h6">{t('education.classrooms.members', { count: group.members.length })}</Typography>
       <Stack spacing={1} sx={{ mt: 1 }}>
@@ -113,6 +118,69 @@ function GroupDetail({ group, courses, token, run, t }: { group: TeacherClassGro
       <Stack direction="row" justifyContent="space-between" alignItems="center" gap={2}><Box><Typography fontWeight={700}>{t('education.classrooms.season', { season: group.challenge_season })}</Typography><Typography variant="caption" color="text.secondary">{t('education.classrooms.seasonHelp')}</Typography></Box><Button onClick={() => void run(() => resetClassChallengeSeason(token, group.id))}>{t('education.classrooms.resetSeason')}</Button></Stack>
     </Paper>
   </Stack>;
+}
+
+function BuddyCard({ group, token, t }: { group: TeacherClassGroup; token: string; t: any }) {
+  const [state, setState] = useState<ClassBuddyState | null>(null);
+  const [providerId, setProviderId] = useState<number | ''>('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const load = useCallback(async () => {
+    try {
+      const next = await readClassBuddy(token, group.id);
+      setState(next);
+      setProviderId(next.assignment?.providerId || '');
+      setError('');
+    } catch (reason) { setError(reason instanceof Error ? reason.message : t('aiAssistant.classBuddy.saveFailed')); }
+  }, [group.id, t, token]);
+  useEffect(() => { void load(); }, [load]);
+  const act = async (action: () => Promise<unknown>) => {
+    setBusy(true); setError('');
+    try { await action(); await load(); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : t('aiAssistant.classBuddy.saveFailed')); }
+    finally { setBusy(false); }
+  };
+  const assignment = state?.assignment || null;
+  const statusText = !assignment || assignment.status === 'active' ? ''
+    : assignment.status === 'disabled' ? t('aiAssistant.classBuddy.disabled', { provider: assignment.providerName })
+    : assignment.status === 'not_assignable' ? t('aiAssistant.classBuddy.notAssignable', { provider: assignment.providerName })
+    : t('aiAssistant.classBuddy.removed');
+  const statusChip = state?.blocked
+    ? { label: t('aiAssistant.classBuddy.chipBlocked'), color: 'warning' as const }
+    : !assignment
+      ? { label: t('aiAssistant.classBuddy.chipNone'), color: 'default' as const }
+      : assignment.status === 'active'
+        ? { label: t('aiAssistant.classBuddy.chipActive'), color: 'success' as const }
+        : { label: t('aiAssistant.classBuddy.chipUnavailable'), color: 'warning' as const };
+  return <Paper variant="outlined" sx={{ p: { xs: 2, md: 2.5 }, bgcolor: 'background.default' }}>
+    <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ xs: 'flex-start', sm: 'center' }} gap={1}>
+      <Stack direction="row" spacing={1.25} alignItems="flex-start">
+        <IconRobot size={22} stroke={1.6} style={{ flexShrink: 0, marginTop: 2 }} aria-hidden />
+        <Box>
+          <Typography variant="h5">{t('aiAssistant.classBuddy.title')}</Typography>
+          <Typography variant="body2" color="text.secondary">{t('aiAssistant.classBuddy.description')}</Typography>
+        </Box>
+      </Stack>
+      {state && <Chip size="small" variant="outlined" color={statusChip.color} label={statusChip.label} />}
+    </Stack>
+    {error && <Alert severity="error" sx={{ mt: 2 }}>{error}</Alert>}
+    {state?.adminSet && <Alert severity="info" sx={{ mt: 2 }}>{t('aiAssistant.classBuddy.adminSet')}</Alert>}
+    {state && !state.adminSet && <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} alignItems={{ sm: 'center' }} sx={{ mt: 2 }}>
+      <TextField select size="small" label={t('aiAssistant.classBuddy.provider')} value={providerId} onChange={(event) => setProviderId(event.target.value === '' ? '' : Number(event.target.value))} sx={{ width: { xs: '100%', sm: 280 } }}>
+        <MenuItem value="">{t('aiAssistant.classBuddy.none')}</MenuItem>
+        {state.providers.map((provider) => <MenuItem key={provider.id} value={provider.id}>{provider.name}</MenuItem>)}
+      </TextField>
+      <Button variant="contained" disabled={busy || providerId === ''} onClick={() => void act(() => assignClassBuddyProvider(token, group.id, Number(providerId)))}>{t('save')}</Button>
+      <Button disabled={busy || !assignment} sx={{ color: 'text.secondary', '&:hover': { color: 'error.main' } }} onClick={() => void act(() => clearClassBuddyProvider(token, group.id))}>{t('aiAssistant.classBuddy.clear')}</Button>
+    </Stack>}
+    {state && !state.adminSet && !state.providers.length && <Alert severity="info" sx={{ mt: 2 }}>{t('aiAssistant.classBuddy.empty')}</Alert>}
+    {statusText && <Typography variant="body2" color="text.secondary" sx={{ mt: 1.5 }}>{statusText}</Typography>}
+    {state && !state.adminSet && <>
+      <Divider sx={{ mt: 2 }} />
+      <FormControlLabel sx={{ mt: 1 }} control={<Switch size="small" checked={state.blocked} disabled={busy} onChange={(event) => void act(() => setClassBuddyBlock(token, group.id, event.target.checked))} />} label={t('aiAssistant.classBuddy.blockAction')} />
+      {state.blocked && <Typography variant="caption" color="text.secondary" display="block">{t('aiAssistant.classBuddy.blockedHelp')}</Typography>}
+    </>}
+  </Paper>;
 }
 
 function AssignmentDetail({ assignment, group, token, run, t }: { assignment: CourseAssignment; group: TeacherClassGroup; token: string; run: (action: () => Promise<unknown>) => Promise<void>; t: any }) {

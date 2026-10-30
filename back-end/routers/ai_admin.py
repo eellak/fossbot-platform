@@ -29,12 +29,11 @@ from utils.ai.usage import purge_expired_usage
 
 
 router = APIRouter(prefix="/api/admin/ai", tags=["ai-admin"])
-RUNTIMES = {"hosted", "browser", "user_local"}
+RUNTIMES = {"hosted", "browser"}
 PROVIDER_RUNTIME_PAIRS = {
     ("openai", "hosted"),
     ("google", "hosted"),
     ("openai_compatible", "hosted"),
-    ("openai_compatible", "user_local"),
     ("webllm", "browser"),
 }
 
@@ -89,7 +88,6 @@ def _validate_settings(provider_type: str, runtime: str, settings: dict[str, Any
         ("openai", "hosted"): {"version", "organization", "project"},
         ("google", "hosted"): {"version", "apiVersion"},
         ("openai_compatible", "hosted"): {"version", "apiStyle", "path", "supportsUsage", "allowPrivateNetwork", "compatibilityProfile"},
-        ("openai_compatible", "user_local"): {"version", "apiStyle", "path", "supportsUsage", "compatibilityProfile"},
         ("webllm", "browser"): {
             "version", "modelUrl", "wasmUrl", "tokenizerUrl", "modelSizeBytes",
             "memorySizeBytes", "bufferSizeRequiredBytes", "requiredWebGpuFeatures",
@@ -143,8 +141,9 @@ def _validate_settings(provider_type: str, runtime: str, settings: dict[str, Any
 class ProviderCreate(APIModel):
     name: str = Field(min_length=1, max_length=120)
     provider_type: Literal["openai", "google", "openai_compatible", "webllm"]
-    runtime: Literal["hosted", "browser", "user_local"]
+    runtime: Literal["hosted", "browser"]
     enabled: bool = False
+    class_assignable: bool = False
     model: str = Field(min_length=1, max_length=160)
     base_url: Optional[str] = Field(default=None, max_length=500)
     settings: dict[str, Any] = Field(default_factory=lambda: {"version": "1"})
@@ -180,6 +179,7 @@ class ProviderCreate(APIModel):
 class ProviderUpdate(APIModel):
     name: Optional[str] = Field(default=None, min_length=1, max_length=120)
     enabled: Optional[bool] = None
+    class_assignable: Optional[bool] = None
     model: Optional[str] = Field(default=None, min_length=1, max_length=160)
     base_url: Optional[str] = Field(default=None, max_length=500)
     settings: Optional[dict[str, Any]] = None
@@ -222,6 +222,7 @@ class SettingsUpdate(APIModel):
     request_limit: Optional[int] = Field(default=None, ge=1)
     token_limit: Optional[int] = Field(default=None, ge=1)
     report_local_usage: bool = False
+    students_blocked: bool = False
     usage_retention_days: int = Field(default=30, ge=1, le=365)
 
 
@@ -230,8 +231,8 @@ class PolicyUpdate(APIModel):
     scope_key: str = Field(min_length=1, max_length=80)
     capability: str = Field(min_length=1, max_length=80)
     effect: Literal["allow", "deny"]
-    provider_ids: list[int] = Field(default_factory=list)
-    runtimes: list[Literal["hosted", "browser", "user_local"]] = Field(default_factory=list)
+    provider_ids: Optional[list[int]] = None
+    runtimes: Optional[list[Literal["hosted", "browser"]]] = None
 
 
 class ResolveRequest(APIModel):
@@ -261,6 +262,7 @@ def provider_payload(provider: AIProviderConfig) -> dict:
         "providerType": provider.provider_type,
         "runtime": provider.runtime,
         "enabled": provider.enabled,
+        "classAssignable": provider.class_assignable,
         "model": provider.model,
         "baseUrl": provider.base_url,
         "settings": provider.settings or {},
@@ -279,6 +281,7 @@ def settings_payload(settings: AIInstanceSettings) -> dict:
         "requestLimit": settings.request_limit,
         "tokenLimit": settings.token_limit,
         "reportLocalUsage": settings.report_local_usage,
+        "studentsBlocked": settings.students_blocked,
         "usageRetentionDays": settings.usage_retention_days,
         "registryVersion": settings.registry_version,
         "updatedAt": settings.updated_at,
@@ -292,6 +295,7 @@ def policy_payload(rule: AIPolicyRule) -> dict:
         "scopeKey": rule.scope_key,
         "capability": rule.capability,
         "effect": rule.effect,
+        "authority": rule.authority,
         "providerIds": rule.provider_ids or [],
         "runtimes": rule.runtimes or [],
         "updatedAt": rule.updated_at,
@@ -367,6 +371,7 @@ def create_provider(request: ProviderCreate, current_user: User = Depends(get_cu
         provider_type=request.provider_type,
         runtime=request.runtime,
         enabled=request.enabled,
+        class_assignable=request.class_assignable,
         model=request.model,
         base_url=request.base_url,
         settings=request.settings,
@@ -493,6 +498,7 @@ def update_settings(request: SettingsUpdate, current_user: User = Depends(get_cu
     settings.request_limit = request.request_limit
     settings.token_limit = request.token_limit
     settings.report_local_usage = request.report_local_usage
+    settings.students_blocked = request.students_blocked
     settings.usage_retention_days = request.usage_retention_days
     settings.registry_version = CAPABILITY_REGISTRY_VERSION
     settings.updated_by_id = current_user.id
@@ -514,7 +520,9 @@ def put_policy(request: PolicyUpdate, current_user: User = Depends(get_current_u
     if request.capability not in CAPABILITY_IDS:
         raise HTTPException(status_code=422, detail="Unknown AI capability")
     scope_key = validate_scope(db, request.scope_type, request.scope_key)
-    validate_restrictions(db, request.provider_ids, request.runtimes)
+    if request.effect == "allow" and request.scope_type == "class_group" and request.provider_ids == []:
+        raise HTTPException(status_code=422, detail="A class-scope allow rule requires at least one provider")
+    validate_restrictions(db, request.provider_ids or [], request.runtimes or [])
     rule = db.query(AIPolicyRule).filter(
         AIPolicyRule.scope_type == request.scope_type,
         AIPolicyRule.scope_key == scope_key,
@@ -525,13 +533,19 @@ def put_policy(request: PolicyUpdate, current_user: User = Depends(get_current_u
             scope_type=request.scope_type,
             scope_key=scope_key,
             capability=request.capability,
+            authority="admin",
             created_by_id=current_user.id,
             updated_by_id=current_user.id,
         )
         db.add(rule)
     rule.effect = request.effect
-    rule.provider_ids = request.provider_ids or None
-    rule.runtimes = request.runtimes or None
+    # Omitted restrictions keep the stored value; an explicit empty list clears them.
+    if request.provider_ids is not None:
+        rule.provider_ids = request.provider_ids or None
+    if request.runtimes is not None:
+        rule.runtimes = request.runtimes or None
+    # An administrator write takes over a delegated class rule.
+    rule.authority = "admin"
     rule.updated_by_id = current_user.id
     db.commit()
     db.refresh(rule)

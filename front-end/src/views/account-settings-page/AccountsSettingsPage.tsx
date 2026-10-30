@@ -17,7 +17,6 @@ import { useAuth } from "src/authentication/AuthProvider";
 import { useTranslation } from 'react-i18next';
 import AccountSettingsInfo from '../../components/account-settings-page/AccountSettingsInfo';
 import { Project } from 'src/authentication/AuthInterfaces';
-import LocalRuntimeSettingsCard from 'src/components/ai/LocalRuntimeSettingsCard';
 import { useNotifications } from 'src/components/notifications/NotificationProvider';
 
 const AccountsSettingsPage = () => {
@@ -175,7 +174,6 @@ const AccountsSettingsPage = () => {
                             </Grid>
                         )}
                     </BlankCard>
-                    <LocalRuntimeSettingsCard />
                 </Grid>
             </Grid>
 

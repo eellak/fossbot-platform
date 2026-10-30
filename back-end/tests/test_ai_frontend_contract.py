@@ -37,11 +37,8 @@ def test_ai_surfaces_do_not_render_provider_html_or_log_content():
     assert "console.debug(" not in joined
 
 
-def test_user_local_secret_is_session_only_and_login_body_is_not_logged():
-    device_settings = (FRONTEND / "ai" / "runtimes" / "deviceSettings.ts").read_text(encoding="utf-8")
+def test_login_body_is_not_logged():
     backend_main = (ROOT / "back-end" / "main.py").read_text(encoding="utf-8")
-    assert "sessionStorage.setItem(secretKey" in device_settings
-    assert "localStorage.setItem(secretKey" not in device_settings
     assert 'logger.info(f"Request body: {login_request}")' not in backend_main
 
 

@@ -16,17 +16,20 @@ Open **Administration → AI assistant**. Add one provider, leave it disabled wh
 - **Google / hosted**: enter the exact Gemini model code and credential.
 - **OpenAI-compatible / hosted**: enter a credential-free absolute base URL. Private/link-local/loopback/reserved destinations are blocked unless **Allow private network** is explicitly enabled. The relative path cannot escape the base URL.
 - **WebLLM / browser**: enter credential-free HTTPS model/WASM URLs, exact model ID, declared byte/memory requirements, cache backend, license URL, required WebGPU features, and optional integrity metadata. A user must still consent before a model download.
-- **OpenAI-compatible / user local**: the admin publishes only the provider policy/metadata. Each user enters their own endpoint/model in the browser; their optional key is held in session storage and is never sent to FOSSBot's backend.
 
 Credentials are write-only: API responses expose `hasSecret`, never the value. Editing a provider requires an explicit **preserve**, **rotate**, or **clear** action. Test after rotation, then disable the old credential at its issuer.
+
+**Assignable to classes** lets a teacher choose this provider for a class group. It is off by default. Enable it only for providers whose cost and data route you accept for a whole class. Turning it off stops new teacher assignments and removes existing ones from policy resolution, so those classes fall back to role or instance rules.
 
 **Remove** deletes a provider after a confirmation. Removal clears it as the instance default and drops it from policy rules; an allow rule left with no providers is deleted rather than widened to every provider. Usage history keeps the recorded provider name and model, so token/latency reports stay readable. Removal cannot be undone, so health-test the replacement provider before removing the old one.
 
 ## Instance settings and limits
 
-Choose the default provider, optional daily request/token ceilings, whether content-free local usage counts should be reported, and usage retention from 1–365 days (default 30). Retention is enforced when settings change and before a new usage event is recorded. Disabling the instance revokes every capability immediately.
+Choose the default provider, optional rolling 60-minute request/token ceilings, whether content-free browser usage counts should be reported, and usage retention from 1–365 days (default 30). Provider ceilings are shared by every user of that provider and ignore browser reports. Retention is enforced when settings change and before a new usage event is recorded. Disabling the instance revokes every capability immediately.
 
 Provider limits and instance limits combine using the smallest configured value. Usage contains identifiers, timestamps, capability/runtime, outcome, policy/prompt versions, and optional token counts—never prompts, responses, source code, Blockly XML, lesson/stage bodies, answers, or credentials.
+
+**Block Buddy for all students** denies every capability to the `user` role and leaves teachers and administrators unaffected. To block one class, use the class page or a class-group deny rule: a blocked class stops contributing its assignment and students fall back to their other scopes.
 
 ## Policy resolution
 
@@ -34,9 +37,17 @@ Create a separate rule for each capability. Precedence is:
 
 `instance → role → active class group → user`
 
-The last matching scope wins. Among multiple active class-group rules, any deny wins; otherwise provider/runtime allowlists are combined. An unrestricted allow at that group level keeps the group unrestricted. Disabled providers are removed after policy resolution.
+The last matching scope wins. Among multiple active class-group rules, any deny wins; otherwise provider/runtime allowlists are combined. An unrestricted allow at that group level keeps the group unrestricted. Disabled providers are removed after policy resolution. A teacher-authored class rule stops applying when its provider is disabled or no longer assignable.
 
 Use **Resolve access** with a real user and capability after every policy change. Confirm the winning scope/rule, reason code, allowed provider IDs/runtimes, selected default, and effective limits. Test a student in multiple active groups and a final user override. Revocation is immediate for the next request; an open local/browser run is cancelled when refreshed access no longer permits it.
+
+## Teacher assignments and shared providers
+
+A teacher sets one provider for a class they own on the class page. That writes one class-group allow rule per capability, marked as teacher-authored. Administrator rules win: a teacher cannot write over an administrative class rule, and saving an administrative rule in the overrides tab replaces a teacher rule. The overrides tab shows who wrote class rules and clears or replaces them.
+
+To share providers with many users without filing a rule per capability, use the overrides form with a provider set and **Apply to all capabilities**. Leave the provider field empty to allow every enabled provider in that scope.
+
+A capability added in a later release is not covered by an existing teacher assignment until the teacher saves again. An administrator block for all students overrides class assignments.
 
 ## Safe rollout
 
@@ -53,7 +64,6 @@ Use **Resolve access** with a real user and capability after every policy change
 - **Private network blocked**: keep it blocked for public hosted services. Enable only for a trusted administrator-managed LAN endpoint after network review.
 - **Health succeeds but streaming fails**: verify the exact model ID, relative chat path, SSE compatibility, output limits, and reverse-proxy buffering.
 - **Browser model unavailable**: require HTTPS, WebGPU, sufficient device/storage limits, and explicit download consent. Clear the cached model from the assistant panel before retrying a changed manifest.
-- **User-local endpoint fails**: the user must start the local server, permit browser CORS, use its OpenAI-compatible chat endpoint, and keep the page open for session-only credentials.
 - **Quota/rate limit**: wait for the displayed retry window or change an approved limit; do not bypass policy with a different provider.
 - **Malformed/oversized response**: the request fails closed. Inspect provider compatibility without logging raw content.
 

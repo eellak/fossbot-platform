@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
-  Alert, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, Divider,
+  Alert, Box, Button, Checkbox, Chip, Dialog, DialogActions, DialogContent, DialogTitle, Divider,
   FormControlLabel, MenuItem, Paper, Skeleton, Stack, Switch, Tab, Tabs, TextField, Typography,
 } from '@mui/material';
 import { IconArrowLeft, IconPlus, IconRefresh, IconRobot } from '@tabler/icons-react';
@@ -143,6 +143,7 @@ function ProvidersTab({ data, token, saving, run, openCreate, openEdit, t }: { d
         <Stack direction={{ xs: 'column', md: 'row' }} alignItems={{ md: 'center' }} gap={2}>
           <Box sx={{ flex: 1, minWidth: 0 }}><Stack direction="row" gap={1} flexWrap="wrap" alignItems="center"><Typography fontWeight={700}>{provider.name}</Typography><Chip size="small" label={t(`aiAdmin.runtimes.${provider.runtime}`)} /><Chip size="small" variant="outlined" label={t(`aiAdmin.providerTypes.${provider.providerType}`)} /></Stack><Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, overflowWrap: 'anywhere' }}>{provider.model}{provider.baseUrl ? ` · ${provider.baseUrl}` : ''}</Typography></Box>
           <FormControlLabel control={<Switch checked={provider.enabled} disabled={saving} onChange={(event) => void run(() => updateAIProvider(token, provider.id, { enabled: event.target.checked }), t('aiAdmin.messages.providerUpdated'))} />} label={provider.enabled ? t('aiAdmin.providers.available') : t('aiAdmin.providers.unavailable')} />
+          <FormControlLabel control={<Switch checked={provider.classAssignable} disabled={saving || !provider.enabled || provider.runtime === 'user_local'} onChange={(event) => void run(() => updateAIProvider(token, provider.id, { classAssignable: event.target.checked }), t('aiAdmin.messages.providerUpdated'))} />} label={t('aiAdmin.providers.classAssignable')} />
           {provider.runtime === 'hosted' && <Button disabled={saving} onClick={() => void run(() => testAIProvider(token, provider.id), t('aiAdmin.messages.providerHealthy'))}>{t('aiAdmin.providers.test')}</Button>}
           <Button disabled={saving} onClick={() => openEdit(provider)}>{t('edit')}</Button>
           <Button disabled={saving} color="error" onClick={() => void remove(provider)}>{t('aiAdmin.providers.remove')}</Button>
@@ -156,9 +157,10 @@ function ProvidersTab({ data, token, saving, run, openCreate, openEdit, t }: { d
 function DefaultsTab({ data, token, saving, run, t }: { data: AIAdminBootstrap; token: string; saving: boolean; run: RunAction; t: any }) {
   const [enabled, setEnabled] = useState(data.settings.enabled);
   const [reportLocalUsage, setReportLocalUsage] = useState(data.settings.reportLocalUsage);
+  const [studentsBlocked, setStudentsBlocked] = useState(data.settings.studentsBlocked);
   const [usageRetentionDays, setUsageRetentionDays] = useState(data.settings.usageRetentionDays);
   const [defaultProviderId, setDefaultProviderId] = useState<number | ''>(data.providers.some((provider) => provider.enabled && provider.id === data.settings.defaultProviderId) ? data.settings.defaultProviderId! : '');
-  const saveSettings = () => run(() => updateAISettings(token, { enabled, reportLocalUsage, usageRetentionDays, defaultProviderId: defaultProviderId || null, requestLimit: data.settings.requestLimit, tokenLimit: data.settings.tokenLimit }), t('aiAdmin.messages.settingsSaved'));
+  const saveSettings = () => run(() => updateAISettings(token, { enabled, reportLocalUsage, studentsBlocked, usageRetentionDays, defaultProviderId: defaultProviderId || null, requestLimit: data.settings.requestLimit, tokenLimit: data.settings.tokenLimit }), t('aiAdmin.messages.settingsSaved'));
   return <Stack spacing={3}>
     <Box>
       <SectionHeading title={t('aiAdmin.instance.title')} description={t('aiAdmin.instance.description')} />
@@ -168,10 +170,12 @@ function DefaultsTab({ data, token, saving, run, t }: { data: AIAdminBootstrap; 
           <MenuItem value="">{t('aiAdmin.instance.automatic')}</MenuItem>{data.providers.filter((provider) => provider.enabled).map((provider) => <MenuItem key={provider.id} value={provider.id}>{provider.name}</MenuItem>)}
         </TextField>
         <FormControlLabel control={<Switch checked={reportLocalUsage} onChange={(event) => setReportLocalUsage(event.target.checked)} />} label={t('aiAdmin.instance.reportLocalUsage')} />
+        <FormControlLabel control={<Switch checked={studentsBlocked} onChange={(event) => setStudentsBlocked(event.target.checked)} />} label={t('aiAdmin.instance.studentsBlocked')} />
         <TextField type="number" label={t('aiAdmin.instance.usageRetentionDays')} value={usageRetentionDays} onChange={(event) => setUsageRetentionDays(Number(event.target.value))} inputProps={{ min: 1, max: 365 }} helperText={t('aiAdmin.instance.usageRetentionHelp')} />
         <Button variant="contained" disabled={saving || usageRetentionDays < 1 || usageRetentionDays > 365} onClick={() => void saveSettings()}>{saving ? t('saving') : t('save')}</Button>
       </Box>
       {!enabled && <Alert severity="warning" sx={{ mt: 2 }}>{t('aiAdmin.instance.absolute')}</Alert>}
+      {studentsBlocked && <Alert severity="info" sx={{ mt: 2 }}>{t('aiAdmin.instance.studentsBlockedHelp')}</Alert>}
     </Box>
     <Divider />
     <Box><SectionHeading title={t('aiAdmin.defaults.title')} description={t('aiAdmin.defaults.description')} /><PolicyGrid data={data} token={token} scopeType="instance" scopeKeys={[['*', t('aiAdmin.defaults.instance')]]} saving={saving} run={run} t={t} /></Box>
@@ -204,23 +208,35 @@ function OverridesTab({ data, token, saving, run, t }: { data: AIAdminBootstrap;
   const options = scopeType === 'class_group' ? data.groups.map((group) => ({ key: String(group.id), label: group.name })) : data.users.map((user) => ({ key: String(user.id), label: `${user.username} · ${t(`roles.${user.role}`)}` }));
   const [scopeKey, setScopeKey] = useState('');
   const [capability, setCapability] = useState<AICapabilityId>('code.explain');
+  const [providerIds, setProviderIds] = useState<number[]>([]);
+  const [allCapabilities, setAllCapabilities] = useState(false);
   const existing = data.policies.find((rule) => rule.scopeType === scopeType && rule.scopeKey === scopeKey && rule.capability === capability);
   const [effect, setEffect] = useState<RuleValue>('inherit');
   useEffect(() => { setScopeKey(''); setEffect('inherit'); }, [scopeType]);
-  useEffect(() => { setEffect(existing?.effect || 'inherit'); }, [existing?.effect, capability, scopeKey]);
-  const save = () => run(
-    () => effect === 'inherit' ? deleteAIPolicy(token, scopeType, scopeKey, capability) : putAIPolicy(token, { scopeType, scopeKey, capability, effect }),
-    t('aiAdmin.messages.policySaved'),
-  );
+  useEffect(() => { setEffect(existing?.effect || 'inherit'); setProviderIds(existing?.providerIds || []); }, [existing?.id]);
+  const save = () => run(async () => {
+    const capabilities = allCapabilities ? data.capabilities.map((item) => item.id) : [capability];
+    for (const item of capabilities) {
+      if (effect === 'inherit') await deleteAIPolicy(token, scopeType, scopeKey, item);
+      else await putAIPolicy(token, { scopeType, scopeKey, capability: item, effect, ...(providerIds.length ? { providerIds } : {}) });
+    }
+  }, t('aiAdmin.messages.policySaved'));
   return <>
     <SectionHeading title={t('aiAdmin.overrides.title')} description={t('aiAdmin.overrides.description')} />
-    <Stack direction={{ xs: 'column', md: 'row' }} gap={2} alignItems={{ md: 'flex-end' }}>
-      <TextField select label={t('aiAdmin.overrides.scope')} value={scopeType} onChange={(event) => setScopeType(event.target.value as 'class_group' | 'user')} sx={{ minWidth: 180 }}><MenuItem value="class_group">{t('aiAdmin.overrides.group')}</MenuItem><MenuItem value="user">{t('aiAdmin.overrides.user')}</MenuItem></TextField>
-      <TextField select fullWidth label={scopeType === 'class_group' ? t('aiAdmin.overrides.group') : t('aiAdmin.overrides.user')} value={scopeKey} onChange={(event) => setScopeKey(event.target.value)}>{options.map((option) => <MenuItem key={option.key} value={option.key}>{option.label}</MenuItem>)}</TextField>
-      <TextField select fullWidth label={t('aiAdmin.policy.capability')} value={capability} onChange={(event) => setCapability(event.target.value as AICapabilityId)}>{data.capabilities.map((item) => <MenuItem key={item.id} value={item.id}>{t(`aiAdmin.capabilities.${item.id}`)}</MenuItem>)}</TextField>
-      <TextField select label={t('aiAdmin.overrides.decision')} value={effect} onChange={(event) => setEffect(event.target.value as RuleValue)} sx={{ minWidth: 160 }}><MenuItem value="inherit">{t('aiAdmin.policy.inherit')}</MenuItem><MenuItem value="allow">{t('aiAdmin.policy.allow')}</MenuItem><MenuItem value="deny">{t('aiAdmin.policy.deny')}</MenuItem></TextField>
-      <Button variant="contained" disabled={!scopeKey || saving || (effect === 'inherit' && !existing)} onClick={() => void save()}>{saving ? t('saving') : t('save')}</Button>
+    <Stack spacing={2}>
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))', lg: 'repeat(4, minmax(0, 1fr))' }, gap: 2 }}>
+        <TextField select label={t('aiAdmin.overrides.scope')} value={scopeType} onChange={(event) => setScopeType(event.target.value as 'class_group' | 'user')}><MenuItem value="class_group">{t('aiAdmin.overrides.group')}</MenuItem><MenuItem value="user">{t('aiAdmin.overrides.user')}</MenuItem></TextField>
+        <TextField select label={scopeType === 'class_group' ? t('aiAdmin.overrides.group') : t('aiAdmin.overrides.user')} value={scopeKey} InputLabelProps={{ shrink: true }} SelectProps={{ displayEmpty: true }} onChange={(event) => setScopeKey(event.target.value)}><MenuItem value="" disabled>{t('aiAdmin.overrides.selectPlaceholder')}</MenuItem>{options.map((option) => <MenuItem key={option.key} value={option.key}>{option.label}</MenuItem>)}</TextField>
+        <TextField select label={t('aiAdmin.policy.capability')} value={capability} onChange={(event) => setCapability(event.target.value as AICapabilityId)} disabled={allCapabilities}>{data.capabilities.map((item) => <MenuItem key={item.id} value={item.id}>{t(`aiAdmin.capabilities.${item.id}`)}</MenuItem>)}</TextField>
+        <TextField select label={t('aiAdmin.overrides.decision')} value={effect} onChange={(event) => setEffect(event.target.value as RuleValue)}><MenuItem value="inherit">{t('aiAdmin.policy.inherit')}</MenuItem><MenuItem value="allow">{t('aiAdmin.policy.allow')}</MenuItem><MenuItem value="deny">{t('aiAdmin.policy.deny')}</MenuItem></TextField>
+      </Box>
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'minmax(0, 1fr) auto auto' }, gap: 2, alignItems: 'start' }}>
+        <TextField select SelectProps={{ multiple: true }} label={t('aiAdmin.overrides.providers')} value={providerIds} onChange={(event) => setProviderIds((typeof event.target.value === 'string' ? [] : event.target.value) as number[])} helperText={t('aiAdmin.overrides.providersHelp')}>{data.providers.filter((provider) => provider.enabled).map((provider) => <MenuItem key={provider.id} value={provider.id}>{provider.name}</MenuItem>)}</TextField>
+        <FormControlLabel sx={{ mt: 1, whiteSpace: 'nowrap' }} control={<Checkbox checked={allCapabilities} onChange={(event) => setAllCapabilities(event.target.checked)} />} label={t('aiAdmin.overrides.allCapabilities')} />
+        <Button variant="contained" sx={{ justifySelf: { xs: 'stretch', md: 'start' } }} disabled={!scopeKey || saving || (effect === 'inherit' && !existing && !allCapabilities)} onClick={() => void save()}>{saving ? t('saving') : t('save')}</Button>
+      </Box>
     </Stack>
+    {existing?.authority === 'class_teacher' && <Alert severity="info" sx={{ mt: 2 }}>{t('aiAdmin.overrides.teacherSet')}</Alert>}
     {!options.length && <Alert severity="info" sx={{ mt: 2 }}>{scopeType === 'class_group' ? t('aiAdmin.overrides.noGroups') : t('aiAdmin.overrides.noUsers')}</Alert>}
   </>;
 }
@@ -286,7 +302,7 @@ function ProviderDialog({ open, provider, saving, onClose, onSave, t }: { open: 
   const initial = useMemo<AIProviderInput>(() => provider ? { name: provider.name, providerType: provider.providerType, runtime: provider.runtime, enabled: provider.enabled, model: provider.model, baseUrl: provider.baseUrl, settings: { ...provider.settings, version: '1' }, secretAction: 'preserve' } : providerDefaults, [provider]);
   const [form, setForm] = useState(initial);
   useEffect(() => { if (open) setForm(initial); }, [initial, open]);
-  const compatibleRuntimes: AIRuntime[] = form.providerType === 'webllm' ? ['browser'] : form.providerType === 'openai_compatible' ? ['hosted', 'user_local'] : ['hosted'];
+  const compatibleRuntimes: AIRuntime[] = form.providerType === 'webllm' ? ['browser'] : ['hosted'];
   const valid = Boolean(
     form.name.trim()
     && form.model.trim()
@@ -304,7 +320,6 @@ function ProviderDialog({ open, provider, saving, onClose, onSave, t }: { open: 
       {form.providerType === 'openai_compatible' && <TextField select label={t('aiAdmin.providers.compatibilityProfile')} value={String(form.settings.compatibilityProfile || 'auto')} onChange={(event) => setForm({ ...form, settings: { ...form.settings, compatibilityProfile: event.target.value } })} helperText={t('aiAdmin.providers.compatibilityProfileHelp')}>
         {(['auto', 'openrouter', 'llamacpp', 'ollama', 'openai'] as const).map((profile) => <MenuItem key={profile} value={profile}>{t(`aiAdmin.compatibilityProfiles.${profile}`)}</MenuItem>)}
       </TextField>}
-      {form.providerType === 'openai_compatible' && form.runtime === 'user_local' && <Alert severity="info">{t('aiAdmin.providers.userLocalHelp')}</Alert>}
       {form.providerType === 'webllm' && <>
         <Alert severity="info">{t('aiAdmin.providers.webllmHelp')}</Alert>
         <TextField required label={t('aiAdmin.providers.modelUrl')} value={String(form.settings.modelUrl || '')} onChange={(event) => setForm({ ...form, settings: { ...form.settings, modelUrl: event.target.value } })} />
