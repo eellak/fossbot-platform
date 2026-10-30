@@ -44,6 +44,11 @@ import BlocklyEditorComponent, { type BlocklyEditorHandle } from '../../componen
 import Spinner from '../spinner/Spinner';
 import VideoPlayer from 'src/components/videoplayer/VideoPlayer';
 import NewProjectDialog from 'src/components/dashboard/NewProjectDialog';
+import { ProjectShareControl } from 'src/components/dashboard/ProjectShareDialog';
+import SharedProjectNotice from 'src/components/editors/SharedProjectNotice';
+import type { SharedProjectInput } from 'src/authentication/AuthInterfaces';
+import { useSharedProjectStage } from 'src/stages/sharedProjectStage';
+import { useSharedProjectDeparture } from 'src/routes/useSharedProjectDeparture';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faPuzzlePiece } from '@fortawesome/free-solid-svg-icons';
 import { IconDeviceFloppy, IconPlayerPlay, IconPlayerStop } from '@tabler/icons-react';
@@ -84,19 +89,19 @@ type BlocklyResizeTarget = 'columns' | 'rows' | 'corner';
 type BlocklyResizeState = { target: BlocklyResizeTarget; startX: number; startY: number; startValue: number; startSecondary?: number };
 const clampWorkspaceValue = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
-const BlocklyPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppearance = true }) => {
+const BlocklyPage: React.FC<{ previewAppearance?: boolean; sharedInput?: SharedProjectInput }> = ({ previewAppearance = true, sharedInput }) => {
   const { t } = useTranslation();
   const simulatorRef = useRef<SimulatorControlHandle>(null);
   const location = useLocation();
   const [editorValue, setEditorValue] = useState(
-    '<xml xmlns="https://developers.google.com/blockly/xml"></xml>',
+    sharedInput?.project.code || '<xml xmlns="https://developers.google.com/blockly/xml"></xml>',
   );
   const [editorPythonValue, setEditorPythonValue] = useState('');
   const [sessionId, setSessionId] = useState('');
 
-  const [projectTitle, setProjectTitle] = useState(t('newProject'));
-  const [projectDescription, setProjectDescription] = useState(t('newProjectDescription'));
-  const [selectedStage, setSelectedStage] = useState<ProjectStageReference | null>(null);
+  const [projectTitle, setProjectTitle] = useState(sharedInput?.project.name ?? t('newProject'));
+  const [projectDescription, setProjectDescription] = useState(sharedInput?.project.description ?? t('newProjectDescription'));
+  const [selectedStage, setSelectedStage] = useState<ProjectStageReference | null>(sharedInput?.project.stageReference || null);
   const [initialStageConfig, setInitialStageConfig] = useState<RawStageConfig | null | undefined>(undefined);
   const [initialStageAssetBaseUrl, setInitialStageAssetBaseUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true); // Loading state of Blockly project
@@ -134,6 +139,33 @@ const BlocklyPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppeara
   const collector = useSensorDataCollection(target, programState, status, telemetry);
   const [resultsTab, setResultsTab] = useState<'terminal' | 'data'>('terminal');
   const { notify } = useNotifications();
+  const sharedStage = useSharedProjectStage(Boolean(sharedInput), selectedStage, setSelectedStage, token, isGuest ? auth.guestSettings : undefined);
+  const sharedStageChanged = Boolean(sharedInput) && JSON.stringify(selectedStage) !== JSON.stringify(sharedInput?.project.stageReference || null);
+  const [sharedBaselineCode, setSharedBaselineCode] = useState<string | null>(null);
+  useEffect(() => {
+    if (!sharedInput) return;
+    const timer = window.setTimeout(() => {
+      const code = editorRef.current?.getXml() ?? editorValue;
+      setEditorValue(code);
+      setSharedBaselineCode(code);
+    }, 0);
+    return () => window.clearTimeout(timer);
+    // Capture the initialized workspace once, before editing, not every XML update.
+  }, [sharedInput?.shareToken]);
+  const sharedDirty = Boolean(sharedInput) && sharedBaselineCode !== null && (
+    editorValue !== sharedBaselineCode || projectTitle !== sharedInput?.project.name
+    || projectDescription !== sharedInput?.project.description || sharedStageChanged
+  );
+  const releaseSharedDeparture = useSharedProjectDeparture(sharedDirty);
+  useEffect(() => {
+    if (!sharedInput) return;
+    setInitialStageConfig(sharedStage.config);
+    setInitialStageAssetBaseUrl(sharedStage.base);
+  }, [sharedInput, sharedStage.config, sharedStage.base]);
+  const sharedSave = sharedInput ? {
+    prepare: sharedStage.prepare,
+    onCreated: () => { releaseSharedDeparture(); setShowDrawer(false); },
+  } : undefined;
 
   const theme = useTheme();
   const customizer = useSelector((state: AppState) => state.customizer);
@@ -193,6 +225,7 @@ const BlocklyPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppeara
   };
 
   const handlePlayClick = async () => {
+    if (sharedStage.blocked) { notify(t('projectSharing.stageUnavailable'), { severity: 'warning' }); return; }
     if (
       editorValue == '<xml xmlns="https://developers.google.com/blockly/xml"></xml>' ||
       editorValue == ''
@@ -249,6 +282,7 @@ const BlocklyPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppeara
   }, []);
 
   useEffect(() => {
+    if (sharedInput) { setLoading(false); return; }
     const fetchProject = async () => {
       try {
         if (projectId != '' && projectId != undefined) {
@@ -294,10 +328,10 @@ const BlocklyPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppeara
     };
 
     fetchProject();
-  }, [projectId, navigate]);
+  }, [projectId, navigate, sharedInput]);
 
   useEffect(() => {
-    if (!isGuest || loading || previewAppearance === false) return undefined;
+    if (sharedInput || !isGuest || loading || previewAppearance === false) return undefined;
     const timer = window.setTimeout(() => {
       try {
         const data = {
@@ -318,10 +352,11 @@ const BlocklyPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppeara
       }
     }, 800);
     return () => window.clearTimeout(timer);
-  }, [editorValue, isGuest, loading, notify, previewAppearance, projectDescription, projectId, projectTitle, selectedStage, t]);
+  }, [editorValue, isGuest, loading, notify, previewAppearance, projectDescription, projectId, projectTitle, selectedStage, sharedInput, t]);
 
   // Local and private GitHub stages are loaded through authenticated backend APIs.
   useEffect(() => {
+    if (sharedInput) return;
     if (!stageNeedsAuthenticatedLoad(selectedStage)) {
       setInitialStageConfig(null);
       setInitialStageAssetBaseUrl(null);
@@ -353,7 +388,7 @@ const BlocklyPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppeara
         }
       });
     return () => { cancelled = true; };
-  }, [isGuest, token, selectedStage?.localStageId, selectedStage?.repoOwner, selectedStage?.repoName, selectedStage?.sourceType]);
+  }, [isGuest, token, selectedStage?.localStageId, selectedStage?.repoOwner, selectedStage?.repoName, selectedStage?.sourceType, sharedInput]);
 
   useEffect(() => {
     const handleStageSelected = (event: Event) => {
@@ -397,7 +432,7 @@ const BlocklyPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppeara
   }, []);
 
   const handleSaveClick = async () => {
-    if (!isExistingProject(projectId)) {
+    if (sharedInput || !isExistingProject(projectId)) {
       setShowDrawer(true);
     } else {
       try {
@@ -450,7 +485,7 @@ const BlocklyPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppeara
 
   const isResponsive = useMediaQuery('(max-width:1024px)');
   const isStageConfigLoading =
-    stageNeedsAuthenticatedLoad(selectedStage) && initialStageConfig === undefined;
+    !sharedInput && stageNeedsAuthenticatedLoad(selectedStage) && initialStageConfig === undefined;
   const selectedStageLabel = selectedStage?.title || [selectedStage?.repoOwner, selectedStage?.repoName].filter(Boolean).join('/');
   const assistantAdapter: AssistantSurfaceAdapter = {
     surface: 'blockly',
@@ -588,6 +623,8 @@ const BlocklyPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppeara
   if (previewAppearance) {
     return (
       <PageContainer title={t('blockly-page.title')} description={t('blockly-page.description')}>
+        {sharedInput && <SharedProjectNotice fallback={sharedInput.project.stageFallback || sharedStageChanged && !selectedStage} failed={sharedStage.failed} retry={sharedStage.retry} useDefault={sharedStage.useDefault} />}
+        {!sharedInput && !isGuest && projectId && <ProjectShareControl projectId={Number(projectId)} />}
         <NewProjectDialog
           showDrawer={showDrawer}
           handleDrawerClose={handleDrawerClose}
@@ -595,6 +632,7 @@ const BlocklyPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppeara
           editorInitialValue="blockly"
           code={editorValue}
           stageReference={selectedStage}
+          sharedSave={sharedSave}
         />
         {loading ? (
           <Spinner />
@@ -625,7 +663,7 @@ const BlocklyPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppeara
                 </Box>
               </Box>
               <Stack direction="row" alignItems="center" sx={{ width: { xs: '100%', sm: 'auto' }, flexWrap: 'wrap', gap: 1 }}>
-                <Button variant="contained" startIcon={<IconPlayerPlay size={20} />} onClick={handlePlayClick} disabled={isRunning}>{t('blockly-page.run')}</Button>
+                <Button variant="contained" startIcon={<IconPlayerPlay size={20} />} onClick={handlePlayClick} disabled={isRunning || sharedStage.blocked}>{t('blockly-page.run')}</Button>
                 <Button variant="outlined" startIcon={<IconPlayerStop size={20} />} disabled={!isRunning} onClick={handleStopClick}>{t('blockly-page.stop')}</Button>
                 <SearchBar variant="button" />
                 {target === 'simulation' && <SimulatorEditorControls simulator={simulatorRef} />}
@@ -651,7 +689,7 @@ const BlocklyPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppeara
                         onTelemetry={collector.onSimulatorTelemetry}
                         appsessionId={sessionId}
                         onMountChange={handleMountChange}
-                        initialStageUrl={selectedStage?.url || null}
+                        initialStageUrl={sharedInput ? null : selectedStage?.url || null}
                         initialStageConfig={initialStageConfig}
                         initialStageAssetBaseUrl={initialStageAssetBaseUrl}
                       />
@@ -674,7 +712,7 @@ const BlocklyPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppeara
                       onTelemetry={collector.onSimulatorTelemetry}
                       appsessionId={sessionId}
                       onMountChange={handleMountChange}
-                      initialStageUrl={selectedStage?.url || null}
+                      initialStageUrl={sharedInput ? null : selectedStage?.url || null}
                       initialStageConfig={initialStageConfig}
                       initialStageAssetBaseUrl={initialStageAssetBaseUrl}
                     />
@@ -698,6 +736,8 @@ const BlocklyPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppeara
 
   return (
     <PageContainer title={t('blockly-page.title')} description={t('blockly-page.description')}>
+      {sharedInput && <SharedProjectNotice fallback={sharedInput.project.stageFallback || sharedStageChanged && !selectedStage} failed={sharedStage.failed} retry={sharedStage.retry} useDefault={sharedStage.useDefault} />}
+        {!sharedInput && !isGuest && projectId && <ProjectShareControl projectId={Number(projectId)} />}
       <NewProjectDialog
         showDrawer={showDrawer}
         handleDrawerClose={handleDrawerClose}
@@ -705,6 +745,7 @@ const BlocklyPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppeara
         editorInitialValue="blockly"
         code={editorValue}
         stageReference={selectedStage}
+        sharedSave={sharedSave}
       />
       <Box flexGrow={1}>
         <Grid
@@ -844,7 +885,7 @@ const BlocklyPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppeara
                   ref={simulatorRef}
                   appsessionId={sessionId}
                   onMountChange={handleMountChange}
-                  initialStageUrl={selectedStage?.url || null}
+                  initialStageUrl={sharedInput ? null : selectedStage?.url || null}
                   initialStageConfig={initialStageConfig}
                   initialStageAssetBaseUrl={initialStageAssetBaseUrl}
                 />

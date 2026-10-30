@@ -47,6 +47,10 @@ export interface AuthContextType {
     updateUserActivatedStatus: (userId: number, activated: ActivatedData) => Promise<boolean>;
     updateUserAccessRevokedStatus: (userId: number, access_revoked: AccessRevokedData) => Promise<boolean>;
 
+    getProjectSharingAction: (id: number) => Promise<ProjectSharingState>;
+    enableProjectSharingAction: (id: number) => Promise<ProjectSharingState>;
+    disableProjectSharingAction: (id: number) => Promise<void>;
+    getSharedProjectAction: (shareToken: string, signal?: AbortSignal) => Promise<SharedProjectData>;
     createProjectAction: (data: NewProjectData) => Promise<number | undefined>;
     getProjectsAction: () => Promise<Project[] | undefined>;
     deleteProjectByIdAction: (projectId: number) => Promise<boolean>;
@@ -93,6 +97,23 @@ export interface Project {
     project_type: string;
     code: string;
     stageReference?: ProjectStageReference | null;
+}
+
+export interface ProjectSharingState { shareToken: string | null; }
+
+export interface SharedProjectData extends NewProjectData {
+    project_type: 'python' | 'blockly';
+    stageFallback: boolean;
+}
+
+export interface SharedProjectInput {
+    shareToken: string;
+    project: SharedProjectData;
+}
+
+export interface SharedProjectSave {
+    prepare: () => Promise<{ stageReference: ProjectStageReference | null } | null>;
+    onCreated: (id: number) => void;
 }
 
 export interface ProjectResponse {

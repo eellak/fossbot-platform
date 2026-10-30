@@ -54,6 +54,9 @@ services:
       - ./back-end/utils:/usr/src/app/back-end/utils
       - ./back-end/database:/usr/src/app/back-end/database
       - ./back-end/models:/usr/src/app/back-end/models
+      - ./back-end/alembic:/usr/src/app/back-end/alembic:ro
+      - ./back-end/tests:/usr/src/app/back-end/tests:ro
+      - ./back-end/logging.json:/usr/src/app/back-end/logging.json:ro
       - ./secrets:/usr/src/app/secrets:ro
     depends_on:
       db:

@@ -40,6 +40,7 @@ import {
   updateUserMarketplaceRolesById,
   createGuestSession,
   getGuestSession,
+  projectSharingRequest,
 } from './AuthApi';
 import {
   getEmailFromFirebaseError,
@@ -52,6 +53,7 @@ import {
 import { clearUserStageCaches } from 'src/stages/stageListCache';
 import { GUEST_TOKEN_STORAGE_KEY, guestLandingPath } from './guest';
 import { guestProjectRepository } from 'src/guest/guestProjects';
+import { clearSharedReturn } from './sharedProjectReturn';
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const revokedAccessMessage = 'Your access to the platform has been revoked.';
@@ -220,7 +222,6 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
         setToken(res.access_token);
         localStorage.setItem(localStorageName, res.access_token);
         await loadAuthenticatedUser(res.access_token);
-        navigate('/dashboard');
         return { success: true, detail: '' };
       }
       return { success: false, detail: res.detail || 'Login failed' };
@@ -236,7 +237,6 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
   const loginWithFirebaseAction = async (provider: FirebaseProviderName) => {
     try {
       if (user && authStatus === 'authenticated') {
-        navigate('/dashboard', { replace: true });
         return { success: true, detail: '' };
       }
 
@@ -246,7 +246,6 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
 
       const accessToken = await exchangeFirebaseToken(idToken, credential.user);
       await loadAuthenticatedUser(accessToken);
-      navigate('/dashboard');
 
       return { success: true, detail: '' };
     } catch (err: any) {
@@ -265,7 +264,6 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
           const idToken = await linkedCredential.user.getIdToken(true);
           const accessToken = await exchangeFirebaseToken(idToken, linkedCredential.user);
           await loadAuthenticatedUser(accessToken);
-          navigate('/dashboard');
 
           return { success: true, detail: '' };
         } catch (linkError) {
@@ -289,6 +287,7 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
   const logOutAction = () => {
     signOutFromFirebase().catch(console.error);
     clearSession();
+    clearSharedReturn();
     navigate('/');
   };
 
@@ -307,7 +306,6 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
       setAuthStatus('authenticated');
       localStorage.removeItem(localStorageName);
       localStorage.setItem(GUEST_TOKEN_STORAGE_KEY, res.token);
-      navigate(guestLandingPath(res.guest.settings));
       return { success: true, detail: '' };
     } catch (error) {
       console.error(error);
@@ -632,6 +630,11 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
     [guest],
   );
 
+  const ownerSharing = (id: number, method = 'GET') => {
+    if (guest) return Promise.reject(new Error('Account project required'));
+    return projectSharingRequest(`/projects/${id}/share`, token, method);
+  };
+
   const contextValue = useMemo(
     () => ({
       token,
@@ -646,6 +649,13 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
       registerAction,
       enterGuestAction,
       refreshGuestAction,
+      getProjectSharingAction: (id: number) => ownerSharing(id),
+      enableProjectSharingAction: (id: number) => ownerSharing(id, 'POST'),
+      disableProjectSharingAction: (id: number) => ownerSharing(id, 'DELETE'),
+      getSharedProjectAction: async (shareToken: string, signal?: AbortSignal) => {
+        try { return await projectSharingRequest(`/shared-projects/${encodeURIComponent(shareToken)}`, token, 'GET', signal); }
+        catch (error) { if ((error as { status?: number }).status === 401) clearSession(); throw error; }
+      },
       createProjectAction,
       getProjectsAction,
       deleteProjectByIdAction,

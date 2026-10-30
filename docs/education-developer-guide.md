@@ -26,8 +26,30 @@ Tracked migrations run in this order:
 6. `20260727_06` — scoring fields, class groups, memberships, assignments, and challenges.
 7. `20260731_07`–`20260731_11` — local stage storage, AI foundation/usage retention, and stage previews.
 8. `20260731_12` — anonymous guest sessions, guest settings, and assignment-scoped guest memberships/enrollments.
+9. `20261030_13` — nullable unique `projects.share_token` for revocable live project links.
 
 Phase 8 adds no table or column. Old workspaces are already retained as release-scoped rows and are exposed read-only through an ownership-checked history route.
+
+## Project sharing
+
+A project owner enables one revocable link per saved project. Links are read-only capabilities over the latest saved row: they are not snapshots, and they are not project-ownership grants.
+
+| Endpoint | Access | Behaviour |
+| --- | --- | --- |
+| `GET /projects/{id}/share` | owning account | current `{shareToken}` or null |
+| `POST /projects/{id}/share` | owning account | enable, or return the existing token |
+| `DELETE /projects/{id}/share` | owning account | clear the token; 204 and idempotent |
+| `GET /shared-projects/{token}` | account or guest participant | restricted working-copy payload |
+
+Rules implementers must keep:
+
+* Tokens are 32 random bytes in URL-safe base64 (43 characters), looked up through the unique index. Non-owners receive 404 for management calls.
+* The shared payload contains name, description, project type, code, a receiver-filtered stage reference, and `stageFallback`. It never contains the source id, owner details, token, or flattened stage columns.
+* Ownership filtering, the guest mutation allowlist, and existing project CRUD stay unchanged. Guest reads require the matching `python` or `blockly` allowed view, checked before any content is returned.
+* Shared reads return the row version observed by that request. Already-open receivers are never pushed updates. Revocation and deletion block later reads, not copies already received.
+* Stage references are rebuilt in the receiver's context: local and GitHub stages only for the account that independently owns or installed them, marketplace stages only from the current published index and its moderation state, built-in stages only from the shipped `/js-simulator/stages/` allowlist. Guests never receive private stage metadata.
+* Received work is saved through the existing `createProjectAction`, producing a new row or a guest-local project. Shared saves never call the ordinary project update path and never clear unrelated guest drafts.
+* Sharing responses send `Cache-Control: no-store`; the SPA sends `Referrer-Policy: no-referrer`; nginx access logs and the Uvicorn access filter must keep tokens out of logs. The deployed Matomo container is a separate release gate: if it cannot be configured to avoid automatic location/referrer collection on `/shared-projects/*`, do not enable sharing.
 
 ## Release updates
 

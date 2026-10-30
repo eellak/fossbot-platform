@@ -32,7 +32,7 @@ const FullLayout: FC<{ previewAppearance?: boolean }> = ({ previewAppearance = t
   const customizer = useSelector((state: AppState) => state.customizer);
   const { pathname } = useLocation();
   const fullBleedWorkspace = previewAppearance && (/\/(course-workspace|python|blockly)\/?$/.test(pathname)
-    || /^\/(monaco-page|blockly-page)(\/|$)/.test(pathname)
+    || /^\/(monaco-page|blockly-page|shared-projects)(\/|$)/.test(pathname)
     || /^\/courses\/[^/]+\/learn\/[^/]+\/?$/.test(pathname));
 
   const theme = useTheme();

@@ -15,7 +15,7 @@ import {
   IconFileTypography,
 } from '@tabler/icons-react';
 import { useAuth } from 'src/authentication/AuthProvider';
-import type { ProjectStageReference } from 'src/authentication/AuthInterfaces';
+import type { ProjectStageReference, SharedProjectSave } from 'src/authentication/AuthInterfaces';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useNotifications } from 'src/components/notifications/NotificationProvider';
@@ -27,9 +27,10 @@ interface NewProjectFormProps {
   editorInitialValue: string,
   code: string,
   stageReference?: ProjectStageReference | null,
+  sharedSave?: SharedProjectSave,
 }
 
-const NewProjectForm = ({ isDescriptionDisabled, editorInitialValue, code, stageReference }: NewProjectFormProps) => {
+const NewProjectForm = ({ isDescriptionDisabled, editorInitialValue, code, stageReference, sharedSave }: NewProjectFormProps) => {
   const { t } = useTranslation();
   const auth = useAuth();
   const canPython = !auth.isGuest || guestCanView(auth.guestSettings, 'python');
@@ -43,6 +44,7 @@ const NewProjectForm = ({ isDescriptionDisabled, editorInitialValue, code, stage
   const [projectNameError, setProjectNameError] = useState(false);
   const [descriptionError, setDescriptionError] = useState(false);
   const [editorError, setEditorError] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -71,6 +73,7 @@ const NewProjectForm = ({ isDescriptionDisabled, editorInitialValue, code, stage
 
   const handleSubmit = async (event) => {
     event.preventDefault();
+    if (saving) return;
     if ((selectedOption === 'python' && !canPython) || (selectedOption === 'blockly' && !canBlockly)) return;
 
     // Check for empty fields and set errors
@@ -78,23 +81,27 @@ const NewProjectForm = ({ isDescriptionDisabled, editorInitialValue, code, stage
     setDescriptionError(description.trim() === '');
     setEditorError(selectedOption.trim() === '');
 
+    setSaving(true);
     try {
-      if (projectName !== '' && description !== '' && selectedOption !== '') {
+      if (projectName.trim() !== '' && description.trim() !== '' && selectedOption !== '') {
+        const prepared = sharedSave ? await sharedSave.prepare() : { stageReference: stageReference || null };
+        if (!prepared) return;
         const projectID = await auth.createProjectAction({
           name: projectName,
           description: description,
           project_type: selectedOption,
           code: code,
-          stageReference: stageReference || null,
+          stageReference: prepared.stageReference,
         });
         if (!projectID) {
-          if (auth.isGuest) notify(t('guest.storageError'), { severity: 'error' });
+          notify(t(auth.isGuest ? 'guest.storageError' : 'projectSharing.saveError'), { severity: 'error' });
           return;
         }
-        if (auth.isGuest) {
+        if (auth.isGuest && !sharedSave) {
           try { guestProjectRepository.clearDraft(selectedOption as 'python' | 'blockly'); } catch { /* Draft cleanup must not block opening the saved project. */ }
         }
 
+        sharedSave?.onCreated(projectID);
         const monacoPageUrl = `/monaco-page/${projectID}`;
         const blocklyPageUrl = `/blockly-page/${projectID}`;
 
@@ -114,7 +121,9 @@ const NewProjectForm = ({ isDescriptionDisabled, editorInitialValue, code, stage
         }
       }
     } catch (error) {
-      console.error('While creating a new project, an error occcured :', error);
+      notify(t('projectSharing.saveError'), { severity: 'error' });
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -184,7 +193,7 @@ const NewProjectForm = ({ isDescriptionDisabled, editorInitialValue, code, stage
                   fullWidth
                   value={selectedOption}
                   onChange={handleEditorChange}
-                  disabled={isDescriptionDisabled}
+                  disabled={isDescriptionDisabled || Boolean(sharedSave)}
                   error={editorError}
                 >
                   <MenuItem value={'python'} disabled={!canPython}>{t('monaco')}</MenuItem>
@@ -193,7 +202,7 @@ const NewProjectForm = ({ isDescriptionDisabled, editorInitialValue, code, stage
               </Grid>
               <Grid item xs={12} sm={3}></Grid>
               <Grid item xs={12} sm={9}>
-                <Button variant="contained" color="primary" onClick={handleSubmit} disabled={!selectedOption || (selectedOption === 'python' ? !canPython : !canBlockly)}>
+                <Button variant="contained" color="primary" onClick={handleSubmit} disabled={saving || !selectedOption || (selectedOption === 'python' ? !canPython : !canBlockly)}>
                   {t('submit')}
                 </Button>
               </Grid>

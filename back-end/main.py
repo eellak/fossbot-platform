@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import re
+import secrets
 import time
 import urllib.request
 from typing import Any, List, Optional
@@ -19,7 +20,8 @@ from database.database import (
     run_tracked_migrations,
 )
 from database.dev_seed import seed_dev_data
-from fastapi import Body, Depends, FastAPI, HTTPException, Query, status
+from fastapi import Body, Depends, FastAPI, HTTPException, Query, Request, Response, status
+from pydantic import ValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
@@ -28,6 +30,9 @@ from models.models import (
     FirebaseTokenRequest,
     LoginRequest,
     ProjectsCreate,
+    ProjectSharingState,
+    SharedProjectData,
+    LectureStageReference,
     RegisterRequest,
     SessionTokenRequest,
     UpdateAccessRevokedRequest,
@@ -60,6 +65,7 @@ from routers.website import router as website_router
 from routers.guests import router as guests_router
 from utils.github_app_auth import create_github_app_jwt
 from utils.beta_access import require_beta_access
+from utils.guest_access import Participant, allowed_guest_views, get_participant, guest_settings_row
 from utils.marketplace_schema import marketplace_entry_path
 from utils.source_providers import get_provider
 from utils.source_providers.github_app import GitHubApiError
@@ -93,6 +99,15 @@ app.include_router(ai_router)
 app.include_router(ai_admin_router)
 app.include_router(website_router)
 app.include_router(guests_router)
+
+@app.middleware("http")
+async def protect_project_sharing_responses(request: Request, call_next):
+    response = await call_next(request)
+    if request.url.path.startswith("/shared-projects/") or re.fullmatch(r"/projects/[^/]+/share/?", request.url.path):
+        response.headers["Cache-Control"] = "no-store"
+        response.headers["Referrer-Policy"] = "no-referrer"
+    return response
+
 
 # Security
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
@@ -803,6 +818,135 @@ async def update_project(project_id: int, project_update: ProjectsCreate, curren
     db.commit()
     db.refresh(db_project)
     return project_payload(db_project)
+
+
+def owned_shared_project(project_id: int, user: User, db: SessionLocal) -> Projects:
+    project = db.query(Projects).filter(Projects.id == project_id, Projects.user_id == user.id).first()
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return project
+
+
+@app.get("/projects/{project_id}/share", response_model=ProjectSharingState)
+async def project_sharing_state(project_id: int, current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):
+    return {"shareToken": owned_shared_project(project_id, current_user, db).share_token}
+
+
+@app.post("/projects/{project_id}/share", response_model=ProjectSharingState)
+async def enable_project_sharing(project_id: int, current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):
+    owner_id = current_user.id
+    for attempt in range(2):
+        project = owned_shared_project(project_id, current_user, db)
+        if project.share_token:
+            return {"shareToken": project.share_token}
+        try:
+            db.query(Projects).filter(
+                Projects.id == project_id, Projects.user_id == owner_id, Projects.share_token.is_(None),
+            ).update({"share_token": secrets.token_urlsafe(32)}, synchronize_session=False)
+            db.commit()
+            db.expire_all()
+            return {"shareToken": owned_shared_project(project_id, current_user, db).share_token}
+        except IntegrityError:
+            db.rollback()
+            if attempt:
+                raise HTTPException(status_code=503, detail="Could not create share link")
+    raise HTTPException(status_code=503, detail="Could not create share link")
+
+
+@app.delete("/projects/{project_id}/share", status_code=204)
+async def disable_project_sharing(project_id: int, current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):
+    owned_shared_project(project_id, current_user, db)
+    db.query(Projects).filter(Projects.id == project_id, Projects.user_id == current_user.id).update(
+        {"share_token": None}, synchronize_session=False,
+    )
+    db.commit()
+    db.expire_all()
+    return Response(status_code=204)
+
+
+@app.get("/shared-projects/{share_token}", response_model=SharedProjectData)
+async def read_shared_project(share_token: str, participant: Participant = Depends(get_participant), db: SessionLocal = Depends(get_db)):
+    if participant.user and (not participant.user.activated or participant.user.access_revoked):
+        raise HTTPException(status_code=403, detail="Account access is unavailable")
+    project = None
+    if re.fullmatch(r"[A-Za-z0-9_-]{43}", share_token):
+        project = db.query(Projects).join(User, Projects.user_id == User.id).filter(
+            Projects.share_token == share_token, User.activated.is_(True), User.access_revoked.is_(False),
+        ).first()
+    if project is None or project.project_type not in {"python", "blockly"}:
+        raise HTTPException(status_code=404, detail="Shared project unavailable")
+    if participant.is_guest and project.project_type not in allowed_guest_views(guest_settings_row(db)):
+        raise HTTPException(status_code=403, detail="This guest editor is not enabled")
+    payload = {
+        "name": project.name, "description": project.description or "",
+        "project_type": project.project_type, "code": project.code or "",
+    }
+    reference, fallback = shared_stage_reference(stage_reference_payload(project), participant, db)
+    return {**payload, "stageReference": reference, "stageFallback": fallback}
+
+
+BUILTIN_SHARED_STAGES = {
+    f"/js-simulator/stages/{name}.json" for name in (
+        "stage_animals", "stage_camera_vision", "stage_cones", "stage_eiffel",
+        "stage_floor_materials", "stage_maze", "stage_mission_challenge",
+        "stage_missions_phase6", "stage_numbers", "stage_object", "stage_ramp",
+        "stage_white_paper", "stage_white_rect",
+    )
+}
+
+
+def shared_stage_reference(reference: Optional[dict[str, Any]], participant: Participant, db: SessionLocal):
+    if reference is None:
+        return None, False
+    try:
+        candidate = LectureStageReference(**reference)
+        if candidate.sourceType == "default":
+            url = candidate.url or "/js-simulator/stages/stage_white_rect.json"
+            if url not in BUILTIN_SHARED_STAGES:
+                return None, True
+            return {"sourceType": "default", "url": url, "title": candidate.title}, False
+        if candidate.sourceType in {"local", "github"}:
+            if participant.is_guest:
+                return None, True
+            candidate.url = None
+            result = normalize_stage_reference(candidate, participant.user, db)
+            result["url"] = None
+            return result, False
+        if candidate.sourceType == "marketplace":
+            if participant.is_guest:
+                if "stages" not in allowed_guest_views(guest_settings_row(db)):
+                    return None, True
+            else:
+                require_beta_access(participant.user)
+            entry = published_marketplace_entry(candidate.repoOwner, candidate.repoName, candidate.marketplaceEntryPath, db)
+            query = db.query(MarketplaceModerationOverride.id).filter(MarketplaceModerationOverride.active.is_(True))
+            if entry.get("sourceType") == "local":
+                query = query.filter(MarketplaceModerationOverride.source_type == "local", MarketplaceModerationOverride.local_publication_id == entry["localPublicationId"])
+            else:
+                query = query.filter(MarketplaceModerationOverride.repo_owner == entry["repoOwner"], MarketplaceModerationOverride.repo_name == entry["repoName"])
+            if query.first():
+                return None, True
+            return marketplace_project_reference(entry), False
+        return None, True
+    except ValidationError:
+        return None, True
+    except HTTPException as error:
+        if error.status_code not in {400, 401, 403, 404, 409, 429, 502, 503}:
+            raise
+        return None, True
+
+
+def marketplace_project_reference(entry: dict[str, Any]) -> dict[str, Any]:
+    is_local = entry.get("sourceType") == "local"
+    return {
+        "sourceType": "marketplace", "localStageId": None,
+        "repoOwner": entry["repoOwner"], "repoName": entry["repoName"],
+        "visibility": "public",
+        "marketplaceEntryPath": f"local:{entry['localPublicationId']}" if is_local else marketplace_entry_path(entry["repoOwner"], entry["repoName"]),
+        "title": entry.get("title") or entry["repoName"],
+        "url": entry.get("recordUrl") if is_local else f"{github_raw_base_url(entry['repoOwner'], entry['repoName'], entry['commitSha'])}/stage.json",
+        "commitSha": entry.get("commitSha"),
+    }
 
 
 def clear_project_stage_reference(project: Projects) -> None:

@@ -41,6 +41,7 @@
     "formik": "^2.4.5",
     "framer-motion": "^10.16.4",
     "handtrackjs": "^0.1.5",
+    "history": "5.3.0",
     "i18next": "22.0.6",
     "jquery": "^3.7.1",
     "jquery.terminal": "^2.37.2",

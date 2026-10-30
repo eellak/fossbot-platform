@@ -43,6 +43,11 @@ import { v4 as uuidv4 } from 'uuid';
 import { useTranslation } from 'react-i18next';
 import VideoPlayer from 'src/components/videoplayer/VideoPlayer';
 import NewProjectDialog from 'src/components/dashboard/NewProjectDialog';
+import { ProjectShareControl } from 'src/components/dashboard/ProjectShareDialog';
+import SharedProjectNotice from 'src/components/editors/SharedProjectNotice';
+import type { SharedProjectInput } from 'src/authentication/AuthInterfaces';
+import { useSharedProjectStage } from 'src/stages/sharedProjectStage';
+import { useSharedProjectDeparture } from 'src/routes/useSharedProjectDeparture';
 import SearchBar from 'src/components/monaco-functions/MonacoSearchBar';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faPython } from '@fortawesome/free-brands-svg-icons';
@@ -92,14 +97,14 @@ type MonacoResizeTarget = 'columns' | 'rows' | 'corner';
 type MonacoResizeState = { target: MonacoResizeTarget; startX: number; startY: number; startValue: number; startSecondary?: number };
 const clampWorkspaceValue = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
-const MonacoPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppearance = true }) => {
+const MonacoPage: React.FC<{ previewAppearance?: boolean; sharedInput?: SharedProjectInput }> = ({ previewAppearance = true, sharedInput }) => {
   const { t } = useTranslation();
   const simulatorRef = useRef<SimulatorControlHandle>(null);
   const location = useLocation();
-  const [editorValue, setEditorValue] = useState('');
-  const [projectTitle, setProjectTitle] = useState(t('newProject'));
-  const [projectDescription, setProjectDescription] = useState(t('newProjectDescription'));
-  const [selectedStage, setSelectedStage] = useState<ProjectStageReference | null>(null);
+  const [editorValue, setEditorValue] = useState(sharedInput?.project.code ?? '');
+  const [projectTitle, setProjectTitle] = useState(sharedInput?.project.name ?? t('newProject'));
+  const [projectDescription, setProjectDescription] = useState(sharedInput?.project.description ?? t('newProjectDescription'));
+  const [selectedStage, setSelectedStage] = useState<ProjectStageReference | null>(sharedInput?.project.stageReference || null);
   const [initialStageConfig, setInitialStageConfig] = useState<RawStageConfig | null | undefined>(undefined);
   const [initialStageAssetBaseUrl, setInitialStageAssetBaseUrl] = useState<string | null>(null);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
@@ -140,6 +145,23 @@ const MonacoPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppearan
   const collector = useSensorDataCollection(target, programState, status, telemetry);
   const [resultsTab, setResultsTab] = useState<'terminal' | 'data'>('terminal');
   const { notify } = useNotifications();
+  const sharedStage = useSharedProjectStage(Boolean(sharedInput), selectedStage, setSelectedStage, token, isGuest ? auth.guestSettings : undefined);
+  const sharedStageChanged = Boolean(sharedInput) && JSON.stringify(selectedStage) !== JSON.stringify(sharedInput?.project.stageReference || null);
+  const sharedBaselineCode = sharedInput?.project.code ?? null;
+  const sharedDirty = Boolean(sharedInput) && sharedBaselineCode !== null && (
+    editorValue !== sharedBaselineCode || projectTitle !== sharedInput?.project.name
+    || projectDescription !== sharedInput?.project.description || sharedStageChanged
+  );
+  const releaseSharedDeparture = useSharedProjectDeparture(sharedDirty);
+  useEffect(() => {
+    if (!sharedInput) return;
+    setInitialStageConfig(sharedStage.config);
+    setInitialStageAssetBaseUrl(sharedStage.base);
+  }, [sharedInput, sharedStage.config, sharedStage.base]);
+  const sharedSave = sharedInput ? {
+    prepare: sharedStage.prepare,
+    onCreated: () => { releaseSharedDeparture(); setShowDrawer(false); },
+  } : undefined;
 
   const theme = useTheme();
   const customizer = useSelector((state: AppState) => state.customizer);
@@ -199,6 +221,7 @@ const MonacoPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppearan
   };
 
   const handlePlayClick = async () => {
+    if (sharedStage.blocked) { notify(t('projectSharing.stageUnavailable'), { severity: 'warning' }); return; }
     if (editorValue == '') {
       handleShowErrorAlert(t('alertMessages.emptyCodeMonaco'));
       return;
@@ -265,6 +288,7 @@ const MonacoPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppearan
   }, []);
 
   useEffect(() => {
+    if (sharedInput) { setLoading(false); return; }
     const fetchProject = async () => {
       try {
         if (projectId && projectId !== '') {
@@ -309,10 +333,10 @@ const MonacoPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppearan
     };
 
     fetchProject();
-  }, [projectId, navigate]);
+  }, [projectId, navigate, sharedInput]);
 
   useEffect(() => {
-    if (!isGuest || loading || previewAppearance === false) return undefined;
+    if (sharedInput || !isGuest || loading || previewAppearance === false) return undefined;
     const timer = window.setTimeout(() => {
       try {
         const data = {
@@ -333,10 +357,11 @@ const MonacoPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppearan
       }
     }, 800);
     return () => window.clearTimeout(timer);
-  }, [editorValue, isGuest, loading, notify, previewAppearance, projectDescription, projectId, projectTitle, selectedStage, t]);
+  }, [editorValue, isGuest, loading, notify, previewAppearance, projectDescription, projectId, projectTitle, selectedStage, sharedInput, t]);
 
   // Local and private GitHub stages are loaded through authenticated backend APIs.
   useEffect(() => {
+    if (sharedInput) return;
     if (!stageNeedsAuthenticatedLoad(selectedStage)) {
       setInitialStageConfig(null);
       setInitialStageAssetBaseUrl(null);
@@ -368,7 +393,7 @@ const MonacoPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppearan
         }
       });
     return () => { cancelled = true; };
-  }, [isGuest, token, selectedStage?.localStageId, selectedStage?.repoOwner, selectedStage?.repoName, selectedStage?.sourceType]);
+  }, [isGuest, token, selectedStage?.localStageId, selectedStage?.repoOwner, selectedStage?.repoName, selectedStage?.sourceType, sharedInput]);
 
   useEffect(() => {
     const handleStageSelected = (event: Event) => {
@@ -387,7 +412,7 @@ const MonacoPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppearan
   }, []);
 
   const handleSaveClick = async () => {
-    if (!isExistingProject(projectId)) {
+    if (sharedInput || !isExistingProject(projectId)) {
       setShowDrawer(true);
     } else {
       try {
@@ -445,7 +470,7 @@ const MonacoPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppearan
   };
 
   const isStageConfigLoading =
-    stageNeedsAuthenticatedLoad(selectedStage) && initialStageConfig === undefined;
+    !sharedInput && stageNeedsAuthenticatedLoad(selectedStage) && initialStageConfig === undefined;
   const selectedStageLabel = selectedStage?.title || [selectedStage?.repoOwner, selectedStage?.repoName].filter(Boolean).join('/');
   const assistantAdapter: AssistantSurfaceAdapter = {
     surface: 'python',
@@ -594,6 +619,8 @@ const MonacoPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppearan
   if (previewAppearance) {
     return (
       <PageContainer title={t('monaco-page.title')} description={t('monaco-page.description')}>
+        {sharedInput && <SharedProjectNotice fallback={sharedInput.project.stageFallback || sharedStageChanged && !selectedStage} failed={sharedStage.failed} retry={sharedStage.retry} useDefault={sharedStage.useDefault} />}
+        {!sharedInput && !isGuest && projectId && <ProjectShareControl projectId={Number(projectId)} />}
         <NewProjectDialog
           showDrawer={showDrawer}
           handleDrawerClose={handleDrawerClose}
@@ -601,6 +628,7 @@ const MonacoPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppearan
           editorInitialValue="python"
           code={editorValue}
           stageReference={selectedStage}
+          sharedSave={sharedSave}
         />
         {loading ? (
           <Spinner />
@@ -631,7 +659,7 @@ const MonacoPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppearan
                 </Box>
               </Box>
               <Stack direction="row" alignItems="center" sx={{ width: { xs: '100%', sm: 'auto' }, flexWrap: 'wrap', gap: 1 }}>
-                <Button variant="contained" startIcon={<IconPlayerPlay size={20} />} onClick={handlePlayClick} disabled={isRunning}>{t('monaco-page.run')}</Button>
+                <Button variant="contained" startIcon={<IconPlayerPlay size={20} />} onClick={handlePlayClick} disabled={isRunning || sharedStage.blocked}>{t('monaco-page.run')}</Button>
                 <Button variant="outlined" startIcon={<IconPlayerStop size={20} />} disabled={!isRunning} onClick={handleStopClick}>{t('monaco-page.stop')}</Button>
                 <SearchBar variant="button" />
                 {target === 'simulation' && <SimulatorEditorControls simulator={simulatorRef} />}
@@ -657,7 +685,7 @@ const MonacoPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppearan
                         onTelemetry={collector.onSimulatorTelemetry}
                         appsessionId={sessionId}
                         onMountChange={handleMountChange}
-                        initialStageUrl={selectedStage?.url || null}
+                        initialStageUrl={sharedInput ? null : selectedStage?.url || null}
                         initialStageConfig={initialStageConfig}
                         initialStageAssetBaseUrl={initialStageAssetBaseUrl}
                       />
@@ -678,7 +706,7 @@ const MonacoPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppearan
                       onTelemetry={collector.onSimulatorTelemetry}
                       appsessionId={sessionId}
                       onMountChange={handleMountChange}
-                      initialStageUrl={selectedStage?.url || null}
+                      initialStageUrl={sharedInput ? null : selectedStage?.url || null}
                       initialStageConfig={initialStageConfig}
                       initialStageAssetBaseUrl={initialStageAssetBaseUrl}
                     />
@@ -702,6 +730,8 @@ const MonacoPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppearan
 
   return (
     <PageContainer title={t('monaco-page.title')} description={t('monaco-page.description')}>
+      {sharedInput && <SharedProjectNotice fallback={sharedInput.project.stageFallback || sharedStageChanged && !selectedStage} failed={sharedStage.failed} retry={sharedStage.retry} useDefault={sharedStage.useDefault} />}
+        {!sharedInput && !isGuest && projectId && <ProjectShareControl projectId={Number(projectId)} />}
       <NewProjectDialog
         showDrawer={showDrawer}
         handleDrawerClose={handleDrawerClose}
@@ -709,6 +739,7 @@ const MonacoPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppearan
         editorInitialValue="python"
         code={editorValue}
         stageReference={selectedStage}
+        sharedSave={sharedSave}
       />
       <Box id="monaco-container" flexGrow={1}>
         <Grid
@@ -860,7 +891,7 @@ const MonacoPage: React.FC<{ previewAppearance?: boolean }> = ({ previewAppearan
                   ref={simulatorRef}
                   appsessionId={sessionId}
                   onMountChange={handleMountChange}
-                  initialStageUrl={selectedStage?.url || null}
+                  initialStageUrl={sharedInput ? null : selectedStage?.url || null}
                   initialStageConfig={initialStageConfig}
                   initialStageAssetBaseUrl={initialStageAssetBaseUrl}
                 />

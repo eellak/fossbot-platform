@@ -1,7 +1,8 @@
 import React, { ReactNode } from 'react';
-import { Navigate, Outlet } from 'react-router-dom';
+import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../authentication/AuthProvider';
 import { guestLandingPath } from '../authentication/guest';
+import { rememberSharedReturn } from '../authentication/sharedProjectReturn';
 
 interface PrivateRouteProps {
   children?: ReactNode;
@@ -10,13 +11,14 @@ interface PrivateRouteProps {
 
 const PrivateRoute: React.FC<PrivateRouteProps> = ({ children, guestAllowed = false }) => {
   const { token, authStatus, isGuest, guestSettings } = useAuth();
+  const location = useLocation();
 
   if (authStatus === 'loading') {
     return null;
   }
   
   if (!token || authStatus !== 'authenticated') {
-    return <Navigate to="/auth/login" />;
+    return <Navigate to="/auth/login" replace state={{ sharedReturnTo: rememberSharedReturn(location.pathname + location.search + location.hash) }} />;
   }
 
   if (isGuest && (!guestAllowed || !guestSettings.allowed_views.length)) {

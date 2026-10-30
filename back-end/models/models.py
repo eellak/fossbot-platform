@@ -1,6 +1,6 @@
 from enum import Enum as PyEnum
 from pydantic import BaseModel, ConfigDict, field_validator
-from typing import Optional
+from typing import Literal, Optional
 from pydantic import Field
 
 class UserRole(PyEnum):
@@ -73,6 +73,19 @@ class ProjectsCreate(BaseModel):
     project_type: str    
     code: str
     stageReference: Optional[LectureStageReference] = None
+
+class ProjectSharingState(BaseModel):
+    shareToken: Optional[str] = None
+
+
+class SharedProjectData(BaseModel):
+    name: str
+    description: str
+    project_type: Literal['python', 'blockly']
+    code: str
+    stageReference: Optional[LectureStageReference] = None
+    stageFallback: bool = False
+
 
 class LessonCreate(BaseModel):
     title: str
