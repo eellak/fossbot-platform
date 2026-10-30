@@ -52,6 +52,7 @@ import {
 import { clearUserStageCaches } from 'src/stages/stageListCache';
 import { GUEST_TOKEN_STORAGE_KEY, guestLandingPath } from './guest';
 import { guestProjectRepository } from 'src/guest/guestProjects';
+import { takeAuthReturnPath } from './authReturn';
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const revokedAccessMessage = 'Your access to the platform has been revoked.';
@@ -220,7 +221,7 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
         setToken(res.access_token);
         localStorage.setItem(localStorageName, res.access_token);
         await loadAuthenticatedUser(res.access_token);
-        navigate('/dashboard');
+        navigate(takeAuthReturnPath('/dashboard'));
         return { success: true, detail: '' };
       }
       return { success: false, detail: res.detail || 'Login failed' };
@@ -236,7 +237,7 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
   const loginWithFirebaseAction = async (provider: FirebaseProviderName) => {
     try {
       if (user && authStatus === 'authenticated') {
-        navigate('/dashboard', { replace: true });
+        navigate(takeAuthReturnPath('/dashboard'), { replace: true });
         return { success: true, detail: '' };
       }
 
@@ -246,7 +247,7 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
 
       const accessToken = await exchangeFirebaseToken(idToken, credential.user);
       await loadAuthenticatedUser(accessToken);
-      navigate('/dashboard');
+      navigate(takeAuthReturnPath('/dashboard'));
 
       return { success: true, detail: '' };
     } catch (err: any) {
@@ -265,7 +266,7 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
           const idToken = await linkedCredential.user.getIdToken(true);
           const accessToken = await exchangeFirebaseToken(idToken, linkedCredential.user);
           await loadAuthenticatedUser(accessToken);
-          navigate('/dashboard');
+          navigate(takeAuthReturnPath('/dashboard'));
 
           return { success: true, detail: '' };
         } catch (linkError) {
@@ -307,7 +308,7 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
       setAuthStatus('authenticated');
       localStorage.removeItem(localStorageName);
       localStorage.setItem(GUEST_TOKEN_STORAGE_KEY, res.token);
-      navigate(guestLandingPath(res.guest.settings));
+      navigate(takeAuthReturnPath(guestLandingPath(res.guest.settings)));
       return { success: true, detail: '' };
     } catch (error) {
       console.error(error);

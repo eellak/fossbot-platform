@@ -1,15 +1,17 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, Button, Chip, LinearProgress, Skeleton, Stack, Typography } from '@mui/material';
-import { IconPlus, IconSchool } from '@tabler/icons-react';
+import { IconPlus, IconSchool, IconSearch } from '@tabler/icons-react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from 'src/authentication/AuthProvider';
 import { UserRole } from 'src/authentication/AuthInterfaces';
-import { listAuthoredCourses, listMyEnrollments } from 'src/courses/CoursesApi';
+import { listAuthoredCourses, listMyEnrollments, dropEnrollment } from 'src/courses/CoursesApi';
 import type { CourseSummary, Enrollment } from 'src/courses/types';
 import DashboardCard from 'src/components/shared/DashboardCardWithChildren';
 import ListCard from 'src/components/shared/ListCard';
 import BetaBadge from 'src/components/shared/BetaBadge';
+import CourseActionsMenu from 'src/components/courses/CourseActionsMenu';
+import { useConfirmDialog } from 'src/components/shared/ConfirmDialog';
 import { guestCanView } from 'src/authentication/guest';
 
 const MAX_ROWS = 3;
@@ -20,6 +22,7 @@ const MAX_ROWS = 3;
  */
 export default function CoursesDashboardPanel({ previewAppearance = true }: { previewAppearance?: boolean }) {
   const { t } = useTranslation();
+  const confirmDialog = useConfirmDialog();
   const { token, user, isGuest, guestSettings } = useAuth();
   const navigate = useNavigate();
   const isTeacher = user?.role === UserRole.TUTOR || user?.role === UserRole.ADMIN;
@@ -29,6 +32,7 @@ export default function CoursesDashboardPanel({ previewAppearance = true }: { pr
   const [courses, setCourses] = useState<CourseSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
+  const [dropError, setDropError] = useState('');
 
   useEffect(() => {
     if (!token) return undefined;
@@ -60,9 +64,28 @@ export default function CoursesDashboardPanel({ previewAppearance = true }: { pr
     title: t('education.courseList.title'),
     subtitle: isTeacher ? t('education.courseList.subtitle') : t('education.student.resumeHelp'),
   };
+
+  const drop = async (enrollment: Enrollment) => {
+    const confirmed = await confirmDialog.confirm({
+      title: t('education.student.dropTitle'),
+      message: t('education.student.dropConfirm', { title: enrollment.course.title }),
+      confirmLabel: t('education.student.dropCourse'),
+      cancelLabel: t('cancel'),
+      danger: true,
+    });
+    if (!confirmed) return;
+    setDropError('');
+    try {
+      await dropEnrollment(token, enrollment.id);
+      setEnrollments((current) => current.filter((item) => item.id !== enrollment.id));
+    } catch (reason) {
+      setDropError(reason instanceof Error ? reason.message : t('education.student.dropFailed'));
+    }
+  };
   const action = (
     <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" justifyContent="flex-end">
       {isTeacher && <Button size="small" variant="contained" startIcon={<IconPlus size={18} />} sx={{ whiteSpace: 'nowrap' }} onClick={() => navigate('/teach/courses')}>{t('education.courseList.create')}</Button>}
+      {!isTeacher && canBrowseCourses && <Button size="small" variant="contained" startIcon={<IconSearch size={18} />} sx={{ whiteSpace: 'nowrap' }} onClick={() => navigate('/courses?tab=explore')}>{t('education.student.findCourses')}</Button>}
       <Button size="small" variant="outlined" sx={{ whiteSpace: 'nowrap' }} onClick={() => navigate(isTeacher ? '/teach/courses' : canBrowseCourses ? '/courses' : '/classrooms')}>{t('education.student.allCourses')}</Button>
     </Stack>
   );
@@ -90,22 +113,32 @@ export default function CoursesDashboardPanel({ previewAppearance = true }: { pr
           meta={course.latest_published_release_version ? t('education.courseList.latestRelease', { version: course.latest_published_release_version }) : t('education.courseList.noRelease')}
           openLabel={t('education.courseList.edit')}
           onOpen={() => navigate(`/teach/courses/${course.id}`)}
+          action={<CourseActionsMenu label={t('education.courseList.actions')} actions={[
+            { key: 'edit', label: t('education.courseList.edit'), onClick: () => navigate(`/teach/courses/${course.id}`) },
+            { key: 'progress', label: t('education.analytics.title'), onClick: () => navigate(`/teach/courses/${course.id}/progress`) },
+          ]} />}
         />
       ))}
     </Stack>
   ) : (
     <Stack spacing={1.25}>
-      {visibleEnrollments.map((enrollment, index) => (
+      {visibleEnrollments.map((enrollment) => (
         <ListCard
           key={enrollment.id}
           surface="card"
           title={enrollment.course.title}
           description={enrollment.course.description}
           fallbackIcon={<IconSchool size={20} />}
-          status={enrollment.update_available ? <Chip size="small" color="info" variant="outlined" label={t('education.student.updateAvailable')} /> : undefined}
           meta={t('education.student.progress', { completed: enrollment.completed_count, total: enrollment.lesson_count })}
           onOpen={() => navigate(`/courses/${enrollment.course_id}${isGuest ? `?enrollment=${enrollment.id}` : ''}`)}
-          action={<Button size="small" variant={index === 0 ? 'contained' : 'outlined'} onClick={() => navigate(enrollment.resume_lesson_key && !enrollment.completed_at ? `/courses/${enrollment.course_id}/learn/${enrollment.resume_lesson_key}${isGuest ? `?enrollment=${enrollment.id}` : ''}` : `/courses/${enrollment.course_id}${isGuest ? `?enrollment=${enrollment.id}` : ''}`)}>{enrollment.completed_at ? t('education.student.reviewCourse') : t('education.student.continueCourse')}</Button>}
+          action={<Stack direction="row" spacing={1} alignItems="center">
+            <Button size="small" variant="contained" onClick={() => navigate(enrollment.resume_lesson_key && !enrollment.completed_at ? `/courses/${enrollment.course_id}/learn/${enrollment.resume_lesson_key}${isGuest ? `?enrollment=${enrollment.id}` : ''}` : `/courses/${enrollment.course_id}${isGuest ? `?enrollment=${enrollment.id}` : ''}`)}>{enrollment.completed_at ? t('education.student.reviewCourse') : t('education.student.continueCourse')}</Button>
+            <CourseActionsMenu label={t('education.courseList.actions')} actions={[
+              { key: 'open', label: t('education.student.viewCourse'), onClick: () => navigate(`/courses/${enrollment.course_id}${isGuest ? `?enrollment=${enrollment.id}` : ''}`) },
+              { key: 'progress', label: t('education.student.progressTitle'), onClick: () => navigate(`/courses/${enrollment.course_id}/progress${isGuest ? `?enrollment=${enrollment.id}` : ''}`) },
+              ...(!isGuest ? [{ key: 'drop', label: t('education.student.dropCourse'), onClick: () => void drop(enrollment), danger: true, dividerBefore: true }] : []),
+            ]} />
+          </Stack>}
         >
           <LinearProgress variant="determinate" value={enrollment.progress_percent} sx={{ mt: 1, maxWidth: 320 }} />
         </ListCard>
@@ -113,5 +146,8 @@ export default function CoursesDashboardPanel({ previewAppearance = true }: { pr
     </Stack>
   );
 
-  return <DashboardCard {...header} titleAdornment={<BetaBadge feature="education" />} action={action} compact collapsible>{body}</DashboardCard>;
+  return <DashboardCard {...header} titleAdornment={<BetaBadge feature="education" />} action={action} compact collapsible>
+    {dropError ? <Alert severity="error" sx={{ mb: 1 }}>{dropError}</Alert> : null}
+    {body}
+  </DashboardCard>;
 }

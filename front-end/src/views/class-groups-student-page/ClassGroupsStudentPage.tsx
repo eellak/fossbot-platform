@@ -1,22 +1,27 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Alert, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel, Paper, Skeleton, Stack, Switch, TextField, Typography,
 } from '@mui/material';
 import { IconLogin, IconTrophy } from '@tabler/icons-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from 'src/authentication/AuthProvider';
 import {
-  joinClassGroup, leaveClassGroup, listJoinedClassGroups, readClassLeaderboard, updateClassMembership,
+  joinClassGroup, leaveClassGroup, listJoinedClassGroups, previewClassGroup, readClassLeaderboard, updateClassMembership,
 } from 'src/courses/CoursesApi';
-import type { ClassLeaderboard, StudentClassGroup } from 'src/courses/types';
+import type { ClassGroupPreview, ClassLeaderboard, StudentClassGroup } from 'src/courses/types';
 
 export default function ClassGroupsStudentPage({ embedded = false, previewAppearance = true }: { embedded?: boolean; previewAppearance?: boolean }) {
   const { t } = useTranslation();
   const { token } = useAuth();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const attemptedJoin = useRef('');
   const [groups, setGroups] = useState<StudentClassGroup[]>([]);
   const [joinCode, setJoinCode] = useState('');
+  const [pendingJoin, setPendingJoin] = useState<{ code: string; group: ClassGroupPreview } | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [joining, setJoining] = useState(false);
   const [leaderboard, setLeaderboard] = useState<ClassLeaderboard | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -29,6 +34,53 @@ export default function ClassGroupsStudentPage({ embedded = false, previewAppear
     finally { setLoading(false); }
   }, [t, token]);
   useEffect(() => { void load(); }, [load]);
+
+  const showJoinPreview = useCallback(async (rawCode: string) => {
+    const code = rawCode.trim().toUpperCase();
+    if (!code) return;
+    setError('');
+    setPreviewLoading(true);
+    try {
+      setPendingJoin({ code, group: await previewClassGroup(token, code) });
+    } catch (reason) {
+      setJoinCode(code);
+      setError(reason instanceof Error ? reason.message : t('education.classrooms.saveFailed'));
+      setSearchParams({}, { replace: true });
+    } finally {
+      setPreviewLoading(false);
+    }
+  }, [setSearchParams, t, token]);
+
+  useEffect(() => {
+    const code = (searchParams.get('join') || '').trim().toUpperCase();
+    if (!code || attemptedJoin.current === code) return;
+    attemptedJoin.current = code;
+    setJoinCode(code);
+    void showJoinPreview(code);
+  }, [searchParams, showJoinPreview]);
+
+  const acceptJoin = async () => {
+    if (!pendingJoin) return;
+    setJoining(true);
+    setError('');
+    try {
+      await joinClassGroup(token, pendingJoin.code);
+      setPendingJoin(null);
+      setJoinCode('');
+      setSearchParams({}, { replace: true });
+      await load();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : t('education.classrooms.saveFailed'));
+    } finally {
+      setJoining(false);
+    }
+  };
+
+  const cancelJoin = () => {
+    setPendingJoin(null);
+    setJoinCode('');
+    setSearchParams({}, { replace: true });
+  };
   const run = async (action: () => Promise<unknown>) => {
     setError('');
     try { await action(); await load(); }
@@ -56,8 +108,8 @@ export default function ClassGroupsStudentPage({ embedded = false, previewAppear
         <Button
           variant="contained"
           startIcon={<IconLogin size={17} />}
-          disabled={!joinCode.trim()}
-          onClick={() => void run(async () => { await joinClassGroup(token, joinCode); setJoinCode(''); })}
+          disabled={!joinCode.trim() || previewLoading}
+          onClick={() => void showJoinPreview(joinCode)}
           sx={previewAppearance ? { flexShrink: 0, alignSelf: { xs: 'stretch', sm: 'center' } } : undefined}
         >
           {t('education.classrooms.join')}
@@ -71,6 +123,28 @@ export default function ClassGroupsStudentPage({ embedded = false, previewAppear
         ? <Typography color="text.secondary" variant="body2" sx={{ py: 1, maxWidth: previewMaxWidth }}>{t('education.classrooms.notJoined')}</Typography>
         : <Alert severity="info">{t('education.classrooms.notJoined')}</Alert>)}
     </Stack>}
+    <Dialog open={Boolean(pendingJoin)} onClose={() => !joining && cancelJoin()} fullWidth maxWidth="sm">
+      <DialogTitle>{t('education.classrooms.joinPreviewTitle')}</DialogTitle>
+      <DialogContent>
+        {pendingJoin && <Stack spacing={2} sx={{ pt: 1 }}>
+          <Typography variant="h5">{pendingJoin.group.name}</Typography>
+          {pendingJoin.group.teacher_name && <Typography color="text.secondary">{t('education.classrooms.joinPreviewTeacher', { teacher: pendingJoin.group.teacher_name })}</Typography>}
+          <Typography>{t('education.classrooms.joinPreviewMembers', { count: pendingJoin.group.member_count })}</Typography>
+          <Box>
+            <Typography variant="subtitle2">{t('education.classrooms.joinPreviewAssignments')}</Typography>
+            {pendingJoin.group.assignments.length
+              ? <Box component="ul" sx={{ m: 0, pl: 3 }}>{pendingJoin.group.assignments.map((assignment) => <li key={`${assignment.course_title}-${assignment.release_version}`}><Typography>{assignment.course_title} · {t('education.student.version', { version: assignment.release_version })}</Typography></li>)}</Box>
+              : <Typography color="text.secondary">{t('education.classrooms.joinPreviewNoAssignments')}</Typography>}
+          </Box>
+          {pendingJoin.group.already_member && <Alert severity="info">{t('education.classrooms.joinPreviewAlreadyMember')}</Alert>}
+          <Alert severity="info">{t('education.classrooms.joinPreviewPrivacy')}</Alert>
+        </Stack>}
+      </DialogContent>
+      <DialogActions>
+        <Button disabled={joining} onClick={cancelJoin}>{t('cancel')}</Button>
+        <Button variant="contained" disabled={joining} onClick={() => void acceptJoin()}>{pendingJoin?.group.already_member ? t('education.classrooms.continueToClass') : t('education.classrooms.join')}</Button>
+      </DialogActions>
+    </Dialog>
     <Dialog open={Boolean(leaderboard)} onClose={() => setLeaderboard(null)} fullWidth maxWidth="sm">
       <DialogTitle>{leaderboard?.activity_title}</DialogTitle>
       <DialogContent>

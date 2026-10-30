@@ -8,7 +8,6 @@ import type {
   LessonSaveRequest,
   PublicationValidation,
   Enrollment,
-  ReleaseUpdate,
   StudentCourse,
   LessonWorkspace,
   LessonWorkspaceHistory,
@@ -21,6 +20,7 @@ import type {
   MissionPersonalFeedback,
   TeacherClassGroup,
   StudentClassGroup,
+  ClassGroupPreview,
   ClassChallenge,
   ClassLeaderboard,
   ClassChallengeStatistics,
@@ -138,6 +138,16 @@ export async function readEnrollment(token: string, enrollmentId: number): Promi
   return parse(await fetch(`${backendUrl}/enrollments/${enrollmentId}`, { headers: headers(token) }));
 }
 
+export async function dropEnrollment(token: string, enrollmentId: number): Promise<void> {
+  const response = await fetch(`${backendUrl}/enrollments/${enrollmentId}`, { method: 'DELETE', headers: headers(token) });
+  if (!response.ok) await parse(response);
+}
+
+export async function removeCourseStudent(token: string, courseId: number, enrollmentId: number): Promise<void> {
+  const response = await fetch(`${backendUrl}/teach/courses/${courseId}/enrollments/${enrollmentId}`, { method: 'DELETE', headers: headers(token) });
+  if (!response.ok) await parse(response);
+}
+
 export async function startLesson(token: string, enrollmentId: number, lessonKey: string): Promise<Enrollment> {
   return parse(await fetch(`${backendUrl}/enrollments/${enrollmentId}/lessons/${encodeURIComponent(lessonKey)}/start`, { method: 'POST', headers: headers(token) }));
 }
@@ -150,26 +160,16 @@ export async function uncompleteLesson(token: string, enrollmentId: number, less
   return parse(await fetch(`${backendUrl}/enrollments/${enrollmentId}/lessons/${encodeURIComponent(lessonKey)}/complete`, { method: 'DELETE', headers: headers(token) }));
 }
 
-export async function readReleaseUpdate(token: string, enrollmentId: number): Promise<ReleaseUpdate> {
-  return parse(await fetch(`${backendUrl}/enrollments/${enrollmentId}/updates`, { headers: headers(token) }));
-}
-
-export async function updateEnrollmentRelease(token: string, enrollmentId: number, currentReleaseId: number, targetReleaseId: number): Promise<Enrollment> {
-  return parse(await fetch(`${backendUrl}/enrollments/${enrollmentId}/update-release`, {
-    method: 'POST', headers: headers(token), body: JSON.stringify({ current_release_id: currentReleaseId, target_release_id: targetReleaseId }),
-  }));
-}
-
 export async function readLessonWorkspace(token: string, enrollmentId: number, lessonKey: string): Promise<LessonWorkspace> {
   return parse(await fetch(`${backendUrl}/enrollments/${enrollmentId}/lessons/${encodeURIComponent(lessonKey)}/workspace`, { headers: headers(token) }));
 }
 
-export async function saveLessonWorkspace(token: string, enrollmentId: number, lessonKey: string, content: LessonWorkspace['content'], revision: number): Promise<LessonWorkspace> {
-  return parse(await fetch(`${backendUrl}/enrollments/${enrollmentId}/lessons/${encodeURIComponent(lessonKey)}/workspace`, { method: 'PUT', headers: headers(token), body: JSON.stringify({ content, revision }) }));
+export async function saveLessonWorkspace(token: string, enrollmentId: number, lessonKey: string, content: LessonWorkspace['content'], revision: number, releaseId: number): Promise<LessonWorkspace> {
+  return parse(await fetch(`${backendUrl}/enrollments/${enrollmentId}/lessons/${encodeURIComponent(lessonKey)}/workspace`, { method: 'PUT', headers: headers(token), body: JSON.stringify({ content, revision, release_id: releaseId }) }));
 }
 
-export async function resetLessonWorkspace(token: string, enrollmentId: number, lessonKey: string, revision: number): Promise<LessonWorkspace> {
-  return parse(await fetch(`${backendUrl}/enrollments/${enrollmentId}/lessons/${encodeURIComponent(lessonKey)}/workspace/reset`, { method: 'POST', headers: headers(token), body: JSON.stringify({ revision }) }));
+export async function resetLessonWorkspace(token: string, enrollmentId: number, lessonKey: string, revision: number, releaseId: number): Promise<LessonWorkspace> {
+  return parse(await fetch(`${backendUrl}/enrollments/${enrollmentId}/lessons/${encodeURIComponent(lessonKey)}/workspace/reset`, { method: 'POST', headers: headers(token), body: JSON.stringify({ revision, release_id: releaseId }) }));
 }
 
 export async function readLessonWorkspaceHistory(token: string, enrollmentId: number, lessonKey: string): Promise<LessonWorkspaceHistory[]> {
@@ -318,6 +318,10 @@ export async function updateClassChallenge(
 
 export async function listJoinedClassGroups(token: string): Promise<StudentClassGroup[]> {
   return parse(await fetch(`${backendUrl}/class-groups/joined`, { headers: headers(token) }));
+}
+
+export async function previewClassGroup(token: string, joinCode: string): Promise<ClassGroupPreview> {
+  return parse(await fetch(`${backendUrl}/class-groups/preview?join_code=${encodeURIComponent(joinCode)}`, { headers: headers(token) }));
 }
 
 export async function joinClassGroup(token: string, joinCode: string): Promise<StudentClassGroup> {

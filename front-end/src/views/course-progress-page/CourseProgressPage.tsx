@@ -1,22 +1,25 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
-  Alert, Box, Button, Chip, LinearProgress, Paper, Skeleton, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography,
+  Alert, Box, Button, Chip, IconButton, LinearProgress, Paper, Skeleton, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Tooltip, Typography,
 } from '@mui/material';
-import { IconArrowLeft, IconRefresh } from '@tabler/icons-react';
+import { IconArrowLeft, IconRefresh, IconUserMinus } from '@tabler/icons-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from 'src/authentication/AuthProvider';
-import { readCourseProgress } from 'src/courses/CoursesApi';
+import { useConfirmDialog } from 'src/components/shared/ConfirmDialog';
+import { readCourseProgress, removeCourseStudent } from 'src/courses/CoursesApi';
 import type { CourseProgressAnalytics } from 'src/courses/types';
 
 export default function CourseProgressPage() {
   const { t } = useTranslation();
+  const confirmDialog = useConfirmDialog();
   const { token } = useAuth();
   const navigate = useNavigate();
   const courseId = Number(useParams().courseId);
   const [analytics, setAnalytics] = useState<CourseProgressAnalytics | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+  const [removingId, setRemovingId] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true); setError('');
@@ -25,6 +28,29 @@ export default function CourseProgressPage() {
     finally { setLoading(false); }
   }, [courseId, t, token]);
   useEffect(() => { void load(); }, [load]);
+
+  const removeStudent = async (student: CourseProgressAnalytics['students'][number]) => {
+    if (!analytics) return;
+    const name = student.student.display_name || student.student.username;
+    const confirmed = await confirmDialog.confirm({
+      title: t('education.analytics.removeTitle'),
+      message: t('education.analytics.removeConfirm', { name, course: analytics.course.title }),
+      confirmLabel: t('education.analytics.removeStudent'),
+      cancelLabel: t('cancel'),
+      danger: true,
+    });
+    if (!confirmed) return;
+    setRemovingId(student.enrollment_id);
+    setError('');
+    try {
+      await removeCourseStudent(token, courseId, student.enrollment_id);
+      await load();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : t('education.analytics.removeFailed'));
+    } finally {
+      setRemovingId(null);
+    }
+  };
 
   if (loading) return <Box sx={{ p: 3 }}><Skeleton variant="rounded" height={120} /><Skeleton variant="rounded" height={300} sx={{ mt: 2 }} /></Box>;
   if (!analytics) return <Box sx={{ p: 3 }}><Alert severity="error" action={<Button color="inherit" onClick={() => void load()}>{t('education.student.retry')}</Button>}>{error}</Alert></Box>;
@@ -60,6 +86,7 @@ export default function CourseProgressPage() {
           <TableCell>{t('education.analytics.activity')}</TableCell>
           <TableCell>{t('education.analytics.missions')}</TableCell>
           <TableCell>{t('education.analytics.questions')}</TableCell>
+          <TableCell align="right">{t('education.analytics.actions')}</TableCell>
         </TableRow></TableHead>
         <TableBody>{analytics.students.map((student) => <TableRow key={student.enrollment_id}>
           <TableCell><Typography fontWeight={650}>{student.student.display_name}</Typography><Typography variant="caption" color="text.secondary">@{student.student.username}</Typography>{student.student.is_guest && <Chip size="small" label={t('guest.session')} sx={{ ml: 1 }} />}{student.awaiting_review && <Chip size="small" color="warning" label={t('education.analytics.awaitingReview')} sx={{ ml: 1 }} />}</TableCell>
@@ -68,6 +95,7 @@ export default function CourseProgressPage() {
           <TableCell>{new Date(student.last_activity_at).toLocaleString()}</TableCell>
           <TableCell><Typography>{t('education.analytics.attempts', { count: student.attempt_count })}</Typography>{student.best_mission_result?.score && <Typography variant="caption" color="text.secondary">{t('education.analytics.bestScore', { score: student.best_mission_result.score.total, maximum: student.best_mission_result.score.maximum })}</Typography>}</TableCell>
           <TableCell>{student.question_accuracy.answered ? t('education.analytics.accuracy', { correct: student.question_accuracy.correct, answered: student.question_accuracy.answered }) : t('education.analytics.noAnswers')}</TableCell>
+          <TableCell align="right"><Tooltip title={t('education.analytics.removeStudent')}><span><IconButton color="error" disabled={removingId === student.enrollment_id} aria-label={`${t('education.analytics.removeStudent')}: ${student.student.display_name || student.student.username}`} onClick={() => void removeStudent(student)}><IconUserMinus size={18} /></IconButton></span></Tooltip></TableCell>
         </TableRow>)}</TableBody>
       </Table>
     </TableContainer>

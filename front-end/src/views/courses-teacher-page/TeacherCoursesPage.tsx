@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, Divider, IconButton, InputAdornment, Menu, MenuItem, Paper, Skeleton, Stack, Tab, Tabs, TextField, Typography } from '@mui/material';
-import { IconDotsVertical, IconPlus, IconSchool, IconSearch } from '@tabler/icons-react';
+import { Alert, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, InputAdornment, Paper, Skeleton, Stack, Tab, Tabs, TextField, Typography } from '@mui/material';
+import { IconPlus, IconSchool, IconSearch } from '@tabler/icons-react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from 'src/authentication/AuthProvider';
@@ -11,6 +11,7 @@ import { pageTabsSx, TabbedPageHeader } from 'src/components/shared/PageHeader';
 import { useConfirmDialog } from 'src/components/shared/ConfirmDialog';
 import ListCard from 'src/components/shared/ListCard';
 import DescriptionField from 'src/components/shared/DescriptionField';
+import CourseActionsMenu from 'src/components/courses/CourseActionsMenu';
 
 export default function TeacherCoursesPage() {
   const { t } = useTranslation();
@@ -24,7 +25,6 @@ export default function TeacherCoursesPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState({ title: '', description: '', objective: '' });
-  const [menu, setMenu] = useState<{ anchor: HTMLElement; course: CourseSummary } | null>(null);
   const [tab, setTab] = useState(0);
 
   const load = async () => {
@@ -48,7 +48,7 @@ export default function TeacherCoursesPage() {
   };
 
   const duplicate = async (source: CourseSummary) => {
-    setMenu(null); setError('');
+    setError('');
     try {
       const draft = await readCourseDraft(token, source.id);
       const copy = await createCourse(token, {
@@ -67,7 +67,6 @@ export default function TeacherCoursesPage() {
   };
 
   const archive = async (course: CourseSummary) => {
-    setMenu(null);
     const confirmed = await confirmDialog.confirm({
       title: t('education.courseList.archive'),
       message: t('education.courseList.archiveConfirm', { title: course.title }),
@@ -80,7 +79,6 @@ export default function TeacherCoursesPage() {
   };
 
   const remove = async (course: CourseSummary) => {
-    setMenu(null);
     setError('');
     const confirmed = await confirmDialog.confirm({
       title: t('education.courseList.deleteTitle'),
@@ -127,18 +125,16 @@ export default function TeacherCoursesPage() {
           meta={course.latest_published_release_version ? t('education.courseList.latestRelease', { version: course.latest_published_release_version }) : t('education.courseList.noRelease')}
           openLabel={t('education.courseList.edit')}
           onOpen={() => navigate(`/teach/courses/${course.id}`)}
-          action={<IconButton aria-label={t('education.courseList.actions')} onClick={(event) => setMenu({ anchor: event.currentTarget, course })}><IconDotsVertical size={20} /></IconButton>}
+          action={<CourseActionsMenu label={t('education.courseList.actions')} actions={[
+            { key: 'edit', label: t('education.courseList.edit'), onClick: () => navigate(`/teach/courses/${course.id}`) },
+            { key: 'progress', label: t('education.analytics.title'), onClick: () => navigate(`/teach/courses/${course.id}/progress`) },
+            { key: 'duplicate', label: t('education.courseList.duplicate'), onClick: () => void duplicate(course) },
+            { key: 'archive', label: t('education.courseList.archive'), onClick: () => void archive(course) },
+            { key: 'delete', label: t('education.courseList.delete'), onClick: () => void remove(course), danger: true, dividerBefore: true },
+          ]} />}
         />)}
       </Box>}</Box>}
       {tab === 1 && <ClassGroupsTeacherPage embedded />}
-      <Menu anchorEl={menu?.anchor} open={!!menu} onClose={() => setMenu(null)}>
-        <MenuItem onClick={() => menu && navigate(`/teach/courses/${menu.course.id}`)}>{t('education.courseList.edit')}</MenuItem>
-        <MenuItem onClick={() => menu && navigate(`/teach/courses/${menu.course.id}/progress`)}>{t('education.analytics.title')}</MenuItem>
-        <MenuItem onClick={() => menu && duplicate(menu.course)}>{t('education.courseList.duplicate')}</MenuItem>
-        <MenuItem onClick={() => menu && archive(menu.course)}>{t('education.courseList.archive')}</MenuItem>
-        <Divider sx={{ my: 0.5 }} />
-        <MenuItem onClick={() => menu && remove(menu.course)} sx={{ color: 'error.main' }}>{t('education.courseList.delete')}</MenuItem>
-      </Menu>
       <Dialog open={createOpen} onClose={() => !creating && setCreateOpen(false)} fullWidth maxWidth="sm">
         <DialogTitle>{t('education.create.title')}</DialogTitle>
         <DialogContent><Stack spacing={2} sx={{ pt: 1 }}>

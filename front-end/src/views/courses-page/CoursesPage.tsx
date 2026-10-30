@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, Box, Button, Card, CardActions, CardContent, Chip, CircularProgress, Grid, LinearProgress, MenuItem, Stack, Tab, Tabs, TextField, Typography } from '@mui/material';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import PageContainer from 'src/components/container/PageContainer';
 import { useAuth } from 'src/authentication/AuthProvider';
@@ -15,9 +15,15 @@ export default function CoursesPage({ previewAppearance = true }: { previewAppea
   const { t } = useTranslation();
   const { token, isGuest, guestSettings } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const canBrowse = !isGuest || guestCanView(guestSettings, 'courses');
   const canUseClasses = !isGuest || guestCanView(guestSettings, 'classrooms');
-  const [tab, setTab] = useState(canBrowse ? 0 : 2);
+  const requestedTab = searchParams.get('tab');
+  const [tab, setTab] = useState(
+    requestedTab === 'explore' && canBrowse ? 1
+      : requestedTab === 'classrooms' && canUseClasses ? 2
+        : canBrowse ? 0 : 2,
+  );
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
   const [courses, setCourses] = useState<StudentCourse[]>([]);
   const [search, setSearch] = useState('');
@@ -78,15 +84,12 @@ export default function CoursesPage({ previewAppearance = true }: { previewAppea
             <Grid item xs={12} md={6} lg={4} key={enrollment.id}>
               <Card variant="outlined" sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
                 <CardContent sx={{ flex: 1 }}>
-                  <Stack direction="row" justifyContent="space-between" spacing={1}>
-                    <Typography variant="h5">{enrollment.course.title}</Typography>
-                    {enrollment.update_available ? <Chip size="small" color="info" label={t('education.student.updateAvailable')} /> : null}
-                  </Stack>
+                  <Typography variant="h5">{enrollment.course.title}</Typography>
                   <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>{enrollment.course.description}</Typography>
                   <LinearProgress variant="determinate" value={enrollment.progress_percent} sx={{ mt: 3, mb: 1 }} />
                   <Typography variant="caption">{t('education.student.progress', { completed: enrollment.completed_count, total: enrollment.lesson_count })}</Typography>
                 </CardContent>
-                <CardActions sx={previewAppearance ? { px: 2.5, pb: 2.5, pt: 0 } : undefined}><Button variant={previewAppearance ? 'contained' : 'text'} onClick={() => navigate(`/courses/${enrollment.course_id}${isGuest ? `?enrollment=${enrollment.id}` : ''}`)}>{enrollment.completed_at ? t('education.student.reviewCourse') : t('education.student.continueCourse')}</Button></CardActions>
+                <CardActions sx={previewAppearance ? { px: 2.5, pb: 2.5, pt: 0 } : undefined}><Button variant={previewAppearance ? 'contained' : 'text'} onClick={() => navigate(`/courses/${enrollment.course_id}${isGuest ? `?enrollment=${enrollment.id}` : ''}`)}>{t('education.student.seeDetails')}</Button></CardActions>
               </Card>
             </Grid>
           ))}</Grid>

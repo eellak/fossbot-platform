@@ -38,6 +38,7 @@ const CoursesPage = Loadable(lazy(() => import('../views/courses-page/CoursesPag
 const CoursePage = Loadable(lazy(() => import('../views/course-page/CoursePage')));
 const LessonWorkspacePage = Loadable(lazy(() => import('../views/lesson-workspace-page/LessonWorkspacePage')));
 const CourseProgressPage = Loadable(lazy(() => import('../views/course-progress-page/CourseProgressPage')));
+const StudentCourseProgressPage = Loadable(lazy(() => import('../views/course-progress-page/StudentCourseProgressPage')));
 const ClassGroupsTeacherPage = Loadable(lazy(() => import('../views/class-groups-teacher-page/ClassGroupsTeacherPage')));
 const ClassGroupsStudentPage = Loadable(lazy(() => import('../views/class-groups-student-page/ClassGroupsStudentPage')));
 const GuestUnavailable = Loadable(lazy(() => import('../views/guest-unavailable-page/GuestUnavailable')));
@@ -176,6 +177,12 @@ const Router = [
     title: 'Lesson',
     element: <PrivateRoute guestAllowed><RoleBasedRoute betaTesterOnly guestView="classrooms"><FullLayout /></RoleBasedRoute></PrivateRoute>,
     children: [{ path: '', exact: true, element: <LessonWorkspacePage /> }],
+  },
+  {
+    path: '/courses/:courseId/progress',
+    title: 'Course progress',
+    element: <PrivateRoute guestAllowed><RoleBasedRoute betaTesterOnly guestViews={['courses', 'classrooms']}><FullLayout /></RoleBasedRoute></PrivateRoute>,
+    children: [{ path: '', exact: true, element: <StudentCourseProgressPage /> }],
   },
   {
     path: '/teach/courses',

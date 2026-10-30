@@ -5,6 +5,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import PrivateRoute from './PrivateRoute';
 import RoleBasedRoute from './RoleBasedRoute';
 import AdminRoute from './AdminRoute';
+import { takeAuthReturnPath } from 'src/authentication/authReturn';
 
 declare const afterEach: any;
 declare const beforeEach: any;
@@ -52,6 +53,7 @@ describe('guest route guards', () => {
   let root: Root;
 
   beforeEach(() => {
+    sessionStorage.clear();
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
@@ -76,6 +78,7 @@ describe('guest route guards', () => {
             <Route path="/guest-unavailable" element={<div>guest unavailable</div>} />
             <Route path="/admin-panel" element={<AdminRoute />}><Route index element={<div>admin page</div>} /></Route>
             <Route path="/dashboard" element={<PrivateRoute guestAllowed><RoleBasedRoute guestView="dashboard"><div>dashboard landing</div></RoleBasedRoute></PrivateRoute>} />
+            <Route path="/auth/login" element={<div>login page</div>} />
           </Routes>
         </MemoryRouter>,
       );
@@ -122,5 +125,12 @@ describe('guest route guards', () => {
     setAccount();
     await render('/private');
     expect(container.textContent).toBe('private account page');
+  });
+
+  it('remembers a private path before redirecting to sign-in', async () => {
+    mockAuth = { token: '', authStatus: 'unauthenticated', isGuest: false, user: null, guestSettings: { beta_tester: false, allowed_views: [] } };
+    await render('/private');
+    expect(container.textContent).toBe('login page');
+    expect(takeAuthReturnPath('/fallback')).toBe('/private');
   });
 });

@@ -20,7 +20,7 @@ from database.database import (
     MissionAttempt,
     User,
 )
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from models.models import UserRole
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy.exc import IntegrityError
@@ -458,6 +458,70 @@ def reset_challenge_season(
     return teacher_group_payload(db, group)
 
 
+@router.get("/class-groups/preview")
+def preview_group(
+    http_request: Request,
+    join_code: str = Query(min_length=4, max_length=40),
+    participant: Participant = Depends(get_participant),
+    db: Session = Depends(get_db),
+):
+    require_student(participant)
+    if participant.is_guest:
+        guest_throttle(http_request, "join", GUEST_JOIN_LIMIT)
+    group = db.query(ClassGroup).filter(
+        ClassGroup.join_code == join_code.strip().upper(),
+        ClassGroup.status == "active",
+    ).first()
+    if group is None:
+        raise HTTPException(status_code=404, detail="Join code is not active")
+    if participant.is_guest:
+        membership = db.query(ClassMembership).filter(
+            ClassMembership.group_id == group.id,
+            ClassMembership.guest_session_id == participant.guest.id,
+            ClassMembership.removed_at.is_(None),
+        ).first()
+    else:
+        membership = db.query(ClassMembership).filter(
+            ClassMembership.group_id == group.id,
+            ClassMembership.student_id == participant.user.id,
+            ClassMembership.removed_at.is_(None),
+        ).first()
+    teacher = db.query(User).filter(User.id == group.teacher_id).first()
+    assignments = db.query(CourseAssignment).filter(
+        CourseAssignment.group_id == group.id,
+    ).order_by(CourseAssignment.created_at).all()
+    courses = {
+        course.id: course
+        for course in db.query(Course).filter(Course.id.in_([item.course_id for item in assignments])).all()
+    } if assignments else {}
+    releases = {
+        release.id: release
+        for release in db.query(CourseRelease).filter(CourseRelease.id.in_([item.release_id for item in assignments])).all()
+    } if assignments else {}
+    return {
+        "id": group.id,
+        "name": group.name,
+        "teacher_name": (
+            f"{teacher.firstname} {teacher.lastname}".strip() or teacher.username
+        ) if teacher else "",
+        "member_count": db.query(ClassMembership).filter(
+            ClassMembership.group_id == group.id,
+            ClassMembership.removed_at.is_(None),
+        ).count(),
+        "challenge_season": group.challenge_season,
+        "leaderboards_enabled": group.leaderboards_enabled,
+        "already_member": membership is not None,
+        "assignments": [
+            {
+                "course_title": courses[item.course_id].title,
+                "release_version": releases[item.release_id].version,
+            }
+            for item in assignments
+            if item.course_id in courses and item.release_id in releases
+        ],
+    }
+
+
 @router.post("/class-groups/join", status_code=status.HTTP_201_CREATED)
 def join_group(
     payload: JoinGroupRequest,
@@ -486,8 +550,9 @@ def join_group(
         ).first()
     now = datetime.datetime.utcnow()
     if membership:
-        membership.removed_at = None
-        membership.leaderboard_opt_in = False
+        if membership.removed_at is not None:
+            membership.removed_at = None
+            membership.leaderboard_opt_in = False
         membership.updated_at = now
     else:
         membership = ClassMembership(

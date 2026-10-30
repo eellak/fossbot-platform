@@ -286,6 +286,33 @@ def test_numeric_accuracy_is_derived_from_stored_lesson_answers(client_for, user
     }
 
 
+def test_student_previews_class_group_before_joining(client_for, users):
+    tutor, _, student, _ = users
+    teacher = client_for(tutor)
+    learner = client_for(student)
+    course, _, release = create_published_course(teacher)
+    group = teacher.post("/class-groups", json={"name": "Preview class"}).json()
+    teacher.post(
+        f"/class-groups/{group['id']}/assignments",
+        json={"course_id": course["id"], "update_policy": "pinned"},
+    )
+
+    preview = learner.get("/class-groups/preview", params={"join_code": group["join_code"]})
+    assert preview.status_code == 200, preview.text
+    payload = preview.json()
+    assert payload["name"] == "Preview class"
+    assert payload["teacher_name"] == "Teach Er"
+    assert payload["member_count"] == 0
+    assert payload["already_member"] is False
+    assert payload["assignments"] == [{"course_title": course["title"], "release_version": release["version"]}]
+
+    assert learner.post("/class-groups/join", json={"join_code": group["join_code"]}).status_code == 201
+    joined_preview = learner.get("/class-groups/preview", params={"join_code": group["join_code"]}).json()
+    assert joined_preview["member_count"] == 1
+    assert joined_preview["already_member"] is True
+    assert learner.get("/class-groups/preview", params={"join_code": "NOPE1234"}).status_code == 404
+
+
 def test_class_group_privacy_opt_in_release_scope_and_analytics(client_for, users, db):
     tutor, other_tutor, student, _ = users
     teacher = client_for(tutor)
@@ -587,6 +614,10 @@ def test_guest_joins_before_and_after_assignment_and_cannot_edit_alias(client_fo
     assert opted_in.status_code == 200
     assert opted_in.json()["membership"]["display_alias"] == "calm_otter"
 
+    joined_active = guest.post("/class-groups/join", json={"join_code": group["join_code"]}, headers=headers)
+    assert joined_active.status_code == 201
+    assert joined_active.json()["membership"]["leaderboard_opt_in"] is True
+
     assert guest.post("/class-groups/join", json={"join_code": "NOPE1234"}, headers=headers).status_code == 404
     teacher.put(f"/class-groups/{group['id']}", json={"status": "archived"})
     assert guest.post("/class-groups/join", json={"join_code": group["join_code"]}, headers=headers).status_code == 404
@@ -794,8 +825,8 @@ def test_guest_course_browsing_workspace_and_server_mutations_are_denied_without
 
     workspace = f"/enrollments/{enrollment.id}/lessons/{lesson['lesson_key']}/workspace"
     assert guest.get(workspace, headers=headers).status_code == 403
-    assert guest.put(workspace, json={"content": "print('guest')", "revision": 1}, headers=headers).status_code == 403
-    assert guest.post(f"{workspace}/reset", json={"revision": 1}, headers=headers).status_code == 403
+    assert guest.put(workspace, json={"content": "print('guest')", "revision": 1, "release_id": release["id"]}, headers=headers).status_code == 403
+    assert guest.post(f"{workspace}/reset", json={"revision": 1, "release_id": release["id"]}, headers=headers).status_code == 403
     assert guest.get(
         f"/enrollments/{enrollment.id}/lessons/{lesson['lesson_key']}/workspace-history", headers=headers,
     ).status_code == 403
@@ -824,6 +855,36 @@ def test_guest_course_browsing_workspace_and_server_mutations_are_denied_without
     assert guest.get(f"/courses/{draft['id']}", headers=headers).status_code == 404
 
     assert learning_table_counts(db) == before
+
+
+def test_guest_enrollment_does_not_auto_pull_a_newer_release(client_for, users, db):
+    from database.database import Enrollment
+
+    tutor, _, _, _ = users
+    teacher = client_for(tutor)
+    course, _, release_one = create_published_course(teacher)
+    group = teacher.post("/class-groups", json={"name": "Pinned release class"}).json()
+    assignment = teacher.post(
+        f"/class-groups/{group['id']}/assignments",
+        json={"course_id": course["id"], "update_policy": "pinned"},
+    ).json()
+    guest, headers, session = guest_client(db, users, ["classrooms", "courses"], include_courses=True)
+    guest.post("/class-groups/join", json={"join_code": group["join_code"]}, headers=headers)
+    from utils.guest_access import clear_guest_throttles
+    clear_guest_throttles()
+    enrollment = db.query(Enrollment).filter(
+        Enrollment.guest_session_id == session.id,
+        Enrollment.assignment_id == assignment["id"],
+    ).one()
+
+    teacher.put(f"/courses/{course['id']}", json={"description": "A newer course version."})
+    release_two = teacher.post(f"/courses/{course['id']}/publish").json()
+    assert release_two["version"] == 2
+    assert guest.get(f"/courses/{course['id']}", headers=headers).status_code == 200
+    listed = guest.get("/enrollments/mine", headers=headers).json()[0]
+    assert listed["active_release"]["id"] == release_one["id"]
+    db.refresh(enrollment)
+    assert enrollment.active_release_id == release_one["id"]
 
 
 def test_guest_mission_submission_is_scoped_idempotent_and_creates_no_workspace_rows(client_for, users, db, monkeypatch):

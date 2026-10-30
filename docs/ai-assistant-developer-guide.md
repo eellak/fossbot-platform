@@ -15,6 +15,8 @@ Current contracts:
 
 Capabilities are `code.explain`, `code.suggest_changes`, `blockly.explain`, `blockly.suggest_changes`, `lesson.draft`, `lesson.suggest_changes`, `stage.create`, and `stage.suggest_changes`.
 
+Python and Blockly requests that carry a `releaseId` and `lessonKey` are grounded by the backend in the published release: `authoritative.course` holds the title, description, objectives, difficulty, and age range, and `authoritative.lesson` holds the title, position, editor type, and the student-safe activity list (answer keys and feedback fields are removed). The activity list is capped at 8,000 characters and reports `lesson_activities` in `ContextReport.truncated` when it is cut.
+
 ## Request flow
 
 1. `GET /api/ai/access` resolves the authenticated user's current policy and returns secret-free provider metadata.

@@ -1,16 +1,19 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Alert, Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Divider, Grid, List, ListItem, ListItemText, Paper, Stack, Typography, useTheme } from '@mui/material';
+import { Alert, Box, Button, Chip, CircularProgress, Divider, Grid, Paper, Stack, Typography, useTheme } from '@mui/material';
+import { IconChartBar, IconUserMinus } from '@tabler/icons-react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import PageContainer from 'src/components/container/PageContainer';
 import StudentCourseOutline from 'src/components/courses/StudentCourseOutline';
+import { useConfirmDialog } from 'src/components/shared/ConfirmDialog';
 import { useAuth } from 'src/authentication/AuthProvider';
-import { enrollInCourse, listMyEnrollments, readPublishedCourse, readReleaseUpdate, updateEnrollmentRelease } from 'src/courses/CoursesApi';
-import type { Enrollment, ReleaseUpdate, StudentCourse } from 'src/courses/types';
+import { dropEnrollment, enrollInCourse, listMyEnrollments, readPublishedCourse } from 'src/courses/CoursesApi';
+import type { Enrollment, StudentCourse } from 'src/courses/types';
 import { guestCanView } from 'src/authentication/guest';
 
 export default function CoursePage() {
   const { t } = useTranslation();
+  const confirmDialog = useConfirmDialog();
   const { token, user, isGuest, guestSettings } = useAuth();
   const theme = useTheme();
   const navigate = useNavigate();
@@ -19,11 +22,10 @@ export default function CoursePage() {
   const requestedEnrollmentId = Number(searchParams.get('enrollment')) || null;
   const [course, setCourse] = useState<StudentCourse | null>(null);
   const [enrollment, setEnrollment] = useState<Enrollment | null>(null);
-  const [update, setUpdate] = useState<ReleaseUpdate | null>(null);
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState(false);
+  const [dropWorking, setDropWorking] = useState(false);
   const [error, setError] = useState('');
-  const [reviewOpen, setReviewOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true); setError('');
@@ -37,7 +39,6 @@ export default function CoursePage() {
           ? mine.find((item) => item.id === requestedEnrollmentId) || null
           : mine.find((item) => item.course_id === courseId) || null;
         setEnrollment(current);
-        setUpdate(current?.update_available ? await readReleaseUpdate(token, current.id) : null);
       }
     } catch (reason) { setError(reason instanceof Error ? reason.message : t('education.student.errors.load')); }
     finally { setLoading(false); }
@@ -59,16 +60,26 @@ export default function CoursePage() {
     finally { setWorking(false); }
   };
 
-  const adoptUpdate = async () => {
-    if (!enrollment || !update) return;
-    setWorking(true); setError('');
+  const drop = async () => {
+    if (!enrollment || !course) return;
+    const confirmed = await confirmDialog.confirm({
+      title: t('education.student.dropTitle'),
+      message: t('education.student.dropConfirm', { title: course.title }),
+      confirmLabel: t('education.student.dropCourse'),
+      cancelLabel: t('cancel'),
+      danger: true,
+    });
+    if (!confirmed) return;
+    setDropWorking(true);
+    setError('');
     try {
-      const updated = await updateEnrollmentRelease(token, enrollment.id, update.current.id, update.latest.id);
-      setEnrollment(updated); setReviewOpen(false);
-      setUpdate(updated.update_available ? await readReleaseUpdate(token, updated.id) : null);
+      await dropEnrollment(token, enrollment.id);
+      navigate(isGuest && !guestCanView(guestSettings, 'courses') ? '/classrooms' : '/courses');
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : t('education.student.dropFailed'));
+    } finally {
+      setDropWorking(false);
     }
-    catch (reason) { setError(reason instanceof Error ? reason.message : t('education.student.errors.update')); }
-    finally { setWorking(false); }
   };
 
   if (loading) return <Box sx={{ py: 10, textAlign: 'center' }}><CircularProgress /></Box>;
@@ -79,10 +90,6 @@ export default function CoursePage() {
       <Stack spacing={3} sx={{ '& .MuiButton-containedPrimary': { color: theme.palette.getContrastText(theme.palette.primary.main) }, '& .MuiButtonBase-root:focus-visible': { outline: '2px solid', outlineColor: 'text.primary', outlineOffset: 2 }, '@media (pointer: coarse), (max-width: 768px)': { '& .MuiButtonBase-root': { minHeight: 44 }, '& .MuiSwitch-switchBase, & .MuiCheckbox-root, & .MuiRadio-root': { minHeight: 0 } } }}>
         <Button sx={{ alignSelf: 'flex-start' }} onClick={() => navigate(isGuest && !guestCanView(guestSettings, 'courses') ? '/classrooms' : '/courses')}>{t(isGuest && !guestCanView(guestSettings, 'courses') ? 'education.student.backToClasses' : 'education.student.backToCourses')}</Button>
         {error ? <Alert severity="error">{error}</Alert> : null}
-        {update?.available ? <Alert severity="info" action={<Stack direction={{ xs: 'column', sm: 'row' }}><Button color="inherit" onClick={() => setUpdate(null)} disabled={working}>{t('education.student.continueCurrent')}</Button><Button color="inherit" onClick={() => setReviewOpen(true)} disabled={working}>{t('education.student.reviewChanges')}</Button></Stack>}>
-          <Typography fontWeight={700}>{t('education.student.updateAvailable')}</Typography>
-          {t('education.student.updateSummary', { added: update.added_lessons, changed: update.changed_lessons, removed: update.removed_lessons })}
-        </Alert> : null}
         <Paper variant="outlined" sx={{ p: { xs: 2, md: 4 } }}>
           <Grid container spacing={4}>
             <Grid item xs={12} md={8}>
@@ -100,32 +107,17 @@ export default function CoursePage() {
                 <Typography variant="h5">{t('education.student.objectives')}</Typography>
                 <Box component="ul" sx={{ m: 0, pl: 3 }}>{course.learning_objectives.map((objective) => <li key={objective}><Typography>{objective}</Typography></li>)}</Box>
                 {course.prerequisites ? <><Typography variant="h6">{t('education.student.prerequisites')}</Typography><Typography>{course.prerequisites}</Typography></> : null}
-                {(user?.role === 'user' || (isGuest && enrollment)) ? <Button variant="contained" size="large" disabled={working} onClick={start} sx={{ alignSelf: 'flex-start' }}>{working ? t('education.student.saving') : enrollment?.completed_at ? t('education.student.reviewCourse') : enrollment ? t('education.student.continueCourse') : t('education.student.startCourse')}</Button> : null}
+                {(user?.role === 'user' || (isGuest && enrollment)) ? <Stack direction="row" spacing={1} flexWrap="wrap">
+                  <Button variant="contained" size="large" disabled={working} onClick={start} sx={{ alignSelf: 'flex-start' }}>{working ? t('education.student.saving') : enrollment?.completed_at ? t('education.student.reviewCourse') : enrollment ? t('education.student.continueCourse') : t('education.student.startCourse')}</Button>
+                  {enrollment ? <Button variant="outlined" size="large" startIcon={<IconChartBar size={18} />} onClick={() => navigate(`/courses/${course.id}/progress${isGuest ? `?enrollment=${enrollment.id}` : ''}`)}>{t('education.student.progressTitle')}</Button> : null}
+                  {enrollment && !isGuest ? <Button variant="text" color="error" size="large" startIcon={<IconUserMinus size={18} />} disabled={working || dropWorking} onClick={() => void drop()}>{t('education.student.dropCourse')}</Button> : null}
+                </Stack> : null}
               </Stack>
             </Grid>
             <Grid item xs={12} md={4}><StudentCourseOutline collapsible defaultOpen={false} lessons={lessons} progress={enrollment?.progress} title={t('education.student.outline')} completedLabel={t('education.student.completed')} onSelect={enrollment ? (key) => navigate(`/courses/${course.id}/learn/${key}${isGuest ? `?enrollment=${enrollment.id}` : ''}`) : undefined} /></Grid>
           </Grid>
         </Paper>
       </Stack>
-      <Dialog open={reviewOpen} onClose={() => !working && setReviewOpen(false)} fullWidth maxWidth="sm" aria-labelledby="course-update-title">
-        <DialogTitle id="course-update-title">{t('education.student.reviewUpdateTitle', { current: update?.current.version, latest: update?.latest.version })}</DialogTitle>
-        <DialogContent>
-          <Stack spacing={2}>
-            <Typography>{t('education.student.updateChoiceHelp')}</Typography>
-            {update?.stage_revisions_changed ? <Alert severity="info">{t('education.student.stageChanged')}</Alert> : null}
-            <List disablePadding aria-label={t('education.student.changedLessons')}>
-              {update?.lesson_changes.filter((item) => item.change !== 'unchanged').map((item) => <ListItem key={`${item.change}-${item.lesson_key}`} divider disableGutters>
-                <ListItemText primary={item.title} secondary={<>{t(`education.student.change.${item.change}`)}{item.stage_changed ? ` · ${t('education.student.stageChangedShort')}` : ''}{item.change !== 'removed' && <><br />{item.change === 'added' ? t('education.student.newLessonStartsFresh') : t('education.student.changedWorkStartsFresh')}</>}</>} />
-              </ListItem>)}
-            </List>
-            {update && update.unchanged_lessons > 0 ? <Typography color="text.secondary">{t('education.student.unchangedPreserved', { count: update.unchanged_lessons })}</Typography> : null}
-          </Stack>
-        </DialogContent>
-        <DialogActions sx={{ flexWrap: 'wrap' }}>
-          <Button onClick={() => { setReviewOpen(false); setUpdate(null); }} disabled={working}>{t('education.student.continueCurrent')}</Button>
-          <Button variant="contained" onClick={adoptUpdate} disabled={working}>{working ? t('education.student.saving') : t('education.student.updateCourse')}</Button>
-        </DialogActions>
-      </Dialog>
     </PageContainer>
   );
 }

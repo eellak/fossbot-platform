@@ -5,7 +5,7 @@ import {
   useMediaQuery, useTheme,
 } from '@mui/material';
 import {
-  IconAlertTriangle, IconArrowDown, IconArrowLeft, IconArrowUp, IconCheck, IconChevronDown, IconChevronRight, IconCopy, IconEye,
+  IconAlertTriangle, IconArrowDown, IconArrowLeft, IconArrowUp, IconChartBar, IconCheck, IconChevronDown, IconChevronRight, IconCopy, IconEye,
   IconGripVertical, IconPlus, IconTrash, IconArrowBackUp, IconArrowForwardUp,
 } from '@tabler/icons-react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
@@ -654,6 +654,7 @@ export default function CourseEditorPage() {
             <Tooltip title={t('education.authoring.undo')}><span><IconButton size="small" disabled={!canUndo || saveState === 'saving' || !!conflict} onClick={undo} aria-label={t('education.authoring.undo')}><IconArrowBackUp size={19} /></IconButton></span></Tooltip>
             <Tooltip title={t('education.authoring.redo')}><span><IconButton size="small" disabled={!canRedo || saveState === 'saving' || !!conflict} onClick={redo} aria-label={t('education.authoring.redo')}><IconArrowForwardUp size={19} /></IconButton></span></Tooltip>
           </Stack>
+          <Button startIcon={<IconChartBar size={18} />} onClick={() => navigate(`/teach/courses/${id}/progress`)}>{t('education.analytics.title')}</Button>
           <Button startIcon={<IconEye size={18} />} disabled={!selectedLesson} onClick={() => setPreviewOpen(true)}>{t('education.preview.action')}</Button>
           <Tooltip title={course.latest_published_release_id && !course.has_unpublished_changes ? t('education.publish.noChanges') : ''}><span><Button variant="contained" disabled={validating || saveState === 'saving' || !!conflict || Boolean(course.latest_published_release_id && !course.has_unpublished_changes)} onClick={validateForPublish}>{course.latest_published_release_id ? t('education.publish.update') : t('education.publish.first')}</Button></span></Tooltip>
         </Stack>
