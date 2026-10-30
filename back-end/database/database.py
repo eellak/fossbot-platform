@@ -496,6 +496,7 @@ class Projects(Base):
     project_type = Column(String, default="python")
     date_created = Column(DateTime, default=datetime.datetime.utcnow)
     code = Column(String)
+    share_token = Column(String(43), nullable=True, unique=True, index=True)
     stage_source_type = Column(String)
     stage_local_id = Column(Integer, ForeignKey('local_stages.id'))
     stage_repo_owner = Column(String)

@@ -52,6 +52,19 @@ export async function createProject(data: NewProjectData, token: string) {
     return response;
 }
 
+export class ProjectSharingError extends Error {
+    constructor(public status: number) { super('Project sharing request failed'); }
+}
+
+export async function projectSharingRequest(path: string, token: string, method = 'GET', signal?: AbortSignal) {
+    const response = await fetch(`${backendUrl}${path}`, {
+        method, signal, cache: 'no-store', referrerPolicy: 'no-referrer',
+        headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!response.ok) throw new ProjectSharingError(response.status);
+    return response.status === 204 ? undefined : response.json();
+}
+
 export async function getUsers(token: string) {
     const response = await fetch(`${backendUrl}/users/`, {
         method: 'GET',

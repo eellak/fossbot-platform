@@ -596,14 +596,14 @@ const StageBuilderPage = () => {
       setSaveProviderOpen(true);
       setProviderError(params.get('github_error') || 'GitHub connection failed.');
       setProviderErrorCode('provider_error');
-      window.history.replaceState(null, '', window.location.pathname);
+      window.history.replaceState(window.history.state, '', window.location.pathname);
       refreshProviderStatus({ force: true });
     } else if (params.get('github_connected') || params.get('github_installed')) {
       const repo = params.get('repo');
       if (repo) setBootstrapRepoName(repo);
       setSaveProviderOpen(true);
       setMessage(params.get('github_connected') ? 'GitHub connected. Continue saving when ready.' : 'GitHub App installation updated. Continue saving when ready.');
-      window.history.replaceState(null, '', window.location.pathname);
+      window.history.replaceState(window.history.state, '', window.location.pathname);
       refreshProviderStatus({ force: true });
     }
   }, []);
@@ -652,7 +652,7 @@ const StageBuilderPage = () => {
         });
         setLocalStage(null);
         if (marketplaceEnabled && githubDeepLinkTarget.action === 'publish') setPublishMarketplaceOpen(true);
-        window.history.replaceState(null, '', window.location.pathname);
+        window.history.replaceState(window.history.state, '', window.location.pathname);
         setGithubDeepLinkLoad({ status: 'idle' });
       } catch (error) {
         if (!cancelled) {
@@ -680,7 +680,7 @@ const StageBuilderPage = () => {
       setGuestLocalStageId(record.id);
       setLocalStage(null);
       setRemoteStage(null);
-      window.history.replaceState(null, '', window.location.pathname);
+      window.history.replaceState(window.history.state, '', window.location.pathname);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Could not open the local stage.');
     }
@@ -699,7 +699,7 @@ const StageBuilderPage = () => {
         setRemoteStage(null);
         if (publishAfterOpen) setPublishMarketplaceOpen(true);
         if (new URLSearchParams(window.location.search).get('action') === 'github-copy') setSaveProviderOpen(true);
-        window.history.replaceState(null, '', window.location.pathname);
+        window.history.replaceState(window.history.state, '', window.location.pathname);
       })
       .catch((error) => { if (!cancelled) setMessage(error instanceof Error ? error.message : 'Could not open local stage.'); })
       .finally(() => { if (!cancelled) setLocalStagesLoading(false); });
@@ -721,7 +721,7 @@ const StageBuilderPage = () => {
         replaceStage(configToEditorStage(record), { undoable: false, clean: false, message: 'Opened stage as a new editable copy.' });
         setLocalStage(null);
         setRemoteStage(null);
-        window.history.replaceState(null, '', window.location.pathname);
+        window.history.replaceState(window.history.state, '', window.location.pathname);
       })
       .catch((error) => { if (!cancelled) setMessage(error instanceof Error ? error.message : 'Could not open the selected stage.'); })
       .finally(() => { if (!cancelled) setLocalStagesLoading(false); });
@@ -1205,7 +1205,7 @@ const StageBuilderPage = () => {
           ? localStageRepository.save({ ...record, id: existing.id, createdAt: existing.createdAt }, scope)
           : localStageRepository.create(record, scope);
         setGuestLocalStageId(saved.id);
-        window.history.replaceState(null, '', `/stage-builder?guestStage=${encodeURIComponent(saved.id)}`);
+        window.history.replaceState(window.history.state, '', `/stage-builder?guestStage=${encodeURIComponent(saved.id)}`);
         setLastExportFingerprint(stageFingerprint(stage));
         setExportedAt(new Date().toISOString());
         clearStageBuilderDraft(scope);
@@ -1291,7 +1291,7 @@ const StageBuilderPage = () => {
       setLocalStage(null);
       setRemoteStage(null);
       setGuestOpenLocalOpen(false);
-      window.history.replaceState(null, '', `/stage-builder?guestStage=${encodeURIComponent(item.id)}`);
+      window.history.replaceState(window.history.state, '', `/stage-builder?guestStage=${encodeURIComponent(item.id)}`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Could not open the local stage.');
     }
@@ -1834,7 +1834,7 @@ const StageBuilderPage = () => {
           }}
           onBack={() => navigate('/stages?tab=mine')}
           onOpenPicker={() => {
-            window.history.replaceState(null, '', window.location.pathname);
+            window.history.replaceState(window.history.state, '', window.location.pathname);
             setGithubDeepLinkLoad({ status: 'idle' });
             setOpenProviderOpen(true);
             refreshProviderStageList();

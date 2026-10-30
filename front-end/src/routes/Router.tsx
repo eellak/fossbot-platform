@@ -41,6 +41,7 @@ const CourseProgressPage = Loadable(lazy(() => import('../views/course-progress-
 const StudentCourseProgressPage = Loadable(lazy(() => import('../views/course-progress-page/StudentCourseProgressPage')));
 const ClassGroupsTeacherPage = Loadable(lazy(() => import('../views/class-groups-teacher-page/ClassGroupsTeacherPage')));
 const ClassGroupsStudentPage = Loadable(lazy(() => import('../views/class-groups-student-page/ClassGroupsStudentPage')));
+const SharedProjectPage = Loadable(lazy(() => import('../views/shared-project-page/SharedProjectPage')));
 const GuestUnavailable = Loadable(lazy(() => import('../views/guest-unavailable-page/GuestUnavailable')));
 
 //const BlocklyPage = Loadable(lazy(() => import('../views/blockly-page/BlocklyPage')));
@@ -122,6 +123,11 @@ const Router = [
       { path: '/auth/register', element: <Register /> },
       { path: '/auth/404', element: <Error /> },
     ],
+  },
+  {
+    path: '/shared-projects',
+    element: <PrivateRoute guestAllowed><FullLayout /></PrivateRoute>,
+    children: [{ path: ':shareToken', element: <SharedProjectPage /> }],
   },
   {
     path: '/blockly-page',

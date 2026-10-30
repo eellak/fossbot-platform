@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
+import { pendingSharedReturn } from 'src/authentication/sharedProjectReturn';
 
 // Extend the Window interface to include _mtm
 declare global {
@@ -14,6 +15,8 @@ const MatomoTracker = () => {
   const CONTAINER_ID = 'NY6wzURV'; // Replace with your container ID
 
   useEffect(() => {
+    // An already-loaded remote container still needs the documented deployment privacy check.
+    if (location.pathname.startsWith('/shared-projects/') || pendingSharedReturn() || (location.state as any)?.sharedReturnTo) return;
     // Function to inject Matomo script
     const injectMatomo = () => {
       const scriptContent = `

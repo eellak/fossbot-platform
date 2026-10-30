@@ -4,6 +4,14 @@
 
 **Continue as guest** opens an anonymous session with a generated alias. No nickname or email is required. Your Python/Blockly code, local stages, and lesson workspaces remain in this browser only; clearing browser storage deletes them permanently. The same guest can join a class with its join code, submit activities and missions, and opt into the class leaderboard. Guest results belong to that class assignment and are visible to the teacher. A guest session expires after 30 days and cannot be recovered or converted into an account. Guests can use the simulator but not a physical robot.
 
+## Shared project links
+
+A shared link opens a copy of someone else's saved Python or Blockly project. Choose **Run** to try it, or edit it and choose **Save** to keep your own copy in your account or in this browser. Guest copies stay in this browser only; clearing browser storage deletes them.
+
+The link always shows the owner's latest saved version, so it can change while sharing is on. If the owner stops sharing or deletes the project, the link stops working, but copies you already saved are yours. Your edits are not saved until you choose **Save**, and reloading the page loses unsaved changes. If the project's stage is not available to you, the default stage loads with a warning and the program may behave differently.
+
+Guests cannot create share links; only saved account projects can be shared.
+
 ## Start and resume
 
 Open **Courses**, choose a public course or a shared unlisted link, and select **Start course**. **My courses** shows progress and returns you to the next unfinished lesson. Your progress and workspace are saved to your account, not GitHub.

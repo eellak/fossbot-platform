@@ -23,6 +23,34 @@ describe('platform helpers', () => {
     }
   });
 
+  it('hosts the fallback textarea inside an open dialog so a focus trap keeps the selection', async () => {
+    const navigatorObject = (globalThis as any).navigator;
+    const originalClipboard = navigatorObject?.clipboard;
+    const originalExec = (document as any).execCommand;
+    const dialog = document.createElement('div');
+    dialog.setAttribute('role', 'dialog');
+    const container = document.createElement('div');
+    container.tabIndex = -1;
+    container.appendChild(dialog);
+    document.body.appendChild(container);
+    container.focus();
+    let copied = false;
+    (document as any).execCommand = () => {
+      const active = document.activeElement as HTMLTextAreaElement | null;
+      copied = active?.tagName === 'TEXTAREA' && active.parentElement === dialog && active.selectionEnd === 'share-link'.length;
+      return true;
+    };
+    try {
+      if (navigatorObject) Object.defineProperty(navigatorObject, 'clipboard', { value: undefined, configurable: true });
+      await expect(copyText('share-link')).resolves.toBe(true);
+      expect(copied).toBe(true);
+    } finally {
+      if (navigatorObject) Object.defineProperty(navigatorObject, 'clipboard', { value: originalClipboard, configurable: true });
+      if (originalExec) (document as any).execCommand = originalExec; else delete (document as any).execCommand;
+      container.remove();
+    }
+  });
+
   it('resolves copy attempts without throwing when the clipboard API is missing', async () => {
     const navigatorObject = (globalThis as any).navigator;
     const original = navigatorObject?.clipboard;

@@ -1,28 +1,34 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import PageContainer from 'src/components/container/PageContainer';
 import img1 from 'src/assets/images/fossbot/back_top_up.png';
 import img2 from 'src/assets/images/fossbot/gfoss_en.png';
 import Logo from 'src/layouts/full/shared/logo/Logo';
 import AuthLogin from './AuthLogin';
 
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Grid, Box, Typography, Stack } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from 'src/authentication/AuthProvider';
 import { useNotifications } from 'src/components/notifications/NotificationProvider';
 import { guestLandingPath } from 'src/authentication/guest';
+import { pendingSharedReturn, validSharedReturn } from 'src/authentication/sharedProjectReturn';
 
 const Login = () => {
   const { t } = useTranslation();
   const auth = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const redirected = useRef(false);
   const { notify } = useNotifications();
 
   useEffect(() => {
-    if (auth.authStatus === 'authenticated') {
-      navigate(auth.isGuest ? guestLandingPath(auth.guestSettings) : '/dashboard', { replace: true });
+    if (auth.authStatus === 'authenticated' && !redirected.current) {
+      redirected.current = true;
+      const state = location.state as { sharedReturnTo?: unknown } | null;
+      const destination = validSharedReturn(state?.sharedReturnTo) || pendingSharedReturn();
+      navigate(destination || (auth.isGuest ? guestLandingPath(auth.guestSettings) : '/dashboard'), { replace: true });
     }
-  }, [auth.authStatus, auth.guestSettings, auth.isGuest, navigate]);
+  }, [auth.authStatus, auth.guestSettings, auth.isGuest, location.state, navigate]);
 
   const handleShowErrorAlert = (message: string) => {
     notify(message, { severity: 'error' });

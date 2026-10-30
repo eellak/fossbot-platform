@@ -34,7 +34,13 @@ export async function copyText(text: string): Promise<boolean> {
   textarea.style.position = 'fixed';
   textarea.style.top = '-1000px';
   textarea.style.opacity = '0';
-  document.body.appendChild(textarea);
+  // A focus trap (e.g. an open MUI dialog) pulls focus out of a body-level
+  // textarea and clears the selection, so host it inside the dialog that owns
+  // focus, or the top-most dialog when focus is elsewhere.
+  const dialogs = Array.from(document.querySelectorAll<HTMLElement>('[role="dialog"]'));
+  const focused = dialogs.find((dialog) => dialog.contains(document.activeElement) || dialog.parentElement?.contains(document.activeElement));
+  const host = focused ?? dialogs[dialogs.length - 1] ?? document.body;
+  host.appendChild(textarea);
   textarea.focus();
   textarea.select();
   let copied = false;
@@ -43,6 +49,6 @@ export async function copyText(text: string): Promise<boolean> {
   } catch {
     copied = false;
   }
-  document.body.removeChild(textarea);
+  textarea.remove();
   return copied;
 }

@@ -3,6 +3,7 @@ import DashboardCard from '../shared/DashboardCardWithChildren';
 import Fab from '@mui/material/Fab';
 import PageContainer from 'src/components/container/PageContainer';
 import NewProjectDialog from './NewProjectDialog';
+import ProjectShareDialog from './ProjectShareDialog';
 
 import { useState, useEffect } from 'react';
 import {
@@ -79,6 +80,7 @@ const ProjectsCard = ({ previewAppearance = true }: { previewAppearance?: boolea
   const [projectMenu, setProjectMenu] = useState<{ anchor: HTMLElement; projectId: number; projectName: string } | null>(null);
   const [pendingDelete, setPendingDelete] = useState<{ id: number; name: string } | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
+  const [sharingId, setSharingId] = useState<number | null>(null);
 
   const { notify } = useNotifications();
 
@@ -208,6 +210,7 @@ const ProjectsCard = ({ previewAppearance = true }: { previewAppearance?: boolea
 
   return (
     <PageContainer>
+      {sharingId !== null && <ProjectShareDialog projectId={sharingId} open onClose={() => setSharingId(null)} />}
       <NewProjectDialog
         showDrawer={showDrawer}
         handleDrawerClose={handleDrawerClose}
@@ -508,6 +511,11 @@ const ProjectsCard = ({ previewAppearance = true }: { previewAppearance?: boolea
           open={Boolean(projectMenu)}
           onClose={() => setProjectMenu(null)}
         >
+          {!auth.isGuest && <MenuItem onClick={() => {
+            if (!projectMenu) return;
+            setSharingId(projectMenu.projectId);
+            setProjectMenu(null);
+          }}>{t('projectSharing.share')}</MenuItem>}
           <MenuItem
             onClick={() => {
               if (!projectMenu) return;
