@@ -269,7 +269,7 @@ def _load_stage(db: Session, user: User, context: StageContext) -> dict[str, Any
     }
 
 
-def assemble_context(db: Session, user: User, request: AssistantRequest) -> AssembledContext:
+def assemble_context(db: Session, user: Optional[User], request: AssistantRequest) -> AssembledContext:
     request.validate_capability()
     allowed = SURFACE_CAPABILITIES[request.surface]
     if allowed is not None and request.capability not in allowed:
@@ -305,6 +305,13 @@ def assemble_context(db: Session, user: User, request: AssistantRequest) -> Asse
             raise ContextError("Blockly runtime diagnostics are missing or stale")
     authoritative: dict[str, Any] = {}
     lesson_activities_truncated = False
+    if user is None:
+        # Guest sessions own no courses or stages, so lesson and stage lookups must not run for them.
+        needs_owner = isinstance(surface, (LessonContext, StageContext)) or (
+            isinstance(surface, (PythonContext, BlocklyContext)) and surface.release_id and surface.lesson_key
+        )
+        if needs_owner:
+            raise ContextError("This context is not available to guest sessions")
     if isinstance(surface, LessonContext):
         authoritative = _load_authoring_course(db, user, surface)
     elif isinstance(surface, (PythonContext, BlocklyContext)) and surface.release_id and surface.lesson_key:

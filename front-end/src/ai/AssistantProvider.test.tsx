@@ -35,11 +35,17 @@ describe('assistant guest bootstrap', () => {
   });
   afterEach(() => { act(() => root.unmount()); container.remove(); });
 
-  it('does not call the AI API for a guest session', async () => {
-    mockAuth = { token: 'guest_token', isGuest: true, authStatus: 'authenticated' };
+  it('does not call the AI API for a guest session while guest Buddy is disabled', async () => {
+    mockAuth = { token: 'guest_token', isGuest: true, authStatus: 'authenticated', guestSettings: { ai_enabled: false } };
     await act(async () => { root.render(<AssistantProvider><Probe /></AssistantProvider>); await flush(); });
     expect(mockReadAIAccess).not.toHaveBeenCalled();
     expect(container.textContent).toBe('idle');
+  });
+
+  it('bootstraps guest access when an administrator enabled guest Buddy', async () => {
+    mockAuth = { token: 'guest_token', isGuest: true, authStatus: 'authenticated', guestSettings: { ai_enabled: true } };
+    await act(async () => { root.render(<AssistantProvider><Probe /></AssistantProvider>); await flush(); });
+    expect(mockReadAIAccess).toHaveBeenCalledWith('guest_token');
   });
 
   it('still bootstraps account access', async () => {

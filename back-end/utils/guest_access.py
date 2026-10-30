@@ -7,7 +7,7 @@ import time
 from dataclasses import dataclass
 from typing import Optional
 
-from database.database import GuestInstanceSettings, GuestSession, User
+from database.database import AIProviderConfig, GuestInstanceSettings, GuestSession, User
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from models.models import GuestSettingsUpdate, GuestView
@@ -93,16 +93,35 @@ def guest_settings_payload(row: Optional[GuestInstanceSettings]) -> dict:
     return {
         "beta_tester": bool(row.beta_tester) if row else False,
         "allowed_views": allowed_guest_views(row),
+        "ai_enabled": bool(row.ai_enabled) if row else False,
+    }
+
+
+def admin_guest_settings_payload(row: Optional[GuestInstanceSettings]) -> dict:
+    return {
+        **guest_settings_payload(row),
+        "ai_provider_ids": list((row.ai_provider_ids if row else None) or []),
     }
 
 
 def save_guest_settings(db: Session, request: GuestSettingsUpdate, admin_id: int) -> GuestInstanceSettings:
+    if request.ai_provider_ids:
+        found = {
+            provider_id for (provider_id,) in db.query(AIProviderConfig.id).filter(
+                AIProviderConfig.id.in_(request.ai_provider_ids),
+                AIProviderConfig.runtime == "hosted",
+            ).all()
+        }
+        if found != set(request.ai_provider_ids):
+            raise HTTPException(status_code=422, detail="Guest AI providers must be configured hosted providers")
     row = guest_settings_row(db)
     if row is None:
         row = GuestInstanceSettings(id=1, updated_by_id=admin_id)
         db.add(row)
     row.beta_tester = request.beta_tester
     row.allowed_views = [view.value for view in request.allowed_views]
+    row.ai_enabled = request.ai_enabled
+    row.ai_provider_ids = list(request.ai_provider_ids)
     row.updated_by_id = admin_id
     row.updated_at = datetime.datetime.utcnow()
     db.commit()

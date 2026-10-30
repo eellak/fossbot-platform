@@ -5,6 +5,11 @@ export type GuestView = 'dashboard' | 'python' | 'blockly' | 'interactive' | 'rc
 export interface GuestSettings {
     beta_tester: boolean;
     allowed_views: GuestView[];
+    ai_enabled: boolean;
+}
+
+export interface GuestAdminSettings extends GuestSettings {
+    ai_provider_ids: number[];
 }
 
 export interface GuestSession {

@@ -1,7 +1,7 @@
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useId, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import {
   Alert, alpha, Box, Button, Chip, CircularProgress, Collapse, Dialog, DialogActions, DialogContent,
-  DialogTitle, Fab, IconButton, LinearProgress, MenuItem, Paper, Portal, Stack, TextField, Tooltip, Typography,
+  DialogTitle, Fab, IconButton, InputAdornment, LinearProgress, MenuItem, Paper, Portal, Stack, TextField, Tooltip, Typography,
 } from '@mui/material';
 import {
   IconArrowLeft, IconArrowRight, IconCheck, IconChevronDown, IconCode, IconMinus, IconPlayerStop, IconRefresh,
@@ -29,6 +29,7 @@ import PythonEditsPreview from './PythonEditsPreview';
 import StageSuggestionPreview from './StageSuggestionPreview';
 import LessonSuggestionPreview from './LessonSuggestionPreview';
 import { resolveBuddyView, type RequestMode } from './buddyView';
+import { clampBuddyPosition, readBuddyPosition, saveBuddyPosition, buddyCornerPosition, BUDDY_CORNERS, type BuddyCorner, type BuddyPosition } from './buddyPosition';
 
 type ConversationTurn = { role: 'user' | 'assistant'; content: string };
 type ConversationStatus = 'pending' | 'answered' | 'proposed' | 'applied' | 'declined' | 'failed' | 'stopped';
@@ -43,6 +44,9 @@ type ConversationEntry = {
 
 // Matches the backend ConversationTurn.content limit so a long answer never poisons the next request.
 const historyTurnLimit = 2000;
+
+// Longest question the buddy input accepts, in characters.
+const COMPOSER_MAX_CHARS = 2000;
 
 export type AssistantBenchmarkPrompt = {
   id: string;
@@ -301,12 +305,16 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
   const [compose, setCompose] = useState(false);
   const [applied, setApplied] = useState(false);
   const [showWorkingSteps, setShowWorkingSteps] = useState(false);
+  const [buddyPos, setBuddyPos] = useState<BuddyPosition | null>(() => readBuddyPosition());
+  const [buddyStyle, setBuddyStyle] = useState<BuddyPosition | null>(null);
   const workingStepsId = useId();
   const abortRef = useRef<AbortController | null>(null);
   const runtimeRef = useRef<AIAssistantRuntime | null>(null);
   const contextKeyRef = useRef(contextKey);
   const outputRef = useRef<HTMLDivElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
+  const buddyBoxRef = useRef<HTMLDivElement | null>(null);
+  const buddyDraggedRef = useRef(false);
   const questionRef = useRef<HTMLInputElement | null>(null);
   const debugSequenceRef = useRef(0);
   const isAdmin = user?.role === 'admin';
@@ -717,8 +725,81 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
   const composerHeight = 56;
   const restartFromApplied = () => { setApplied(false); setOutput(''); setPreview(null); setPreviewCapability(null); setStatus('idle'); setQuestion(''); window.requestAnimationFrame(() => questionRef.current?.focus()); };
 
-  const panel = <Paper ref={panelRef} id="fossbot-buddy-panel" role="dialog" aria-label={t('aiAssistant.title')} elevation={8} sx={{ width: '100%', boxSizing: 'border-box', maxHeight: { xs: 'calc(100vh - 104px)', lg: 'calc(100vh - 196px)' }, overflowY: 'auto', overflowX: 'hidden', borderRadius: 2, '& .MuiButton-root': { minHeight: 44 }, '& .MuiChip-clickable': { minHeight: 40 } }}>
-    <Stack direction="row" alignItems="center" spacing={1.25} sx={{ minHeight: 64, px: 2, py: 1, position: 'sticky', top: 0, zIndex: 2, bgcolor: 'background.paper', borderBottom: 1, borderColor: 'divider' }}>
+  const stickBuddy = (corner: BuddyCorner) => {
+    const next = buddyCornerPosition(corner, { width: window.innerWidth, height: window.innerHeight });
+    setBuddyPos(next);
+    saveBuddyPosition(next);
+  };
+  // No stored position means the CSS default, which is the bottom-right corner.
+  const activeCorner = buddyPos
+    ? BUDDY_CORNERS.find((corner) => {
+      const preset = buddyCornerPosition(corner, { width: window.innerWidth, height: window.innerHeight });
+      return preset.right === buddyPos.right && preset.bottom === buddyPos.bottom;
+    })
+    : 'bottom-right';
+
+  // Drag the floating Buddy: the FAB when closed, the panel header when open.
+  // The panel grows up and left from the same corner, so the chat opens where
+  // the button was left. Position is remembered across reloads.
+  const startBuddyDrag = (event: ReactPointerEvent<HTMLElement>) => {
+    if (event.button !== 0) return;
+    const handle = event.currentTarget;
+    const interactive = (event.target as HTMLElement).closest('button, a, input, textarea, select, [role="button"]');
+    if (interactive && interactive !== handle && handle.contains(interactive)) return;
+    const box = buddyBoxRef.current;
+    if (!box) return;
+    const rect = box.getBoundingClientRect();
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const start = { right: window.innerWidth - rect.right, bottom: window.innerHeight - rect.bottom };
+    const size = { width: rect.width, height: rect.height };
+    const viewport = { width: window.innerWidth, height: window.innerHeight };
+    let moved = false;
+    let latest = start;
+    const move = (moveEvent: PointerEvent) => {
+      const dx = moveEvent.clientX - startX;
+      const dy = moveEvent.clientY - startY;
+      if (!moved && Math.abs(dx) + Math.abs(dy) < 4) return;
+      moved = true;
+      latest = clampBuddyPosition({ right: start.right - dx, bottom: start.bottom - dy }, size, viewport);
+      setBuddyPos(latest);
+    };
+    const end = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', end);
+      window.removeEventListener('pointercancel', end);
+      if (!moved) return;
+      saveBuddyPosition(latest);
+      // The click that follows this pointerup must not open the panel.
+      buddyDraggedRef.current = true;
+      window.setTimeout(() => { buddyDraggedRef.current = false; }, 0);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', end);
+    window.addEventListener('pointercancel', end);
+  };
+
+  // The open panel is larger than the FAB, so it can hang off screen when the
+  // button sits near an edge. Only the rendered box is pulled back; the saved
+  // anchor stays put so closing the chat returns the button to where it was.
+  useLayoutEffect(() => {
+    if (!buddyPos) { setBuddyStyle(null); return; }
+    const box = buddyBoxRef.current;
+    if (!box) return;
+    const apply = () => {
+      const rect = box.getBoundingClientRect();
+      const next = clampBuddyPosition(buddyPos, { width: rect.width, height: rect.height }, { width: window.innerWidth, height: window.innerHeight });
+      setBuddyStyle((current) => current && current.right === next.right && current.bottom === next.bottom ? current : next);
+    };
+    apply();
+    const observer = new ResizeObserver(apply);
+    observer.observe(box);
+    window.addEventListener('resize', apply);
+    return () => { observer.disconnect(); window.removeEventListener('resize', apply); };
+  }, [buddyPos, open]);
+
+  const panel = <Paper ref={panelRef} id="fossbot-buddy-panel" role="dialog" aria-label={t('aiAssistant.title')} elevation={24} sx={{ width: '100%', boxSizing: 'border-box', border: 1, borderColor: 'divider', maxHeight: { xs: 'calc(100vh - 104px)', lg: 'calc(100vh - 196px)' }, overflowY: 'auto', overflowX: 'hidden', borderRadius: 2, '& .MuiButton-root': { minHeight: 44 }, '& .MuiChip-clickable': { minHeight: 40 } }}>
+    <Stack direction="row" alignItems="center" spacing={1.25} onPointerDown={startBuddyDrag} sx={{ minHeight: 64, px: 2, py: 1, position: 'sticky', top: 0, zIndex: 2, bgcolor: 'background.paper', borderBottom: 1, borderColor: 'divider', cursor: 'grab', touchAction: 'none', '&:active': { cursor: 'grabbing' } }}>
       <BuddyRobotTile />
       <Box sx={{ flex: 1, minWidth: 0 }}>
         <Stack direction="row" alignItems="center" spacing={1} sx={{ minWidth: 0 }}>
@@ -735,6 +816,12 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
         {allowedProviders.length > 0 && <TextField select size="small" label={t('aiAssistant.provider')} value={selectedProvider?.id || ''} onChange={(event) => { setSelectedProviderId(Number(event.target.value)); setRuntimeStatus({ readiness: 'idle' }); }} disabled={busy} sx={{ minWidth: 0, '& .MuiInputBase-root': { minWidth: 0 }, '& .MuiSelect-select': { minWidth: 0, maxWidth: '100%', boxSizing: 'border-box' } }}>{allowedProviders.map((provider) => <MenuItem key={provider.id} value={provider.id}>{provider.name}</MenuItem>)}</TextField>}
         {selectedProvider?.runtime === 'browser' && <Button size="small" color="error" sx={{ alignSelf: 'flex-start' }} disabled={busy} onClick={() => { const runtime = runtimeFor(selectedProvider, token); if (runtime instanceof WebLLMRuntime) void runtime.clearCache().then(() => { localStorage.removeItem(webLLMConsentKey(selectedProvider)); setRuntimeStatus({ readiness: 'idle', cached: false }); }).catch(() => setRuntimeStatus({ readiness: 'error', message: 'webllm_worker_stopped' })); }}>{t('aiAssistant.clearModel')}</Button>}
         {isAdmin && <AdminDebugToggle enabled={debugEnabled} disabled={busy} onChange={(enabled) => { setDebugEnabled(enabled); clearDebug(); }} />}
+        <Box>
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.75 }}>{t('aiAssistant.position.label')}</Typography>
+          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0.75 }}>
+            {BUDDY_CORNERS.map((corner) => <Button key={corner} size="small" variant={corner === activeCorner ? 'contained' : 'outlined'} disabled={busy} onClick={() => stickBuddy(corner)}>{t(`aiAssistant.position.${corner}`)}</Button>)}
+          </Box>
+        </Box>
       </Stack>
     </Collapse>
     <Box sx={{ p: rhythm.inset, display: 'flex', flexDirection: 'column', gap: rhythm.blockGap }}>
@@ -806,7 +893,8 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
             }}
             multiline
             minRows={2}
-            inputProps={{ maxLength: 2000 }}
+            inputProps={{ maxLength: COMPOSER_MAX_CHARS }}
+            InputProps={{ endAdornment: <ComposerLimit value={question} /> }}
             disabled={busy}
           />
           <Stack spacing={rhythm.actionGap}>
@@ -932,7 +1020,8 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
           minRows={1}
           maxRows={4}
           size="small"
-          inputProps={{ maxLength: 2000 }}
+          inputProps={{ maxLength: COMPOSER_MAX_CHARS }}
+          InputProps={{ endAdornment: <ComposerLimit value={question} /> }}
           sx={{ flex: 1, minWidth: 0, '& .MuiOutlinedInput-root': { minHeight: composerHeight } }}
         />
         <Button variant="contained" endIcon={<IconArrowRight size={18} />} disabled={!question.trim() || busy || !activeDecision?.allowed} onClick={() => void run(question, primaryMode)} sx={{ flex: '0 0 auto', minHeight: composerHeight }}>{t('aiAssistant.send')}</Button>
@@ -942,13 +1031,30 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
 
   return <>
     <Portal>
-      <Box sx={{ position: 'fixed', right: { xs: 12, sm: 20 }, bottom: { xs: 12, sm: 20 }, zIndex: (currentTheme) => currentTheme.zIndex.modal - 1, width: open ? 'min(430px, calc(100vw - 24px))' : 'auto', maxWidth: 'calc(100vw - 24px)' }}>
-        {open ? panel : <Tooltip title={t('aiAssistant.open')} placement="left"><Fab color="primary" aria-controls="fossbot-buddy-panel" aria-expanded={false} aria-label={t('aiAssistant.open')} onClick={() => setOpen(true)}>{busy ? <CircularProgress size={22} color="inherit" /> : <IconRobot size={24} />}</Fab></Tooltip>}
+      <Box ref={buddyBoxRef} sx={{ position: 'fixed', right: buddyStyle ? buddyStyle.right : buddyPos ? buddyPos.right : { xs: 12, sm: 20 }, bottom: buddyStyle ? buddyStyle.bottom : buddyPos ? buddyPos.bottom : { xs: 12, sm: 20 }, zIndex: (currentTheme) => currentTheme.zIndex.modal - 1, width: open ? 'min(430px, calc(100vw - 24px))' : 'auto', maxWidth: 'calc(100vw - 24px)' }}>
+        {open ? panel : <Tooltip placement="top" arrow enterDelay={400} title={<Stack spacing={0.25} sx={{ py: 0.25 }}><Typography variant="subtitle2">{t('aiAssistant.dragHint')}</Typography><Typography variant="caption" sx={{ display: 'block', opacity: 0.85 }}>{t('aiAssistant.openHint')}</Typography></Stack>}><Fab color="primary" aria-controls="fossbot-buddy-panel" aria-expanded={false} aria-label={t('aiAssistant.open')} onPointerDown={startBuddyDrag} onClick={() => { if (buddyDraggedRef.current) return; setOpen(true); }} sx={{ touchAction: 'none' }}>{busy ? <CircularProgress size={22} color="inherit" /> : <IconRobot size={24} />}</Fab></Tooltip>}
       </Box>
     </Portal>
     <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)}><DialogTitle>{t('aiAssistant.confirmTitle')}</DialogTitle><DialogContent><Typography>{confirmationBody || t('aiAssistant.confirmBody')}</Typography></DialogContent><DialogActions><Button onClick={() => setConfirmOpen(false)}>{t('cancel')}</Button><Button variant="contained" onClick={() => void apply()}>{t('aiAssistant.apply')}</Button></DialogActions></Dialog>
     <Dialog open={Boolean(consent)} onClose={() => setConsent(null)} fullWidth maxWidth="sm"><DialogTitle>{t(consent?.kind === 'download' ? 'aiAssistant.consent.downloadTitle' : 'aiAssistant.consent.localTitle')}</DialogTitle><DialogContent><Stack spacing={1.5}>{consent?.kind === 'download' ? <><Typography>{t('aiAssistant.consent.downloadBody', { size: formatBytes(webLLMDownloadGuidance(consent.provider).downloadBytes), memory: formatBytes(webLLMDownloadGuidance(consent.provider).memoryBytes) })}</Typography><Typography variant="caption" sx={{ overflowWrap: 'anywhere' }}>{t('aiAssistant.consent.source', { source: webLLMDownloadGuidance(consent.provider).source })}</Typography></> : <Alert severity="warning">{t('aiAssistant.consent.localBody')}</Alert>}</Stack></DialogContent><DialogActions><Button onClick={() => setConsent(null)}>{t('cancel')}</Button><Button variant="contained" onClick={() => { if (!consent) return; const pending = consent; if (pending.kind === 'download') localStorage.setItem(webLLMConsentKey(pending.provider), 'accepted'); setSelectedProviderId(pending.provider.id); setConsent(null); void run(pending.question, pending.mode, true, pending.provider.id, Boolean(pending.benchmark)); }}>{t(consent?.kind === 'download' ? 'aiAssistant.consent.download' : 'aiAssistant.consent.send')}</Button></DialogActions></Dialog>
   </>;
+}
+
+function ComposerLimit({ value }: { value: string }) {
+  const { t } = useTranslation();
+  const atLimit = value.length >= COMPOSER_MAX_CHARS;
+  return (
+    <InputAdornment position="end" sx={{ alignSelf: 'flex-end', mb: '6px' }}>
+      <Typography
+        variant="caption"
+        color={atLimit ? 'error.main' : 'text.secondary'}
+        title={t('aiAssistant.composerLimitLabel', { count: value.length, max: COMPOSER_MAX_CHARS })}
+        sx={{ fontVariantNumeric: 'tabular-nums' }}
+      >
+        {t('aiAssistant.composerLimit', { count: value.length, max: COMPOSER_MAX_CHARS })}
+      </Typography>
+    </InputAdornment>
+  );
 }
 
 function formatBytes(value: number) {

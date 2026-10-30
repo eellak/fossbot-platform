@@ -239,7 +239,7 @@ export async function getAdminGuestSettings(token: string) {
     });
 }
 
-export async function updateAdminGuestSettings(token: string, settings: { beta_tester: boolean; allowed_views: string[] }) {
+export async function updateAdminGuestSettings(token: string, settings: { beta_tester: boolean; allowed_views: string[]; ai_enabled: boolean; ai_provider_ids: number[] }) {
     return fetch(`${backendUrl}/guests/admin/settings`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },

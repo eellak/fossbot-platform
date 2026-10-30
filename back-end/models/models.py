@@ -27,6 +27,8 @@ class GuestSettingsUpdate(BaseModel):
     allowed_views: list[GuestView] = Field(
         default_factory=lambda: list(GuestView), max_length=len(GuestView),
     )
+    ai_enabled: bool = Field(default=False, strict=True)
+    ai_provider_ids: list[int] = Field(default_factory=list, max_length=64)
 
     @field_validator('allowed_views')
     @classmethod
@@ -34,6 +36,13 @@ class GuestSettingsUpdate(BaseModel):
         if len(views) != len(set(views)):
             raise ValueError('Guest views must be unique')
         return views
+
+    @field_validator('ai_provider_ids')
+    @classmethod
+    def unique_providers(cls, provider_ids: list[int]) -> list[int]:
+        if len(provider_ids) != len(set(provider_ids)):
+            raise ValueError('Guest AI providers must be unique')
+        return provider_ids
 
 
 class LoginRequest(BaseModel):

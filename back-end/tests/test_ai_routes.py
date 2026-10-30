@@ -21,6 +21,7 @@ from routers import ai, ai_admin
 from utils.ai.admin_debug import scrub_debug_value
 from utils.ai.providers.base import ProviderEvent
 from utils.ai.schemas import AssistantRequest
+from utils.guest_access import Participant
 
 
 def client_for(db, user):
@@ -32,7 +33,7 @@ def client_for(db, user):
         yield db
 
     app.dependency_overrides[ai.get_db] = override_db
-    app.dependency_overrides[ai.get_current_user] = lambda: user
+    app.dependency_overrides[ai.get_participant] = lambda: Participant(user=user)
     app.dependency_overrides[ai_admin.get_db] = override_db
     app.dependency_overrides[ai_admin.get_current_user] = lambda: user
     return TestClient(app)
@@ -989,7 +990,7 @@ def test_disconnect_closes_upstream_and_records_cancellation(db, users, monkeypa
                 context={},
             ),
             DisconnectedRequest(),
-            student,
+            Participant(user=student),
             db,
         )
         chunks = [chunk async for chunk in response.body_iterator]
