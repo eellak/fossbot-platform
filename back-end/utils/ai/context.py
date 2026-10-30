@@ -5,7 +5,17 @@ import hashlib
 from dataclasses import dataclass
 from typing import Any, Optional
 
-from database.database import Course, CourseRelease, Enrollment, Lesson as LessonRecord, LocalStage, User
+from database.database import (
+    ClassGroup,
+    ClassMembership,
+    Course,
+    CourseAssignment,
+    CourseRelease,
+    Enrollment,
+    Lesson as LessonRecord,
+    LocalStage,
+    User,
+)
 from models.models import UserRole
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
@@ -94,7 +104,12 @@ def _lesson_details(lesson: dict[str, Any]) -> tuple[dict[str, Any], bool]:
     return {**details, "activities": activities}, False
 
 
-def _load_lesson(db: Session, user: User, context: PublishedLessonContext) -> dict[str, Any]:
+def _load_lesson(
+    db: Session,
+    user: Optional[User],
+    context: PublishedLessonContext,
+    guest_session_id: Optional[int] = None,
+) -> dict[str, Any]:
     if not context.release_id or not context.lesson_key:
         return {}
     release = db.query(CourseRelease).filter(CourseRelease.id == context.release_id).first()
@@ -103,15 +118,34 @@ def _load_lesson(db: Session, user: User, context: PublishedLessonContext) -> di
     course = db.query(Course).filter(Course.id == release.course_id).first()
     if course is None:
         raise ContextError("Published lesson context was not found")
-    allowed = user.role == UserRole.ADMIN or course.author_id == user.id
-    if not allowed and user.role == UserRole.USER:
-        allowed = db.query(Enrollment.id).filter(
-            Enrollment.student_id == user.id,
-            Enrollment.course_id == course.id,
-            Enrollment.active_release_id == release.id,
-        ).first() is not None
-    if not allowed and course.status == "published" and course.latest_published_release_id == release.id:
-        allowed = True
+    if user is None:
+        # Guests reach lessons only through a class assignment, so the membership must still be live.
+        allowed = False
+        if guest_session_id is not None:
+            allowed = db.query(Enrollment.id).join(
+                CourseAssignment, CourseAssignment.id == Enrollment.assignment_id,
+            ).join(
+                ClassMembership, ClassMembership.group_id == CourseAssignment.group_id,
+            ).join(
+                ClassGroup, ClassGroup.id == CourseAssignment.group_id,
+            ).filter(
+                Enrollment.guest_session_id == guest_session_id,
+                Enrollment.course_id == course.id,
+                Enrollment.active_release_id == release.id,
+                ClassMembership.guest_session_id == guest_session_id,
+                ClassMembership.removed_at.is_(None),
+                ClassGroup.status == "active",
+            ).first() is not None
+    else:
+        allowed = user.role == UserRole.ADMIN or course.author_id == user.id
+        if not allowed and user.role == UserRole.USER:
+            allowed = db.query(Enrollment.id).filter(
+                Enrollment.student_id == user.id,
+                Enrollment.course_id == course.id,
+                Enrollment.active_release_id == release.id,
+            ).first() is not None
+        if not allowed and course.status == "published" and course.latest_published_release_id == release.id:
+            allowed = True
     if not allowed:
         raise ContextError("Published lesson context is not authorized")
     lessons = student_release_lessons(release.snapshot.get("lessons", []))
@@ -269,7 +303,12 @@ def _load_stage(db: Session, user: User, context: StageContext) -> dict[str, Any
     }
 
 
-def assemble_context(db: Session, user: Optional[User], request: AssistantRequest) -> AssembledContext:
+def assemble_context(
+    db: Session,
+    user: Optional[User],
+    request: AssistantRequest,
+    guest_session_id: Optional[int] = None,
+) -> AssembledContext:
     request.validate_capability()
     allowed = SURFACE_CAPABILITIES[request.surface]
     if allowed is not None and request.capability not in allowed:
@@ -305,17 +344,15 @@ def assemble_context(db: Session, user: Optional[User], request: AssistantReques
             raise ContextError("Blockly runtime diagnostics are missing or stale")
     authoritative: dict[str, Any] = {}
     lesson_activities_truncated = False
-    if user is None:
-        # Guest sessions own no courses or stages, so lesson and stage lookups must not run for them.
-        needs_owner = isinstance(surface, (LessonContext, StageContext)) or (
-            isinstance(surface, (PythonContext, BlocklyContext)) and surface.release_id and surface.lesson_key
-        )
-        if needs_owner:
-            raise ContextError("This context is not available to guest sessions")
     if isinstance(surface, LessonContext):
         authoritative = _load_authoring_course(db, user, surface)
     elif isinstance(surface, (PythonContext, BlocklyContext)) and surface.release_id and surface.lesson_key:
-        loaded = _load_lesson(db, user, PublishedLessonContext(releaseId=surface.release_id, lessonKey=surface.lesson_key))
+        loaded = _load_lesson(
+            db,
+            user,
+            PublishedLessonContext(releaseId=surface.release_id, lessonKey=surface.lesson_key),
+            guest_session_id,
+        )
         lesson_activities_truncated = bool(loaded.get("contextTruncated"))
         authoritative = {
             "course": loaded.get("course", {}),
