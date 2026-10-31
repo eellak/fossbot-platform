@@ -12,6 +12,7 @@ import { useAuth } from 'src/authentication/AuthProvider';
 import { useNotifications } from 'src/components/notifications/NotificationProvider';
 import { guestLandingPath } from 'src/authentication/guest';
 import { pendingSharedReturn, validSharedReturn } from 'src/authentication/sharedProjectReturn';
+import { takeAuthReturnPath } from 'src/authentication/authReturn';
 
 const Login = () => {
   const { t } = useTranslation();
@@ -26,7 +27,7 @@ const Login = () => {
       redirected.current = true;
       const state = location.state as { sharedReturnTo?: unknown } | null;
       const destination = validSharedReturn(state?.sharedReturnTo) || pendingSharedReturn();
-      navigate(destination || (auth.isGuest ? guestLandingPath(auth.guestSettings) : '/dashboard'), { replace: true });
+      navigate(destination || takeAuthReturnPath(auth.isGuest ? guestLandingPath(auth.guestSettings) : '/dashboard'), { replace: true });
     }
   }, [auth.authStatus, auth.guestSettings, auth.isGuest, location.state, navigate]);
 
