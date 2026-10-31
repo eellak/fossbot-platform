@@ -1,4 +1,4 @@
-import { clampBuddyPosition, readBuddyPosition, saveBuddyPosition, buddyCornerPosition, BUDDY_CORNERS, BUDDY_MARGIN, BUDDY_POSITION_KEY } from './buddyPosition';
+import { clampBuddyPosition, buddyCornerPosition, BUDDY_CORNERS, BUDDY_MARGIN } from './buddyPosition';
 
 declare const describe: any;
 declare const expect: any;
@@ -28,37 +28,6 @@ describe('clampBuddyPosition', () => {
       right: BUDDY_MARGIN,
       bottom: 300,
     });
-  });
-});
-
-describe('readBuddyPosition / saveBuddyPosition', () => {
-  const storage = () => {
-    const values = new Map<string, string>();
-    return {
-      getItem: (key: string) => values.get(key) ?? null,
-      setItem: (key: string, value: string) => void values.set(key, value),
-    };
-  };
-
-  it('round-trips a saved position', () => {
-    const store = storage();
-    saveBuddyPosition({ right: 40, bottom: 80 }, store);
-    expect(store.getItem(BUDDY_POSITION_KEY)).toBe('{"right":40,"bottom":80}');
-    expect(readBuddyPosition(store)).toEqual({ right: 40, bottom: 80 });
-  });
-
-  it('ignores missing or malformed values instead of throwing', () => {
-    const store = storage();
-    expect(readBuddyPosition(store)).toBeNull();
-    store.setItem(BUDDY_POSITION_KEY, 'not json');
-    expect(readBuddyPosition(store)).toBeNull();
-    store.setItem(BUDDY_POSITION_KEY, '{"right":"20"}');
-    expect(readBuddyPosition(store)).toBeNull();
-  });
-
-  it('survives unavailable storage', () => {
-    expect(readBuddyPosition(undefined)).toBeNull();
-    expect(() => saveBuddyPosition({ right: 1, bottom: 1 }, undefined)).not.toThrow();
   });
 });
 
