@@ -29,7 +29,7 @@ import PythonEditsPreview from './PythonEditsPreview';
 import StageSuggestionPreview from './StageSuggestionPreview';
 import LessonSuggestionPreview from './LessonSuggestionPreview';
 import { resolveBuddyView, type RequestMode } from './buddyView';
-import { clampBuddyPosition, buddyCornerPosition, BUDDY_CORNERS, type BuddyCorner, type BuddyPosition } from './buddyPosition';
+import { clampBuddyPosition, buddyCornerPosition, getBuddyPosition, setCurrentBuddyPosition, BUDDY_CORNERS, type BuddyCorner, type BuddyPosition } from './buddyPosition';
 
 type ConversationTurn = { role: 'user' | 'assistant'; content: string };
 type ConversationStatus = 'pending' | 'answered' | 'proposed' | 'applied' | 'declined' | 'failed' | 'stopped';
@@ -305,7 +305,7 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
   const [compose, setCompose] = useState(false);
   const [applied, setApplied] = useState(false);
   const [showWorkingSteps, setShowWorkingSteps] = useState(false);
-  const [buddyPos, setBuddyPos] = useState<BuddyPosition | null>(null);
+  const [buddyPos, setBuddyPos] = useState<BuddyPosition | null>(getBuddyPosition);
   const [buddyStyle, setBuddyStyle] = useState<BuddyPosition | null>(null);
   const workingStepsId = useId();
   const abortRef = useRef<AbortController | null>(null);
@@ -721,6 +721,7 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
   const stickBuddy = (corner: BuddyCorner) => {
     const next = buddyCornerPosition(corner, { width: window.innerWidth, height: window.innerHeight });
     setBuddyPos(next);
+    setCurrentBuddyPosition(next);
   };
   // No position means the responsive CSS default at the bottom-right corner.
   const activeCorner = buddyPos
@@ -752,7 +753,9 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
       const dy = moveEvent.clientY - startY;
       if (!moved && Math.abs(dx) + Math.abs(dy) < 4) return;
       moved = true;
-      setBuddyPos(clampBuddyPosition({ right: start.right - dx, bottom: start.bottom - dy }, size, viewport));
+      const next = clampBuddyPosition({ right: start.right - dx, bottom: start.bottom - dy }, size, viewport);
+      setBuddyPos(next);
+      setCurrentBuddyPosition(next);
     };
     const end = () => {
       window.removeEventListener('pointermove', move);

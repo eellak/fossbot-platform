@@ -3,9 +3,25 @@ import { clampBuddyPosition, buddyCornerPosition, BUDDY_CORNERS, BUDDY_MARGIN } 
 declare const describe: any;
 declare const expect: any;
 declare const it: any;
+declare const jest: any;
 
 const viewport = { width: 1200, height: 800 };
 const fab = { width: 56, height: 56 };
+
+it('keeps the position across Buddy mounts but resets it in a new page runtime', () => {
+  jest.isolateModules(() => {
+    const position = require('./buddyPosition') as typeof import('./buddyPosition');
+    expect(position.getBuddyPosition()).toBeNull();
+    position.setCurrentBuddyPosition({ right: 80, bottom: 120 });
+    expect(position.getBuddyPosition()).toEqual({ right: 80, bottom: 120 });
+    position.clampBuddyPosition(position.getBuddyPosition()!, fab, { width: 100, height: 100 });
+    expect(position.getBuddyPosition()).toEqual({ right: 80, bottom: 120 });
+  });
+  jest.isolateModules(() => {
+    const position = require('./buddyPosition') as typeof import('./buddyPosition');
+    expect(position.getBuddyPosition()).toBeNull();
+  });
+});
 
 describe('clampBuddyPosition', () => {
   it('leaves a position that already fits untouched', () => {

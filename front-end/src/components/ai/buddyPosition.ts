@@ -12,6 +12,17 @@ export const BUDDY_FAB_SIZE = 56;
 /** Gap kept between the floating Buddy box and the viewport edge. */
 export const BUDDY_MARGIN = 8;
 
+// Shared across Buddy mounts in this tab, but reset by a full page reload.
+let currentBuddyPosition: BuddyPosition | null = null;
+
+export function getBuddyPosition(): BuddyPosition | null {
+  return currentBuddyPosition;
+}
+
+export function setCurrentBuddyPosition(position: BuddyPosition): void {
+  currentBuddyPosition = position;
+}
+
 /**
  * Keeps a stored right/bottom offset on screen for the given box size. A box
  * larger than the viewport pins to the margin instead of going negative.
