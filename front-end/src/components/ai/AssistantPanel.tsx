@@ -29,7 +29,7 @@ import PythonEditsPreview from './PythonEditsPreview';
 import StageSuggestionPreview from './StageSuggestionPreview';
 import LessonSuggestionPreview from './LessonSuggestionPreview';
 import { resolveBuddyView, type RequestMode } from './buddyView';
-import { clampBuddyPosition, readBuddyPosition, saveBuddyPosition, buddyCornerPosition, BUDDY_CORNERS, type BuddyCorner, type BuddyPosition } from './buddyPosition';
+import { clampBuddyPosition, buddyCornerPosition, getBuddyPosition, setCurrentBuddyPosition, BUDDY_CORNERS, type BuddyCorner, type BuddyPosition } from './buddyPosition';
 
 type ConversationTurn = { role: 'user' | 'assistant'; content: string };
 type ConversationStatus = 'pending' | 'answered' | 'proposed' | 'applied' | 'declined' | 'failed' | 'stopped';
@@ -305,7 +305,7 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
   const [compose, setCompose] = useState(false);
   const [applied, setApplied] = useState(false);
   const [showWorkingSteps, setShowWorkingSteps] = useState(false);
-  const [buddyPos, setBuddyPos] = useState<BuddyPosition | null>(() => readBuddyPosition());
+  const [buddyPos, setBuddyPos] = useState<BuddyPosition | null>(getBuddyPosition);
   const [buddyStyle, setBuddyStyle] = useState<BuddyPosition | null>(null);
   const workingStepsId = useId();
   const abortRef = useRef<AbortController | null>(null);
@@ -721,9 +721,9 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
   const stickBuddy = (corner: BuddyCorner) => {
     const next = buddyCornerPosition(corner, { width: window.innerWidth, height: window.innerHeight });
     setBuddyPos(next);
-    saveBuddyPosition(next);
+    setCurrentBuddyPosition(next);
   };
-  // No stored position means the CSS default, which is the bottom-right corner.
+  // No position means the responsive CSS default at the bottom-right corner.
   const activeCorner = buddyPos
     ? BUDDY_CORNERS.find((corner) => {
       const preset = buddyCornerPosition(corner, { width: window.innerWidth, height: window.innerHeight });
@@ -733,7 +733,7 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
 
   // Drag the floating Buddy: the FAB when closed, the panel header when open.
   // The panel grows up and left from the same corner, so the chat opens where
-  // the button was left. Position is remembered across reloads.
+  // the button was left until the page is reloaded.
   const startBuddyDrag = (event: ReactPointerEvent<HTMLElement>) => {
     if (event.button !== 0) return;
     const handle = event.currentTarget;
@@ -748,21 +748,20 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
     const size = { width: rect.width, height: rect.height };
     const viewport = { width: window.innerWidth, height: window.innerHeight };
     let moved = false;
-    let latest = start;
     const move = (moveEvent: PointerEvent) => {
       const dx = moveEvent.clientX - startX;
       const dy = moveEvent.clientY - startY;
       if (!moved && Math.abs(dx) + Math.abs(dy) < 4) return;
       moved = true;
-      latest = clampBuddyPosition({ right: start.right - dx, bottom: start.bottom - dy }, size, viewport);
-      setBuddyPos(latest);
+      const next = clampBuddyPosition({ right: start.right - dx, bottom: start.bottom - dy }, size, viewport);
+      setBuddyPos(next);
+      setCurrentBuddyPosition(next);
     };
     const end = () => {
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', end);
       window.removeEventListener('pointercancel', end);
       if (!moved) return;
-      saveBuddyPosition(latest);
       // The click that follows this pointerup must not open the panel.
       buddyDraggedRef.current = true;
       window.setTimeout(() => { buddyDraggedRef.current = false; }, 0);
@@ -773,7 +772,7 @@ export default function AssistantPanel({ adapter, explainCapability, suggestCapa
   };
 
   // The open panel is larger than the FAB, so it can hang off screen when the
-  // button sits near an edge. Only the rendered box is pulled back; the saved
+  // button sits near an edge. Only the rendered box is pulled back; the chosen
   // anchor stays put so closing the chat returns the button to where it was.
   useLayoutEffect(() => {
     if (!buddyPos) { setBuddyStyle(null); return; }

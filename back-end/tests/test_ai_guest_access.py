@@ -8,6 +8,12 @@ from database.database import (
     AIInstanceSettings,
     AIProviderConfig,
     AIUsageEvent,
+    ClassGroup,
+    ClassMembership,
+    Course,
+    CourseAssignment,
+    CourseRelease,
+    Enrollment,
     GuestInstanceSettings,
     GuestSession,
 )
@@ -281,3 +287,93 @@ def test_guest_admin_settings_only_accept_hosted_providers_and_hide_the_allowlis
     assert duplicate.status_code == 422
     assert public.json()["ai_enabled"] is True
     assert "ai_provider_ids" not in public.json()
+
+
+def test_guests_get_lesson_context_only_for_a_live_assignment(db, users, monkeypatch):
+    admin = users[3]
+    tutor = users[0]
+    now = datetime.datetime.utcnow()
+    provider = hosted_provider(db, admin, "Guest hosted provider")
+    configure(db, users, [provider.id])
+    session = guest_session(db)
+    course = Course(
+        title="Robotics",
+        description="Course",
+        author_id=tutor.id,
+        learning_objectives=["Learn sensors"],
+        status="published",
+        visibility="public",
+    )
+    db.add(course)
+    db.flush()
+    assigned_release = CourseRelease(
+        course_id=course.id,
+        version=1,
+        schema_version=3,
+        created_by_id=tutor.id,
+        published_at=now,
+        snapshot={
+            "course": {"title": "Robotics", "learningObjectives": ["Learn sensors"]},
+            "lessons": [{"lessonKey": "sensor-basics", "title": "Sensors", "position": 1, "editorType": "python", "activities": []}],
+        },
+    )
+    other_release = CourseRelease(
+        course_id=course.id,
+        version=0,
+        schema_version=3,
+        created_by_id=tutor.id,
+        published_at=now,
+        snapshot={
+            "course": {"title": "Robotics", "learningObjectives": ["Learn sensors"]},
+            "lessons": [{"lessonKey": "sensor-basics", "title": "Sensors", "position": 1, "editorType": "python", "activities": []}],
+        },
+    )
+    db.add_all([assigned_release, other_release])
+    db.flush()
+    group = ClassGroup(teacher_id=tutor.id, name="Class", join_code="ABC123")
+    db.add(group)
+    db.flush()
+    assignment = CourseAssignment(group_id=group.id, course_id=course.id, release_id=assigned_release.id)
+    db.add(assignment)
+    db.flush()
+    membership = ClassMembership(
+        group_id=group.id,
+        guest_session_id=session.id,
+        display_alias=session.alias,
+        joined_at=now,
+        updated_at=now,
+    )
+    db.add(membership)
+    db.add(Enrollment(
+        guest_session_id=session.id,
+        assignment_id=assignment.id,
+        course_id=course.id,
+        active_release_id=assigned_release.id,
+    ))
+    db.commit()
+    calls = []
+    monkeypatch.setattr(ai, "hosted_provider", lambda *args, **kwargs: FakeHostedProvider(calls))
+
+    with guest_client_for(db, session, admin) as client:
+        assigned = client.post("/api/ai/assist/stream", json=stream_body(
+            provider.id,
+            context={"source": "print(1)", "releaseId": assigned_release.id, "lessonKey": "sensor-basics"},
+        ))
+        unassigned = client.post("/api/ai/assist/stream", json=stream_body(
+            provider.id,
+            context={"source": "print(1)", "releaseId": other_release.id, "lessonKey": "sensor-basics"},
+        ))
+        membership.removed_at = now
+        db.commit()
+        removed = client.post("/api/ai/assist/stream", json=stream_body(
+            provider.id,
+            context={"source": "print(1)", "releaseId": assigned_release.id, "lessonKey": "sensor-basics"},
+        ))
+
+    assert assigned.status_code == 200, assigned.text
+    assert "Sensors" in calls[0].system
+    assert unassigned.status_code == 422
+    assert unassigned.json()["detail"]["code"] == "invalid_context"
+    assert removed.status_code == 422
+    assert removed.json()["detail"]["code"] == "invalid_context"
+    assert len(calls) == 1

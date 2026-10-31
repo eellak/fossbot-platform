@@ -516,7 +516,7 @@ async def stream_assistance(
     if settings is None:
         raise HTTPException(status_code=503, detail={"code": "instance_disabled", "message": "Assistant access is not available."})
     try:
-        context = assemble_context(db, current_user, payload)
+        context = assemble_context(db, current_user, payload, guest_session.id if guest_session else None)
         # Guests are learners too: keep the hint-first pedagogy for them.
         prompt = build_prompt(current_user.role if current_user else UserRole.USER, payload, context)
         ensure_quota(

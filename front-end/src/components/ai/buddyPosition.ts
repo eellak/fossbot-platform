@@ -9,10 +9,19 @@ export const BUDDY_CORNERS: BuddyCorner[] = ['top-left', 'top-right', 'bottom-le
 /** MUI Fab size, which is what a preset anchors because that is the closed box. */
 export const BUDDY_FAB_SIZE = 56;
 
-export const BUDDY_POSITION_KEY = 'fossbot.buddy.position';
-
 /** Gap kept between the floating Buddy box and the viewport edge. */
 export const BUDDY_MARGIN = 8;
+
+// Shared across Buddy mounts in this tab, but reset by a full page reload.
+let currentBuddyPosition: BuddyPosition | null = null;
+
+export function getBuddyPosition(): BuddyPosition | null {
+  return currentBuddyPosition;
+}
+
+export function setCurrentBuddyPosition(position: BuddyPosition): void {
+  currentBuddyPosition = position;
+}
 
 /**
  * Keeps a stored right/bottom offset on screen for the given box size. A box
@@ -43,36 +52,4 @@ export function buddyCornerPosition(
     right: Math.max(BUDDY_MARGIN, onLeft ? viewport.width - size - BUDDY_MARGIN : BUDDY_MARGIN),
     bottom: Math.max(BUDDY_MARGIN, onTop ? viewport.height - size - BUDDY_MARGIN : BUDDY_MARGIN),
   };
-}
-
-function isBuddyPosition(value: unknown): value is BuddyPosition {
-  const candidate = value as BuddyPosition | null;
-  return Boolean(candidate) && Number.isFinite(candidate?.right) && Number.isFinite(candidate?.bottom);
-}
-
-function browserStorage(): Storage | undefined {
-  return typeof window === 'undefined' ? undefined : window.localStorage;
-}
-
-export function readBuddyPosition(
-  storage: Pick<Storage, 'getItem'> | undefined = browserStorage(),
-): BuddyPosition | null {
-  if (!storage) return null;
-  try {
-    const parsed: unknown = JSON.parse(storage.getItem(BUDDY_POSITION_KEY) ?? 'null');
-    return isBuddyPosition(parsed) ? { right: parsed.right, bottom: parsed.bottom } : null;
-  } catch {
-    return null;
-  }
-}
-
-export function saveBuddyPosition(
-  position: BuddyPosition,
-  storage: Pick<Storage, 'setItem'> | undefined = browserStorage(),
-): void {
-  try {
-    storage?.setItem(BUDDY_POSITION_KEY, JSON.stringify(position));
-  } catch {
-    // Storage can be unavailable (private mode, quota); the position just is not remembered.
-  }
 }
