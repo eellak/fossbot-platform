@@ -1,11 +1,13 @@
 import React from 'react';
 import { act } from 'react-dom/test-utils';
 import { createRoot, type Root } from 'react-dom/client';
-import { MemoryRouter, useLocation } from 'react-router-dom';
+import { MemoryRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import AuthProvider, { useAuth } from './AuthProvider';
 import { GUEST_TOKEN_STORAGE_KEY } from './guest';
 import { rememberAuthReturnPath } from './authReturn';
 import { rememberSharedReturn } from './sharedProjectReturn';
+import PrivateRoute from 'src/routes/PrivateRoute';
+import RoleBasedRoute from 'src/routes/RoleBasedRoute';
 
 declare const afterEach: any;
 declare const beforeEach: any;
@@ -197,6 +199,125 @@ describe('guest authentication lifecycle', () => {
     await render();
     await act(async () => { container.querySelectorAll('button')[0].click(); await flush(); });
     expect(text('location')).toBe(path);
+  });
+
+  it('keeps a restored stage-test route while Firebase refreshes the app token', async () => {
+    localStorage.setItem('fossbot-platform', 'existing-token');
+    let resolveInitialUser: (response: any) => void;
+    let resolveRefreshToken: (response: any) => void;
+    const resolveRefreshUsers: Array<(response: any) => void> = [];
+    authApi.getUserData.mockImplementation((token: string) => token === 'existing-token'
+      ? new Promise((resolve) => { resolveInitialUser = resolve; })
+      : new Promise((resolve) => { resolveRefreshUsers.push(resolve); }));
+    authApi.loginWithFirebaseToken.mockReturnValue(new Promise((resolve) => { resolveRefreshToken = resolve; }));
+
+    await act(async () => {
+      root.render(
+        <MemoryRouter initialEntries={['/stage-builder/test?handoff=stage_123']}>
+          <AuthProvider>
+            <LocationProbe />
+            <Routes>
+              <Route path="/stage-builder/test" element={(
+                <PrivateRoute guestAllowed>
+                  <RoleBasedRoute betaTesterOnly guestView="stage_builder"><span data-testid="stage-test">test</span></RoleBasedRoute>
+                </PrivateRoute>
+              )} />
+              <Route path="/auth/login" element={<Navigate to="/dashboard" replace />} />
+              <Route path="/dashboard" element={<span data-testid="dashboard">dashboard</span>} />
+            </Routes>
+          </AuthProvider>
+        </MemoryRouter>,
+      );
+      await flush();
+    });
+
+    expect(text('location')).toBe('/stage-builder/test?handoff=stage_123');
+
+    let firebaseRefresh: Promise<void>;
+    await act(async () => {
+      firebaseRefresh = firebaseCallback({ getIdToken: jest.fn().mockResolvedValue('firebase-id') });
+      await flush();
+    });
+    await act(async () => {
+      resolveInitialUser(jsonResponse(account));
+      await flush();
+    });
+    expect(container.querySelector('[data-testid="stage-test"]')).not.toBeNull();
+
+    await act(async () => {
+      resolveRefreshToken(jsonResponse({ access_token: 'refreshed-token' }));
+      await flush();
+    });
+    await act(async () => { await flush(); });
+
+    expect(text('location')).toBe('/stage-builder/test?handoff=stage_123');
+    expect(container.querySelector('[data-testid="dashboard"]')).toBeNull();
+
+    await act(async () => {
+      await flush();
+      resolveRefreshUsers.forEach((resolve) => resolve(jsonResponse(account)));
+      await firebaseRefresh;
+    });
+
+    expect(text('location')).toBe('/stage-builder/test?handoff=stage_123');
+    expect(container.querySelector('[data-testid="stage-test"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="dashboard"]')).toBeNull();
+  });
+
+  it('ignores the old-token user response after Firebase starts refreshing auth', async () => {
+    localStorage.setItem('fossbot-platform', 'existing-token');
+    const pendingUsers: Array<{ token: string; resolve: (response: any) => void }> = [];
+    authApi.getUserData.mockImplementation((token: string) => new Promise((resolve) => {
+      pendingUsers.push({ token, resolve });
+    }));
+    authApi.loginWithFirebaseToken.mockResolvedValue(jsonResponse({ access_token: 'refreshed-token' }));
+
+    await act(async () => {
+      root.render(<MemoryRouter><AuthProvider><Probe /><LocationProbe /></AuthProvider></MemoryRouter>);
+      await flush();
+    });
+
+    let firebaseRefresh: Promise<void>;
+    await act(async () => {
+      firebaseRefresh = firebaseCallback({ getIdToken: jest.fn().mockResolvedValue('firebase-id') });
+      await flush();
+    });
+    await act(async () => { await flush(); });
+
+    const oldTokenRequest = pendingUsers.find((request) => request.token === 'existing-token');
+    expect(oldTokenRequest).toBeDefined();
+    await act(async () => {
+      oldTokenRequest.resolve(jsonResponse(account));
+      await flush();
+    });
+    expect(text('status')).toBe('loading');
+
+    await act(async () => {
+      pendingUsers.filter((request) => request.token === 'refreshed-token').forEach((request) => request.resolve(jsonResponse(account)));
+      await firebaseRefresh;
+    });
+    expect(text('status')).toBe('authenticated');
+  });
+
+  it('keeps the restored app session when Firebase token exchange fails', async () => {
+    localStorage.setItem('fossbot-platform', 'existing-token');
+    authApi.getUserData.mockResolvedValue(jsonResponse(account));
+    authApi.loginWithFirebaseToken.mockRejectedValue(new Error('Firebase exchange unavailable'));
+
+    await act(async () => {
+      root.render(<MemoryRouter><AuthProvider><Probe /><LocationProbe /></AuthProvider></MemoryRouter>);
+      await flush();
+    });
+    expect(text('status')).toBe('authenticated');
+
+    await act(async () => {
+      await firebaseCallback({ getIdToken: jest.fn().mockResolvedValue('firebase-id') });
+      await flush();
+    });
+
+    expect(text('status')).toBe('authenticated');
+    expect(localStorage.getItem('fossbot-platform')).toBe('existing-token');
+    expect(firebase.signOutFromFirebase).toHaveBeenCalled();
   });
 
 });
