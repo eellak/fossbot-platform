@@ -68,7 +68,7 @@ def test_invalid_and_expired_tokens_are_rejected(client, db):
 
     created = client.post("/guests/session").json()
     session = db.query(GuestSession).one()
-    session.expires_at = datetime.datetime.utcnow() - datetime.timedelta(seconds=1)
+    session.expires_at = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None) - datetime.timedelta(seconds=1)
     db.commit()
     assert client.get("/guests/me", headers={"Authorization": f"Bearer {created['token']}"}).status_code == 401
 

@@ -35,7 +35,7 @@ def test_usage_retention_deletes_only_expired_content_free_rows(db, users):
     )
     db.add(provider)
     db.flush()
-    now = datetime.datetime.utcnow()
+    now = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
     db.add_all([
         AIInstanceSettings(id=1, enabled=True, usage_retention_days=7, registry_version="1", updated_by_id=admin.id),
         event(student.id, provider.id, "expired_usage_1234", now - datetime.timedelta(days=8)),

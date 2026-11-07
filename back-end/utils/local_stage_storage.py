@@ -24,7 +24,7 @@ class LocalStageValidationError(ValueError):
 
 
 def utc_now_iso() -> str:
-    return datetime.datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
+    return datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None).replace(microsecond=0).isoformat() + "Z"
 
 
 def public_backend_url() -> str:

@@ -34,7 +34,7 @@ def build_stage_manifest(
         "validation": {
             "state": validation_state,
             "commitSha": commit_sha,
-            "checkedAt": datetime.datetime.utcnow().isoformat() + "Z" if commit_sha else None,
+            "checkedAt": datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None).isoformat() + "Z" if commit_sha else None,
         },
     }
 

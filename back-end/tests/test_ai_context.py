@@ -122,7 +122,7 @@ def test_published_lesson_context_is_student_safe(db, users):
         version=1,
         schema_version=3,
         created_by_id=tutor.id,
-        published_at=datetime.datetime.utcnow(),
+        published_at=datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None),
         snapshot={
             "course": {"title": "Robotics", "description": "Measure before you move.", "learningObjectives": ["Learn sensors"], "difficulty": "Beginner"},
             "lessons": [{
@@ -182,7 +182,7 @@ def test_published_lesson_activities_are_bounded(db, users):
         version=1,
         schema_version=3,
         created_by_id=tutor.id,
-        published_at=datetime.datetime.utcnow(),
+        published_at=datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None),
         snapshot={
             "course": {"title": "Robotics", "learningObjectives": ["Learn sensors"]},
             "lessons": [{

@@ -242,7 +242,7 @@ def test_access_is_current_user_only_and_uses_active_memberships(db, users):
         assert decision["reasonCode"] == "class_group_denied"
         assert all("secret" not in str(item).lower() for item in payload["providers"])
 
-    membership.removed_at = __import__("datetime").datetime.utcnow()
+    membership.removed_at = __import__("datetime").datetime.now(__import__("datetime").timezone.utc).replace(tzinfo=None)
     db.commit()
     with client_for(db, student) as client:
         decision = next(item for item in client.get("/api/ai/access").json()["capabilities"] if item["capability"] == "code.explain")
@@ -301,7 +301,7 @@ def test_local_usage_reporting_is_opt_in_content_free_and_policy_checked(db, use
         "providerId": provider.id,
         "capability": "code.explain",
         "requestId": "browser_local_1234567890",
-        "startedAt": datetime.datetime.utcnow().isoformat() + "Z",
+        "startedAt": datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None).isoformat() + "Z",
         "outcome": "completed",
         "inputTokens": 30,
         "outputTokens": 12,
@@ -341,8 +341,8 @@ def test_admin_settings_update_enforces_usage_retention(db, users):
         model=provider.model,
         runtime=provider.runtime,
         request_id="expired_route_usage_1234",
-        started_at=datetime.datetime.utcnow() - datetime.timedelta(days=8),
-        completed_at=datetime.datetime.utcnow() - datetime.timedelta(days=8),
+        started_at=datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None) - datetime.timedelta(days=8),
+        completed_at=datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None) - datetime.timedelta(days=8),
         outcome="completed",
         policy_version="1",
         prompt_version="fossbot-assistant-v2",
@@ -439,7 +439,7 @@ def test_provider_removal_cleans_up_references(db, users):
     settings = AIInstanceSettings(id=1, enabled=True, default_provider_id=provider.id, registry_version="1", updated_by_id=admin.id)
     explicit_rule = AIPolicyRule(scope_type="instance", scope_key="*", capability="code.explain", effect="allow", provider_ids=[provider.id], runtimes=["hosted"], created_by_id=admin.id, updated_by_id=admin.id)
     shared_rule = AIPolicyRule(scope_type="instance", scope_key="*", capability="code.suggest_changes", effect="allow", provider_ids=[provider.id, other.id], runtimes=["hosted"], created_by_id=admin.id, updated_by_id=admin.id)
-    event = AIUsageEvent(user_id=admin.id, provider_id=provider.id, capability="code.explain", provider_name="Deterministic hosted", model="test-model", runtime="hosted", request_id="req-delete-1", started_at=datetime.datetime.utcnow(), outcome="completed", policy_version="1")
+    event = AIUsageEvent(user_id=admin.id, provider_id=provider.id, capability="code.explain", provider_name="Deterministic hosted", model="test-model", runtime="hosted", request_id="req-delete-1", started_at=datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None), outcome="completed", policy_version="1")
     db.add_all([settings, explicit_rule, shared_rule, event])
     db.commit()
     with client_for(db, tutor) as client:
@@ -563,8 +563,8 @@ def test_denied_and_over_budget_requests_do_not_invoke_provider(db, users, monke
         model=provider.model,
         runtime="hosted",
         request_id="prior-request",
-        started_at=datetime.datetime.utcnow(),
-        completed_at=datetime.datetime.utcnow(),
+        started_at=datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None),
+        completed_at=datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None),
         outcome="completed",
         policy_version="1",
         prompt_version="test",

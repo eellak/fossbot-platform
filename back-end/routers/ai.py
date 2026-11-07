@@ -461,7 +461,7 @@ def report_local_usage(
     if provider is None:
         raise HTTPException(status_code=422, detail="A browser or user-local provider is required")
     started_at = payload.started_at.replace(tzinfo=None)
-    now = datetime.datetime.utcnow()
+    now = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
     if abs((now - started_at).total_seconds()) > 86_400:
         raise HTTPException(status_code=422, detail="Usage start time is outside the reporting window")
     if db.query(AIUsageEvent.id).filter(AIUsageEvent.request_id == payload.request_id).first():
@@ -547,7 +547,7 @@ async def stream_assistance(
         raise HTTPException(status_code=status_code, detail={"code": code, "message": message}) from error
 
     request_id = uuid.uuid4().hex
-    started_at = datetime.datetime.utcnow()
+    started_at = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
     trace = AdminDebugTrace(enabled=payload.debug)
     suggestion_capability = is_suggestion_capability(payload.capability)
     provider_request = ProviderStreamRequest(

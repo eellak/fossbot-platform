@@ -52,7 +52,7 @@ def hosted_provider(db, admin, name, *, runtime="hosted", enabled=True):
 
 
 def guest_session(db, alias="calm_otter"):
-    now = datetime.datetime.utcnow()
+    now = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
     session = GuestSession(
         alias=alias,
         token_hash=f"hash-{alias}",
@@ -190,7 +190,7 @@ def test_guests_cannot_request_admin_debug_or_authoring_capabilities(db, users, 
             "providerId": provider.id,
             "capability": "code.explain",
             "requestId": "guest_usage_1234",
-            "startedAt": datetime.datetime.utcnow().isoformat(),
+            "startedAt": datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None).isoformat(),
             "outcome": "completed",
             "estimated": True,
         })
@@ -210,7 +210,7 @@ def test_guest_quota_is_counted_per_guest_session(db, users):
     db.commit()
     first = guest_session(db, "calm_otter")
     second = guest_session(db, "brave_otter")
-    now = datetime.datetime.utcnow()
+    now = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
     for index in range(GUEST_REQUEST_LIMIT_PER_HOUR):
         db.add(AIUsageEvent(
             guest_session_id=first.id,
@@ -292,7 +292,7 @@ def test_guest_admin_settings_only_accept_hosted_providers_and_hide_the_allowlis
 def test_guests_get_lesson_context_only_for_a_live_assignment(db, users, monkeypatch):
     admin = users[3]
     tutor = users[0]
-    now = datetime.datetime.utcnow()
+    now = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
     provider = hosted_provider(db, admin, "Guest hosted provider")
     configure(db, users, [provider.id])
     session = guest_session(db)

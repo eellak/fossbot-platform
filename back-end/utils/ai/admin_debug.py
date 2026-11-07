@@ -89,7 +89,7 @@ class AdminDebugTrace:
         return {
             "version": TRACE_VERSION,
             "sequence": self.sequence,
-            "timestamp": datetime.datetime.utcnow().isoformat(timespec="milliseconds") + "Z",
+            "timestamp": datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None).isoformat(timespec="milliseconds") + "Z",
             "source": source,
             "step": step,
             "data": scrub_debug_value(data),

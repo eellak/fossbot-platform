@@ -654,7 +654,7 @@ def create_marketplace_pr(provider, marketplace_token: str, marketplace_repo_dat
     if not base_sha:
         raise stage_error(502, "provider_error", "Could not find marketplace base branch commit.")
 
-    timestamp = datetime.datetime.utcnow().strftime("%Y%m%d%H%M%S")
+    timestamp = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None).strftime("%Y%m%d%H%M%S")
     branch_name = f"fossbot/{branch_slug}-{timestamp}"
     try:
         provider.create_ref(marketplace_token, owner, repo, f"refs/heads/{branch_name}", base_sha)
@@ -822,7 +822,7 @@ async def apply_moderation_override(owner: str, repo_name: str, request: Marketp
     if request.reportId:
         report = db.query(MarketplaceReport).filter(MarketplaceReport.id == request.reportId).first()
         if report:
-            report.resolved_at = datetime.datetime.utcnow()
+            report.resolved_at = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
     db.commit()
     db.refresh(existing)
     return moderation_payload(existing)
@@ -860,7 +860,7 @@ async def verification_queue(current_user: User = Depends(get_current_user), db:
             pull_request = pull_requests.get(item.review_pr_number) if item.status == "pr_open" else None
             if item.status == "pr_open" and (not pull_request or pull_request.get("state") == "closed"):
                 item.status = "completed" if pull_request and pull_request.get("merged_at") else "declined"
-                item.reviewed_at = datetime.datetime.utcnow()
+                item.reviewed_at = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
                 status_changed = True
                 continue
             try:
@@ -900,7 +900,7 @@ async def request_verification(owner: str, repo_name: str, current_user: User = 
         if existing and existing.status in ("requested", "pr_open"):
             raise stage_error(409, "verification_request_pending", "This published revision is already waiting for verification.")
         if existing:
-            existing.status, existing.requested_by_user_id, existing.requested_at, existing.review_pr_number, existing.review_pr_url, existing.reviewed_at = "requested", current_user.id, datetime.datetime.utcnow(), None, None, None
+            existing.status, existing.requested_by_user_id, existing.requested_at, existing.review_pr_number, existing.review_pr_url, existing.reviewed_at = "requested", current_user.id, datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None), None, None, None
             application = existing
         else:
             application = MarketplaceVerificationApplication(repo_owner=entry["repoOwner"], repo_name=entry["repoName"], commit_sha=entry["commitSha"], requested_by_user_id=current_user.id)
@@ -1022,7 +1022,7 @@ async def submit_verification(
         application.status = "pr_open"
         application.review_pr_number = pr.get("number")
         application.review_pr_url = pr.get("html_url")
-        application.reviewed_at = datetime.datetime.utcnow()
+        application.reviewed_at = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
         db.commit()
         return {"entry": next_entry, "pullRequest": marketplace_pull_request_payload(pr)}
     except HTTPException:
