@@ -485,7 +485,7 @@ def guest_client(db, users, allowed_views=None, alias="calm_otter", include_cour
     from utils.guest_access import hash_guest_token, new_guest_token
 
     token = new_guest_token()
-    now = __import__("datetime").datetime.utcnow()
+    now = __import__("datetime").datetime.now(__import__("datetime").timezone.utc).replace(tzinfo=None)
     session = GuestSession(
         alias=alias,
         token_hash=hash_guest_token(token),
@@ -521,7 +521,7 @@ def guest_client(db, users, allowed_views=None, alias="calm_otter", include_cour
 
 
 def add_attempt(db, enrollment, release_id, lesson_key, activity_key, client_id, elapsed, success=True):
-    from datetime import datetime
+    from datetime import datetime, timezone
 
     from database.database import MissionAttempt
 
@@ -532,8 +532,8 @@ def add_attempt(db, enrollment, release_id, lesson_key, activity_key, client_id,
         activity_key=activity_key,
         attempt_number=db.query(MissionAttempt).filter(MissionAttempt.enrollment_id == enrollment.id).count() + 1,
         client_attempt_id=client_id,
-        started_at=datetime.utcnow(),
-        ended_at=datetime.utcnow(),
+        started_at=datetime.now(timezone.utc).replace(tzinfo=None),
+        ended_at=datetime.now(timezone.utc).replace(tzinfo=None),
         outcome="succeeded" if success else "failed",
         completion_reason="objectives_met" if success else "failure_objective",
         objective_results=[{"key": "reach", "role": "completion", "status": "succeeded" if success else "pending"}],

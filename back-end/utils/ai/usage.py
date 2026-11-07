@@ -26,7 +26,7 @@ def purge_expired_usage(
     *,
     now: Optional[datetime.datetime] = None,
 ) -> int:
-    cutoff = (now or datetime.datetime.utcnow()) - datetime.timedelta(days=retention_days)
+    cutoff = (now or datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)) - datetime.timedelta(days=retention_days)
     deleted = db.query(AIUsageEvent).filter(AIUsageEvent.started_at < cutoff).delete(synchronize_session=False)
     return int(deleted or 0)
 
@@ -51,7 +51,7 @@ def ensure_quota(
     token_limit: Optional[int],
     estimated_input_tokens: int,
 ) -> None:
-    since = datetime.datetime.utcnow() - datetime.timedelta(seconds=USAGE_WINDOW_SECONDS)
+    since = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None) - datetime.timedelta(seconds=USAGE_WINDOW_SECONDS)
     base = db.query(AIUsageEvent).filter(AIUsageEvent.started_at >= since)
     # Reported browser/user-local runs cost nothing on a hosted provider, so they must not
     # consume the shared instance or provider budget. The per-user check stays unchanged.
@@ -96,7 +96,7 @@ def record_usage(
     input_tokens: Optional[int] = None,
     output_tokens: Optional[int] = None,
 ) -> None:
-    completed_at = datetime.datetime.utcnow()
+    completed_at = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
     settings = db.query(AIInstanceSettings).filter(AIInstanceSettings.id == 1).first()
     purge_expired_usage(db, settings.usage_retention_days if settings else DEFAULT_USAGE_RETENTION_DAYS, now=completed_at)
     db.add(AIUsageEvent(

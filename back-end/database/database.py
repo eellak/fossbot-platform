@@ -35,6 +35,11 @@ Base = declarative_base()
 JSON_DOCUMENT = JSON().with_variant(JSONB(), "postgresql")
 
 # Function to create the database tables
+def utc_now() -> datetime.datetime:
+    """Return current UTC datetime with naive tzinfo for database compatibility."""
+    return datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
+
+
 def getSessionLocal():
     return SessionLocal
 
@@ -235,8 +240,8 @@ class AIProviderConfig(Base):
     token_limit = Column(Integer)
     created_by_id = Column(Integer, ForeignKey('users.id'), nullable=False)
     updated_by_id = Column(Integer, ForeignKey('users.id'), nullable=False)
-    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)
 
 
 class AIInstanceSettings(Base):
@@ -253,7 +258,7 @@ class AIInstanceSettings(Base):
     usage_retention_days = Column(Integer, nullable=False, default=30)
     registry_version = Column(String(32), nullable=False, default="1")
     updated_by_id = Column(Integer, ForeignKey('users.id'), nullable=False)
-    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)
 
 
 class AIPolicyRule(Base):
@@ -277,8 +282,8 @@ class AIPolicyRule(Base):
     runtimes = Column(JSON_DOCUMENT)
     created_by_id = Column(Integer, ForeignKey('users.id'), nullable=False)
     updated_by_id = Column(Integer, ForeignKey('users.id'), nullable=False)
-    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)
 
 
 class AIUsageEvent(Base):
@@ -317,8 +322,8 @@ class SourceProviderConnection(Base):
     user_token_expires_at = Column(DateTime)
     user_refresh_token_encrypted = Column(String)
     user_refresh_token_expires_at = Column(DateTime)
-    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)
     user = relationship("User")
 
 
@@ -329,7 +334,7 @@ class MarketplaceRoleAssignment(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
     role = Column(String, nullable=False)
-    assigned_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+    assigned_at = Column(DateTime, default=utc_now, nullable=False)
     user = relationship("User")
 
 
@@ -346,7 +351,7 @@ class MarketplaceReport(Base):
     explanation = Column(Text, nullable=False)
     reporter_contact = Column(String)
     reporter_user_id = Column(Integer, ForeignKey('users.id'))
-    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
     resolved_at = Column(DateTime)
     reporter = relationship("User")
 
@@ -366,8 +371,8 @@ class MarketplaceModerationOverride(Base):
     active = Column(Boolean, default=True, nullable=False)
     reason = Column(Text, nullable=False)
     moderator_user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
-    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)
     moderator = relationship("User")
 
 
@@ -383,7 +388,7 @@ class MarketplaceModerationAction(Base):
     reason = Column(Text, nullable=False)
     moderator_user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
     report_id = Column(Integer, ForeignKey('marketplace_reports.id'))
-    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
     moderator = relationship("User")
     report = relationship("MarketplaceReport")
 
@@ -398,7 +403,7 @@ class MarketplaceVerificationRequest(Base):
     commit_sha = Column(String, nullable=False)
     status = Column(String, nullable=False, default="requested")
     requested_by_user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
-    requested_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+    requested_at = Column(DateTime, default=utc_now, nullable=False)
     review_pr_number = Column(Integer)
     review_pr_url = Column(String)
     reviewed_at = Column(DateTime)
@@ -424,8 +429,8 @@ class LocalStage(Base):
     preview_image = Column(LargeBinary)
     preview_mime = Column(String(64))
     provenance = Column(JSON_DOCUMENT)
-    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)
 
     user = relationship("User")
 
@@ -451,7 +456,7 @@ class LocalMarketplaceSubmission(Base):
     preview_image = Column(LargeBinary)
     preview_mime = Column(String(64))
     status = Column(String(24), nullable=False, default="pending")
-    requested_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+    requested_at = Column(DateTime, default=utc_now, nullable=False)
     reviewed_at = Column(DateTime)
     reviewed_by_user_id = Column(Integer, ForeignKey('users.id'))
     review_reason = Column(Text)
@@ -484,8 +489,8 @@ class LocalMarketplacePublication(Base):
     preview_mime = Column(String(64))
     current_submission_id = Column(Integer, ForeignKey('local_marketplace_submissions.id'))
     active = Column(Boolean, nullable=False, default=True)
-    published_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow, nullable=False)
+    published_at = Column(DateTime, default=utc_now, nullable=False)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)
     unpublished_at = Column(DateTime)
 
     stage = relationship("LocalStage")
@@ -498,7 +503,7 @@ class Projects(Base):
     name =  Column(String, nullable=False)
     description = Column(String)
     project_type = Column(String, default="python")
-    date_created = Column(DateTime, default=datetime.datetime.utcnow)
+    date_created = Column(DateTime, default=utc_now)
     code = Column(String)
     share_token = Column(String(43), nullable=True, unique=True, index=True)
     stage_source_type = Column(String)
@@ -534,8 +539,8 @@ class Course(Base):
     prerequisites = Column(Text)
     tags = Column(JSON)
     latest_published_release_id = Column(Integer, ForeignKey('course_releases.id', use_alter=True, name='fk_courses_latest_release'))
-    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)
     author = relationship("User")
     lessons = relationship("Lesson", back_populates="course", order_by="Lesson.position")
     releases = relationship("CourseRelease", back_populates="course", foreign_keys="CourseRelease.course_id")
@@ -562,8 +567,8 @@ class Lesson(Base):
     starter_content = Column(JSON)
     simulator_settings = Column(JSON)
     archived = Column(Boolean, nullable=False, default=False)
-    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)
     # Retained while deprecated lecture clients migrate to structured activities.
     description = Column(String)
     image_url = Column(String)
@@ -590,7 +595,7 @@ class CourseRelease(Base):
     schema_version = Column(Integer, nullable=False)
     snapshot = Column(JSON, nullable=False)
     created_by_id = Column(Integer, ForeignKey('users.id'), nullable=False)
-    published_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+    published_at = Column(DateTime, default=utc_now, nullable=False)
     course = relationship("Course", back_populates="releases", foreign_keys=[course_id])
     created_by = relationship("User")
 
@@ -601,7 +606,7 @@ class GuestSession(Base):
     id = Column(Integer, primary_key=True, index=True)
     alias = Column(String(64), nullable=False)
     token_hash = Column(String(64), nullable=False, unique=True, index=True)
-    created_at = Column(DateTime, nullable=False, default=datetime.datetime.utcnow)
+    created_at = Column(DateTime, nullable=False, default=utc_now)
     expires_at = Column(DateTime, nullable=False)
 
 
@@ -615,7 +620,7 @@ class GuestInstanceSettings(Base):
     ai_enabled = Column(Boolean, nullable=False, default=False)
     ai_provider_ids = Column(JSON_DOCUMENT, nullable=False, default=list)
     updated_by_id = Column(Integer, ForeignKey('users.id'), nullable=False)
-    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)
 
 
 class Enrollment(Base):
@@ -636,7 +641,7 @@ class Enrollment(Base):
     assignment_id = Column(Integer, ForeignKey('course_assignments.id'), nullable=True)
     course_id = Column(Integer, ForeignKey('courses.id'), nullable=False)
     active_release_id = Column(Integer, ForeignKey('course_releases.id'), nullable=False)
-    enrolled_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+    enrolled_at = Column(DateTime, default=utc_now, nullable=False)
     completed_at = Column(DateTime)
     release_updated_at = Column(DateTime)
 
@@ -656,8 +661,8 @@ class LessonProgress(Base):
     started_at = Column(DateTime)
     completed_at = Column(DateTime)
     completion_method = Column(String)
-    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)
 
 
 class LessonWorkspace(Base):
@@ -675,9 +680,9 @@ class LessonWorkspace(Base):
     saved_content = Column(JSON)
     origin = Column(JSON)
     revision = Column(Integer, nullable=False, default=1)
-    initialized_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
-    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow, nullable=False)
+    initialized_at = Column(DateTime, default=utc_now, nullable=False)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)
 
 
 class ActivityAnswer(Base):
@@ -703,8 +708,8 @@ class ActivityAnswer(Base):
     first_submitted_at = Column(DateTime, nullable=False)
     last_submitted_at = Column(DateTime, nullable=False)
     satisfied_at = Column(DateTime)
-    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)
 
 
 class MissionAttempt(Base):
@@ -744,7 +749,7 @@ class MissionAttempt(Base):
     score_config_version = Column(Integer)
     score_config_hash = Column(String)
     score_result = Column(JSON)
-    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
 
 
 class ClassGroup(Base):
@@ -761,8 +766,8 @@ class ClassGroup(Base):
     leaderboards_enabled = Column(Boolean, nullable=False, default=False)
     ai_blocked = Column(Boolean, nullable=False, default=False, server_default=false())
     challenge_season = Column(Integer, nullable=False, default=1)
-    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)
 
 
 class ClassMembership(Base):
@@ -783,8 +788,8 @@ class ClassMembership(Base):
     guest_session_id = Column(Integer, ForeignKey('guest_sessions.id'), nullable=True, index=True)
     display_alias = Column(String, nullable=False)
     leaderboard_opt_in = Column(Boolean, nullable=False, default=False)
-    joined_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow, nullable=False)
+    joined_at = Column(DateTime, default=utc_now, nullable=False)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)
     removed_at = Column(DateTime)
 
 
@@ -804,8 +809,8 @@ class CourseAssignment(Base):
     release_id = Column(Integer, ForeignKey('course_releases.id'), nullable=False)
     update_policy = Column(String, nullable=False, default="student_choice")
     due_at = Column(DateTime)
-    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)
 
 
 class ClassChallenge(Base):
@@ -830,8 +835,8 @@ class ClassChallenge(Base):
     board_type = Column(String, nullable=False, default="highest_score")
     tie_tolerance = Column(Float, nullable=False, default=0)
     season = Column(Integer, nullable=False, default=1)
-    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)
 
 
 # Import compatibility for code that has not yet adopted canonical product naming.
@@ -851,7 +856,7 @@ class WebsiteEntry(Base):
     key = Column(String(80), unique=True, nullable=False)
     kind = Column(String(16), nullable=False)
     deleted_at = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
 
 
 class WebsiteTranslation(Base):
@@ -869,7 +874,7 @@ class WebsiteTranslation(Base):
     published = Column(JSON_DOCUMENT, nullable=True)
     published_slug = Column(String(160), nullable=True)
     published_at = Column(DateTime, nullable=True)
-    updated_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=utc_now, nullable=False)
 
 
 class WebsiteRevision(Base):
@@ -879,7 +884,7 @@ class WebsiteRevision(Base):
     revision = Column(Integer, nullable=False)
     snapshot = Column(JSON_DOCUMENT, nullable=False)
     actor_id = Column(Integer, ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
-    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
 
 
 class WebsiteMedia(Base):
@@ -899,7 +904,7 @@ class WebsiteApiToken(Base):
     token_hash = Column(String(64), unique=True, index=True, nullable=False)
     prefix = Column(String(16), nullable=False)
     allow_publish = Column(Boolean, default=False, nullable=False)
-    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
     expires_at = Column(DateTime, nullable=False)
     last_used_at = Column(DateTime, nullable=True)
     revoked_at = Column(DateTime, nullable=True)

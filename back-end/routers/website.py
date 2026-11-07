@@ -244,7 +244,7 @@ def trash_entry(key:str, user=Depends(editor), db:Session=Depends(get_db)):
     publisher(user, db)
     parent=entry(db,key)
     if parent.kind=='home': raise HTTPException(409, 'The homepage cannot be deleted. Unpublish its translations instead.')
-    parent.deleted_at=datetime.datetime.utcnow();commit(db)
+    parent.deleted_at=datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None);commit(db)
     return {'ok':True}
 
 
@@ -318,11 +318,11 @@ def save_translation(key:str, locale:str, data:TranslationInput, user=Depends(ed
             require_active_media(db, shared)
             sibling.sections = shared
             sibling.revision += 1
-            sibling.updated_at = datetime.datetime.utcnow()
+            sibling.updated_at = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
             db.add(WebsiteRevision(translation_id=sibling.id, revision=sibling.revision, snapshot=snapshot(sibling), actor_id=user.id))
     if not row: row=WebsiteTranslation(entry_id=parent.id,locale=locale); db.add(row)
     row.slug=data.slug; row.title=data.title.strip(); row.description=data.description; row.sections=sections
-    row.revision = (row.revision or 0)+1; row.updated_at=datetime.datetime.utcnow()
+    row.revision = (row.revision or 0)+1; row.updated_at=datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
     try: db.flush()
     except IntegrityError:
         db.rollback()
@@ -338,7 +338,7 @@ def publish(key:str,locale:str,expectedRevision:int,user=Depends(editor),db: Ses
     row=translation(db,key,locale,expectedRevision)
     if not row.sections: raise HTTPException(422,'Add content before publishing')
     require_active_media(db,row.sections)
-    row.published={**snapshot(row), 'sections': public_sections(row.sections)}; row.published_slug=row.slug; row.published_at=datetime.datetime.utcnow(); commit(db)
+    row.published={**snapshot(row), 'sections': public_sections(row.sections)}; row.published_slug=row.slug; row.published_at=datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None); commit(db)
     return draft(row)
 
 
@@ -383,7 +383,7 @@ def trash_media(media_id:int,user=Depends(editor),db:Session=Depends(get_db)):
     for row in db.query(WebsiteTranslation).join(WebsiteEntry).filter(WebsiteEntry.deleted_at.is_(None)).all():
         if media_id in media_references([row.sections,row.published]): used.append(f'{row.title} ({row.locale})')
     if used: raise HTTPException(409, 'Photo is used by: '+', '.join(used[:10])+'. Remove it from drafts and published content first.')
-    media.deleted_at=datetime.datetime.utcnow();commit(db)
+    media.deleted_at=datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None);commit(db)
     return {'ok':True}
 
 
@@ -515,7 +515,7 @@ def create_api_token(data:ApiTokenInput, response:Response, user=Depends(editor)
     row=WebsiteApiToken(user_id=user.id, name=data.name.strip(),
                         token_hash=hashlib.sha256(secret.encode()).hexdigest(), prefix=secret[:12],
                         allow_publish=data.allow_publish,
-                        expires_at=datetime.datetime.utcnow()+datetime.timedelta(days=data.expires_in_days))
+                        expires_at=datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)+datetime.timedelta(days=data.expires_in_days))
     db.add(row);commit(db)
     response.headers['Cache-Control']='no-store'
     return {**api_token_info(row), 'token':secret}
@@ -527,7 +527,7 @@ def revoke_api_token(token_id:int, user=Depends(editor), db:Session=Depends(get_
     row=db.get(WebsiteApiToken,token_id)
     if not row: raise HTTPException(404, 'Token not found')
     if row.revoked_at is None:
-        row.revoked_at=datetime.datetime.utcnow();commit(db)
+        row.revoked_at=datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None);commit(db)
     return api_token_info(row)
 
 
@@ -536,7 +536,7 @@ def website_api_identity(authorization:str=Header(default=''), db:Session=Depend
     invalid=HTTPException(401, 'Invalid, expired or revoked website API token', headers={'WWW-Authenticate':'Bearer'})
     if scheme.lower()!='bearer' or not secret.startswith('fbwp_') or len(secret)>100: raise invalid
     row=db.query(WebsiteApiToken).filter_by(token_hash=hashlib.sha256(secret.encode()).hexdigest()).first()
-    now=datetime.datetime.utcnow()
+    now=datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
     if not row or row.revoked_at is not None or row.expires_at<=now: raise invalid
     owner=db.get(User,row.user_id)
     if not owner or not owner.activated or owner.access_revoked or owner.role!=UserRole.ADMIN: raise invalid
@@ -575,7 +575,7 @@ def api_create_post(data:ApiPostInput, identity=Depends(website_api_identity), d
         db.rollback();raise HTTPException(409,'This URL or translation already exists')
     db.add(WebsiteRevision(translation_id=row.id,revision=1,snapshot=snapshot(row),actor_id=owner.id))
     if data.publish:
-        row.published=snapshot(row);row.published_slug=row.slug;row.published_at=datetime.datetime.utcnow()
+        row.published=snapshot(row);row.published_slug=row.slug;row.published_at=datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
     commit(db)
     return {'key':parent.key,'kind':'post',**draft(row),
             'url':f'/news/{row.locale}/{row.slug}' if data.publish else None}

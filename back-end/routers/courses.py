@@ -1260,7 +1260,7 @@ def publish_course(course_id: int, user: User = Depends(get_current_user), db: S
         schema_version=RELEASE_SCHEMA_VERSION,
         snapshot=snapshot,
         created_by_id=user.id,
-        published_at=datetime.datetime.utcnow(),
+        published_at=datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None),
     )
     db.add(release)
     db.flush()
@@ -1455,7 +1455,7 @@ def complete_progress(
     lesson_key: str,
     method: str,
 ) -> None:
-    now = datetime.datetime.utcnow()
+    now = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
     progress = progress_row(db, enrollment, lesson_key)
     if progress is None:
         progress = LessonProgress(
@@ -1509,7 +1509,7 @@ def initialize_workspace(db: Session, enrollment: Enrollment, release: CourseRel
     if existing:
         return existing
 
-    now = datetime.datetime.utcnow()
+    now = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
     content = lesson.get("starterContent")
     origin: dict[str, Any] = {"type": "fresh", "baseline": content}
     if lesson["startMode"] == "inherit_previous_code":
@@ -1569,7 +1569,7 @@ def refresh_course_completion(db: Session, enrollment: Enrollment, release: Cour
         LessonProgress.lesson_key.in_(lesson_keys),
         LessonProgress.state == "completed",
     ).count() if lesson_keys else 0
-    enrollment.completed_at = datetime.datetime.utcnow() if lesson_keys and completed == len(lesson_keys) else None
+    enrollment.completed_at = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None) if lesson_keys and completed == len(lesson_keys) else None
 
 
 def enrollment_payload(db: Session, enrollment: Enrollment) -> dict[str, Any]:
@@ -1740,7 +1740,7 @@ def start_lesson(
             release_id=release.id,
             lesson_key=lesson_key,
             state="in_progress",
-            started_at=datetime.datetime.utcnow(),
+            started_at=datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None),
         )
         db.add(progress)
         safe_commit(db)
@@ -1871,7 +1871,7 @@ def submit_activity(
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
 
-    now = datetime.datetime.utcnow()
+    now = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
     if answer is None:
         answer = ActivityAnswer(
             enrollment_id=enrollment.id,
@@ -2188,7 +2188,7 @@ def submit_mission_attempt(
     )
     db.add(attempt)
 
-    now = datetime.datetime.utcnow()
+    now = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
     answer = activity_answer_row(db, enrollment, lesson_key, activity_key)
     if answer is None:
         answer = ActivityAnswer(
@@ -2334,7 +2334,7 @@ def apply_release_update(db: Session, enrollment: Enrollment, active: CourseRele
         .where(Enrollment.id == enrollment.id, Enrollment.active_release_id == active.id)
         .values(
             active_release_id=latest.id,
-            release_updated_at=datetime.datetime.utcnow(),
+            release_updated_at=datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None),
             completed_at=None,
         )
         .execution_options(synchronize_session=False)
@@ -2384,7 +2384,7 @@ def apply_release_update(db: Session, enrollment: Enrollment, active: CourseRele
                 saved_content=workspace.saved_content,
                 origin={**(workspace.origin or {}), "carriedFromReleaseId": active.id, "carriedFromWorkspaceRevision": workspace.revision},
                 revision=1,
-                initialized_at=datetime.datetime.utcnow(),
+                initialized_at=datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None),
             ))
         previous_activities = {item["key"]: item for item in previous.get("activities", [])} if previous else {}
         for activity in lesson.get("activities", []):

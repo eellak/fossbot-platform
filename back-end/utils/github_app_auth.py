@@ -185,13 +185,13 @@ def github_new_repo_url(repo_name: str, description: str = "FOSSBot stage", visi
 def _expires_at(seconds: Optional[int]) -> Optional[datetime.datetime]:
     if not seconds:
         return None
-    return datetime.datetime.utcnow() + datetime.timedelta(seconds=int(seconds))
+    return datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None) + datetime.timedelta(seconds=int(seconds))
 
 
 def token_expired(expires_at: Optional[datetime.datetime], skew_seconds: int = 120) -> bool:
     if not expires_at:
         return False
-    return expires_at <= datetime.datetime.utcnow() + datetime.timedelta(seconds=skew_seconds)
+    return expires_at <= datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None) + datetime.timedelta(seconds=skew_seconds)
 
 
 def _oauth_token_request(body: dict[str, str]) -> dict[str, Any]:

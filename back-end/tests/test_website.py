@@ -244,7 +244,7 @@ def test_revoked_expired_and_inactive_owner_tokens_are_denied(cms_client,db,user
     minted=new()
     assert client.post(f"/website/api-tokens/{minted['id']}/revoke").status_code==200
     assert post(minted['token']).status_code==401
-    expired=new();db.get(WebsiteApiToken,expired['id']).expires_at=datetime.datetime.utcnow()-datetime.timedelta(seconds=1);db.commit()
+    expired=new();db.get(WebsiteApiToken,expired['id']).expires_at=datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)-datetime.timedelta(seconds=1);db.commit()
     assert post(expired['token']).status_code==401
     for field,value in [('activated',False),('access_revoked',True),('role',users[0].role)]:
         minted=new();old=getattr(users[3],field);setattr(users[3],field,value);db.commit()

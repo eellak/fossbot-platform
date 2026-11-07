@@ -361,7 +361,7 @@ def create_group(
     db: Session = Depends(get_db),
 ):
     require_teacher(user)
-    now = datetime.datetime.utcnow()
+    now = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
     group = ClassGroup(
         teacher_id=user.id,
         name=request.name,
@@ -398,7 +398,7 @@ def update_group(
     group = owned_group_or_404(db, user, group_id)
     for field, value in request.model_dump(exclude_unset=True).items():
         setattr(group, field, value)
-    group.updated_at = datetime.datetime.utcnow()
+    group.updated_at = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
     db.commit()
     db.refresh(group)
     return teacher_group_payload(db, group)
@@ -413,7 +413,7 @@ def regenerate_join_code(
     require_teacher(user)
     group = owned_group_or_404(db, user, group_id)
     group.join_code = new_join_code(db)
-    group.updated_at = datetime.datetime.utcnow()
+    group.updated_at = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
     db.commit()
     return teacher_group_payload(db, group)
 
@@ -434,7 +434,7 @@ def reset_challenge_season(
         ClassChallenge.assignment_id.in_(assignment_ids),
         ClassChallenge.season == previous,
     ).all() if assignment_ids else []
-    now = datetime.datetime.utcnow()
+    now = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
     for challenge in challenges:
         assignment = next(item for item in assignments if item.id == challenge.assignment_id)
         release = db.query(CourseRelease).filter(CourseRelease.id == assignment.release_id).one()
@@ -548,7 +548,7 @@ def join_group(
             ClassMembership.group_id == group.id,
             ClassMembership.student_id == participant.user.id,
         ).first()
-    now = datetime.datetime.utcnow()
+    now = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
     if membership:
         if membership.removed_at is not None:
             membership.removed_at = None
@@ -597,7 +597,7 @@ def update_own_membership(
         raise HTTPException(status_code=403, detail="Guest aliases cannot be changed")
     for field, value in request.model_dump(exclude_unset=True).items():
         setattr(membership, field, value)
-    membership.updated_at = datetime.datetime.utcnow()
+    membership.updated_at = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
     db.commit()
     return student_group_payload(db, membership)
 
@@ -610,7 +610,7 @@ def leave_group(
 ):
     require_student(participant)
     membership = active_membership_or_404(db, participant, group_id)
-    membership.removed_at = datetime.datetime.utcnow()
+    membership.removed_at = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
     membership.leaderboard_opt_in = False
     db.commit()
 
@@ -631,7 +631,7 @@ def remove_member(
     ).first()
     if membership is None:
         raise HTTPException(status_code=404, detail="Class member not found")
-    membership.removed_at = datetime.datetime.utcnow()
+    membership.removed_at = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
     membership.leaderboard_opt_in = False
     db.commit()
 
@@ -700,7 +700,7 @@ def update_assignment(
             Enrollment.guest_session_id.is_not(None),
         ).all():
             enrollment.active_release_id = release.id
-            enrollment.release_updated_at = datetime.datetime.utcnow()
+            enrollment.release_updated_at = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
             enrollment.completed_at = None
     if "due_at" in values and values["due_at"] is not None:
         values["due_at"] = values["due_at"].replace(tzinfo=None)

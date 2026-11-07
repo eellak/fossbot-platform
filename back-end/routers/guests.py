@@ -50,7 +50,7 @@ def create_guest_session(response: Response, request: Request, db: Session = Dep
     if not settings["allowed_views"]:
         raise HTTPException(status_code=403, detail="Guest access is not available")
     token = new_guest_token()
-    now = datetime.datetime.utcnow()
+    now = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
     session = GuestSession(
         alias=new_guest_alias(db),
         token_hash=hash_guest_token(token),

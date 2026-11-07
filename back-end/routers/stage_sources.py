@@ -294,7 +294,7 @@ def upsert_connection(
         connection.user_refresh_token_expires_at = token_data.get(
             "refresh_token_expires_at"
         )
-    connection.updated_at = datetime.datetime.utcnow()
+    connection.updated_at = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
     db.commit()
     db.refresh(connection)
     return connection
@@ -334,7 +334,7 @@ def get_user_token(db: Session, connection: SourceProviderConnection) -> str:
         connection.user_refresh_token_expires_at = token_data.get(
             "refresh_token_expires_at"
         )
-    connection.updated_at = datetime.datetime.utcnow()
+    connection.updated_at = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
     db.commit()
     db.refresh(connection)
     token = decrypt_secret(connection.user_token_encrypted)
@@ -369,7 +369,7 @@ def sync_installation(
     )
     connection.installation_id = str(selected["id"])
     connection.repository_selection = selected.get("repository_selection")
-    connection.updated_at = datetime.datetime.utcnow()
+    connection.updated_at = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
     db.commit()
     db.refresh(connection)
     return connection
@@ -400,7 +400,7 @@ def commit_message(user_message: Optional[str]) -> str:
     message = (user_message or "").strip()
     if message:
         return f"feat(stage): {message}"
-    return f"chore(stage): save — {datetime.datetime.utcnow().isoformat()}Z"
+    return f"chore(stage): save — {datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None).isoformat()}Z"
 
 
 def content_bytes(value: Any) -> bytes:
@@ -487,7 +487,7 @@ async def github_setup(
         connection = connection_for_user(db, user_id)
         if connection:
             connection.installation_id = str(installation_id)
-            connection.updated_at = datetime.datetime.utcnow()
+            connection.updated_at = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
             db.commit()
 
     suffix = "github_installed=1"

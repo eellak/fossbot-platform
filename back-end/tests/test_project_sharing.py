@@ -120,7 +120,7 @@ def test_guest_editor_policy_precedes_content_and_stage_work(api, db, users, pro
 def test_guest_credentials_read_but_never_manage(api, db, users, project):
     token = enable(api, project, users[0])
     raw = "guest_" + secrets.token_urlsafe(32)
-    db.add(GuestSession(alias="test_guest", token_hash=hash_guest_token(raw), expires_at=datetime.datetime.utcnow() + datetime.timedelta(days=1)))
+    db.add(GuestSession(alias="test_guest", token_hash=hash_guest_token(raw), expires_at=datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None) + datetime.timedelta(days=1)))
     db.commit()
     main.app.dependency_overrides.pop(get_participant)
     main.app.dependency_overrides.pop(main.get_current_user)
@@ -131,7 +131,7 @@ def test_guest_credentials_read_but_never_manage(api, db, users, project):
     assert api.get(f"/shared-projects/{token}").status_code == 401
     assert api.get(f"/shared-projects/{token}").headers["cache-control"] == "no-store"
     session = db.query(GuestSession).one()
-    session.expires_at = datetime.datetime.utcnow() - datetime.timedelta(seconds=1)
+    session.expires_at = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None) - datetime.timedelta(seconds=1)
     db.commit()
     assert api.get(f"/shared-projects/{token}", headers=headers).status_code == 401
 

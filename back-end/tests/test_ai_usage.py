@@ -57,7 +57,7 @@ def test_reported_browser_usage_does_not_consume_provider_or_instance_limits(db,
     db.flush()
     settings = AIInstanceSettings(id=1, enabled=True, registry_version="1", updated_by_id=admin.id)
     db.add(settings)
-    now = datetime.datetime.utcnow()
+    now = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
     db.add(event(student.id, provider.id, "browser_usage_1234", "browser", now))
     db.commit()
 

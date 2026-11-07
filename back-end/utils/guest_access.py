@@ -123,7 +123,7 @@ def save_guest_settings(db: Session, request: GuestSettingsUpdate, admin_id: int
     row.ai_enabled = request.ai_enabled
     row.ai_provider_ids = list(request.ai_provider_ids)
     row.updated_by_id = admin_id
-    row.updated_at = datetime.datetime.utcnow()
+    row.updated_at = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
     db.commit()
     db.refresh(row)
     return row
@@ -173,7 +173,7 @@ async def get_guest_session(
     session = db.query(GuestSession).filter(
         GuestSession.token_hash == hash_guest_token(credentials.credentials),
     ).first()
-    if session is None or session.expires_at <= datetime.datetime.utcnow():
+    if session is None or session.expires_at <= datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None):
         raise unauthorized
     return session
 

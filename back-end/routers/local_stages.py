@@ -349,7 +349,7 @@ async def update_local_stage(stage_id: int, request: LocalStageSaveRequest, curr
         stage.preview_image = preview_image
         stage.preview_mime = preview_mime
     stage.revision += 1
-    stage.updated_at = datetime.datetime.utcnow()
+    stage.updated_at = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
     try:
         db.commit()
     except IntegrityError as error:
@@ -564,7 +564,7 @@ async def unpublish_local_stage(stage_id: int, current_user: User = Depends(get_
     publication = db.query(LocalMarketplacePublication).filter(LocalMarketplacePublication.stage_id == stage.id).first()
     if not pending and (not publication or not publication.active):
         raise stage_error(404, "not_published", "This local stage has no active publication or pending request.")
-    now = datetime.datetime.utcnow()
+    now = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
     for submission in pending:
         submission.status = "cancelled"
         submission.reviewed_at = now
@@ -622,7 +622,7 @@ async def review_local_publication(submission_id: int, request: LocalMarketplace
         raise stage_error(409, "publish_request_unavailable", "This publication request is no longer awaiting review.")
     if not request.approved and not (request.reason or "").strip():
         raise stage_error(400, "review_reason_required", "Add a reason when rejecting a publication request.")
-    now = datetime.datetime.utcnow()
+    now = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
     submission.reviewed_at = now
     submission.reviewed_by_user_id = current_user.id
     submission.review_reason = (request.reason or "").strip() or None
