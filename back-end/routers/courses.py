@@ -829,18 +829,19 @@ def course_payload(course: Course, *, include_lessons: bool = False) -> dict[str
 
 def release_course_payload(course: Course, release: CourseRelease) -> dict[str, Any]:
     payload = course_payload(course)
-    snapshot_course = release.snapshot["course"]
+    snapshot = release.snapshot if isinstance(release.snapshot, dict) else {}
+    snapshot_course = snapshot.get("course", {}) if isinstance(snapshot.get("course"), dict) else {}
     payload.update({
-        "title": snapshot_course["title"],
-        "description": snapshot_course["description"],
-        "learning_objectives": snapshot_course["learningObjectives"],
-        "visibility": snapshot_course["visibility"],
-        "cover_image_url": snapshot_course.get("coverImageUrl"),
-        "age_range": snapshot_course.get("ageRange"),
-        "difficulty": snapshot_course.get("difficulty"),
-        "estimated_duration_minutes": snapshot_course.get("estimatedDurationMinutes"),
-        "prerequisites": snapshot_course.get("prerequisites"),
-        "tags": snapshot_course.get("tags"),
+        "title": snapshot_course.get("title", course.title),
+        "description": snapshot_course.get("description", course.description),
+        "learning_objectives": snapshot_course.get("learningObjectives", []),
+        "visibility": snapshot_course.get("visibility", course.visibility),
+        "cover_image_url": snapshot_course.get("coverImageUrl", course.cover_image_url),
+        "age_range": snapshot_course.get("ageRange", course.age_range),
+        "difficulty": snapshot_course.get("difficulty", course.difficulty),
+        "estimated_duration_minutes": snapshot_course.get("estimatedDurationMinutes", course.estimated_duration_minutes),
+        "prerequisites": snapshot_course.get("prerequisites", course.prerequisites),
+        "tags": snapshot_course.get("tags", course.tags or []),
         "has_unpublished_changes": False,
         "unpublished_change_summary": {"course": False, "outline": False, "lesson_keys": [], "remote_stage_changes": []},
         "author_name": f"{course.author.firstname} {course.author.lastname}".strip() or course.author.username,
@@ -848,7 +849,7 @@ def release_course_payload(course: Course, release: CourseRelease) -> dict[str, 
             "id": release.id,
             "version": release.version,
             "published_at": release.published_at,
-            "lessons": student_release_lessons(release.snapshot["lessons"]),
+            "lessons": student_release_lessons(snapshot.get("lessons", []) if isinstance(snapshot.get("lessons"), list) else []),
         },
     })
     return payload
@@ -1303,7 +1304,11 @@ def list_public_courses(
     releases = {release.id: release for release in db.query(CourseRelease).filter(
         CourseRelease.id.in_([course.latest_published_release_id for course in courses])
     ).all()} if courses else {}
-    return [release_course_payload(course, releases[course.latest_published_release_id]) for course in courses]
+    return [
+        release_course_payload(course, releases[course.latest_published_release_id])
+        for course in courses
+        if course.latest_published_release_id in releases
+    ]
 
 
 @router.get("/courses/{course_id}", response_model=StudentCourseResponse)
@@ -1325,7 +1330,9 @@ def read_published_course(
         release_id = course.latest_published_release_id
     else:
         raise HTTPException(status_code=404, detail="Course not found")
-    release = db.query(CourseRelease).filter(CourseRelease.id == release_id).one()
+    release = db.query(CourseRelease).filter(CourseRelease.id == release_id).first()
+    if release is None:
+        raise HTTPException(status_code=404, detail="Course release not found")
     return release_course_payload(course, release)
 
 
@@ -1380,7 +1387,9 @@ def owned_enrollment_or_404(db: Session, actor: Union[User, Participant], enroll
 
 
 def release_lessons(release: CourseRelease) -> list[dict[str, Any]]:
-    return sorted(release.snapshot.get("lessons", []), key=lambda lesson: lesson["position"])
+    snapshot = release.snapshot if isinstance(release.snapshot, dict) else {}
+    lessons = snapshot.get("lessons", []) if isinstance(snapshot.get("lessons"), list) else []
+    return sorted(lessons, key=lambda lesson: lesson.get("position", 0))
 
 
 def lesson_for_release_or_404(release: CourseRelease, lesson_key: str) -> dict[str, Any]:

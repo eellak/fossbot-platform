@@ -1428,3 +1428,39 @@ def test_mission_does_not_replace_self_completion(client_for, users):
     completed = learner.post(f"/enrollments/{enrollment['id']}/lessons/{lesson['lesson_key']}/complete")
     assert completed.status_code == 200
     assert completed.json()["progress"][0]["completion_method"] == "self"
+
+
+def test_read_published_course_nonexistent_release_returns_404(client_for, users, db):
+    tutor, _, student, _ = users
+    teacher = client_for(tutor)
+    course = create_course(teacher, title="Course with missing release")
+    add_lesson(teacher, course["id"])
+    teacher.post(f"/courses/{course['id']}/publish")
+
+    db_course = db.query(Course).filter(Course.id == course["id"]).one()
+    db_course.latest_published_release_id = 999999
+    db.commit()
+
+    learner = client_for(student)
+    response = learner.get(f"/courses/{course['id']}")
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Course release not found"
+
+
+def test_list_public_courses_skips_orphaned_releases(client_for, users, db):
+    tutor, _, student, _ = users
+    teacher = client_for(tutor)
+    course = create_course(teacher, title="Orphaned release course")
+    add_lesson(teacher, course["id"])
+    teacher.post(f"/courses/{course['id']}/publish")
+
+    db_course = db.query(Course).filter(Course.id == course["id"]).one()
+    db_course.latest_published_release_id = 999998
+    db.commit()
+
+    learner = client_for(student)
+    response = learner.get("/courses")
+    assert response.status_code == 200
+    returned_ids = [c["id"] for c in response.json()]
+    assert course["id"] not in returned_ids
+
