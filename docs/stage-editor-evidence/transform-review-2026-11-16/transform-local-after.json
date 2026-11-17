@@ -1,0 +1,256 @@
+[
+  {
+    "key": "fossbot.stageBuilder.preferences.v1:guest",
+    "value": {
+      "buildDrawerOpen": false,
+      "captureKeyboardInViewport": true,
+      "controlScheme": "legacyGizmo",
+      "focusCanvasEnabled": false,
+      "keyboardShortcutsEnabled": true,
+      "lockMode": "stopAtFirstHit",
+      "rotationSnapPreset": "15",
+      "showAdvancedInspector": false,
+      "snapPreset": "fine",
+      "styleVariant": "fossbot",
+      "transformSpace": "local"
+    }
+  },
+  {
+    "key": "fossbot.stageBuilder.recoveryDraft.v1:guest",
+    "value": {
+      "recoveryId": "e28cfb56-e712-46fa-9077-5d716eda453d",
+      "savedAt": "2026-11-16T10:45:59.947Z",
+      "sourceFingerprint": "1288c5c6c169b3861a2ad587d3aa418d544d579fcd6380fddf357e807009e05d",
+      "sourceLocator": "New stage",
+      "stageRecord": {
+        "config": [
+          {
+            "color": "#ddf0fb",
+            "mode": "color",
+            "type": "skybox"
+          },
+          {
+            "dimensions": [
+              10,
+              10
+            ],
+            "material": {
+              "color": "dodgerblue"
+            },
+            "name": "floor",
+            "offset": [
+              0,
+              0
+            ],
+            "repeat": [
+              25,
+              25
+            ],
+            "texture": "",
+            "type": "floor"
+          },
+          {
+            "castShadow": true,
+            "dimensions": [
+              1.6,
+              0.12,
+              0.45
+            ],
+            "immovable": true,
+            "mass": 0,
+            "material": {
+              "color": "#78909c"
+            },
+            "name": "bridge deck",
+            "orientation": [
+              0,
+              0.7853981633974483,
+              0
+            ],
+            "position": [
+              0.282842712474619,
+              0.32,
+              -0.282842712474619
+            ],
+            "type": "cube"
+          },
+          {
+            "castShadow": true,
+            "dimensions": [
+              0.18,
+              0.3,
+              0.45
+            ],
+            "immovable": true,
+            "mass": 0,
+            "material": {
+              "color": "#546e7a"
+            },
+            "name": "bridge support A",
+            "orientation": [
+              0,
+              0,
+              0
+            ],
+            "position": [
+              -0.55,
+              0.15,
+              0
+            ],
+            "type": "cube"
+          },
+          {
+            "castShadow": true,
+            "dimensions": [
+              0.18,
+              0.3,
+              0.45
+            ],
+            "immovable": true,
+            "mass": 0,
+            "material": {
+              "color": "#546e7a"
+            },
+            "name": "bridge support B",
+            "orientation": [
+              0,
+              0,
+              0
+            ],
+            "position": [
+              0.55,
+              0.15,
+              0
+            ],
+            "type": "cube"
+          }
+        ],
+        "createdAt": "2026-11-16T10:43:41.697Z",
+        "description": "",
+        "editor": {
+          "attachedOrder": {},
+          "defaultRotationSnapPreset": "15",
+          "defaultSnapPreset": "fine",
+          "floor": {
+            "color": "dodgerblue",
+            "dimensions": [
+              10,
+              10
+            ],
+            "name": "floor",
+            "offset": [
+              0,
+              0
+            ],
+            "repeat": [
+              25,
+              25
+            ],
+            "texture": ""
+          },
+          "gridSize": 0.5,
+          "gridVisible": false,
+          "groups": [
+            {
+              "createdAt": "2026-11-16T10:43:59.965Z",
+              "id": "stage_mwj4ypgd_dxvvz0i",
+              "name": "Bridge",
+              "objectIds": [
+                "stage_mwj4ypgd_8kt48co",
+                "stage_mwj4ypgd_44spix8",
+                "stage_mwj4ypgd_t7p1kp0"
+              ],
+              "updatedAt": "2026-11-16T10:43:59.965Z"
+            }
+          ],
+          "hierarchyOrder": [
+            {
+              "id": "stage_mwj4ypgd_dxvvz0i",
+              "kind": "group"
+            }
+          ],
+          "lastMovementSnapPreset": "fine",
+          "objects": [
+            {
+              "color": "#78909c",
+              "dimensions": [
+                1.6,
+                0.12,
+                0.45
+              ],
+              "groupId": "stage_mwj4ypgd_dxvvz0i",
+              "id": "stage_mwj4ypgd_8kt48co",
+              "immovable": true,
+              "kind": "cube",
+              "mass": 0,
+              "name": "bridge deck",
+              "position": [
+                0.282842712474619,
+                0.32,
+                -0.282842712474619
+              ],
+              "prefabSourceId": "builtin_bridge",
+              "rotationY": 0.7853981633974483,
+              "semanticKind": "platform"
+            },
+            {
+              "color": "#546e7a",
+              "dimensions": [
+                0.18,
+                0.3,
+                0.45
+              ],
+              "groupId": "stage_mwj4ypgd_dxvvz0i",
+              "id": "stage_mwj4ypgd_44spix8",
+              "immovable": true,
+              "kind": "cube",
+              "mass": 0,
+              "name": "bridge support A",
+              "position": [
+                -0.55,
+                0.15,
+                0
+              ],
+              "prefabSourceId": "builtin_bridge",
+              "rotationY": 0,
+              "semanticKind": "block"
+            },
+            {
+              "color": "#546e7a",
+              "dimensions": [
+                0.18,
+                0.3,
+                0.45
+              ],
+              "groupId": "stage_mwj4ypgd_dxvvz0i",
+              "id": "stage_mwj4ypgd_t7p1kp0",
+              "immovable": true,
+              "kind": "cube",
+              "mass": 0,
+              "name": "bridge support B",
+              "position": [
+                0.55,
+                0.15,
+                0
+              ],
+              "prefabSourceId": "builtin_bridge",
+              "rotationY": 0,
+              "semanticKind": "block"
+            }
+          ],
+          "skybox": {
+            "color": "#ddf0fb",
+            "mode": "color"
+          },
+          "validationOverrides": {},
+          "version": 3
+        },
+        "id": "",
+        "title": "Untitled Stage",
+        "updatedAt": "2026-11-16T10:45:59.947Z"
+      },
+      "upgradeState": "unchanged",
+      "version": 1
+    }
+  }
+]

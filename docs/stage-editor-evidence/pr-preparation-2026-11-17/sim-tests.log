@@ -1,0 +1,48 @@
+✔ audio is enabled only inside its floor range (0.722492ms)
+✔ real OpenCV WASM rejects blank and single-tape roads, detects two boundaries (8.877281ms)
+✔ real ArUco dictionary decodes rendered pixels and clockwise rotation (13.582158ms)
+✔ legacy sharp (0.448766ms)
+✔ automatic corner (0.206464ms)
+✔ manual corner (0.12354ms)
+✔ lone editable point (0.380735ms)
+✔ future version (0.090031ms)
+✔ missing corner intent (0.065879ms)
+✔ misaligned corners (0.146083ms)
+✔ invalid endpoint (0.060415ms)
+✔ invalid manual trim (0.044184ms)
+✔ invalid width (0.03443ms)
+✔ invalid coordinate (0.048107ms)
+✔ duplicate point (0.06351ms)
+✔ rounded reversal (0.039965ms)
+✔ approved neighbouring requests retain intent and share only when needed (0.328508ms)
+✔ seeded chains are non-overlapping, bounded and reversal invariant (85.068562ms)
+✔ a distant constraint does not shrink unrelated corners or redistribute spare room (0.152851ms)
+✔ automatic sizes recompute, while manual requests restore when room returns (0.189655ms)
+✔ straight joins consume no corner space and sharp reversals remain authored (0.104009ms)
+✔ sampled quadratics stay within the width-sensitive tolerance (4.061102ms)
+✔ the approved per-path bound never returns a partial or coarser route (3.694991ms)
+✔ non-finite and malformed data fail without mutation or exceptions (0.209711ms)
+✔ closed routes round every corner, fit across the seam and end exactly at their start (0.375201ms)
+✔ target and ordered checkpoint objectives transition deterministically (0.318503ms)
+✔ objective outcomes remain provisional until the program finishes (0.145612ms)
+✔ danger zones fail and collectibles complete without raw events in results (0.097774ms)
+✔ safe-run and movement-limit objectives finalize independently of path distance (0.085225ms)
+✔ stop, push, sensor, and actuator objectives use structured events (0.128655ms)
+✔ stage challenge metadata survives JSON round-trip and legacy markers get stable IDs (0.277361ms)
+✔ push-object contact is not classified as a mission collision incident (0.069582ms)
+✔ mission challenge stage exposes every marker kind with stable IDs (1.009584ms)
+✔ legacy and current direct loads validate without an editor resave (0.395927ms)
+✔ unsupported metadata, lines, hidden editor lines and incomplete runtime lines reject before construction (0.177065ms)
+✔ current records compare runnable lines in order, with defaults and equivalent colours (0.717406ms)
+✔ hidden ancestors and lone points are excluded, and corner intent is compared exactly (0.294148ms)
+✔ editable records retain repairable routes while runtime rejects them (0.100133ms)
+✔ run summaries calculate min max average and final then reset cleanly (0.154108ms)
+✔ summaries contain no raw sample arrays (0.048952ms)
+ℹ tests 40
+ℹ suites 0
+ℹ pass 40
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 283.650138

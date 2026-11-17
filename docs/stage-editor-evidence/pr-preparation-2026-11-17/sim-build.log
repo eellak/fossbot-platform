@@ -1,0 +1,26 @@
+npm notice run sim-v2@0.0.0 build
+npm notice run vite build
+vite v5.4.21 building for production...
+transforming...
+✓ 204 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                               0.53 kB │ gzip:     0.34 kB
+dist/assets/host-QAG3tdQJ.js                  0.56 kB │ gzip:     0.26 kB
+dist/assets/telemetryOverlay-L0Xi9zSq.js      0.82 kB │ gzip:     0.48 kB
+dist/assets/cameraControls-ykKyteNH.js        1.05 kB │ gzip:     0.61 kB
+dist/assets/positionStore-CoaHCsu0.js         1.14 kB │ gzip:     0.53 kB
+dist/assets/overlay-CLEFTvhB.js               1.17 kB │ gzip:     0.42 kB
+dist/assets/movementPresets-DviHaU1W.js       2.09 kB │ gzip:     0.85 kB
+dist/assets/positionPresets-lMhKYv-9.js       3.13 kB │ gzip:     1.25 kB
+dist/assets/dragUtils-B-QdeAcJ.js             3.16 kB │ gzip:     1.17 kB
+dist/assets/runner-CVturW0T.js                6.50 kB │ gzip:     2.54 kB
+dist/assets/index-h68VMVV9.js                61.59 kB │ gzip:    17.65 kB
+dist/assets/BenchmarkPanel-Zr2uN0SF.js      117.91 kB │ gzip:    36.47 kB
+dist/assets/index-rNAFprD5.js             3,018.95 kB │ gzip: 1,025.95 kB
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 1.90s

@@ -1,0 +1,519 @@
+{
+  "title": "Crowded selection review",
+  "config": [
+    {
+      "color": "#ddf0fb",
+      "mode": "color",
+      "type": "skybox"
+    },
+    {
+      "dimensions": [
+        8,
+        8
+      ],
+      "material": {
+        "color": "#2e82d2"
+      },
+      "name": "floor",
+      "offset": [
+        0,
+        0
+      ],
+      "repeat": [
+        25,
+        25
+      ],
+      "texture": "",
+      "type": "floor"
+    },
+    {
+      "challenge": {
+        "kind": "spawn",
+        "markerId": "robot-spawn-2"
+      },
+      "orientation": [
+        0,
+        0,
+        0
+      ],
+      "position": [
+        -1.5,
+        0,
+        -0.3
+      ],
+      "type": "fossbot"
+    },
+    {
+      "type": "line",
+      "name": "U route",
+      "points": [
+        [
+          -2,
+          -2
+        ],
+        [
+          -2,
+          2
+        ],
+        [
+          2,
+          2
+        ]
+      ],
+      "width": 0.04,
+      "color": "black",
+      "curveVersion": 1,
+      "corners": [
+        null,
+        {
+          "mode": "rounded",
+          "sizing": "manual",
+          "trim": 0.4
+        },
+        null
+      ]
+    },
+    {
+      "type": "cube",
+      "name": "Block 1-1",
+      "position": [
+        0.5,
+        0.2,
+        -2.0
+      ],
+      "dimensions": [
+        0.4,
+        0.4,
+        0.4
+      ],
+      "color": "#e79d44",
+      "mass": 0,
+      "immovable": true
+    },
+    {
+      "type": "cube",
+      "name": "Block 1-2",
+      "position": [
+        0.98,
+        0.2,
+        -2.0
+      ],
+      "dimensions": [
+        0.4,
+        0.4,
+        0.4
+      ],
+      "color": "#e79d44",
+      "mass": 0,
+      "immovable": true
+    },
+    {
+      "type": "cube",
+      "name": "Block 1-3",
+      "position": [
+        1.46,
+        0.2,
+        -2.0
+      ],
+      "dimensions": [
+        0.4,
+        0.4,
+        0.4
+      ],
+      "color": "#e79d44",
+      "mass": 0,
+      "immovable": true
+    },
+    {
+      "type": "cube",
+      "name": "Block 1-4",
+      "position": [
+        1.94,
+        0.2,
+        -2.0
+      ],
+      "dimensions": [
+        0.4,
+        0.4,
+        0.4
+      ],
+      "color": "#e79d44",
+      "mass": 0,
+      "immovable": true
+    },
+    {
+      "type": "cube",
+      "name": "Block 1-5",
+      "position": [
+        2.42,
+        0.2,
+        -2.0
+      ],
+      "dimensions": [
+        0.4,
+        0.4,
+        0.4
+      ],
+      "color": "#e79d44",
+      "mass": 0,
+      "immovable": true
+    },
+    {
+      "type": "cube",
+      "name": "Block 2-1",
+      "position": [
+        0.5,
+        0.2,
+        -1.52
+      ],
+      "dimensions": [
+        0.4,
+        0.4,
+        0.4
+      ],
+      "color": "#e79d44",
+      "mass": 0,
+      "immovable": true
+    },
+    {
+      "type": "cube",
+      "name": "Block 2-2",
+      "position": [
+        0.98,
+        0.2,
+        -1.52
+      ],
+      "dimensions": [
+        0.4,
+        0.4,
+        0.4
+      ],
+      "color": "#e79d44",
+      "mass": 0,
+      "immovable": true
+    },
+    {
+      "type": "cube",
+      "name": "Block 2-3",
+      "position": [
+        1.46,
+        0.2,
+        -1.52
+      ],
+      "dimensions": [
+        0.4,
+        0.4,
+        0.4
+      ],
+      "color": "#e79d44",
+      "mass": 0,
+      "immovable": true
+    },
+    {
+      "type": "cube",
+      "name": "Block 2-4",
+      "position": [
+        1.94,
+        0.2,
+        -1.52
+      ],
+      "dimensions": [
+        0.4,
+        0.4,
+        0.4
+      ],
+      "color": "#e79d44",
+      "mass": 0,
+      "immovable": true
+    },
+    {
+      "type": "cube",
+      "name": "Block 2-5",
+      "position": [
+        2.42,
+        0.2,
+        -1.52
+      ],
+      "dimensions": [
+        0.4,
+        0.4,
+        0.4
+      ],
+      "color": "#e79d44",
+      "mass": 0,
+      "immovable": true
+    },
+    {
+      "type": "cube",
+      "name": "Block 3-1",
+      "position": [
+        0.5,
+        0.2,
+        -1.04
+      ],
+      "dimensions": [
+        0.4,
+        0.4,
+        0.4
+      ],
+      "color": "#e79d44",
+      "mass": 0,
+      "immovable": true
+    },
+    {
+      "type": "cube",
+      "name": "Block 3-2",
+      "position": [
+        0.98,
+        0.2,
+        -1.04
+      ],
+      "dimensions": [
+        0.4,
+        0.4,
+        0.4
+      ],
+      "color": "#e79d44",
+      "mass": 0,
+      "immovable": true
+    },
+    {
+      "type": "cube",
+      "name": "Block 3-3",
+      "position": [
+        1.46,
+        0.2,
+        -1.04
+      ],
+      "dimensions": [
+        0.4,
+        0.4,
+        0.4
+      ],
+      "color": "#e79d44",
+      "mass": 0,
+      "immovable": true
+    },
+    {
+      "type": "cube",
+      "name": "Block 3-4",
+      "position": [
+        1.94,
+        0.2,
+        -1.04
+      ],
+      "dimensions": [
+        0.4,
+        0.4,
+        0.4
+      ],
+      "color": "#e79d44",
+      "mass": 0,
+      "immovable": true
+    },
+    {
+      "type": "cube",
+      "name": "Block 3-5",
+      "position": [
+        2.42,
+        0.2,
+        -1.04
+      ],
+      "dimensions": [
+        0.4,
+        0.4,
+        0.4
+      ],
+      "color": "#e79d44",
+      "mass": 0,
+      "immovable": true
+    },
+    {
+      "type": "cube",
+      "name": "Block 4-1",
+      "position": [
+        0.5,
+        0.2,
+        -0.56
+      ],
+      "dimensions": [
+        0.4,
+        0.4,
+        0.4
+      ],
+      "color": "#e79d44",
+      "mass": 0,
+      "immovable": true
+    },
+    {
+      "type": "cube",
+      "name": "Block 4-2",
+      "position": [
+        0.98,
+        0.2,
+        -0.56
+      ],
+      "dimensions": [
+        0.4,
+        0.4,
+        0.4
+      ],
+      "color": "#e79d44",
+      "mass": 0,
+      "immovable": true
+    },
+    {
+      "type": "cube",
+      "name": "Block 4-3",
+      "position": [
+        1.46,
+        0.2,
+        -0.56
+      ],
+      "dimensions": [
+        0.4,
+        0.4,
+        0.4
+      ],
+      "color": "#e79d44",
+      "mass": 0,
+      "immovable": true
+    },
+    {
+      "type": "cube",
+      "name": "Block 4-4",
+      "position": [
+        1.94,
+        0.2,
+        -0.56
+      ],
+      "dimensions": [
+        0.4,
+        0.4,
+        0.4
+      ],
+      "color": "#e79d44",
+      "mass": 0,
+      "immovable": true
+    },
+    {
+      "type": "cube",
+      "name": "Block 4-5",
+      "position": [
+        2.42,
+        0.2,
+        -0.56
+      ],
+      "dimensions": [
+        0.4,
+        0.4,
+        0.4
+      ],
+      "color": "#e79d44",
+      "mass": 0,
+      "immovable": true
+    },
+    {
+      "type": "cube",
+      "name": "Block 5-1",
+      "position": [
+        0.5,
+        0.2,
+        -0.08000000000000007
+      ],
+      "dimensions": [
+        0.4,
+        0.4,
+        0.4
+      ],
+      "color": "#e79d44",
+      "mass": 0,
+      "immovable": true
+    },
+    {
+      "type": "cube",
+      "name": "Block 5-2",
+      "position": [
+        0.98,
+        0.2,
+        -0.08000000000000007
+      ],
+      "dimensions": [
+        0.4,
+        0.4,
+        0.4
+      ],
+      "color": "#e79d44",
+      "mass": 0,
+      "immovable": true
+    },
+    {
+      "type": "cube",
+      "name": "Block 5-3",
+      "position": [
+        1.46,
+        0.2,
+        -0.08000000000000007
+      ],
+      "dimensions": [
+        0.4,
+        0.4,
+        0.4
+      ],
+      "color": "#e79d44",
+      "mass": 0,
+      "immovable": true
+    },
+    {
+      "type": "cube",
+      "name": "Block 5-4",
+      "position": [
+        1.94,
+        0.2,
+        -0.08000000000000007
+      ],
+      "dimensions": [
+        0.4,
+        0.4,
+        0.4
+      ],
+      "color": "#e79d44",
+      "mass": 0,
+      "immovable": true
+    },
+    {
+      "type": "cube",
+      "name": "Block 5-5",
+      "position": [
+        2.42,
+        0.2,
+        -0.08000000000000007
+      ],
+      "dimensions": [
+        0.4,
+        0.4,
+        0.4
+      ],
+      "color": "#e79d44",
+      "mass": 0,
+      "immovable": true
+    },
+    {
+      "type": "cube",
+      "name": "Route cover",
+      "position": [
+        -2,
+        0.3,
+        0
+      ],
+      "dimensions": [
+        0.7,
+        0.6,
+        0.7
+      ],
+      "color": "#d65060",
+      "mass": 0,
+      "immovable": true
+    }
+  ]
+}

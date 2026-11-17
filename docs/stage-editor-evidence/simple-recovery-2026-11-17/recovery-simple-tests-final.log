@@ -1,0 +1,198 @@
+npm notice run fossbot-platform@0.0.0 test
+npm notice run craco test --watchAll=false --runInBand --testPathPattern=stageBuilderRecovery.test|stageBuilderRunHandoff.test|stageBuilderDrafts.test
+PASS src/components/stage-builder/stageBuilderRecovery.test.ts
+  ● Console
+
+    console.warn
+      WARNING: Multiple instances of Three.js being imported.
+
+      2 | import { normalizeStageHierarchy } from './stageBuilderHierarchy';
+      3 | import { upgradeStageRecord } from './stageBuilderMigration';
+    > 4 | import { Color } from 'three';
+        | ^
+      5 | import type {
+      6 |   EditorStage,
+      7 |   EditorStageFloorSettings,
+
+      at Object.<anonymous> (node_modules/three/build/three.cjs:53024:11)
+      at Object.<anonymous> (src/components/stage-builder/serialize.ts:4:1)
+      at Object.<anonymous> (src/components/stage-builder/stageBuilderDrafts.ts:2:1)
+      at Object.<anonymous> (src/components/stage-builder/stageBuilderRecovery.ts:3:1)
+      at Object.<anonymous> (src/components/stage-builder/stageBuilderRecovery.test.ts:1:1)
+
+    console.warn
+      [stage-builder] Failed to write recovery draft Error: quota
+          at Proxy.<anonymous> (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/src/components/stage-builder/stageBuilderRecovery.test.ts:58:48)
+          at /home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-mock/build/index.js:449:39
+          at Proxy.<anonymous> (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-mock/build/index.js:457:13)
+          at Proxy.setItem (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-mock/build/index.js:170:19)
+          at writeStageBuilderDraft (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/src/components/stage-builder/stageBuilderDrafts.ts:98:25)
+          at Object.<anonymous> (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/src/components/stage-builder/stageBuilderRecovery.test.ts:59:32)
+          at Promise.then.completed (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-circus/build/utils.js:391:28)
+          at new Promise (<anonymous>)
+          at callAsyncCircusFn (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-circus/build/utils.js:316:10)
+          at _callCircusTest (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-circus/build/run.js:218:40)
+          at _runTest (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-circus/build/run.js:155:3)
+          at _runTestsForDescribeBlock (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-circus/build/run.js:66:9)
+          at run (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-circus/build/run.js:25:3)
+          at runAndTransformResultsToJestFormat (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapterInit.js:170:21)
+          at jestAdapter (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapter.js:82:19)
+          at runTestInternal (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-runner/build/runTest.js:389:16)
+          at runTest (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-runner/build/runTest.js:475:34)
+
+       99 |     return true;
+      100 |   } catch (error) {
+    > 101 |     console.warn('[stage-builder] Failed to write recovery draft', error);
+          |             ^
+      102 |     onError?.(error instanceof Error ? error.message : String(error));
+      103 |     return false;
+      104 |   }
+
+      at writeStageBuilderDraft (src/components/stage-builder/stageBuilderDrafts.ts:101:13)
+      at Object.<anonymous> (src/components/stage-builder/stageBuilderRecovery.test.ts:59:32)
+
+    console.warn
+      [stage-builder] Failed to write recovery draft Error: Another recovery draft is retained. Review recovery sources before replacing it.
+          at writeStageBuilderDraft (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/src/components/stage-builder/stageBuilderDrafts.ts:95:123)
+          at Object.<anonymous> (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/src/components/stage-builder/stageBuilderRecovery.test.ts:64:32)
+          at Promise.then.completed (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-circus/build/utils.js:391:28)
+          at new Promise (<anonymous>)
+          at callAsyncCircusFn (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-circus/build/utils.js:316:10)
+          at _callCircusTest (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-circus/build/run.js:218:40)
+          at _runTest (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-circus/build/run.js:155:3)
+          at _runTestsForDescribeBlock (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-circus/build/run.js:66:9)
+          at run (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-circus/build/run.js:25:3)
+          at runAndTransformResultsToJestFormat (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapterInit.js:170:21)
+          at jestAdapter (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapter.js:82:19)
+          at runTestInternal (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-runner/build/runTest.js:389:16)
+          at runTest (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-runner/build/runTest.js:475:34)
+
+       99 |     return true;
+      100 |   } catch (error) {
+    > 101 |     console.warn('[stage-builder] Failed to write recovery draft', error);
+          |             ^
+      102 |     onError?.(error instanceof Error ? error.message : String(error));
+      103 |     return false;
+      104 |   }
+
+      at writeStageBuilderDraft (src/components/stage-builder/stageBuilderDrafts.ts:101:13)
+      at Object.<anonymous> (src/components/stage-builder/stageBuilderRecovery.test.ts:64:32)
+
+    console.warn
+      [stage-builder] Failed to write recovery draft SyntaxError: Expected property name or '}' in JSON at position 1 (line 1 column 2)
+          at JSON.parse (<anonymous>)
+          at writeStageBuilderDraft (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/src/components/stage-builder/stageBuilderDrafts.ts:94:29)
+          at Object.<anonymous> (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/src/components/stage-builder/stageBuilderRecovery.test.ts:90:32)
+          at Promise.then.completed (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-circus/build/utils.js:391:28)
+          at new Promise (<anonymous>)
+          at callAsyncCircusFn (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-circus/build/utils.js:316:10)
+          at _callCircusTest (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-circus/build/run.js:218:40)
+          at _runTest (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-circus/build/run.js:155:3)
+          at _runTestsForDescribeBlock (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-circus/build/run.js:66:9)
+          at run (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-circus/build/run.js:25:3)
+          at runAndTransformResultsToJestFormat (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapterInit.js:170:21)
+          at jestAdapter (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapter.js:82:19)
+          at runTestInternal (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-runner/build/runTest.js:389:16)
+          at runTest (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-runner/build/runTest.js:475:34)
+
+       99 |     return true;
+      100 |   } catch (error) {
+    > 101 |     console.warn('[stage-builder] Failed to write recovery draft', error);
+          |             ^
+      102 |     onError?.(error instanceof Error ? error.message : String(error));
+      103 |     return false;
+      104 |   }
+
+      at writeStageBuilderDraft (src/components/stage-builder/stageBuilderDrafts.ts:101:13)
+      at Object.<anonymous> (src/components/stage-builder/stageBuilderRecovery.test.ts:90:32)
+
+    console.warn
+      [stage-builder] Failed to write recovery draft Error: Another recovery draft is retained. Review recovery sources before replacing it.
+          at writeStageBuilderDraft (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/src/components/stage-builder/stageBuilderDrafts.ts:95:123)
+          at persistStageRecovery (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/src/components/stage-builder/stageBuilderRecovery.ts:90:32)
+          at Object.<anonymous> (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/src/components/stage-builder/stageBuilderRecovery.test.ts:152:10)
+          at Promise.then.completed (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-circus/build/utils.js:391:28)
+          at new Promise (<anonymous>)
+          at callAsyncCircusFn (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-circus/build/utils.js:316:10)
+          at _callCircusTest (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-circus/build/run.js:218:40)
+          at _runTest (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-circus/build/run.js:155:3)
+          at _runTestsForDescribeBlock (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-circus/build/run.js:66:9)
+          at run (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-circus/build/run.js:25:3)
+          at runAndTransformResultsToJestFormat (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapterInit.js:170:21)
+          at jestAdapter (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapter.js:82:19)
+          at runTestInternal (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-runner/build/runTest.js:389:16)
+          at runTest (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-runner/build/runTest.js:475:34)
+
+       99 |     return true;
+      100 |   } catch (error) {
+    > 101 |     console.warn('[stage-builder] Failed to write recovery draft', error);
+          |             ^
+      102 |     onError?.(error instanceof Error ? error.message : String(error));
+      103 |     return false;
+      104 |   }
+
+      at writeStageBuilderDraft (src/components/stage-builder/stageBuilderDrafts.ts:101:13)
+      at persistStageRecovery (src/components/stage-builder/stageBuilderRecovery.ts:90:32)
+      at Object.<anonymous> (src/components/stage-builder/stageBuilderRecovery.test.ts:152:10)
+
+    console.warn
+      [stage-builder] Failed to write recovery draft DOMException {}
+
+       99 |     return true;
+      100 |   } catch (error) {
+    > 101 |     console.warn('[stage-builder] Failed to write recovery draft', error);
+          |             ^
+      102 |     onError?.(error instanceof Error ? error.message : String(error));
+      103 |     return false;
+      104 |   }
+
+      at writeStageBuilderDraft (src/components/stage-builder/stageBuilderDrafts.ts:101:13)
+      at persistStageRecovery (src/components/stage-builder/stageBuilderRecovery.ts:90:32)
+      at Object.<anonymous> (src/components/stage-builder/stageBuilderRecovery.test.ts:156:10)
+
+PASS src/components/stage-builder/stageBuilderRunHandoff.test.ts
+  ● Console
+
+    console.warn
+      WARNING: Multiple instances of Three.js being imported.
+
+      2 | import { normalizeStageHierarchy } from './stageBuilderHierarchy';
+      3 | import { upgradeStageRecord } from './stageBuilderMigration';
+    > 4 | import { Color } from 'three';
+        | ^
+      5 | import type {
+      6 |   EditorStage,
+      7 |   EditorStageFloorSettings,
+
+      at Object.<anonymous> (node_modules/three/build/three.cjs:53024:11)
+      at Object.<anonymous> (src/components/stage-builder/serialize.ts:4:1)
+      at Object.<anonymous> (src/components/stage-builder/stageBuilderRunHandoff.test.ts:1:1)
+
+PASS src/components/stage-builder/stageBuilderDrafts.test.ts
+  ● Console
+
+    console.warn
+      WARNING: Multiple instances of Three.js being imported.
+
+      2 | import { normalizeStageHierarchy } from './stageBuilderHierarchy';
+      3 | import { upgradeStageRecord } from './stageBuilderMigration';
+    > 4 | import { Color } from 'three';
+        | ^
+      5 | import type {
+      6 |   EditorStage,
+      7 |   EditorStageFloorSettings,
+
+      at Object.<anonymous> (node_modules/three/build/three.cjs:53024:11)
+      at Object.<anonymous> (src/components/stage-builder/serialize.ts:4:1)
+      at Object.<anonymous> (src/components/stage-builder/stageBuilderDrafts.test.ts:1:1)
+      at TestScheduler.scheduleTests (node_modules/@jest/core/build/TestScheduler.js:333:13)
+      at runJest (node_modules/@jest/core/build/runJest.js:404:19)
+      at _run10000 (node_modules/@jest/core/build/cli/index.js:320:7)
+      at runCLI (node_modules/@jest/core/build/cli/index.js:173:3)
+
+
+Test Suites: 3 passed, 3 total
+Tests:       14 passed, 14 total
+Snapshots:   0 total
+Time:        0.883 s, estimated 1 s
+Ran all test suites matching /stageBuilderRecovery.test|stageBuilderRunHandoff.test|stageBuilderDrafts.test/i.

@@ -112,6 +112,9 @@ Administrators choose which guest views are available and whether guests receive
 
 ### Start the development stack
 
+For editor-only work with hot reload and no backend, see the
+[standalone Stage Builder workflow](front-end/src/components/stage-builder/README.md#standalone-editor-development).
+
 ```bash
 git clone https://github.com/eellak/fossbot-platform.git
 cd fossbot-platform
@@ -242,3 +245,9 @@ The simulator also supports `robot.motor_left` and `robot.motor_right` with
 wheels does not start movement. `robot.stop()` stops both wheels. Percentage
 inputs approximate motion and are not a physical PWM calibration; bounded
 distance/angle commands retain their existing simulator drive speed.
+
+
+Stage editor implementation references: [approved design](design_draft.md),
+[verification and open release gates](docs/stage-editor-verification.md), and
+[issue evidence](docs/stage-editor-improvements.md). Native curved stages require
+the coordinated editor/runtime/backend rollout described in the design.

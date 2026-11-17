@@ -1,0 +1,17 @@
+...............................................................          [100%]
+=============================== warnings summary ===============================
+../../usr/local/lib/python3.9/site-packages/pydantic/_internal/_config.py:271
+  /usr/local/lib/python3.9/site-packages/pydantic/_internal/_config.py:271: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.5/migration/
+    warnings.warn(DEPRECATION_MESSAGE, DeprecationWarning)
+
+../../usr/local/lib/python3.9/site-packages/pydantic/_internal/_config.py:321
+  /usr/local/lib/python3.9/site-packages/pydantic/_internal/_config.py:321: UserWarning: Valid config keys have changed in V2:
+  * 'orm_mode' has been renamed to 'from_attributes'
+    warnings.warn(message, UserWarning)
+
+database/database.py:34
+  /workspace/back-end/database/database.py:34: MovedIn20Warning: The ``declarative_base()`` function is now available as sqlalchemy.orm.declarative_base(). (deprecated since: 2.0) (Background on SQLAlchemy 2.0 at: https://sqlalche.me/e/b8d9)
+    Base = declarative_base()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+63 passed, 3 warnings in 0.60s

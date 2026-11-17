@@ -1,0 +1,296 @@
+npm notice run fossbot-platform@0.0.0 test
+npm notice run craco test --watchAll=false --runInBand --testPathPattern=SavedStagePreview.test|stageBuilderRecovery.test
+PASS src/components/stage-builder/SavedStagePreview.test.tsx
+  ● Console
+
+    console.warn
+      WARNING: Multiple instances of Three.js being imported.
+
+      2 | import { normalizeStageHierarchy } from './stageBuilderHierarchy';
+      3 | import { upgradeStageRecord } from './stageBuilderMigration';
+    > 4 | import { Color } from 'three';
+        | ^
+      5 | import type {
+      6 |   EditorStage,
+      7 |   EditorStageFloorSettings,
+
+      at Object.<anonymous> (node_modules/three/build/three.cjs:53024:11)
+      at Object.<anonymous> (src/components/stage-builder/serialize.ts:4:1)
+      at Object.<anonymous> (src/components/stage-builder/SavedStagePreview.tsx:4:1)
+      at Object.<anonymous> (src/components/stage-builder/SavedStagePreview.test.tsx:4:1)
+
+    console.error
+      Warning: `ReactDOMTestUtils.act` is deprecated in favor of `React.act`. Import `act` from `react` instead of `react-dom/test-utils`. See https://react.dev/warnings/react-dom-test-utils for more info.
+
+      16 |   const back = jest.fn(), edit = jest.fn();
+      17 |   try {
+    > 18 |     act(() => root.render(<SavedStagePreview record={record} onBack={back} onEdit={edit} />));
+         |        ^
+      19 |     expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Viewing saved version · read-only');
+      20 |     expect(mockSceneProps.selectedId).toBeNull();
+      21 |     expect(mockSceneProps.transformMode).toBe('select');
+
+      at printWarning (node_modules/react-dom/cjs/react-dom-test-utils.development.js:71:30)
+      at error (node_modules/react-dom/cjs/react-dom-test-utils.development.js:45:7)
+      at actWithWarning (node_modules/react-dom/cjs/react-dom-test-utils.development.js:1736:7)
+      at Object.<anonymous> (src/components/stage-builder/SavedStagePreview.test.tsx:18:8)
+
+    console.error
+      Warning: React does not recognize the `useFlexGap` prop on a DOM element. If you intentionally want it to appear in the DOM as a custom attribute, spell it as lowercase `useflexgap` instead. If you accidentally passed it from a parent component, remove it from the DOM element.
+          at div
+          at /home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/@emotion/react/dist/emotion-element-ae8cc4ba.cjs.dev.js:63:23
+          at Stack (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/@mui/material/Stack/Stack.js:111:49)
+          at div
+          at /home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/@emotion/react/dist/emotion-element-ae8cc4ba.cjs.dev.js:63:23
+          at Paper (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/@mui/material/Paper/Paper.js:68:44)
+          at /home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/@emotion/react/dist/emotion-element-ae8cc4ba.cjs.dev.js:63:23
+          at div
+          at /home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/@emotion/react/dist/emotion-element-ae8cc4ba.cjs.dev.js:63:23
+          at Transition (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/react-transition-group/cjs/Transition.js:135:30)
+          at Fade (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/@mui/material/Fade/Fade.js:35:39)
+          at FocusTrap (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/@mui/base/node/FocusTrap/FocusTrap.js:86:5)
+          at div
+          at /home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/@emotion/react/dist/emotion-element-ae8cc4ba.cjs.dev.js:63:23
+          at Portal (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/@mui/base/node/Portal/Portal.js:25:5)
+          at ModalUnstyled (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/@mui/base/node/ModalUnstyled/ModalUnstyled.js:61:7)
+          at Modal (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/@mui/material/Modal/Modal.js:74:44)
+          at /home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/@emotion/react/dist/emotion-element-ae8cc4ba.cjs.dev.js:63:23
+          at Dialog (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/@mui/material/Dialog/Dialog.js:160:44)
+          at SavedStagePreview (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/src/components/stage-builder/SavedStagePreview.tsx:9:37)
+
+      16 |   const back = jest.fn(), edit = jest.fn();
+      17 |   try {
+    > 18 |     act(() => root.render(<SavedStagePreview record={record} onBack={back} onEdit={edit} />));
+         |        ^
+      19 |     expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Viewing saved version · read-only');
+      20 |     expect(mockSceneProps.selectedId).toBeNull();
+      21 |     expect(mockSceneProps.transformMode).toBe('select');
+
+      at printWarning (node_modules/react-dom/cjs/react-dom.development.js:86:30)
+      at error (node_modules/react-dom/cjs/react-dom.development.js:60:7)
+      at validateProperty$1 (node_modules/react-dom/cjs/react-dom.development.js:3757:7)
+      at warnUnknownProperties (node_modules/react-dom/cjs/react-dom.development.js:3803:21)
+      at validateProperties$2 (node_modules/react-dom/cjs/react-dom.development.js:3827:3)
+      at validatePropertiesInDevelopment (node_modules/react-dom/cjs/react-dom.development.js:9541:5)
+      at setInitialProperties (node_modules/react-dom/cjs/react-dom.development.js:9830:5)
+      at finalizeInitialChildren (node_modules/react-dom/cjs/react-dom.development.js:10950:3)
+      at completeWork (node_modules/react-dom/cjs/react-dom.development.js:22232:17)
+      at completeUnitOfWork (node_modules/react-dom/cjs/react-dom.development.js:26632:16)
+      at performUnitOfWork (node_modules/react-dom/cjs/react-dom.development.js:26607:5)
+      at workLoopSync (node_modules/react-dom/cjs/react-dom.development.js:26505:5)
+      at renderRootSync (node_modules/react-dom/cjs/react-dom.development.js:26473:7)
+      at performSyncWorkOnRoot (node_modules/react-dom/cjs/react-dom.development.js:26124:20)
+      at flushSyncCallbacks (node_modules/react-dom/cjs/react-dom.development.js:12042:22)
+      at commitRootImpl (node_modules/react-dom/cjs/react-dom.development.js:26998:3)
+      at commitRoot (node_modules/react-dom/cjs/react-dom.development.js:26721:5)
+      at finishConcurrentRender (node_modules/react-dom/cjs/react-dom.development.js:26020:9)
+      at performConcurrentWorkOnRoot (node_modules/react-dom/cjs/react-dom.development.js:25848:7)
+      at flushActQueue (node_modules/react/cjs/react.development.js:2667:24)
+      at act (node_modules/react/cjs/react.development.js:2582:11)
+      at actWithWarning (node_modules/react-dom/cjs/react-dom-test-utils.development.js:1740:10)
+      at Object.<anonymous> (src/components/stage-builder/SavedStagePreview.test.tsx:18:8)
+
+PASS src/components/stage-builder/stageBuilderRecovery.test.ts
+  ● Console
+
+    console.warn
+      WARNING: Multiple instances of Three.js being imported.
+
+      2 | import { normalizeStageHierarchy } from './stageBuilderHierarchy';
+      3 | import { upgradeStageRecord } from './stageBuilderMigration';
+    > 4 | import { Color } from 'three';
+        | ^
+      5 | import type {
+      6 |   EditorStage,
+      7 |   EditorStageFloorSettings,
+
+      at Object.<anonymous> (node_modules/three/build/three.cjs:53024:11)
+      at Object.<anonymous> (src/components/stage-builder/serialize.ts:4:1)
+      at Object.<anonymous> (src/components/stage-builder/stageBuilderDrafts.ts:2:1)
+      at Object.<anonymous> (src/components/stage-builder/stageBuilderRecovery.ts:3:1)
+      at Object.<anonymous> (src/components/stage-builder/stageBuilderRecovery.test.ts:1:1)
+      at TestScheduler.scheduleTests (node_modules/@jest/core/build/TestScheduler.js:333:13)
+      at runJest (node_modules/@jest/core/build/runJest.js:404:19)
+      at _run10000 (node_modules/@jest/core/build/cli/index.js:320:7)
+      at runCLI (node_modules/@jest/core/build/cli/index.js:173:3)
+
+    console.warn
+      [stage-builder] Failed to write recovery draft Error: quota
+          at Proxy.<anonymous> (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/src/components/stage-builder/stageBuilderRecovery.test.ts:58:48)
+          at /home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-mock/build/index.js:449:39
+          at Proxy.<anonymous> (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-mock/build/index.js:457:13)
+          at Proxy.setItem (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-mock/build/index.js:170:19)
+          at writeStageBuilderDraft (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/src/components/stage-builder/stageBuilderDrafts.ts:98:25)
+          at Object.<anonymous> (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/src/components/stage-builder/stageBuilderRecovery.test.ts:59:32)
+          at Promise.then.completed (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-circus/build/utils.js:391:28)
+          at new Promise (<anonymous>)
+          at callAsyncCircusFn (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-circus/build/utils.js:316:10)
+          at _callCircusTest (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-circus/build/run.js:218:40)
+          at _runTest (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-circus/build/run.js:155:3)
+          at _runTestsForDescribeBlock (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-circus/build/run.js:66:9)
+          at run (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-circus/build/run.js:25:3)
+          at runAndTransformResultsToJestFormat (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapterInit.js:170:21)
+          at jestAdapter (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapter.js:82:19)
+          at runTestInternal (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-runner/build/runTest.js:389:16)
+          at runTest (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-runner/build/runTest.js:475:34)
+          at TestRunner.runTests (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-runner/build/index.js:101:12)
+          at TestScheduler.scheduleTests (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/@jest/core/build/TestScheduler.js:333:13)
+          at runJest (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/@jest/core/build/runJest.js:404:19)
+          at _run10000 (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/@jest/core/build/cli/index.js:320:7)
+          at runCLI (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/@jest/core/build/cli/index.js:173:3)
+          at Object.run (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-cli/build/cli/index.js:155:37)
+
+       99 |     return true;
+      100 |   } catch (error) {
+    > 101 |     console.warn('[stage-builder] Failed to write recovery draft', error);
+          |             ^
+      102 |     onError?.(error instanceof Error ? error.message : String(error));
+      103 |     return false;
+      104 |   }
+
+      at writeStageBuilderDraft (src/components/stage-builder/stageBuilderDrafts.ts:101:13)
+      at Object.<anonymous> (src/components/stage-builder/stageBuilderRecovery.test.ts:59:32)
+      at TestScheduler.scheduleTests (node_modules/@jest/core/build/TestScheduler.js:333:13)
+      at runJest (node_modules/@jest/core/build/runJest.js:404:19)
+      at _run10000 (node_modules/@jest/core/build/cli/index.js:320:7)
+      at runCLI (node_modules/@jest/core/build/cli/index.js:173:3)
+
+    console.warn
+      [stage-builder] Failed to write recovery draft Error: Another recovery draft is retained. Review recovery sources before replacing it.
+          at writeStageBuilderDraft (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/src/components/stage-builder/stageBuilderDrafts.ts:95:123)
+          at Object.<anonymous> (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/src/components/stage-builder/stageBuilderRecovery.test.ts:64:32)
+          at Promise.then.completed (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-circus/build/utils.js:391:28)
+          at new Promise (<anonymous>)
+          at callAsyncCircusFn (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-circus/build/utils.js:316:10)
+          at _callCircusTest (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-circus/build/run.js:218:40)
+          at _runTest (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-circus/build/run.js:155:3)
+          at _runTestsForDescribeBlock (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-circus/build/run.js:66:9)
+          at run (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-circus/build/run.js:25:3)
+          at runAndTransformResultsToJestFormat (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapterInit.js:170:21)
+          at jestAdapter (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapter.js:82:19)
+          at runTestInternal (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-runner/build/runTest.js:389:16)
+          at runTest (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-runner/build/runTest.js:475:34)
+          at TestRunner.runTests (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-runner/build/index.js:101:12)
+          at TestScheduler.scheduleTests (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/@jest/core/build/TestScheduler.js:333:13)
+          at runJest (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/@jest/core/build/runJest.js:404:19)
+          at _run10000 (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/@jest/core/build/cli/index.js:320:7)
+          at runCLI (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/@jest/core/build/cli/index.js:173:3)
+          at Object.run (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-cli/build/cli/index.js:155:37)
+
+       99 |     return true;
+      100 |   } catch (error) {
+    > 101 |     console.warn('[stage-builder] Failed to write recovery draft', error);
+          |             ^
+      102 |     onError?.(error instanceof Error ? error.message : String(error));
+      103 |     return false;
+      104 |   }
+
+      at writeStageBuilderDraft (src/components/stage-builder/stageBuilderDrafts.ts:101:13)
+      at Object.<anonymous> (src/components/stage-builder/stageBuilderRecovery.test.ts:64:32)
+      at TestScheduler.scheduleTests (node_modules/@jest/core/build/TestScheduler.js:333:13)
+      at runJest (node_modules/@jest/core/build/runJest.js:404:19)
+      at _run10000 (node_modules/@jest/core/build/cli/index.js:320:7)
+      at runCLI (node_modules/@jest/core/build/cli/index.js:173:3)
+
+    console.warn
+      [stage-builder] Failed to write recovery draft SyntaxError: Expected property name or '}' in JSON at position 1 (line 1 column 2)
+          at JSON.parse (<anonymous>)
+          at writeStageBuilderDraft (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/src/components/stage-builder/stageBuilderDrafts.ts:94:29)
+          at Object.<anonymous> (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/src/components/stage-builder/stageBuilderRecovery.test.ts:90:32)
+          at Promise.then.completed (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-circus/build/utils.js:391:28)
+          at new Promise (<anonymous>)
+          at callAsyncCircusFn (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-circus/build/utils.js:316:10)
+          at _callCircusTest (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-circus/build/run.js:218:40)
+          at _runTest (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-circus/build/run.js:155:3)
+          at _runTestsForDescribeBlock (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-circus/build/run.js:66:9)
+          at run (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-circus/build/run.js:25:3)
+          at runAndTransformResultsToJestFormat (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapterInit.js:170:21)
+          at jestAdapter (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapter.js:82:19)
+          at runTestInternal (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-runner/build/runTest.js:389:16)
+          at runTest (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-runner/build/runTest.js:475:34)
+          at TestRunner.runTests (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-runner/build/index.js:101:12)
+          at TestScheduler.scheduleTests (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/@jest/core/build/TestScheduler.js:333:13)
+          at runJest (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/@jest/core/build/runJest.js:404:19)
+          at _run10000 (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/@jest/core/build/cli/index.js:320:7)
+          at runCLI (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/@jest/core/build/cli/index.js:173:3)
+          at Object.run (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-cli/build/cli/index.js:155:37)
+
+       99 |     return true;
+      100 |   } catch (error) {
+    > 101 |     console.warn('[stage-builder] Failed to write recovery draft', error);
+          |             ^
+      102 |     onError?.(error instanceof Error ? error.message : String(error));
+      103 |     return false;
+      104 |   }
+
+      at writeStageBuilderDraft (src/components/stage-builder/stageBuilderDrafts.ts:101:13)
+      at Object.<anonymous> (src/components/stage-builder/stageBuilderRecovery.test.ts:90:32)
+      at TestScheduler.scheduleTests (node_modules/@jest/core/build/TestScheduler.js:333:13)
+      at runJest (node_modules/@jest/core/build/runJest.js:404:19)
+      at _run10000 (node_modules/@jest/core/build/cli/index.js:320:7)
+      at runCLI (node_modules/@jest/core/build/cli/index.js:173:3)
+
+    console.warn
+      [stage-builder] Failed to write recovery draft Error: Another recovery draft is retained. Review recovery sources before replacing it.
+          at writeStageBuilderDraft (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/src/components/stage-builder/stageBuilderDrafts.ts:95:123)
+          at persistStageRecovery (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/src/components/stage-builder/stageBuilderRecovery.ts:90:32)
+          at Object.<anonymous> (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/src/components/stage-builder/stageBuilderRecovery.test.ts:152:10)
+          at Promise.then.completed (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-circus/build/utils.js:391:28)
+          at new Promise (<anonymous>)
+          at callAsyncCircusFn (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-circus/build/utils.js:316:10)
+          at _callCircusTest (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-circus/build/run.js:218:40)
+          at _runTest (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-circus/build/run.js:155:3)
+          at _runTestsForDescribeBlock (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-circus/build/run.js:66:9)
+          at run (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-circus/build/run.js:25:3)
+          at runAndTransformResultsToJestFormat (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapterInit.js:170:21)
+          at jestAdapter (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapter.js:82:19)
+          at runTestInternal (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-runner/build/runTest.js:389:16)
+          at runTest (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-runner/build/runTest.js:475:34)
+          at TestRunner.runTests (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-runner/build/index.js:101:12)
+          at TestScheduler.scheduleTests (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/@jest/core/build/TestScheduler.js:333:13)
+          at runJest (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/@jest/core/build/runJest.js:404:19)
+          at _run10000 (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/@jest/core/build/cli/index.js:320:7)
+          at runCLI (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/@jest/core/build/cli/index.js:173:3)
+          at Object.run (/home/jorgen/.codex/worktrees/9f84/fossbot-platform/front-end/node_modules/jest-cli/build/cli/index.js:155:37)
+
+       99 |     return true;
+      100 |   } catch (error) {
+    > 101 |     console.warn('[stage-builder] Failed to write recovery draft', error);
+          |             ^
+      102 |     onError?.(error instanceof Error ? error.message : String(error));
+      103 |     return false;
+      104 |   }
+
+      at writeStageBuilderDraft (src/components/stage-builder/stageBuilderDrafts.ts:101:13)
+      at persistStageRecovery (src/components/stage-builder/stageBuilderRecovery.ts:90:32)
+      at Object.<anonymous> (src/components/stage-builder/stageBuilderRecovery.test.ts:152:10)
+      at TestScheduler.scheduleTests (node_modules/@jest/core/build/TestScheduler.js:333:13)
+      at runJest (node_modules/@jest/core/build/runJest.js:404:19)
+      at _run10000 (node_modules/@jest/core/build/cli/index.js:320:7)
+      at runCLI (node_modules/@jest/core/build/cli/index.js:173:3)
+
+    console.warn
+      [stage-builder] Failed to write recovery draft DOMException {}
+
+       99 |     return true;
+      100 |   } catch (error) {
+    > 101 |     console.warn('[stage-builder] Failed to write recovery draft', error);
+          |             ^
+      102 |     onError?.(error instanceof Error ? error.message : String(error));
+      103 |     return false;
+      104 |   }
+
+      at writeStageBuilderDraft (src/components/stage-builder/stageBuilderDrafts.ts:101:13)
+      at persistStageRecovery (src/components/stage-builder/stageBuilderRecovery.ts:90:32)
+      at Object.<anonymous> (src/components/stage-builder/stageBuilderRecovery.test.ts:156:10)
+      at TestScheduler.scheduleTests (node_modules/@jest/core/build/TestScheduler.js:333:13)
+      at runJest (node_modules/@jest/core/build/runJest.js:404:19)
+      at _run10000 (node_modules/@jest/core/build/cli/index.js:320:7)
+      at runCLI (node_modules/@jest/core/build/cli/index.js:173:3)
+
+
+Test Suites: 2 passed, 2 total
+Tests:       12 passed, 12 total
+Snapshots:   0 total
+Time:        1.028 s
+Ran all test suites matching /SavedStagePreview.test|stageBuilderRecovery.test/i.

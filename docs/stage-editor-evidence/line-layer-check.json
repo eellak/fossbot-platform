@@ -1,0 +1,36 @@
+{
+  "screenshot": "line-layer-toolbar.png",
+  "checks": [
+    {
+      "point": "selected point 2",
+      "centre": [
+        640,
+        318
+      ],
+      "checkedPixels": 49,
+      "fillColours": [
+        [
+          30,
+          79,
+          191
+        ]
+      ]
+    },
+    {
+      "point": "unselected point 3",
+      "centre": [
+        640,
+        371
+      ],
+      "checkedPixels": 49,
+      "fillColours": [
+        [
+          255,
+          255,
+          255
+        ]
+      ]
+    }
+  ],
+  "result": "Both point fills are uniform across the guide attachment."
+}

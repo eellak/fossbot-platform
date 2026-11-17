@@ -1,0 +1,12 @@
+npm notice run fossbot-platform@0.0.0 test
+npm notice run craco test --watchAll=false --runInBand --silent --testPathPattern=stageBuilderRecovery.test|fingerprint.test|dev/stage-editor/workspace.test|stageBuilderMigration.test|stageBuilderDrafts.test
+PASS src/components/stage-builder/stageBuilderRecovery.test.ts
+PASS src/dev/stage-editor/workspace.test.ts
+PASS src/components/stage-builder/stageBuilderDrafts.test.ts
+PASS src/components/stage-builder/stageBuilderMigration.test.ts
+PASS src/ai/fingerprint.test.ts
+
+Test Suites: 5 passed, 5 total
+Tests:       22 passed, 22 total
+Snapshots:   0 total
+Time:        0.494 s, estimated 1 s

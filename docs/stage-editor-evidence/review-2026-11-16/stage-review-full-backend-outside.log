@@ -1,0 +1,74 @@
+..........................FF............................................ [ 22%]
+........................................................................ [ 44%]
+..........................................................s............. [ 67%]
+.................................................s...................... [ 89%]
+.................................                                        [100%]
+=================================== FAILURES ===================================
+__________ test_versioned_corpus_is_synthetic_complete_and_bilingual ___________
+
+    def test_versioned_corpus_is_synthetic_complete_and_bilingual():
+        corpus = load(CORPUS)
+        validate_corpus(corpus)
+>       assert len(corpus["cases"]) == 14
+E       AssertionError: assert 15 == 14
+E        +  where 15 = len([{'capability': 'code.explain', 'category': 'python_debugging', 'context': {'execution_target': 'simulation', 'lesson_...Python order'], 'max_characters': 2000, 'must_not_contain': ['unknown_magic_block'], 'output_type': 'text'}, ...}, ...])
+
+tests/test_ai_evaluation.py:21: AssertionError
+_________ test_deterministic_baseline_passes_every_automatic_contract __________
+
+    def test_deterministic_baseline_passes_every_automatic_contract():
+        report = score_results(load(CORPUS), load(MOCK_RESULTS))
+>       assert report["automatic"] == {"passed": 14, "failed": 0, "missing": []}
+E       AssertionError: assert {'failed': 0,... 'passed': 14} == {'failed': 0,... 'passed': 14}
+E
+E         Omitting 2 identical items, use -vv to show
+E         Differing items:
+E         {'missing': ['python-async-runtime-en-01']} != {'missing': []}
+E         Use -v to get more diff
+
+tests/test_ai_evaluation.py:27: AssertionError
+=============================== warnings summary ===============================
+../../../../../../../tmp/stage-review-venv/lib/python3.11/site-packages/starlette/testclient.py:31
+  /tmp/stage-review-venv/lib/python3.11/site-packages/starlette/testclient.py:31: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    [], typing.ContextManager[anyio.abc.BlockingPortal]
+
+../../../../../../../tmp/stage-review-venv/lib/python3.11/site-packages/pydantic/_internal/_config.py:271
+  /tmp/stage-review-venv/lib/python3.11/site-packages/pydantic/_internal/_config.py:271: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.5/migration/
+    warnings.warn(DEPRECATION_MESSAGE, DeprecationWarning)
+
+../../../../../../../tmp/stage-review-venv/lib/python3.11/site-packages/pydantic/_internal/_config.py:321
+  /tmp/stage-review-venv/lib/python3.11/site-packages/pydantic/_internal/_config.py:321: UserWarning: Valid config keys have changed in V2:
+  * 'orm_mode' has been renamed to 'from_attributes'
+    warnings.warn(message, UserWarning)
+
+database/database.py:34
+  /home/jorgen/.codex/worktrees/9f84/fossbot-platform/back-end/database/database.py:34: MovedIn20Warning: The ``declarative_base()`` function is now available as sqlalchemy.orm.declarative_base(). (deprecated since: 2.0) (Background on SQLAlchemy 2.0 at: https://sqlalche.me/e/b8d9)
+    Base = declarative_base()
+
+../../../../../../../tmp/stage-review-venv/lib/python3.11/site-packages/passlib/utils/__init__.py:854
+  /tmp/stage-review-venv/lib/python3.11/site-packages/passlib/utils/__init__.py:854: DeprecationWarning: 'crypt' is deprecated and slated for removal in Python 3.13
+    from crypt import crypt as _crypt
+
+main.py:244
+  /home/jorgen/.codex/worktrees/9f84/fossbot-platform/back-end/main.py:244: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("startup")
+
+../../../../../../../tmp/stage-review-venv/lib/python3.11/site-packages/fastapi/applications.py:4495
+  /tmp/stage-review-venv/lib/python3.11/site-packages/fastapi/applications.py:4495: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    return self.router.on_event(event_type)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_ai_evaluation.py::test_versioned_corpus_is_synthetic_complete_and_bilingual
+FAILED tests/test_ai_evaluation.py::test_deterministic_baseline_passes_every_automatic_contract
+2 failed, 317 passed, 2 skipped, 7 warnings in 15.70s

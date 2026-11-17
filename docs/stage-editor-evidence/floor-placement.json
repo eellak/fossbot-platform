@@ -1,0 +1,297 @@
+{
+  "config": [
+    {
+      "color": "#ddf0fb",
+      "mode": "color",
+      "type": "skybox"
+    },
+    {
+      "dimensions": [
+        10,
+        10
+      ],
+      "material": {
+        "color": "dodgerblue"
+      },
+      "name": "floor",
+      "offset": [
+        0,
+        0
+      ],
+      "repeat": [
+        25,
+        25
+      ],
+      "texture": "",
+      "type": "floor"
+    },
+    {
+      "castShadow": true,
+      "dimensions": [
+        0.8,
+        0.12,
+        0.8
+      ],
+      "immovable": true,
+      "mass": 0,
+      "material": {
+        "color": "#90a4ae"
+      },
+      "name": "platform",
+      "orientation": [
+        0,
+        0,
+        0
+      ],
+      "position": [
+        0,
+        0.05999999865889549,
+        0
+      ],
+      "type": "cube"
+    },
+    {
+      "castShadow": true,
+      "dimensions": [
+        1.6,
+        0.12,
+        0.45
+      ],
+      "immovable": true,
+      "mass": 0,
+      "material": {
+        "color": "#78909c"
+      },
+      "name": "bridge deck",
+      "orientation": [
+        0,
+        0,
+        0
+      ],
+      "position": [
+        0,
+        0.75,
+        0
+      ],
+      "type": "cube"
+    },
+    {
+      "castShadow": true,
+      "dimensions": [
+        0.18,
+        0.3,
+        0.45
+      ],
+      "immovable": true,
+      "mass": 0,
+      "material": {
+        "color": "#546e7a"
+      },
+      "name": "bridge support A",
+      "orientation": [
+        0,
+        0,
+        0
+      ],
+      "position": [
+        -0.55,
+        0.58,
+        0
+      ],
+      "type": "cube"
+    },
+    {
+      "castShadow": true,
+      "dimensions": [
+        0.18,
+        0.3,
+        0.45
+      ],
+      "immovable": true,
+      "mass": 0,
+      "material": {
+        "color": "#546e7a"
+      },
+      "name": "bridge support B",
+      "orientation": [
+        0,
+        0,
+        0
+      ],
+      "position": [
+        0.55,
+        0.58,
+        0
+      ],
+      "type": "cube"
+    },
+    {
+      "type": "fossbot",
+      "name": "robot",
+      "position": [
+        -2,
+        0,
+        -2
+      ],
+      "rotationY": 0
+    }
+  ],
+  "createdAt": "2026-11-13T09:07:00.940Z",
+  "description": "",
+  "editor": {
+    "attachedOrder": {},
+    "defaultRotationSnapPreset": "15",
+    "defaultSnapPreset": "precise",
+    "floor": {
+      "color": "dodgerblue",
+      "dimensions": [
+        10,
+        10
+      ],
+      "name": "floor",
+      "offset": [
+        0,
+        0
+      ],
+      "repeat": [
+        25,
+        25
+      ],
+      "texture": ""
+    },
+    "gridSize": 0.5,
+    "gridVisible": false,
+    "groups": [
+      {
+        "createdAt": "2026-11-13T09:07:27.289Z",
+        "id": "stage_mwer6zsp_nijzbc1",
+        "name": "Bridge",
+        "objectIds": [
+          "stage_mwer6zsp_9ua8tsc",
+          "stage_mwer6zsp_9xe1wsn",
+          "stage_mwer6zsp_rm45oco"
+        ],
+        "updatedAt": "2026-11-13T09:07:27.289Z"
+      }
+    ],
+    "hierarchyOrder": [
+      {
+        "id": "stage_mwer37cg_onvyke6",
+        "kind": "object"
+      },
+      {
+        "id": "stage_mwer6zsp_nijzbc1",
+        "kind": "group"
+      }
+    ],
+    "lastMovementSnapPreset": "precise",
+    "objects": [
+      {
+        "color": "#90a4ae",
+        "dimensions": [
+          0.8,
+          0.12,
+          0.8
+        ],
+        "id": "stage_mwer37cg_onvyke6",
+        "immovable": true,
+        "kind": "cube",
+        "mass": 0,
+        "name": "platform",
+        "position": [
+          0,
+          0.05999999865889549,
+          0
+        ],
+        "rotationY": 0,
+        "semanticKind": "platform"
+      },
+      {
+        "color": "#78909c",
+        "dimensions": [
+          1.6,
+          0.12,
+          0.45
+        ],
+        "groupId": "stage_mwer6zsp_nijzbc1",
+        "id": "stage_mwer6zsp_9ua8tsc",
+        "immovable": true,
+        "kind": "cube",
+        "mass": 0,
+        "name": "bridge deck",
+        "position": [
+          0,
+          0.75,
+          0
+        ],
+        "prefabSourceId": "builtin_bridge",
+        "rotationY": 0,
+        "semanticKind": "platform"
+      },
+      {
+        "color": "#546e7a",
+        "dimensions": [
+          0.18,
+          0.3,
+          0.45
+        ],
+        "groupId": "stage_mwer6zsp_nijzbc1",
+        "id": "stage_mwer6zsp_9xe1wsn",
+        "immovable": true,
+        "kind": "cube",
+        "mass": 0,
+        "name": "bridge support A",
+        "position": [
+          -0.55,
+          0.58,
+          0
+        ],
+        "prefabSourceId": "builtin_bridge",
+        "rotationY": 0,
+        "semanticKind": "block"
+      },
+      {
+        "color": "#546e7a",
+        "dimensions": [
+          0.18,
+          0.3,
+          0.45
+        ],
+        "groupId": "stage_mwer6zsp_nijzbc1",
+        "id": "stage_mwer6zsp_rm45oco",
+        "immovable": true,
+        "kind": "cube",
+        "mass": 0,
+        "name": "bridge support B",
+        "position": [
+          0.55,
+          0.58,
+          0
+        ],
+        "prefabSourceId": "builtin_bridge",
+        "rotationY": 0,
+        "semanticKind": "block"
+      },
+      {
+        "id": "robot",
+        "kind": "fossbot",
+        "name": "robot",
+        "position": [
+          -2,
+          0,
+          -2
+        ],
+        "rotationY": 0
+      }
+    ],
+    "skybox": {
+      "color": "#ddf0fb",
+      "mode": "color"
+    },
+    "validationOverrides": {},
+    "version": 3
+  },
+  "id": "floor-placement-check",
+  "title": "Floor placement check",
+  "updatedAt": "2026-11-13T09:07:29.355Z"
+}
