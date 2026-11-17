@@ -1,6 +1,6 @@
 import React, { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Alert, Box, IconButton, Stack, Tooltip, Typography,
+  Alert, Box, Button, IconButton, Stack, Tooltip, Typography,
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import RestartAltIcon from '@mui/icons-material/RestartAlt';
@@ -15,6 +15,7 @@ import ArrowForwardIosIcon from '@mui/icons-material/ArrowForwardIos';
 import StopIcon from '@mui/icons-material/Stop';
 import { useNavigate } from 'react-router-dom';
 import type { FossbotSimulatorHandle } from 'src/simulator/FossbotSimulator';
+import { validateStageFormat } from 'src/simulator/stages/stageFormatCore';
 import { readStageBuilderRunHandoff } from 'src/components/stage-builder/stageBuilderRunHandoff';
 import { editorColors, editorTones, EditorThemeProvider, getEditorColors, getEditorPanelSx, getEditorTabsSx, getEditorTones, getEditorType, getInspectorPanelSx } from 'src/components/stage-builder/stageBuilderEditorTheme';
 
@@ -83,6 +84,13 @@ const StageBuilderTestPage = () => {
   const navigate = useNavigate();
   const simRef = useRef<FossbotSimulatorHandle | null>(null);
   const handoff = useMemo(() => readStageBuilderRunHandoff(handoffIdFromUrl()), []);
+  const handoffError = useMemo(() => {
+    if (!handoff) return 'No Stage Builder run handoff was found. Return to the builder and press Run Test again.';
+    try { validateStageFormat(handoff.record); return ''; }
+    catch (error) { return error instanceof Error ? error.message : 'This stage could not be loaded.'; }
+  }, [handoff]);
+  const [loadError, setLoadError] = useState('');
+  const [ready, setReady] = useState(false);
   const [sensorHelpersVisible, setSensorHelpersVisible] = useState(false);
   const [collisionWireVisible, setCollisionWireVisible] = useState(() => !!handoff?.collisionWireVisible);
   const [sensors, setSensors] = useState<SensorSnapshot>({
@@ -235,25 +243,28 @@ const StageBuilderTestPage = () => {
       }}>
         {/* simulator viewport */}
         <Box sx={{ minWidth: 0, minHeight: 0, position: 'relative' }}>
-          {!handoff ? (
+          {handoffError ? (
             <Alert severity="error" sx={{ m: 2 }}>
-              No Stage Builder run handoff was found. Return to the builder and press Run Test again.
+              {handoffError}
             </Alert>
           ) : (
             <>
               <Suspense fallback={<Box sx={{ p: 2 }}>Loading simulator…</Box>}>
                 <LazyFossbotSimulator
                   ref={simRef}
-                  initialStageConfig={handoff.record.config}
-                  config={{ ...simulatorConfig, showColliders: collisionWireVisible, stageAssetBaseUrl: handoff.stageAssetBaseUrl || undefined }}
+                  initialStageConfig={handoff!.record.config}
+                  config={{ ...simulatorConfig, showColliders: collisionWireVisible, stageAssetBaseUrl: handoff!.stageAssetBaseUrl || undefined }}
                   lockCamera={lockCamera}
                   onMountChange={(mounted) => {
+                    setReady(mounted);
                     if (mounted && sensorHelpersVisible) simRef.current?.setSensorHelpersVisible(true);
                     if (mounted && collisionWireVisible) simRef.current?.setCollisionWireVisible(true);
                   }}
+                  onLoadError={(error) => setLoadError(error?.message || '')}
                   style={{ minHeight: '100%' }}
                 />
               </Suspense>
+              {loadError && <Alert severity="error" sx={{ position: 'absolute', top: 8, left: 8, right: 8 }} action={<Button color="inherit" onClick={() => { void simRef.current?.retryStageLoad().catch(() => {}); }}>Retry</Button>}>{loadError}</Alert>}
               {hasAudioEntries && (
                 <Box sx={{
                   position: 'absolute',
@@ -289,21 +300,21 @@ const StageBuilderTestPage = () => {
           {/* ── d-pad remote (centered) ── */}
           <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <Stack spacing={1.5} alignItems="center">
-              <IconButton sx={remoteBtnSx} onClick={() => simRef.current?.moveStep(-0.4)}>
+              <IconButton disabled={!ready} sx={remoteBtnSx} onClick={() => simRef.current?.moveStep(-0.4)}>
                 <ArrowUpwardIcon />
               </IconButton>
               <Stack direction="row" spacing={1.5}>
-                <IconButton sx={remoteBtnSx} onClick={() => simRef.current?.rotateStep(0.174533)}>
+                <IconButton disabled={!ready} sx={remoteBtnSx} onClick={() => simRef.current?.rotateStep(0.174533)}>
                   <ArrowBackIosNewIcon />
                 </IconButton>
                 <IconButton sx={stopBtnSx} onClick={() => simRef.current?.stopMotion()}>
                   <StopIcon />
                 </IconButton>
-                <IconButton sx={remoteBtnSx} onClick={() => simRef.current?.rotateStep(-0.174533)}>
+                <IconButton disabled={!ready} sx={remoteBtnSx} onClick={() => simRef.current?.rotateStep(-0.174533)}>
                   <ArrowForwardIosIcon />
                 </IconButton>
               </Stack>
-              <IconButton sx={remoteBtnSx} onClick={() => simRef.current?.moveStep(0.4)}>
+              <IconButton disabled={!ready} sx={remoteBtnSx} onClick={() => simRef.current?.moveStep(0.4)}>
                 <ArrowDownwardIcon />
               </IconButton>
             </Stack>

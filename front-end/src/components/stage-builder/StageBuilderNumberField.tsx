@@ -39,6 +39,8 @@ export type StageBuilderNumberFieldProps = Omit<TextFieldProps, 'type'> & {
   type?: TextFieldProps['type'];
   value: number;
   axis?: 'X' | 'Y' | 'Z';
+  displayPrecision?: number;
+  onValuePreview?: (value: number | null) => void;
 };
 
 function numericAttribute(value: unknown): number | undefined {
@@ -87,13 +89,15 @@ function restoreBodyDragStyles(state: NumberFieldDragState) {
   document.body.style.userSelect = state.bodyUserSelect;
 }
 
-export function StageBuilderNumberField({ inputProps, onChange, disabled, InputProps, sx, axis, ...props }: StageBuilderNumberFieldProps) {
+export function StageBuilderNumberField({ inputProps, onChange, disabled, InputProps, sx, axis, displayPrecision, onValuePreview, ...props }: StageBuilderNumberFieldProps) {
   const [draftValue, setDraftValue] = React.useState<string | null>(null);
   const dragRef = React.useRef<NumberFieldDragState | null>(null);
   const blockClickRef = React.useRef(false);
-  const finishDragRef = React.useRef<(preventClick: boolean, exitPointerLock?: boolean) => void>(() => {});
+  const finishDragRef = React.useRef<(preventClick: boolean, exitPointerLock?: boolean, cancelled?: boolean) => void>(() => {});
   const inputPropsRef = React.useRef<NativeInputProps>({});
   const onChangeRef = React.useRef<typeof onChange>(onChange);
+  const previewRef = React.useRef(onValuePreview);
+  previewRef.current = onValuePreview;
   const nativeInputProps = (inputProps || {}) as NativeInputProps;
   const readOnly = InputProps?.readOnly || nativeInputProps.readOnly;
   const canDrag = !disabled && !readOnly && !!onChange;
@@ -103,7 +107,7 @@ export function StageBuilderNumberField({ inputProps, onChange, disabled, InputP
 
   const emitValue = React.useCallback((value: number) => {
     setDraftValue(String(value));
-    onChangeRef.current?.(makeChangeEvent(value));
+    previewRef.current?.(value);
   }, []);
 
   const requestPointerLock = React.useCallback((lockElement: HTMLElement) => {
@@ -167,19 +171,30 @@ export function StageBuilderNumberField({ inputProps, onChange, disabled, InputP
   const handlePointerLockChange = React.useCallback(() => {
     const drag = dragRef.current;
     if (!drag || document.pointerLockElement === drag.lockElement || !drag.active) return;
-    finishDragRef.current(true, false);
+    finishDragRef.current(true, false, true);
   }, []);
 
-  const finishDrag = React.useCallback((preventClick: boolean, exitPointerLock = true) => {
+  const handleDragKey = React.useCallback((event: KeyboardEvent) => {
+    if (event.key !== 'Escape' || !dragRef.current?.active) return;
+    event.preventDefault(); event.stopImmediatePropagation();
+    finishDragRef.current(true, true, true);
+  }, []);
+
+  const finishDrag = React.useCallback((preventClick: boolean, exitPointerLock = true, cancelled = false) => {
     const drag = dragRef.current;
     if (!drag) return;
 
     document.removeEventListener('mousemove', handleDocumentMouseMove);
     document.removeEventListener('mouseup', handleDocumentMouseUp);
     document.removeEventListener('pointerlockchange', handlePointerLockChange);
+    window.removeEventListener('keydown', handleDragKey, true);
     restoreBodyDragStyles(drag);
     dragRef.current = null;
     setDraftValue(null);
+    if (drag.active) {
+      previewRef.current?.(null);
+      if (!cancelled && drag.lastValue !== drag.startValue) onChangeRef.current?.(makeChangeEvent(drag.lastValue));
+    }
 
     if (drag.target.hasPointerCapture?.(drag.pointerId)) drag.target.releasePointerCapture(drag.pointerId);
     if (exitPointerLock && document.pointerLockElement === drag.lockElement) document.exitPointerLock();
@@ -188,14 +203,14 @@ export function StageBuilderNumberField({ inputProps, onChange, disabled, InputP
       blockClickRef.current = true;
       window.setTimeout(() => { blockClickRef.current = false; }, 0);
     }
-  }, [handleDocumentMouseMove, handleDocumentMouseUp, handlePointerLockChange]);
+  }, [handleDocumentMouseMove, handleDocumentMouseUp, handlePointerLockChange, handleDragKey]);
 
   React.useEffect(() => {
     finishDragRef.current = finishDrag;
   }, [finishDrag]);
 
   React.useEffect(() => () => {
-    finishDragRef.current(false);
+    finishDragRef.current(false, true, true);
   }, []);
 
   const handlePointerDown: React.PointerEventHandler<HTMLInputElement> = (event) => {
@@ -206,7 +221,7 @@ export function StageBuilderNumberField({ inputProps, onChange, disabled, InputP
 
     const target = event.currentTarget;
     const lockElement = target.ownerDocument.body || target.ownerDocument.documentElement;
-    const startValue = numericAttribute(target.value) ?? numericAttribute(props.value) ?? 0;
+    const startValue = displayPrecision !== undefined && draftValue === null ? props.value : numericAttribute(target.value) ?? numericAttribute(props.value) ?? 0;
     dragRef.current = {
       pointerId: event.pointerId,
       startX: event.clientX,
@@ -227,6 +242,7 @@ export function StageBuilderNumberField({ inputProps, onChange, disabled, InputP
     document.addEventListener('mousemove', handleDocumentMouseMove);
     document.addEventListener('mouseup', handleDocumentMouseUp);
     document.addEventListener('pointerlockchange', handlePointerLockChange);
+    window.addEventListener('keydown', handleDragKey, true);
     target.setPointerCapture?.(event.pointerId);
     document.body.style.userSelect = 'none';
   };
@@ -244,7 +260,7 @@ export function StageBuilderNumberField({ inputProps, onChange, disabled, InputP
     const drag = dragRef.current;
     if (!drag || drag.pointerId !== event.pointerId) return;
     if (drag.active && drag.pointerLockRequested) return;
-    finishDragRef.current(drag.active);
+    finishDragRef.current(drag.active, true, true);
   };
 
   const handleLostPointerCapture: React.PointerEventHandler<HTMLInputElement> = (event) => {
@@ -265,7 +281,7 @@ export function StageBuilderNumberField({ inputProps, onChange, disabled, InputP
   const handleFocus: React.FocusEventHandler<HTMLInputElement | HTMLTextAreaElement> = (event) => {
     props.onFocus?.(event);
     if (event.defaultPrevented) return;
-    setDraftValue(event.target.value);
+    setDraftValue(displayPrecision === undefined ? event.target.value : String(props.value));
   };
 
   const handleChange: React.ChangeEventHandler<HTMLInputElement | HTMLTextAreaElement> = (event) => {
@@ -277,8 +293,9 @@ export function StageBuilderNumberField({ inputProps, onChange, disabled, InputP
 
   const handleBlur: React.FocusEventHandler<HTMLInputElement | HTMLTextAreaElement> = (event) => {
     props.onBlur?.(event);
+    if (dragRef.current?.active) { finishDragRef.current(true, true, true); return; }
     const parsed = Number(event.target.value);
-    if (Number.isFinite(parsed)) onChange?.(makeChangeEvent(parsed));
+    if (Number.isFinite(parsed) && (displayPrecision === undefined || parsed !== props.value)) onChange?.(makeChangeEvent(parsed));
     setDraftValue(null);
   };
 
@@ -291,7 +308,7 @@ export function StageBuilderNumberField({ inputProps, onChange, disabled, InputP
     label: props.label ?? axis,
     type: 'number',
     disabled,
-    value: draftValue ?? props.value,
+    value: draftValue ?? (displayPrecision === undefined ? props.value : Number(props.value.toFixed(displayPrecision))),
     onFocus: handleFocus,
     onChange: handleChange,
     onBlur: handleBlur,

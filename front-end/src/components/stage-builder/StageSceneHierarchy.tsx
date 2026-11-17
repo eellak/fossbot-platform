@@ -1,3 +1,4 @@
+import { hierarchyParentId, normalizeStageHierarchy } from './stageBuilderHierarchy';
 import React, { useMemo, useState } from 'react';
 import {
   Box, IconButton, InputBase, Stack, TextField, Tooltip, Typography,
@@ -11,9 +12,9 @@ import LockOpenIcon from '@mui/icons-material/LockOpen';
 import DeleteIcon from '@mui/icons-material/Delete';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import SearchIcon from '@mui/icons-material/Search';
-import type { EditorStage, EditorStageObject, StageBuilderGroup, StageSemanticKind } from './types';
+import type { EditorStage, EditorStageObject, StageBuilderGroup, StageHierarchyRow, StageSemanticKind } from './types';
 import { displayObjectType } from './stageBuilderCatalog';
-import { PreviewShape, hasStaticPreviewAsset, staticPreviewUrl } from './StageObjectLibrary';
+import { PreviewImage } from './PreviewImage';
 import { useEditorTheme, type EditorTone } from './stageBuilderEditorTheme';
 
 export type HierarchyDropPosition = 'before' | 'after' | 'inside';
@@ -29,8 +30,9 @@ export interface StageSceneHierarchyProps {
   onSelectionChange: (ids: string[]) => void;
   onObjectChange: (object: EditorStageObject) => void;
   onDuplicateObjects: (ids: string[]) => void;
+  onDuplicateGroup: (id: string) => void;
   onDeleteObjects: (ids: string[]) => void;
-  onHierarchyDrop: (draggedId: string, target: HierarchyDropTarget) => void;
+  onHierarchyDrop: (source: StageHierarchyRow, target: HierarchyDropTarget) => void;
   onGroupRename: (groupId: string, name: string) => void;
   onPatchObjects: (ids: string[], patch: Partial<EditorStageObject>) => void;
 }
@@ -203,43 +205,7 @@ function TreeRowShell({
 }
 
 function ObjectPreview({ object }: { object: EditorStageObject }) {
-  const { tones: editorTones } = useEditorTheme();
-  const tone = toneForObject(object, hierarchyTonesFor(editorTones));
-  const kind = previewKindForObject(object);
-  if (object.kind === 'model') {
-    const format = (object.format || 'obj').toUpperCase();
-    return (
-      <Box sx={{ width: 32, height: 32, display: 'grid', placeItems: 'center', overflow: 'hidden', borderRadius: 0.5, bgcolor: 'transparent' }}>
-        <Box sx={{ position: 'relative', width: 26, height: 24 }}>
-          <Box sx={{ position: 'absolute', left: 5, top: 6, width: 14, height: 14, bgcolor: object.color || tone.accent, opacity: 0.72, transform: 'skewY(-18deg)' }} />
-          <Box sx={{ position: 'absolute', right: 0, bottom: 0, px: 0.25, minWidth: 17, height: 10, display: 'grid', placeItems: 'center', borderRadius: 0.25, bgcolor: tone.accent, color: tone.text, fontSize: '0.43rem', fontWeight: 900, lineHeight: 1 }}>{format}</Box>
-        </Box>
-      </Box>
-    );
-  }
-  if (object.kind === 'text') {
-    return (
-      <Box sx={{ width: 32, height: 32, display: 'grid', placeItems: 'center', overflow: 'hidden', borderRadius: 0.5, bgcolor: 'transparent' }}>
-        <Box sx={{ width: 24, height: 18, display: 'grid', placeItems: 'center', border: `1px solid ${tone.accent}`, bgcolor: `${tone.accent}1f`, color: tone.text, fontSize: '0.75rem', fontWeight: 900, lineHeight: 1, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace' }}>T</Box>
-      </Box>
-    );
-  }
-  return (
-    <Box sx={{ width: 32, height: 32, display: 'grid', placeItems: 'center', overflow: 'hidden', borderRadius: 0.5, bgcolor: 'transparent' }}>
-      {hasStaticPreviewAsset(kind) ? (
-        <img
-          src={staticPreviewUrl(kind)}
-          width={30}
-          height={30}
-          alt=""
-          draggable={false}
-          style={{ display: 'block', objectFit: 'contain', userSelect: 'none' }}
-        />
-      ) : (
-        <PreviewShape kind={kind} tone={tone} width={28} height={24} />
-      )}
-    </Box>
-  );
+  return <PreviewImage object={object} width={30} height={30} />;
 }
 
 function GroupPreview({ selected }: { selected: boolean }) {
@@ -305,7 +271,7 @@ function ObjectRow({
   onObjectChange: (object: EditorStageObject) => void;
   onDuplicateObjects: (ids: string[]) => void;
   onDeleteObjects: (ids: string[]) => void;
-  onObjectDragStart: (id: string, event: React.DragEvent<HTMLDivElement>) => void;
+  onObjectDragStart: (source: StageHierarchyRow, event: React.DragEvent<HTMLDivElement>) => void;
   onTargetDragOver: (target: HierarchyDropTarget, event: React.DragEvent<HTMLDivElement>) => void;
   onTargetDragLeave: (target: HierarchyDropTarget, event: React.DragEvent<HTMLDivElement>) => void;
   onTargetDrop: (target: HierarchyDropTarget, event: React.DragEvent<HTMLDivElement>) => void;
@@ -339,9 +305,16 @@ function ObjectRow({
       <TreeRowShell depth={depth} last={last} ancestorLines={ancestorLines} childStem={children.length > 0}>
         <Box
           draggable={!editing}
+          tabIndex={0}
+          role="button"
+          aria-label={object.name}
+          aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown"
+          data-hierarchy-kind="object"
+          data-hierarchy-id={object.id}
+          onKeyDown={(event) => { if (event.target === event.currentTarget && ['Enter', ' '].includes(event.key)) { event.preventDefault(); onSelectObject(object.id); } }}
           onClick={select}
           onDoubleClick={() => setEditing(true)}
-          onDragStart={(event) => onObjectDragStart(object.id, event)}
+          onDragStart={(event) => onObjectDragStart({ kind: 'object', id: object.id }, event)}
           onDragOver={(event) => onTargetDragOver(targetFor(event), event)}
           onDragLeave={(event) => onTargetDragLeave(targetFor(event), event)}
           onDrop={(event) => onTargetDrop(targetFor(event), event)}
@@ -362,7 +335,7 @@ function ObjectRow({
             transition: 'background-color 120ms ease, box-shadow 120ms ease, opacity 120ms ease',
             ...dropSx(activeDrop, editorColors),
             '&:hover': { bgcolor: activeDrop === 'inside' ? `${editorColors.accent}24` : rowSelected ? selectedBg : hoverBg },
-            '&:hover .scene-row-actions': { display: 'flex' },
+            '&:hover .scene-row-actions, &:focus-within .scene-row-actions': { display: 'flex' },
           }}
         >
           <ObjectPreview object={object} />
@@ -443,6 +416,7 @@ function GroupBlock({
   onSelectionChange,
   onObjectChange,
   onDuplicateObjects,
+  onDuplicateGroup,
   onDeleteObjects,
   onGroupRename,
   onPatchObjects,
@@ -469,10 +443,11 @@ function GroupBlock({
   onSelectionChange: (ids: string[]) => void;
   onObjectChange: (object: EditorStageObject) => void;
   onDuplicateObjects: (ids: string[]) => void;
+  onDuplicateGroup: (id: string) => void;
   onDeleteObjects: (ids: string[]) => void;
   onGroupRename: (groupId: string, name: string) => void;
   onPatchObjects: (ids: string[], patch: Partial<EditorStageObject>) => void;
-  onObjectDragStart: (id: string, event: React.DragEvent<HTMLDivElement>) => void;
+  onObjectDragStart: (source: StageHierarchyRow, event: React.DragEvent<HTMLDivElement>) => void;
   onTargetDragOver: (target: HierarchyDropTarget, event: React.DragEvent<HTMLDivElement>) => void;
   onTargetDragLeave: (target: HierarchyDropTarget, event: React.DragEvent<HTMLDivElement>) => void;
   onTargetDrop: (target: HierarchyDropTarget, event: React.DragEvent<HTMLDivElement>) => void;
@@ -486,7 +461,7 @@ function GroupBlock({
   const hoverBg = `${editorColors.textMuted}0f`;
   const [expanded, setExpanded] = useState(true);
   const [editing, setEditing] = useState(false);
-  const ids = objects.map((object) => object.id);
+  const ids = group.objectIds;
   const allHidden = objects.length > 0 && objects.every((object) => object.hidden);
   const allLocked = objects.length > 0 && objects.every((object) => object.locked);
   const selected = selectedGroupId === group.id;
@@ -522,6 +497,16 @@ function GroupBlock({
           {expanded ? <KeyboardArrowDownIcon sx={{ width: 18, height: 18 }} /> : <KeyboardArrowRightIcon sx={{ width: 18, height: 18 }} />}
         </IconButton>
         <Box
+          draggable={!editing}
+          tabIndex={0}
+          role="button"
+          aria-label={group.name}
+          aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown"
+          data-hierarchy-kind="group"
+          data-hierarchy-id={group.id}
+          onKeyDown={(event) => { if (event.target === event.currentTarget && ['Enter', ' '].includes(event.key)) { event.preventDefault(); onSelectGroup(group.id); } }}
+          onDragStart={(event) => onObjectDragStart({ kind: 'group', id: group.id }, event)}
+          onDragEnd={onObjectDragEnd}
           onClick={() => onSelectGroup(group.id)}
           onDoubleClick={() => setEditing(true)}
           onDragOver={(event) => onTargetDragOver(targetFor(event), event)}
@@ -542,7 +527,7 @@ function GroupBlock({
             transition: 'background-color 120ms ease, box-shadow 120ms ease',
             ...dropSx(activeDrop, editorColors),
             '&:hover': { bgcolor: activeDrop === 'inside' ? `${editorColors.prefab}1f` : selected ? selectedBg : hoverBg },
-            '&:hover .scene-row-actions': { display: 'flex' },
+            '&:hover .scene-row-actions, &:focus-within .scene-row-actions': { display: 'flex' },
           }}
         >
           <GroupPreview selected={selected} />
@@ -556,7 +541,7 @@ function GroupBlock({
           <Stack className="scene-row-actions" direction="row" spacing={0} sx={{ display: 'none', flexShrink: 0 }}>
             <Tooltip title={allHidden ? 'Show all' : 'Hide all'}><IconButton size="small" onClick={(event) => { stop(event); onPatchObjects(ids, { hidden: !allHidden } as Partial<EditorStageObject>); }} sx={rowActionSx(editorColors)}>{allHidden ? <VisibilityOffIcon sx={{ width: 15, height: 15 }} /> : <VisibilityIcon sx={{ width: 15, height: 15 }} />}</IconButton></Tooltip>
             <Tooltip title={allLocked ? 'Unlock all' : 'Lock all'}><IconButton size="small" onClick={(event) => { stop(event); onPatchObjects(ids, { locked: !allLocked } as Partial<EditorStageObject>); }} sx={rowActionSx(editorColors)}>{allLocked ? <LockIcon sx={{ width: 15, height: 15 }} /> : <LockOpenIcon sx={{ width: 15, height: 15 }} />}</IconButton></Tooltip>
-            <Tooltip title="Duplicate group"><IconButton size="small" onClick={(event) => { stop(event); onDuplicateObjects(ids); }} sx={rowActionSx(editorColors)}><ContentCopyIcon sx={{ width: 15, height: 15 }} /></IconButton></Tooltip>
+            <Tooltip title="Duplicate group"><IconButton size="small" onClick={(event) => { stop(event); onDuplicateGroup(group.id); }} sx={rowActionSx(editorColors)}><ContentCopyIcon sx={{ width: 15, height: 15 }} /></IconButton></Tooltip>
             <Tooltip title="Delete group"><IconButton size="small" onClick={(event) => { stop(event); onDeleteObjects(ids); }} sx={{ ...rowActionSx(editorColors), color: editorColors.danger, '&:hover': { bgcolor: editorColors.dangerSurface, color: editorColors.danger } }}><DeleteIcon sx={{ width: 15, height: 15 }} /></IconButton></Tooltip>
           </Stack>
         </Box>
@@ -600,6 +585,7 @@ export function StageSceneHierarchy({
   onSelectionChange,
   onObjectChange,
   onDuplicateObjects,
+  onDuplicateGroup,
   onDeleteObjects,
   onHierarchyDrop,
   onGroupRename,
@@ -610,7 +596,8 @@ export function StageSceneHierarchy({
   const panelMuted = editorColors.textMuted;
   const panelLine = editorColors.border;
   const [query, setQuery] = useState('');
-  const [draggedObjectId, setDraggedObjectId] = useState<string | null>(null);
+  const [draggedSource, setDraggedSource] = useState<StageHierarchyRow | null>(null);
+  const draggedObjectId = draggedSource?.kind === 'object' ? draggedSource.id : null;
   const [dropTarget, setDropTarget] = useState<HierarchyDropTarget | null>(null);
   const normalizedQuery = query.trim().toLowerCase();
 
@@ -618,10 +605,11 @@ export function StageSceneHierarchy({
     const objectById = new Map(stage.objects.map((object) => [object.id, object]));
     const nextChildrenByParent = new Map<string, EditorStageObject[]>();
     for (const object of stage.objects) {
-      if (!object.parentId || !objectById.has(object.parentId)) continue;
-      const children = nextChildrenByParent.get(object.parentId) || [];
+      const parent = hierarchyParentId(object);
+      if (!parent || !objectById.has(parent)) continue;
+      const children = nextChildrenByParent.get(parent) || [];
       children.push(object);
-      nextChildrenByParent.set(object.parentId, children);
+      nextChildrenByParent.set(parent, children);
     }
     const childIds = new Set(Array.from(nextChildrenByParent.values()).flatMap((children) => children.map((object) => object.id)));
     const nextObjectGroupIds = new Map<string, string>();
@@ -637,42 +625,39 @@ export function StageSceneHierarchy({
       if (filteredObjects.length > 0 || (!normalizedQuery && allObjects.length > 0)) groupEntries.set(group.id, { group, objects: filteredObjects, allObjects });
     }
 
-    const seenGroups = new Set<string>();
-    const items: RootItem[] = [];
-    for (const object of stage.objects) {
-      const groupId = nextObjectGroupIds.get(object.id);
-      if (groupId) {
-        if (seenGroups.has(groupId)) continue;
-        seenGroups.add(groupId);
-        const entry = groupEntries.get(groupId);
-        if (entry) items.push({ type: 'group', entry });
-        continue;
-      }
-      if (childIds.has(object.id)) continue;
-      if (objectVisible(object, normalizedQuery, nextChildrenByParent)) items.push({ type: 'object', object });
+    const normalized = normalizeStageHierarchy(stage);
+    for (const [parent, children] of nextChildrenByParent) {
+      const order = normalized.metadata.attachedOrder?.[parent] || [];
+      children.sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
     }
-
-    for (const [groupId, entry] of groupEntries) {
-      if (!seenGroups.has(groupId)) items.push({ type: 'group', entry });
+    const items: RootItem[] = [];
+    for (const row of normalized.metadata.hierarchyOrder || []) {
+      if (row.kind === 'group') {
+        const entry = groupEntries.get(row.id);
+        if (entry) items.push({ type: 'group', entry });
+      } else {
+        const object = objectById.get(row.id);
+        if (object && objectVisible(object, normalizedQuery, nextChildrenByParent)) items.push({ type: 'object', object });
+      }
     }
 
     return { rootItems: items, objectGroupIds: nextObjectGroupIds, childrenByParent: nextChildrenByParent };
-  }, [stage.metadata.groups, stage.objects, normalizedQuery]);
+  }, [stage.metadata, stage.objects, normalizedQuery]);
 
   const hasItems = rootItems.length > 0;
 
-  const handleObjectDragStart = (id: string, event: React.DragEvent<HTMLDivElement>) => {
+  const handleObjectDragStart = (source: StageHierarchyRow, event: React.DragEvent<HTMLDivElement>) => {
     event.stopPropagation();
     event.dataTransfer.effectAllowed = 'move';
-    event.dataTransfer.setData(dragDataType, id);
-    event.dataTransfer.setData('text/plain', id);
-    setDraggedObjectId(id);
+    event.dataTransfer.setData(dragDataType, JSON.stringify(source));
+    setDraggedSource(source);
     setDropTarget(null);
   };
 
   const handleTargetDragOver = (target: HierarchyDropTarget, event: React.DragEvent<HTMLDivElement>) => {
     event.stopPropagation();
-    if (!draggedObjectId || (target.type === 'object' && draggedObjectId === target.id)) return;
+    if (!draggedSource || (target.type === draggedSource.kind && draggedSource.id === target.id)) return;
+    if (draggedSource.kind === 'group' && target.position === 'inside') return;
     event.preventDefault();
     event.dataTransfer.dropEffect = 'move';
     setDropTarget(target);
@@ -689,23 +674,40 @@ export function StageSceneHierarchy({
   const handleTargetDrop = (target: HierarchyDropTarget, event: React.DragEvent<HTMLDivElement>) => {
     event.preventDefault();
     event.stopPropagation();
-    const sourceId = draggedObjectId || event.dataTransfer.getData(dragDataType) || event.dataTransfer.getData('text/plain');
-    setDraggedObjectId(null);
+    let source = draggedSource;
+    if (!source) {
+      try { source = JSON.parse(event.dataTransfer.getData(dragDataType)); } catch { return; }
+    }
+    setDraggedSource(null);
     setDropTarget(null);
-    if (!sourceId || (target.type === 'object' && sourceId === target.id)) return;
-    onHierarchyDrop(sourceId, target);
+    if (!source || !['object', 'group'].includes(source.kind) || typeof source.id !== 'string') return;
+    onHierarchyDrop(source, target);
   };
 
   const handleObjectDragEnd = () => {
-    setDraggedObjectId(null);
+    setDraggedSource(null);
     setDropTarget(null);
   };
 
   return (
-    <Box sx={{ color: panelText, width: '100%', overflowX: 'hidden' }}>
+    <Box sx={{ color: panelText, width: '100%', overflowX: 'hidden' }} onKeyDown={(event) => {
+      if (!event.altKey || !['ArrowUp', 'ArrowDown'].includes(event.key)) return;
+      const row = (event.target as HTMLElement).closest<HTMLElement>('[data-hierarchy-kind]');
+      if (!row || event.target !== row) return;
+      const source = { kind: row.dataset.hierarchyKind, id: row.dataset.hierarchyId } as StageHierarchyRow;
+      const normalized = normalizeStageHierarchy(stage);
+      const object = source.kind === 'object' ? stage.objects.find(item => item.id === source.id) : null;
+      const parent = object && hierarchyParentId(object);
+      const group = object && stage.metadata.groups.find(item => item.objectIds.includes(source.id));
+      const siblings: StageHierarchyRow[] = parent ? (normalized.metadata.attachedOrder?.[parent] || []).map(id => ({ kind: 'object', id }))
+        : group ? group.objectIds.map(id => ({ kind: 'object', id })) : normalized.metadata.hierarchyOrder || [];
+      const index = siblings.findIndex(item => item.kind === source.kind && item.id === source.id);
+      const target = siblings[index + (event.key === 'ArrowUp' ? -1 : 1)];
+      event.preventDefault();
+      if (index >= 0 && target) onHierarchyDrop(source, { type: target.kind, id: target.id, position: event.key === 'ArrowUp' ? 'before' : 'after' });
+    }}>
       <Box sx={{ minHeight: 40, display: 'flex', alignItems: 'center', gap: 0.75, px: 0.875, bgcolor: editorColors.panel }}>
         <Box sx={{ minWidth: 0 }}>
-          <Typography variant="subtitle2" sx={{ ...editorType.panelTitle, fontSize: '0.875rem', lineHeight: 1.1 }}>Hierarchy</Typography>
           <Typography variant="caption" noWrap sx={{ ...editorType.caption, display: 'block' }}>{stage.objects.length} object{stage.objects.length === 1 ? '' : 's'}</Typography>
         </Box>
         <Box sx={{ flex: 1 }} />
@@ -742,6 +744,7 @@ export function StageSceneHierarchy({
             onSelectionChange={onSelectionChange}
             onObjectChange={onObjectChange}
             onDuplicateObjects={onDuplicateObjects}
+            onDuplicateGroup={onDuplicateGroup}
             onDeleteObjects={onDeleteObjects}
             onGroupRename={onGroupRename}
             onPatchObjects={onPatchObjects}

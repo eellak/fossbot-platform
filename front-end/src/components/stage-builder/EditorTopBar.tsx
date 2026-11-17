@@ -5,6 +5,9 @@ import {
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
+import SettingsIcon from '@mui/icons-material/Settings';
+import TuneIcon from '@mui/icons-material/Tune';
+import FactCheckIcon from '@mui/icons-material/FactCheck';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import GitHubIcon from '@mui/icons-material/GitHub';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
@@ -19,7 +22,7 @@ import { MARKETPLACE_COPY } from 'src/stages/marketplaceCopy';
 export interface EditorTopBarProps {
   stageName: string;
   dirty: boolean;
-  exportedAt?: string | null;
+  saveStatus?: string | null;
   validationResults: StageBuilderValidationResult[];
   selectedCount: number;
   canUndo: boolean;
@@ -40,6 +43,7 @@ export interface EditorTopBarProps {
   marketplacePublishLabel?: string;
   marketplacePublishReady?: boolean;
   onImport: () => void;
+  onReviewRecovery?: () => void;
   onSaveLocal: () => void;
   onOpenLocal: () => void;
   allowCloud?: boolean;
@@ -53,12 +57,15 @@ export interface EditorTopBarProps {
   onUndo: () => void;
   onRedo: () => void;
   onDuplicate: () => void;
+  onPlaceOnFloor?: () => void;
+  canPlaceOnFloor?: boolean;
   onDelete: () => void;
   onDeleteStage?: () => void;
   deleteStageBusy?: boolean;
   onOpenValidation: () => void;
   onOpenSettings: () => void;
   onOpenStageSettings: () => void;
+  onOpenTestSettings: () => void;
   onOpenPreviewSettings: () => void;
   onToggleLeftPanel: () => void;
   onToggleRightPanel: () => void;
@@ -119,7 +126,7 @@ function TopStatusText({ label, tone, onClick }: { label: string; tone: string; 
 export function EditorTopBar({
   stageName,
   dirty,
-  exportedAt,
+  saveStatus,
   validationResults,
   selectedCount,
   canUndo,
@@ -140,6 +147,7 @@ export function EditorTopBar({
   marketplacePublishLabel = MARKETPLACE_COPY.publishStage,
   marketplacePublishReady = false,
   onImport,
+  onReviewRecovery,
   onSaveLocal,
   onOpenLocal,
   allowCloud = true,
@@ -153,12 +161,14 @@ export function EditorTopBar({
   onUndo,
   onRedo,
   onDuplicate,
+  onPlaceOnFloor,
+  canPlaceOnFloor = false,
   onDelete,
   onDeleteStage,
   deleteStageBusy,
   onOpenValidation,
   onOpenSettings,
-  onOpenStageSettings,
+  onOpenStageSettings, onOpenTestSettings,
   onOpenPreviewSettings,
   onToggleLeftPanel,
   onToggleRightPanel,
@@ -223,13 +233,15 @@ export function EditorTopBar({
         </ButtonBase>
       </Tooltip>
 
+      <Tooltip title="Stage settings"><Button aria-label="Stage settings" onClick={onOpenStageSettings} sx={{ ...topbarIconButtonSx, width: 'auto', minWidth: 32, gap: 0.75 }}><SettingsIcon fontSize="small" /><Box component="span" sx={{ display: { xs: 'none', lg: 'inline' } }}>Stage settings</Box></Button></Tooltip>
+      <Tooltip title={`Validation: ${validationSummary(validationResults)}`}><Button aria-label="Validation" onClick={onOpenValidation} sx={{ ...topbarIconButtonSx, width: 'auto', minWidth: 32, gap: 0.75, color: hasErrors ? editorColors.danger : hasWarnings ? editorColors.warning : editorColors.success }}><FactCheckIcon fontSize="small" /><Box component="span" sx={{ display: { xs: 'none', lg: 'inline' } }}>Validation</Box></Button></Tooltip>
       <Box sx={{ flex: 1 }} />
       <Stack direction="row" spacing={0.75} alignItems="center" sx={{ display: { xs: 'none', md: 'flex' }, minWidth: 0, color: editorColors.textMuted }}>
-        <TopStatusText label={dirty ? 'Unsaved changes' : exportedAt ? 'Exported' : 'No changes'} tone={dirty ? editorColors.warning : editorColors.success} />
-        <TopStatusText label={validationSummary(validationResults)} tone={hasErrors ? editorColors.danger : hasWarnings ? editorColors.warning : editorColors.success} onClick={onOpenValidation} />
+        <TopStatusText label={dirty ? 'Unsaved changes' : saveStatus || 'No changes'} tone={dirty ? editorColors.warning : editorColors.success} />
+
       </Stack>
       <Stack direction="row" spacing={0.75} alignItems="center" sx={{ pl: 0.75, ml: 0.25 }}>
-        <Button size="small" color="inherit" variant="outlined" startIcon={localStageBusy ? <CircularProgress size={15} color="inherit" /> : <SaveIcon />} onClick={onSaveLocal} disabled={localStageBusy} sx={{ ...exportButtonSx, display: { xs: 'none', sm: 'inline-flex' } }}>{localStageBusy ? allowCloud ? 'Saving locally…' : 'Saving in this browser…' : allowCloud ? 'Save locally' : 'Save in this browser'}</Button>
+        <Button size="small" color="inherit" variant="outlined" startIcon={localStageBusy ? <CircularProgress size={15} color="inherit" /> : <SaveIcon />} onClick={onSaveLocal} disabled={localStageBusy} sx={{ ...exportButtonSx, display: { xs: 'none', sm: 'inline-flex' } }}>{localStageBusy ? allowCloud ? 'Saving to account…' : 'Saving in this browser…' : allowCloud ? 'Save to account' : 'Save in this browser'}</Button>
         {allowCloud && <Tooltip title={providerLabel || 'GitHub actions'}>
           <span>
             <Button
@@ -258,6 +270,7 @@ export function EditorTopBar({
           {marketplaceBusy ? 'Submitting…' : marketplacePublishLabel}
         </Button>}
         <Button size="small" variant="contained" disableElevation startIcon={<PlayArrowIcon />} onClick={onRunTest} aria-label="Run test" sx={{ ...runButtonSx, minWidth: { xs: 34, sm: 96 }, px: { xs: 0.75, sm: 1.75 }, '& .MuiButton-startIcon': { mr: { xs: 0, sm: 1 }, ml: 0 } }}><Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>Run test</Box></Button>
+        <Tooltip title="Test settings"><IconButton aria-label="Test settings" onClick={onOpenTestSettings} sx={topbarIconButtonSx}><TuneIcon fontSize="small" /></IconButton></Tooltip>
         <IconButton size="small" onClick={overflow.openMenu} aria-label="More editor actions" sx={topbarIconButtonSx}><MoreVertIcon fontSize="small" /></IconButton>
       </Stack>
       {allowCloud && <Menu anchorEl={github.anchorEl} open={github.open} onClose={github.closeMenu}>
@@ -283,21 +296,23 @@ export function EditorTopBar({
         <MenuItem onClick={() => { overflow.closeMenu(); onOpenLocal(); }}><FolderOpenIcon fontSize="small" sx={{ mr: 1 }} />{allowCloud ? 'Open my stage…' : 'Open browser-saved stage…'}</MenuItem>
         {marketplaceEnabled && <MenuItem disabled={marketplaceBusy} onClick={() => { overflow.closeMenu(); onPublishMarketplace(); }}>{marketplaceBusy ? <CircularProgress size={16} sx={{ mr: 1 }} /> : <PublishIcon fontSize="small" sx={{ mr: 1 }} />}{marketplaceBusy ? 'Submitting…' : marketplacePublishLabel}</MenuItem>}
         <Divider />
-        <MenuItem onClick={() => { overflow.closeMenu(); onExport(); }}><FileDownloadIcon fontSize="small" sx={{ mr: 1 }} />Save JSON</MenuItem>
+        <MenuItem onClick={() => { overflow.closeMenu(); onExport(); }}><FileDownloadIcon fontSize="small" sx={{ mr: 1 }} />Download JSON</MenuItem>
         <Divider />
         <MenuItem onClick={() => { overflow.closeMenu(); onNew(); }}>New stage</MenuItem>
         <MenuItem onClick={() => { overflow.closeMenu(); onDemo(); }}>Load demo</MenuItem>
         <MenuItem onClick={() => { overflow.closeMenu(); onImport(); }}>Import JSON…</MenuItem>
+        {onReviewRecovery && <MenuItem onClick={() => { overflow.closeMenu(); onReviewRecovery(); }}>Recent drafts</MenuItem>}
         <Divider />
         <MenuItem disabled={!canUndo} onClick={() => { overflow.closeMenu(); onUndo(); }}>Undo</MenuItem>
         <MenuItem disabled={!canRedo} onClick={() => { overflow.closeMenu(); onRedo(); }}>Redo</MenuItem>
         <MenuItem disabled={!selectedCount} onClick={() => { overflow.closeMenu(); onDuplicate(); }}>Duplicate selection</MenuItem>
+        <MenuItem disabled={!canPlaceOnFloor} onClick={() => { overflow.closeMenu(); onPlaceOnFloor?.(); }}>Place on floor</MenuItem>
         <MenuItem disabled={!selectedCount} onClick={() => { overflow.closeMenu(); onDelete(); }}>Delete selection</MenuItem>
         <Divider />
         <MenuItem onClick={() => { overflow.closeMenu(); onOpenValidation(); }}>Open validation</MenuItem>
         <MenuItem onClick={() => { overflow.closeMenu(); onToggleLeftPanel(); }}>{leftPanelVisible ? 'Hide' : 'Show'} library panel</MenuItem>
         <MenuItem onClick={() => { overflow.closeMenu(); onToggleRightPanel(); }}>{rightPanelVisible ? 'Hide' : 'Show'} inspector</MenuItem>
-        <MenuItem onClick={() => { overflow.closeMenu(); onOpenPreviewSettings(); }}>Preview settings</MenuItem>
+        {process.env.NODE_ENV === 'development' && <MenuItem onClick={() => { overflow.closeMenu(); onOpenPreviewSettings(); }}>Preview settings</MenuItem>}
         <MenuItem onClick={() => { overflow.closeMenu(); onOpenSettings(); }}>Editor settings</MenuItem>
         {onDeleteStage && <Divider />}
         {onDeleteStage && <MenuItem sx={{ color: 'error.main' }} disabled={deleteStageBusy || localStageBusy || providerBusy || marketplaceBusy} onClick={() => { overflow.closeMenu(); onDeleteStage(); }}><DeleteOutlineIcon fontSize="small" sx={{ mr: 1 }} />{deleteStageBusy ? 'Deleting stage…' : 'Delete stage'}</MenuItem>}

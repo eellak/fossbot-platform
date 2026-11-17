@@ -1,7 +1,6 @@
 import type { EditorStageObject, LocalStageRecord } from './types';
 
 const RUN_HANDOFF_PREFIX = 'fossbot.stageBuilder.runTest.v1';
-const DRAFT_PREFIX = 'fossbot.stageBuilder.recoveryDraft.v1';
 
 export type StageBuilderRunHandoff = {
   id: string;
@@ -55,15 +54,6 @@ export function writeStageBuilderRunHandoff(record: LocalStageRecord, id = makeR
     return id;
   } catch (error) {
     console.warn('[stage-builder] Failed to write run handoff', error);
-  }
-
-  try {
-    removeKeysWithPrefix(DRAFT_PREFIX);
-    removeKeysWithPrefix(RUN_HANDOFF_PREFIX);
-    window.localStorage.setItem(key, serialized);
-    return id;
-  } catch (error) {
-    console.warn('[stage-builder] Failed to write run handoff after cleanup', error);
     return null;
   }
 }

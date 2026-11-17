@@ -1,4 +1,13 @@
 import React, { useEffect, useImperativeHandle, useMemo, useRef } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import OpenWithIcon from '@mui/icons-material/OpenWith';
+import RotateRightIcon from '@mui/icons-material/RotateRight';
+import { evaluateLineGeometry, MAX_LINE_SEGMENTS } from '../../simulator/stages/lineGeometryCore';
+import { buildLineVisual } from '../../simulator/stages/visuals';
+import { rotateLine, lineRotationCenter, translateLine, previewLineInsertion, canCloseLine, closeLine, adjustLineCorner, moveLinePoint, setLineCorner, type LineOperation } from './stageBuilderLineEditing';
+import type { EditorLineObject } from './types';
+import { pickEditorLine } from './stageBuilderLinePicking';
+import { editorSelectionBounds, createLineMoveHandle, positionLineMoveHandle, createLinePointHandle, updateLinePointHandle, lineCornerHandles } from './stageBuilderLineHandles';
 import * as THREE from 'three';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
@@ -16,12 +25,13 @@ import { objectVisualKey } from './stageBuilderVisualKey';
 import type { EditorStageObject, StageBuilderGroup, StageBuilderMode, StageBuilderSkyboxSettings, StageBuilderTransformSpace, StageLabelAttachment, StageLabelFace, StageTextStyle, Vec3 } from './types';
 import type { StageBuilderControlScheme, StageBuilderLockMode, StageBuilderStyleVariant } from './stageBuilderPreferences';
 import type { StageBuilderSnapSettings } from './stageBuilderSnapping';
-import { getSnapSettings, snapAngle, snapDimensions, snapPosition } from './stageBuilderSnapping';
+import { commitObjectTransform, getSnapSettings, snapAngle, snapConstrainedPosition, snapDimensions, snapPosition, type TransformOperation } from './stageBuilderSnapping';
 import type { StageBuilderValidationResult } from './stageBuilderValidation';
 import { cloneStage, objectBounds, stageHalfExtents, cameraLookDirection } from './stageBuilderGeometry';
 import { getEditorColors, getEditorTones } from './stageBuilderEditorTheme';
 import { normalizeStageBuilderSkybox } from './stageBuilderSkybox';
 import { CUSTOM_OBJECT_MIN_SCALE } from './stageBuilderCustomObjects';
+import { lowestGeometryPoint } from './stageBuilderFloorPlacement';
 import { createStageBuilderRenderScheduler } from './stageBuilderRenderScheduler';
 
 export type StageBuilderTransformMode = 'select' | 'translate' | 'rotate' | 'scale';
@@ -36,6 +46,11 @@ export type StageBuilderPlacementStatus = {
 };
 
 export interface StageBuilderSceneProps {
+  keyboardEnabled?: boolean;
+  lineOperation?: LineOperation;
+  onLineOperationChange?: (operation: LineOperation) => void;
+  onAppendLinePoint?: (point: [number, number]) => void;
+  onLinePreview?: (line: EditorLineObject | null) => void;
   objects: EditorStageObject[];
   groups?: StageBuilderGroup[];
   selectedId: string | null;
@@ -73,6 +88,7 @@ export interface StageBuilderSceneProps {
 export type StageBuilderSceneHandle = {
   /** Renders the current stage from the default preview camera and returns a small PNG data URL. */
   captureStagePreview: (width?: number, height?: number) => string | null;
+  measureLowestPoint: (object: EditorStageObject) => Promise<number>;
 };
 
 export type MeshRecord = {
@@ -400,6 +416,7 @@ function makeImportedModelPickProxy(root: THREE.Object3D, objectId: string): THR
   );
   proxy.position.copy(center);
   proxy.name = 'custom object pick proxy';
+  proxy.userData.stageBuilderHelper = true;
   setObjectUserData(proxy, objectId);
   return proxy;
 }
@@ -486,6 +503,7 @@ function addCollisionWireVisual(root: THREE.Object3D, object: EditorStageObject,
   }
   if (!wire) return;
   wire.name = 'collision wire';
+  wire.userData.stageBuilderHelper = true;
   wire.renderOrder = 30;
   root.add(wire);
 }
@@ -560,7 +578,7 @@ function makeImportedModelRoot(object: Extract<EditorStageObject, { kind: 'model
     group.add(initialWire);
   }
 
-  loadStageBuilderModel(object, resolveAssetUrl, options.resolvedAssetUrl).then((loaded) => {
+  group.userData.stageBuilderVisualReady = loadStageBuilderModel(object, resolveAssetUrl, options.resolvedAssetUrl).then((loaded) => {
     if (group.userData.stageBuilderDisposed) {
       disposeObject(loaded);
       return;
@@ -589,8 +607,10 @@ function makeImportedModelRoot(object: Extract<EditorStageObject, { kind: 'model
       if (edgeWire) group.add(edgeWire);
     }
     onVisualReady?.();
+    return true;
   }).catch(() => {
-    // Keep the placeholder selectable when the imported model cannot be loaded.
+    // Keep the editor placeholder selectable, but never export it as finished artwork.
+    return false;
   });
 
   return group;
@@ -745,7 +765,6 @@ function makeLabelPlane(object: Extract<EditorStageObject, { kind: 'text' }>, op
   const texture = new THREE.CanvasTexture(makeTextCanvas(object.text, object.color, object.style, size, textSize, decorSize));
   const [width, height] = size;
   const mesh = new THREE.Mesh(new THREE.PlaneGeometry(width, height), labelPlaneMaterial(texture, options));
-  mesh.userData.stageBuilderPickPriority = 10;
   mesh.renderOrder = 4;
   return mesh;
 }
@@ -1307,19 +1326,26 @@ export function makeObjectRoot(object: EditorStageObject, options: ObjectVisualO
   } else if (object.kind === 'line') {
     const group = new THREE.Group();
     group.name = object.name;
-    const lineMat = new THREE.LineBasicMaterial({ color: materialColor(object.color, options, colors), transparent: options.ghost, opacity: options.ghost ? 0.45 : 1 });
-    const markerMat = basicMaterial(object.color, options, 1, colors);
-    const points = object.points.map(([x, z]) => new THREE.Vector3(x, object.y ?? 0.03, z));
-    if (points.length >= 2) {
-      const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), lineMat);
+    const evaluation = evaluateLineGeometry(object);
+    if (evaluation.runnable) {
+      const line = buildLineVisual({ ...object, type: 'line' }, evaluation).object;
       group.add(line);
-      pickables.push(line);
+      line.traverse(child => {
+        if (!(child as THREE.Mesh).isMesh) return;
+        // The editor floor is transparent, so draw its line surface in the same pass.
+        const material = (child as THREE.Mesh).material as THREE.Material;
+        material.transparent = true;
+        material.opacity = options.ghost ? 0.42 : 1;
+        pickables.push(child);
+      });
     }
-    for (const [x, z] of object.points) {
-      const marker = new THREE.Mesh(new THREE.SphereGeometry(Math.max(0.04, object.width * 1.6), 16, 10), markerMat);
-      marker.position.set(x, object.y ?? 0.035, z);
+    group.userData.stageBuilderLine = true;
+    group.userData.lastLinePoint = object.points.length - 1;
+    for (const [index, point] of object.points.entries()) {
+      if (!point.every(Number.isFinite)) continue;
+      const marker = createLinePointHandle(index, colors);
+      marker.position.set(point[0], (object.y ?? 0.001) + 0.006, point[1]);
       group.add(marker);
-      pickables.push(marker);
     }
     root = group;
   } else if (object.kind === 'model') {
@@ -1603,7 +1629,7 @@ function objectFromRootTransform(object: EditorStageObject, root: THREE.Object3D
 
 function transformLineObjectWithMatrix(object: EditorStageObject, matrix: THREE.Matrix4, snap: StageBuilderSnapSettings): EditorStageObject {
   if (object.kind !== 'line') return object;
-  const transformed = object.points.map(([x, z]) => snapPosition(new THREE.Vector3(x, object.y ?? 0, z).applyMatrix4(matrix).toArray() as Vec3, snap));
+  const transformed = object.points.map(([x, z]) => snapPosition(new THREE.Vector3(x, object.y ?? 0.001, z).applyMatrix4(matrix).toArray() as Vec3, snap));
   const matrixScale = new THREE.Vector3();
   matrix.decompose(new THREE.Vector3(), new THREE.Quaternion(), matrixScale);
   const widthScale = Math.max(scaleRatio(matrixScale.x), scaleRatio(matrixScale.z));
@@ -1830,7 +1856,11 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
   onPlaceAt,
   onPlacementStatusChange,
   onLockedSelectionAttempt,
+  keyboardEnabled = true,
+  lineOperation = { mode: 'select' }, onLineOperationChange, onAppendLinePoint, onLinePreview,
 }: StageBuilderSceneProps, ref) {
+  const keyboardEnabledRef = useRef(keyboardEnabled);
+  keyboardEnabledRef.current = keyboardEnabled;
   const containerRef = useRef<HTMLDivElement | null>(null);
   const sceneRef = useRef<SceneHandle | null>(null);
   const requestRenderRef = useRef<() => void>(() => undefined);
@@ -1851,6 +1881,10 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
   // Tracks an empty-space pointerdown so the matching pointerup can deselect —
   // but only if the pointer didn't move (a click), not an orbit/pan drag.
   const emptyClickRef = useRef<{ x: number; y: number } | null>(null);
+  const drawClickRef = useRef<{ x: number; y: number; point: [number, number] } | null>(null);
+  const lineActionsRef = useRef({ lineOperation, onLineOperationChange, onAppendLinePoint, onLinePreview });
+  const lineDragRef = useRef<{ start: EditorLineObject; next: EditorLineObject; index: number; kind: 'point' | 'corner' | 'keyboard' | 'move' | 'rotate'; rotation?: { pivot: [number, number]; lastAngle: number; startAngle: number; angle: number; applied: number; radius: number; handles: Map<string, THREE.Vector3> }; moveOrigin?: THREE.Vector3; closeOnClick?: boolean; pointerStart?: { x: number; y: number } } | null>(null);
+  useEffect(() => { lineActionsRef.current = { lineOperation, onLineOperationChange, onAppendLinePoint, onLinePreview }; invalidateScene(); }, [lineOperation, onLineOperationChange, onAppendLinePoint, onLinePreview]);
   const transformModeRef = useRef(transformMode);
   const objectsRef = useRef(objects);
   const groupsRef = useRef(groups);
@@ -1888,6 +1922,7 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
   const placementStatusRef = useRef<string>('');
   const friendlyDragRef = useRef<FriendlyDragState | null>(null);
   const groupTransformRef = useRef<GroupTransformState | null>(null);
+  const transformStartRef = useRef<{ operation: TransformOperation; object: EditorStageObject | null; matrix: THREE.Matrix4 | null; scale: THREE.Vector3 | null } | null>(null);
   const lookThroughCameraIdRef = useRef<string | null>(lookThroughCameraId);
   const savedEditorCameraRef = useRef({
     position: new THREE.Vector3(),
@@ -1946,7 +1981,7 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
       const root = objectMapRef.current.get(object.id)?.root;
       if (!root) continue;
       root.updateMatrixWorld(true);
-      const next = new THREE.Box3().setFromObject(root);
+      const next = editorSelectionBounds(root);
       if (!hasBox) box.copy(next);
       else box.union(next);
       hasBox = true;
@@ -2011,7 +2046,7 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
     transform.detach();
     if (lookThroughCameraIdRef.current) return;
     if (builderModeRef.current !== 'edit' || controlSchemeRef.current !== 'legacyGizmo') return;
-    if (transformModeRef.current === 'select') return;
+    if (transformModeRef.current === 'select' || lineActionsRef.current.lineOperation.mode !== 'select') return;
 
     const groupId = selectedGroupRef.current;
     if (groupId && updateGroupPivotFromBounds(groupId) && groupPivotRef.current) {
@@ -2079,24 +2114,27 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
     const delta = groupTransformDelta();
     groupTransformRef.current = null;
     if (!state || !delta) return;
-    const snap = snapSettingsRef.current;
+    const snap = getSnapSettings('off', 'off');
+    const operation = transformStartRef.current?.operation;
+    if (!operation) return;
     const nextObjects = Array.from(state.objectSnapshots.values()).map((object) => {
-      if (object.kind === 'line') return transformLineObjectWithMatrix(object, delta, snap);
+      if (object.kind === 'line') return commitObjectTransform(object, transformLineObjectWithMatrix(object, delta, snap), operation, true);
       const root = objectMapRef.current.get(object.id)?.root;
       const baselineScale = state.rootStartScales.get(object.id);
-      if (root && baselineScale) return objectFromRootTransform(object, root, snap, baselineScale) || object;
-      return transformObjectWithMatrix(object, delta, snap);
+      const proposed = root && baselineScale ? objectFromRootTransform(object, root, snap, baselineScale) || object : transformObjectWithMatrix(object, delta, snap);
+      return commitObjectTransform(object, proposed, operation, true);
     });
     if (onObjectsChangeRef.current) onObjectsChangeRef.current(nextObjects);
     else nextObjects.forEach((object) => onObjectChangeRef.current(object));
   };
 
   const commitSelectedTransform = () => {
-    const selected = objectsRef.current.find((item) => item.id === selectedRef.current);
+    const start = transformStartRef.current;
+    const selected = start?.object;
     const root = selected ? objectMapRef.current.get(selected.id)?.root : null;
     if (!selected || !root || selected.kind === 'line') return;
-    const next = objectFromRootTransform(selected, root, snapSettingsRef.current);
-    if (next) onObjectChangeRef.current(next);
+    const next = objectFromRootTransform(selected, root, getSnapSettings('off', 'off'), start?.scale || undefined);
+    if (next && start) onObjectChangeRef.current(commitObjectTransform(selected, next, start.operation));
   };
 
   useEffect(() => {
@@ -2184,11 +2222,16 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
       sceneHandle.controls.enabled = !event.value;
       if (event.value) {
         wasDraggingRef.current = true;
+        const object = objectsRef.current.find((item) => item.id === selectedRef.current) || null;
+        const root = object ? objectMapRef.current.get(object.id)?.root : null;
+        root?.updateMatrix();
+        transformStartRef.current = { operation: { mode: transform.getMode(), axes: transform.axis || 'XYZ', space: transform.space }, object, matrix: root?.matrix.clone() || null, scale: root?.scale.clone() || null };
         beginGroupTransform();
       } else if (wasDraggingRef.current) {
         wasDraggingRef.current = false;
         if (groupTransformRef.current) commitGroupTransform();
         else commitSelectedTransform();
+        transformStartRef.current = null;
       }
     });
     transform.addEventListener('objectChange', () => {
@@ -2205,11 +2248,210 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
     sceneHandle.scene.add(transform as unknown as THREE.Object3D);
     transformRef.current = transform;
 
-    const updatePointer = (event: PointerEvent) => {
+    const updatePointer = (event: MouseEvent) => {
       const rect = sceneHandle.renderer.domElement.getBoundingClientRect();
       tmpPointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
       tmpPointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
       raycaster.setFromCamera(tmpPointer, sceneHandle.camera);
+    };
+
+    const cornerControls = new Map<number, { button: HTMLButtonElement; diamond: HTMLSpanElement; guide: THREE.Group }>();
+    let cornerPathId: string | null = null;
+    let cornerCache: { line: EditorLineObject; handles: ReturnType<typeof lineCornerHandles> } | null = null;
+    const cornerOcclusionRay = new THREE.Raycaster();
+    const activeCorners = () => {
+      const operation = lineActionsRef.current.lineOperation;
+      if (operation.mode === 'select') return null;
+      const line = objectsRef.current.find(object => object.id === operation.pathId && object.kind === 'line') as EditorLineObject | undefined;
+      if (!line || line.locked || !objectMapRef.current.get(line.id)?.root.visible) return null;
+      if (cornerCache?.line !== line) cornerCache = { line, handles: lineCornerHandles(line) };
+      return cornerCache;
+    };
+    const finishLineDrag = () => {
+      const drag = lineDragRef.current;
+      lineDragRef.current = null;
+      lineActionsRef.current.onLinePreview?.(null);
+      sceneHandle.controls.enabled = true;
+      if (drag && JSON.stringify(drag.start) !== JSON.stringify(drag.next)) onObjectChangeRef.current(drag.next);
+      invalidateScene();
+    };
+    const createCornerControl = (index: number) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.setAttribute('aria-label', `Adjust rounding at point ${index + 1}`);
+      button.style.cssText = 'position:absolute;display:none;width:28px;height:28px;border:0;background:transparent;z-index:3;cursor:ew-resize;padding:9px;touch-action:none;';
+      const diamond = document.createElement('span');
+      diamond.style.cssText = 'display:block;width:10px;height:10px;box-sizing:border-box;transform:rotate(45deg);border:2px solid;';
+      button.appendChild(diamond);
+      button.title = `Point ${index + 1} rounding. Drag or use arrow keys. Shift uses 0.001 m. Escape cancels.`;
+      // Guides share the WebGL layer with points, so point fills always cover them.
+      const guide = new THREE.Group();
+      guide.visible = false;
+      for (const [width, order] of [[3, 998], [1, 999]]) {
+        const geometry = new LineSegmentsGeometry();
+        geometry.setPositions([0, 0, 0, 0, 0, 0]);
+        const stroke = new LineSegments2(geometry, new LineMaterial({ linewidth: width, transparent: true, depthTest: false, depthWrite: false }));
+        stroke.renderOrder = order;
+        stroke.frustumCulled = false;
+        guide.add(stroke);
+      }
+      sceneHandle.scene.add(guide);
+      containerRef.current?.append(button);
+      const selectCorner = () => {
+        const operation = lineActionsRef.current.lineOperation;
+        if (operation.mode === 'edit' && operation.pointIndex !== index) lineActionsRef.current.onLineOperationChange?.({ ...operation, pointIndex: index });
+      };
+      button.onfocus = selectCorner;
+      button.onpointerdown = event => {
+        const corners = activeCorners();
+        if (!corners?.handles.some(handle => handle.index === index) || event.button !== 0) return;
+        event.preventDefault(); event.stopPropagation();
+        button.focus();
+        lineDragRef.current = { start: corners.line, next: corners.line, index, kind: 'corner' };
+        sceneHandle.controls.enabled = false;
+      };
+      button.onkeydown = event => {
+        if (!['ArrowUp', 'ArrowRight', 'ArrowDown', 'ArrowLeft'].includes(event.key)) return;
+        const corners = activeCorners();
+        if (!corners?.handles.some(handle => handle.index === index)) return;
+        event.preventDefault(); event.stopPropagation();
+        const drag = lineDragRef.current || { start: corners.line, next: corners.line, index, kind: 'keyboard' as const };
+        const direction = ['ArrowUp', 'ArrowRight'].includes(event.key) ? 1 : -1;
+        drag.next = adjustLineCorner(drag.next, drag.index, direction * (event.shiftKey ? 0.001 : 0.01));
+        lineDragRef.current = drag;
+        lineActionsRef.current.onLinePreview?.(drag.next);
+      };
+      button.onkeyup = event => { if (lineDragRef.current?.kind === 'keyboard' && event.key.startsWith('Arrow')) finishLineDrag(); };
+      button.onblur = () => { if (lineDragRef.current?.kind === 'keyboard') finishLineDrag(); };
+      return { button, diamond, guide };
+    };
+
+    type LineTransformKind = 'move' | 'rotate';
+    const lineTransformControls = new Map<string, { id: string; kind: LineTransformKind; button: HTMLButtonElement; mesh: THREE.Mesh; line?: EditorLineObject }>();
+    const transformIcons = (['move', 'rotate'] as const).map(kind => {
+      const markup = renderToStaticMarkup(kind === 'move' ? <OpenWithIcon /> : <RotateRightIcon />);
+      const svg = new DOMParser().parseFromString(markup, 'image/svg+xml');
+      const path = new Path2D(svg.querySelector('path')!.getAttribute('d')!);
+      const canvas = document.createElement('canvas'); canvas.width = canvas.height = 128;
+      const texture = new THREE.CanvasTexture(canvas); texture.colorSpace = THREE.SRGBColorSpace;
+      return { kind, path, context: canvas.getContext('2d')!, texture, colors: '' };
+    });
+    const cancelLineTransform = () => {
+      if (!['move', 'rotate'].includes(lineDragRef.current?.kind || '')) return;
+      lineDragRef.current = null;
+      lineActionsRef.current.onLinePreview?.(null);
+      sceneHandle.controls.enabled = true;
+      invalidateScene();
+    };
+    const movableLine = (id: string) => objectsRef.current.find((object): object is EditorLineObject =>
+      object.id === id && object.kind === 'line' && !object.locked && !!objectMapRef.current.get(id)?.root.visible);
+    const selectMovingLine = (id: string) => {
+      if (selectedRef.current !== id || selectedGroupRef.current) onSelectRef.current(id);
+    };
+    const createLineTransformControl = (id: string, kind: LineTransformKind) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      // Keep a keyboard target while the visible control is rendered on the floor.
+      button.style.cssText = 'position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);padding:0;border:0;';
+      const mesh = createLineMoveHandle(transformIcons.find(icon => icon.kind === kind)!.texture);
+      sceneHandle.scene.add(mesh);
+      button.onfocus = () => invalidateScene();
+      button.onblur = () => invalidateScene();
+      button.title = kind === 'move' ? 'Move line along X/Z. Drag or use arrow keys. Escape cancels a drag.' : 'Rotate line around its centre. Drag or use arrow keys. Alt disables snapping. Escape cancels a drag.';
+      button.onclick = () => selectMovingLine(id);
+      button.onpointerdown = event => {
+        const line = movableLine(id);
+        if (!line || event.button !== 0 || lineDragRef.current) return;
+        event.preventDefault(); event.stopPropagation();
+        updatePointer(event);
+        if (!raycaster.ray.intersectPlane(floorPlane, floorHit)) return;
+        clearDrawingPreview(); clearCloseHint();
+        drawClickRef.current = null; emptyClickRef.current = null;
+        selectMovingLine(id);
+        button.focus(); sceneHandle.renderer.domElement.setPointerCapture(event.pointerId);
+        const pivot = lineRotationCenter(line);
+        const angle = Math.atan2(floorHit.z - pivot[1], floorHit.x - pivot[0]);
+        lineDragRef.current = { start: line, next: line, index: -1, kind, moveOrigin: floorHit.clone(), pointerStart: { x: event.clientX, y: event.clientY },
+          ...(kind === 'rotate' ? { rotation: { pivot, lastAngle: angle, startAngle: angle, angle: 0, applied: 0,
+            radius: Math.hypot(floorHit.x - pivot[0], floorHit.z - pivot[1]),
+            handles: new Map(Array.from(lineTransformControls, ([key, control]) => [key, control.mesh.position.clone()])) } } : {}) };
+        invalidateScene();
+        sceneHandle.controls.enabled = false;
+      };
+      button.onpointercancel = cancelLineTransform;
+      button.onkeydown = event => {
+        if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) return;
+        const line = movableLine(id);
+        if (!line || lineDragRef.current) return;
+        event.preventDefault(); event.stopPropagation();
+        selectMovingLine(id);
+        const snap = getSnapSettings(snapSettingsRef.current.preset, snapSettingsRef.current.rotationPreset, event);
+        if (kind === 'rotate') {
+          const direction = ['ArrowLeft', 'ArrowUp'].includes(event.key) ? 1 : -1;
+          onObjectChangeRef.current(rotateLine(line, lineRotationCenter(line), direction * (!event.altKey && snap.rotate ? snap.rotate : Math.PI / 180)));
+          return;
+        }
+        const step = snap.move || (event.shiftKey ? 0.001 : 0.01);
+        onObjectChangeRef.current(translateLine(line, [event.key === 'ArrowLeft' ? -step : event.key === 'ArrowRight' ? step : 0,
+          event.key === 'ArrowUp' ? -step : event.key === 'ArrowDown' ? step : 0]));
+      };
+      containerRef.current?.append(button);
+      return { id, kind, button, mesh };
+    };
+
+    const rotationGuide = new THREE.Group();
+    rotationGuide.visible = false;
+    for (const width of [3, 1]) {
+      const geometry = new LineSegmentsGeometry();
+      geometry.setPositions(new Float32Array(68 * 6));
+      const stroke = new LineSegments2(geometry, new LineMaterial({ linewidth: width, transparent: true, depthWrite: false }));
+      stroke.frustumCulled = false; stroke.renderOrder = width === 3 ? 5 : 6;
+      rotationGuide.add(stroke);
+    }
+    sceneHandle.scene.add(rotationGuide);
+    const rotationLabel = document.createElement('div');
+    rotationLabel.style.cssText = 'position:absolute;display:none;pointer-events:none;padding:3px 6px;border-radius:4px;font-size:12px;font-weight:600;z-index:4;';
+    rotationLabel.setAttribute('role', 'status');
+    rotationLabel.setAttribute('aria-label', 'Line rotation angle');
+    containerRef.current?.append(rotationLabel);
+    const updateRotationGuide = () => {
+      const rotation = lineDragRef.current?.rotation;
+      rotationGuide.visible = !!rotation;
+      rotationLabel.style.display = 'none';
+      if (!rotation) return;
+      const [x, z] = rotation.pivot;
+      const radius = rotation.radius;
+      const start = rotation.startAngle;
+      const sweep = Math.sign(rotation.applied) * Math.min(Math.abs(rotation.applied), Math.PI * 2);
+      const end = start - rotation.applied;
+      for (const [index, child] of rotationGuide.children.entries()) {
+        const stroke = child as LineSegments2;
+        const attributes = stroke.geometry.attributes;
+        const segment = (i: number, ax: number, az: number, bx: number, bz: number) => {
+          attributes.instanceStart.setXYZ(i, ax, 0.014, az);
+          attributes.instanceEnd.setXYZ(i, bx, 0.014, bz);
+        };
+        segment(0, x - 0.06, z, x + 0.06, z);
+        segment(1, x, z - 0.06, x, z + 0.06);
+        segment(2, x, z, x + Math.cos(start) * radius, z + Math.sin(start) * radius);
+        segment(3, x, z, x + Math.cos(end) * radius, z + Math.sin(end) * radius);
+        for (let i = 0; i < 64; i++) {
+          const a = start - sweep * i / 64, b = start - sweep * (i + 1) / 64;
+          segment(i + 4, x + Math.cos(a) * radius, z + Math.sin(a) * radius, x + Math.cos(b) * radius, z + Math.sin(b) * radius);
+        }
+        attributes.instanceStart.needsUpdate = true; attributes.instanceEnd.needsUpdate = true;
+        stroke.material.color.set(index === 0 ? styleColorsRef.current.panel : styleColorsRef.current.accent);
+        stroke.material.resolution.set(sceneHandle.renderer.domElement.clientWidth, sceneHandle.renderer.domElement.clientHeight);
+      }
+      const canvas = sceneHandle.renderer.domElement;
+      const screen = new THREE.Vector3(x + Math.cos(end) * radius, 0.014, z + Math.sin(end) * radius).project(sceneHandle.camera);
+      if (screen.z < -1 || screen.z > 1) return;
+      rotationLabel.style.display = 'block';
+      rotationLabel.style.left = `${Math.max(0, Math.min(canvas.clientWidth - 65, (screen.x + 1) * canvas.clientWidth / 2 + 14))}px`;
+      rotationLabel.style.top = `${Math.max(0, Math.min(canvas.clientHeight - 24, (1 - screen.y) * canvas.clientHeight / 2 - 28))}px`;
+      rotationLabel.style.background = styleColorsRef.current.panel;
+      rotationLabel.style.color = styleColorsRef.current.textStrong;
+      rotationLabel.textContent = `${Math.round(rotation.applied * 1800 / Math.PI) / 10}°`;
     };
 
     const placementObjectAt = (position: Vec3): EditorStageObject | null => {
@@ -2313,7 +2555,105 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
       }
     };
 
+    const pickScene = (event: MouseEvent) => {
+      const lines = objectsRef.current.filter((object): object is EditorLineObject => object.kind === 'line');
+      const lineIds = new Set(lines.map(line => line.id));
+      const pickables = Array.from(objectMapRef.current.values()).filter(record => !lineIds.has(record.objectId)).flatMap((record) => record.pickables);
+      const hits: (THREE.Intersection & { linePointIndex?: number })[] = raycaster.intersectObjects(pickables, true);
+      const rect = sceneHandle.renderer.domElement.getBoundingClientRect();
+      for (const line of lines) {
+        const root = objectMapRef.current.get(line.id)?.root;
+        if (!root || !root.visible) continue;
+        const hit = pickEditorLine(line, root, sceneHandle.camera, rect.width, rect.height, event.clientX - rect.left, event.clientY - rect.top, lineActionsRef.current.lineOperation.mode !== 'select' && lineActionsRef.current.lineOperation.pathId === line.id, 'pointerType' in event && event.pointerType === 'touch' ? 44 : 24);
+        if (hit) hits.push(hit);
+      }
+      hits.sort((a, b) => a.distance - b.distance);
+      return hits;
+    };
+
+    const closeHint = document.createElement('div');
+    closeHint.textContent = 'Close loop';
+    closeHint.setAttribute('role', 'tooltip');
+    closeHint.style.cssText = 'position:absolute;display:none;pointer-events:none;z-index:4;padding:4px 8px;border-radius:4px;font-size:12px;';
+    containerRef.current?.append(closeHint);
+    let closeTarget: { pathId: string; index: number } | null = null;
+    const clearCloseHint = () => {
+      if (!closeTarget) return;
+      closeTarget = null;
+      closeHint.style.display = 'none';
+      invalidateScene();
+    };
+    const drawingPreview = new THREE.Group();
+    drawingPreview.visible = false;
+    sceneHandle.scene.add(drawingPreview);
+    const previewPoint = createLinePointHandle(-1, styleColorsRef.current);
+    drawingPreview.add(previewPoint);
+    const previewStrokes = [4, 2].map((width, index) => {
+      const geometry = new LineSegmentsGeometry();
+      geometry.setPositions(new Float32Array(MAX_LINE_SEGMENTS * 6));
+      geometry.instanceCount = 0;
+      const stroke = new LineSegments2(geometry, new LineMaterial({ linewidth: width, dashed: true, dashSize: 0.08, gapSize: 0.05, transparent: true, depthWrite: false }));
+      stroke.computeLineDistances();
+      stroke.frustumCulled = false;
+      stroke.renderOrder = 996 + index;
+      drawingPreview.add(stroke);
+      return stroke;
+    });
+    let drawingPointer: { clientX: number; clientY: number; shiftKey: boolean; altKey: boolean; blocked: boolean } | null = null;
+    let previewCache: { line: EditorLineObject | undefined; from: number | undefined; x: number; z: number; valid: boolean } | null = null;
+    const clearDrawingPreview = () => {
+      drawingPointer = null;
+      if (drawingPreview.visible) { drawingPreview.visible = false; invalidateScene(); }
+    };
+    const updateDrawingPreview = () => {
+      const operation = lineActionsRef.current.lineOperation;
+      drawingPreview.visible = false;
+      if (!drawingPointer || drawingPointer.blocked || drawingPointer.altKey || spaceHeldRef.current || lineDragRef.current
+        || operation.mode !== 'edit' || builderModeRef.current !== 'edit' || lookThroughCameraIdRef.current) return;
+      const line = objectsRef.current.find(object => object.id === operation.pathId && object.kind === 'line') as EditorLineObject | undefined;
+      if (operation.pathId && (!line || line.locked || !objectMapRef.current.get(line.id)?.root.visible)) return;
+      const rect = sceneHandle.renderer.domElement.getBoundingClientRect();
+      raycaster.setFromCamera(new THREE.Vector2((drawingPointer.clientX - rect.left) / rect.width * 2 - 1,
+        1 - (drawingPointer.clientY - rect.top) / rect.height * 2), sceneHandle.camera);
+      if (!raycaster.ray.intersectPlane(floorPlane, floorHit)) return;
+      const snap = getSnapSettings(snapSettingsRef.current.preset, snapSettingsRef.current.rotationPreset, { shiftKey: drawingPointer.shiftKey });
+      const [x, , z] = snapPosition([floorHit.x, 0, floorHit.z], snap);
+      const from = operation.pointIndex;
+      const y = (line?.y ?? 0.001) + 0.008;
+      if (!previewCache || previewCache.line !== line || previewCache.from !== from || previewCache.x !== x || previewCache.z !== z) {
+        const candidate = line ? previewLineInsertion(line, from, [x, z]) : null;
+        previewCache = { line, from, x, z, valid: !line || !!candidate };
+        const route = candidate?.evaluation.route || [];
+        for (const stroke of previewStrokes) {
+          const attributes = stroke.geometry.attributes;
+          let distance = 0;
+          for (let i = 1; i < route.length; i++) {
+            const a = route[i - 1], b = route[i];
+            attributes.instanceStart.setXYZ(i - 1, a[0], y, a[1]);
+            attributes.instanceEnd.setXYZ(i - 1, b[0], y, b[1]);
+            attributes.instanceDistanceStart.setX(i - 1, distance);
+            distance += Math.hypot(b[0] - a[0], b[1] - a[1]);
+            attributes.instanceDistanceEnd.setX(i - 1, distance);
+          }
+          stroke.geometry.instanceCount = Math.max(0, route.length - 1);
+          for (const name of ['instanceStart', 'instanceEnd', 'instanceDistanceStart', 'instanceDistanceEnd']) attributes[name].needsUpdate = true;
+        }
+      }
+      if (!previewCache.valid) return;
+      drawingPreview.visible = true;
+      previewPoint.position.set(x, y, z);
+      drawingPreview.updateMatrixWorld(true);
+      updateLinePointHandle(previewPoint, sceneHandle.camera, rect.height, true, true, styleColorsRef.current);
+      previewStrokes.forEach((stroke, index) => {
+        stroke.material.color.set(index === 0 ? styleColorsRef.current.panel : styleColorsRef.current.accent);
+        stroke.material.resolution.set(rect.width, rect.height);
+      });
+    };
+    let lastDrawingClick = -Infinity;
     const handlePointerDown = (event: PointerEvent) => {
+      clearDrawingPreview();
+      if (event.button !== 0) return;
+      if (lineActionsRef.current.lineOperation.mode === 'edit') lastDrawingClick = performance.now();
       updatePointer(event);
       if (lookThroughCameraIdRef.current) return;
       if (spaceHeldRef.current || builderModeRef.current === 'navigate' || builderModeRef.current === 'test') return;
@@ -2322,6 +2662,15 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
         const status = updatePlacementStatus(event);
         if (status?.valid && status.position) onPlaceAtRef.current?.(status.position);
         return;
+      }
+
+      for (const control of lineTransformControls.values()) {
+        const hit = control.mesh.visible ? raycaster.intersectObject(control.mesh)[0] : undefined;
+        const front = hit ? pickScene(event)[0] : undefined;
+        if (hit && (!front || front.distance >= hit.distance)) {
+          control.button.onpointerdown?.call(control.button, event);
+          return;
+        }
       }
 
       // TransformControls receives this pointerdown first; if it claimed a gizmo
@@ -2333,7 +2682,7 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
 
       const selected = objectsRef.current.find((item) => item.id === selectedRef.current);
       const selectedRoot = selected ? objectMapRef.current.get(selected.id)?.root : null;
-      if (controlSchemeRef.current === 'friendly' && selectedRoot && canTransform(selected)) {
+      if (lineActionsRef.current.lineOperation.mode === 'select' && controlSchemeRef.current === 'friendly' && selectedRoot && canTransform(selected)) {
         const handleHit = raycaster.intersectObjects(friendlyHandlesRef.current?.pickables || [], true)[0];
         const kind = handleHit?.object.userData.friendlyHandle as FriendlyHandleKind | undefined;
         if (kind && raycaster.ray.intersectPlane(floorPlane, floorHit)) {
@@ -2345,17 +2694,33 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
           const distance = Math.max(0.01, Math.hypot(floorHit.x - selectedRoot.position.x, floorHit.z - selectedRoot.position.z));
           const dims = 'dimensions' in selected ? [...selected.dimensions] as number[] : [];
           friendlyDragRef.current = { kind, startAngle: angle, lastAngle: angle, accumulatedAngle: 0, startRotation: 'rotationY' in selected ? selected.rotationY : 0, startDistance: distance, startDimensions: dims };
+          selectedRoot.updateMatrix();
+          transformStartRef.current = { operation: { mode: kind === 'move' ? 'translate' : kind === 'resize' ? 'scale' : 'rotate', axes: kind === 'move' ? (axisLockRef.current || 'XZ').toUpperCase() : 'XYZ', space: 'world' }, object: selected!, matrix: selectedRoot.matrix.clone(), scale: selectedRoot.scale.clone() };
           return;
         }
       }
 
-      const pickables = Array.from(objectMapRef.current.values()).flatMap((record) => record.pickables);
-      const hits = raycaster.intersectObjects(pickables, true);
-      const priorityHit = hits.find((entry) => Number(entry.object.userData.stageBuilderPickPriority || 0) > 0);
-      const firstHit = priorityHit || hits[0];
+      const hits = pickScene(event);
+      const firstHit = hits[0];
       if (firstHit?.object.userData.stageObjectId) {
         const currentId = selectedRef.current;
         let nextId = firstHit.object.userData.stageObjectId as string;
+        const operation = lineActionsRef.current.lineOperation;
+        if (operation.mode === 'edit' && operation.pathId === nextId) {
+          let hit: THREE.Object3D | null = firstHit.object;
+          while (hit && hit.userData.linePointIndex === undefined) hit = hit.parent;
+          const pointIndex = firstHit.linePointIndex ?? hit?.userData.linePointIndex;
+          const line = objectsRef.current.find(object => object.id === nextId) as EditorLineObject;
+          if (pointIndex !== undefined && !line.locked) {
+            const closeOnClick = canCloseLine(line, operation.pointIndex, pointIndex);
+            if (!closeOnClick) lineActionsRef.current.onLineOperationChange?.({ mode: 'edit', pathId: nextId, pointIndex });
+            clearCloseHint();
+            lineDragRef.current = { start: line, next: line, index: pointIndex, kind: 'point', closeOnClick, pointerStart: { x: event.clientX, y: event.clientY } };
+            sceneHandle.controls.enabled = false;
+            return;
+          }
+          return;
+        }
         if (lockModeRef.current === 'selectThrough' && currentId && nextId === currentId) {
           const throughHit = hits.find((entry) => entry.object.userData.stageObjectId && entry.object.userData.stageObjectId !== currentId);
           if (throughHit?.object.userData.stageObjectId) nextId = throughHit.object.userData.stageObjectId as string;
@@ -2376,16 +2741,15 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
         return;
       }
 
+      if (lineActionsRef.current.lineOperation.mode === 'edit' && !event.altKey && raycaster.ray.intersectPlane(floorPlane, floorHit)) {
+        const snap = getSnapSettings(snapSettingsRef.current.preset, snapSettingsRef.current.rotationPreset, { shiftKey: event.shiftKey });
+        const point = snapPosition([floorHit.x, 0, floorHit.z], snap);
+        drawClickRef.current = { x: event.clientX, y: event.clientY, point: [point[0], point[2]] };
+        return;
+      }
       if (event.shiftKey) {
         marqueeRef.current = { startX: event.clientX, startY: event.clientY, currentX: event.clientX, currentY: event.clientY };
         updateMarqueeElement(event);
-        return;
-      }
-
-      if (selected?.kind === 'line' && !selected.locked && raycaster.ray.intersectPlane(floorPlane, floorHit)) {
-        const snap = getSnapSettings(snapSettingsRef.current.preset, snapSettingsRef.current.rotationPreset, { shiftKey: event.shiftKey });
-        const point = snapPosition([floorHit.x, 0, floorHit.z], snap);
-        onObjectChangeRef.current({ ...selected, points: [...selected.points, [point[0], point[2]]] });
         return;
       }
 
@@ -2394,8 +2758,82 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
       if (event.button === 0) emptyClickRef.current = { x: event.clientX, y: event.clientY };
     };
 
+    const handleDoubleClick = (event: MouseEvent) => {
+      if (event.button !== 0 || event.shiftKey || event.altKey || event.ctrlKey || event.metaKey || spaceHeldRef.current
+        || lookThroughCameraIdRef.current || builderModeRef.current !== 'edit'
+        || lineActionsRef.current.lineOperation.mode !== 'select' || performance.now() - lastDrawingClick < 500) return;
+      updatePointer(event);
+      const hit = pickScene(event)[0];
+      const line = objectsRef.current.find(object => object.id === hit?.object.userData.stageObjectId);
+      if (line?.kind !== 'line' || line.locked || line.id !== selectedRef.current) return;
+      event.preventDefault();
+      lineActionsRef.current.onLineOperationChange?.({ mode: 'edit', pathId: line.id, pointIndex: line.points.length - 1 });
+    };
+
     const handlePointerMove = (event: PointerEvent) => {
       updatePointer(event);
+      const lineDrag = lineDragRef.current;
+      if (lineDrag && lineDrag.kind !== 'keyboard') {
+        if (lineDrag.pointerStart) {
+          if (Math.hypot(event.clientX - lineDrag.pointerStart.x, event.clientY - lineDrag.pointerStart.y) < 4) return;
+          lineDrag.pointerStart = undefined;
+          if (lineDrag.closeOnClick) {
+            lineDrag.closeOnClick = false;
+            lineActionsRef.current.onLineOperationChange?.({ mode: 'edit', pathId: lineDrag.start.id, pointIndex: lineDrag.index });
+          }
+        }
+        const plane = ['move', 'rotate'].includes(lineDrag.kind) ? floorPlane : new THREE.Plane(new THREE.Vector3(0, 1, 0), -(lineDrag.start.y ?? 0.001));
+        if (!raycaster.ray.intersectPlane(plane, floorHit)) return;
+        if (lineDrag.kind === 'move') {
+          const snap = getSnapSettings(snapSettingsRef.current.preset, snapSettingsRef.current.rotationPreset, event);
+          const origin = lineDrag.moveOrigin!;
+          const [x, , z] = snapPosition([floorHit.x - origin.x, 0, floorHit.z - origin.z], snap);
+          lineDrag.next = translateLine(lineDrag.start, [x, z]);
+        } else if (lineDrag.kind === 'rotate') {
+          const rotation = lineDrag.rotation!;
+          const x = floorHit.x - rotation.pivot[0], z = floorHit.z - rotation.pivot[1];
+          if (Math.hypot(x, z) < 0.001) return;
+          const angle = Math.atan2(z, x);
+          const delta = rotation.lastAngle - angle;
+          rotation.angle += Math.atan2(Math.sin(delta), Math.cos(delta));
+          rotation.lastAngle = angle;
+          rotation.applied = event.altKey ? rotation.angle : snapAngle(rotation.angle, getSnapSettings(snapSettingsRef.current.preset, snapSettingsRef.current.rotationPreset, event));
+          lineDrag.next = rotateLine(lineDrag.start, rotation.pivot, rotation.applied);
+        } else if (lineDrag.kind === 'point') {
+          const snap = getSnapSettings(snapSettingsRef.current.preset, snapSettingsRef.current.rotationPreset, { shiftKey: event.shiftKey, altKey: event.altKey });
+          const point = snapPosition([floorHit.x, 0, floorHit.z], snap);
+          lineDrag.next = moveLinePoint(lineDrag.start, lineDrag.index, [point[0], point[2]]);
+        } else {
+          const point = lineDrag.start.points[lineDrag.index];
+          const outgoing = lineDrag.start.points[(lineDrag.index + 1) % lineDrag.start.points.length];
+          const dx = outgoing[0] - point[0], dz = outgoing[1] - point[1];
+          const distance = Math.hypot(dx, dz);
+          const trim = Math.max(0.001, ((floorHit.x - point[0]) * dx + (floorHit.z - point[1]) * dz) / distance);
+          lineDrag.next = setLineCorner(lineDrag.start, lineDrag.index, { mode: 'rounded', sizing: 'manual', trim });
+        }
+        lineActionsRef.current.onLinePreview?.(lineDrag.next);
+        return;
+      }
+      const moveHit = Array.from(lineTransformControls.values()).find(control => control.mesh.visible && raycaster.intersectObject(control.mesh).length > 0);
+      sceneHandle.renderer.domElement.style.cursor = moveHit ? (moveHit.kind === 'rotate' ? 'grab' : 'move') : '';
+      if (moveHit && !event.buttons) { clearDrawingPreview(); clearCloseHint(); return; }
+      const operation = lineActionsRef.current.lineOperation;
+      const line = operation.mode === 'edit' ? objectsRef.current.find(object => object.id === operation.pathId && object.kind === 'line') as EditorLineObject | undefined : undefined;
+      const hit = operation.mode === 'edit' && event.target === sceneHandle.renderer.domElement && !event.buttons && !spaceHeldRef.current ? pickScene(event)[0] : undefined;
+      if (operation.mode === 'edit' && event.target === sceneHandle.renderer.domElement && !event.buttons) {
+        drawingPointer = { clientX: event.clientX, clientY: event.clientY, shiftKey: event.shiftKey, altKey: event.altKey, blocked: !!hit };
+        invalidateScene();
+      } else clearDrawingPreview();
+      if (line && operation.mode === 'edit' && hit?.object.userData.stageObjectId === line.id && hit.linePointIndex !== undefined && canCloseLine(line, operation.pointIndex, hit.linePointIndex)) {
+        closeTarget = { pathId: line.id, index: hit.linePointIndex };
+        const rect = containerRef.current!.getBoundingClientRect();
+        closeHint.style.display = 'block';
+        closeHint.style.left = `${Math.min(event.clientX - rect.left + 14, rect.width - 90)}px`;
+        closeHint.style.top = `${Math.max(0, event.clientY - rect.top - 32)}px`;
+        closeHint.style.background = styleColorsRef.current.panel;
+        closeHint.style.color = styleColorsRef.current.textStrong;
+        invalidateScene();
+      } else clearCloseHint();
       if (builderModeRef.current === 'place') {
         updatePlacementStatus(event);
         return;
@@ -2418,7 +2856,9 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
         const next = new THREE.Vector3(dragStartPosition.x + floorHit.x - dragStartHit.x, dragStartPosition.y, dragStartPosition.z + floorHit.z - dragStartHit.z);
         if (axisLockRef.current === 'x') next.z = dragStartPosition.z;
         if (axisLockRef.current === 'z') next.x = dragStartPosition.x;
-        const snapped = snapPosition([next.x, next.y, next.z], snap);
+        const axes = (axisLockRef.current || 'XZ').toUpperCase();
+        if (transformStartRef.current) transformStartRef.current.operation.axes = axes;
+        const snapped = snapConstrainedPosition(dragStartPosition.toArray() as Vec3, next.toArray() as Vec3, axes, snap.move);
         selectedRoot.position.set(snapped[0], snapped[1], snapped[2]);
       } else if (drag.kind === 'rotate' && 'rotationY' in selected) {
         const angle = Math.atan2(floorHit.z - selectedRoot.position.z, floorHit.x - selectedRoot.position.x);
@@ -2440,11 +2880,24 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
     };
 
     const handlePointerUp = (event: PointerEvent) => {
+      const lineDrag = lineDragRef.current;
+      if (lineDrag && lineDrag.kind !== 'keyboard') {
+        if (event.button !== 0) return;
+        if (lineDrag.closeOnClick && lineDrag.pointerStart && Math.hypot(event.clientX - lineDrag.pointerStart.x, event.clientY - lineDrag.pointerStart.y) < 4) {
+          lineDrag.next = closeLine(lineDrag.start);
+          lineActionsRef.current.onLineOperationChange?.({ mode: 'edit', pathId: lineDrag.start.id, pointIndex: lineDrag.index });
+        }
+        finishLineDrag(); return;
+      }
+      const draw = drawClickRef.current;
+      drawClickRef.current = null;
+      if (draw && Math.hypot(event.clientX - draw.x, event.clientY - draw.y) < 5) lineActionsRef.current.onAppendLinePoint?.(draw.point);
       if (marqueeRef.current) finishMarquee();
       if (friendlyDragRef.current) {
         friendlyDragRef.current = null;
         sceneHandle.controls.enabled = true;
         commitSelectedTransform();
+        transformStartRef.current = null;
       }
       const emptyDown = emptyClickRef.current;
       emptyClickRef.current = null;
@@ -2462,7 +2915,7 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
         gizmo.setTranslationSnap(null);
         gizmo.setRotationSnap(null);
       } else if (shiftHeldRef.current) {
-        gizmo.setTranslationSnap(0.1);
+        gizmo.setTranslationSnap(Math.min(snap.move || 0.1, 0.1));
         gizmo.setRotationSnap((15 * Math.PI) / 180);
       } else {
         gizmo.setTranslationSnap(snap.move || null);
@@ -2471,6 +2924,37 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
     };
 
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (!keyboardEnabledRef.current) return;
+      if (drawingPointer) { drawingPointer.shiftKey = event.shiftKey; drawingPointer.altKey = event.altKey; invalidateScene(); }
+      if (event.key === 'Escape') clearDrawingPreview();
+      if (event.key === 'Escape' && lineDragRef.current) {
+        event.preventDefault(); event.stopImmediatePropagation();
+        lineDragRef.current = null;
+        lineActionsRef.current.onLinePreview?.(null);
+        sceneHandle.controls.enabled = true;
+        invalidateScene();
+        return;
+      }
+      if (event.key === 'Escape' && transformStartRef.current) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        wasDraggingRef.current = false;
+        transform.reset();
+        transform.dragging = false;
+        const start = transformStartRef.current;
+        const roots = groupTransformRef.current?.rootStartMatrices || new Map(start.object && start.matrix ? [[start.object.id, start.matrix]] : []);
+        for (const [id, matrix] of roots) {
+          const root = objectMapRef.current.get(id)?.root;
+          if (root) { matrix.decompose(root.position, root.quaternion, root.scale); root.updateMatrixWorld(true); }
+        }
+        friendlyDragRef.current = null;
+        groupTransformRef.current = null;
+        transformStartRef.current = null;
+        sceneHandle.controls.enabled = true;
+        updateAttachedLabelVisuals(new Set(roots.keys()));
+        invalidateScene(true);
+        return;
+      }
       if (event.code === 'Space') spaceHeldRef.current = true;
       if (event.key === 'Shift' && !shiftHeldRef.current) {
         shiftHeldRef.current = true;
@@ -2485,6 +2969,8 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
       if (event.key.toLowerCase() === 'z') axisLockRef.current = 'z';
     };
     const handleKeyUp = (event: KeyboardEvent) => {
+      if (!keyboardEnabledRef.current) return;
+      if (drawingPointer) { drawingPointer.shiftKey = event.shiftKey; drawingPointer.altKey = event.altKey; invalidateScene(); }
       if (event.code === 'Space') spaceHeldRef.current = false;
       if (event.key === 'Shift' && shiftHeldRef.current) {
         shiftHeldRef.current = false;
@@ -2498,12 +2984,120 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
     };
 
     sceneHandle.renderer.domElement.addEventListener('pointerdown', handlePointerDown);
+    sceneHandle.renderer.domElement.addEventListener('pointercancel', cancelLineTransform);
+    sceneHandle.renderer.domElement.addEventListener('dblclick', handleDoubleClick);
+    sceneHandle.renderer.domElement.addEventListener('pointerleave', clearCloseHint);
+    sceneHandle.renderer.domElement.addEventListener('pointerleave', clearDrawingPreview);
     window.addEventListener('pointermove', handlePointerMove);
     window.addEventListener('pointerup', handlePointerUp);
-    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keydown', handleKeyDown, true);
     window.addEventListener('keyup', handleKeyUp);
 
     const frame = () => {
+      updateDrawingPreview();
+      const operation = lineActionsRef.current.lineOperation;
+      if (operation.mode !== 'edit' || operation.pathId !== closeTarget?.pathId || lineDragRef.current) clearCloseHint();
+      const selectedLine = objectsRef.current.find((line): line is EditorLineObject => line.kind === 'line' && line.id === selectedRef.current
+        && !line.locked && !!objectMapRef.current.get(line.id)?.root.visible && builderModeRef.current === 'edit' && !lookThroughCameraIdRef.current);
+      for (const [key, control] of lineTransformControls) {
+        if (control.id !== selectedLine?.id) {
+          control.button.remove(); control.mesh.removeFromParent(); disposeObject(control.mesh); lineTransformControls.delete(key);
+        }
+      }
+      if (selectedLine) {
+        for (const icon of transformIcons) {
+          const key = `${selectedLine.id}:${icon.kind}`;
+          let control = lineTransformControls.get(key);
+          if (!control) { control = createLineTransformControl(selectedLine.id, icon.kind); lineTransformControls.set(key, control); }
+          const colors = styleColorsRef.current;
+          const focused = control.button === document.activeElement;
+          const colorKey = `${colors.panel}:${colors.accent}:${focused}`;
+          if (icon.colors !== colorKey) {
+            icon.colors = colorKey;
+            const context = icon.context;
+            context.clearRect(0, 0, 128, 128);
+            context.save(); context.translate(8, 8); context.scale(112 / 24, 112 / 24);
+            context.strokeStyle = colors.panel; context.lineWidth = focused ? 3 : 2;
+            context.lineJoin = 'round'; context.stroke(icon.path);
+            context.fillStyle = colors.accent; context.fill(icon.path); context.restore();
+            icon.texture.needsUpdate = true;
+          }
+          const rotation = lineDragRef.current?.rotation;
+          if (rotation) {
+            const origin = rotation.handles.get(key)!;
+            const cos = Math.cos(rotation.applied), sin = Math.sin(rotation.applied);
+            const x = origin.x - rotation.pivot[0], z = origin.z - rotation.pivot[1];
+            control.mesh.position.set(rotation.pivot[0] + x * cos + z * sin, origin.y, rotation.pivot[1] - x * sin + z * cos);
+            control.mesh.updateMatrixWorld(true);
+            control.line = undefined;
+          } else if (control.line !== selectedLine) {
+            const outward = positionLineMoveHandle(control.mesh, selectedLine);
+            if (icon.kind === 'rotate' && outward) { control.mesh.position.x -= outward.y * 0.28; control.mesh.position.z += outward.x * 0.28; }
+            control.mesh.updateMatrixWorld(true);
+            control.line = selectedLine;
+          }
+          control.button.setAttribute('aria-label', `${icon.kind === 'move' ? 'Move' : 'Rotate'} ${selectedLine.name || 'line'}`);
+        }
+      }
+      updateRotationGuide();
+      const pointOccluders = operation.mode === 'select' ? [] : Array.from(objectMapRef.current.values())
+        .filter(record => record.objectId !== operation.pathId && record.root.visible).flatMap(record => record.pickables);
+      for (const record of objectMapRef.current.values()) {
+        const active = operation.mode !== 'select' && operation.pathId === record.objectId;
+        for (const child of record.root.children) {
+          if (child.userData.linePointIndex === undefined) continue;
+          updateLinePointHandle(child as THREE.Mesh, sceneHandle.camera, sceneHandle.renderer.domElement.clientHeight,
+            active, active && ((operation.mode === 'edit' ? operation.pointIndex ?? record.root.userData.lastLinePoint : null) === child.userData.linePointIndex || (closeTarget?.pathId === record.objectId && closeTarget.index === child.userData.linePointIndex)), styleColorsRef.current);
+          if (child.visible && pointOccluders.length) {
+            const world = child.getWorldPosition(new THREE.Vector3());
+            const screen = world.clone().project(sceneHandle.camera);
+            cornerOcclusionRay.setFromCamera(new THREE.Vector2(screen.x, screen.y), sceneHandle.camera);
+            const front = cornerOcclusionRay.intersectObjects(pointOccluders, true)[0];
+            const depth = world.sub(cornerOcclusionRay.ray.origin).dot(cornerOcclusionRay.ray.direction);
+            child.visible = !front || front.distance >= depth;
+          }
+        }
+      }
+      const corners = activeCorners();
+      if (cornerPathId !== (corners?.line.id ?? null)) {
+        for (const control of cornerControls.values()) { control.button.remove(); control.guide.removeFromParent(); disposeObject(control.guide); }
+        cornerControls.clear();
+        cornerPathId = corners?.line.id ?? null;
+      }
+      const liveIndices = new Set(corners?.handles.map(handle => handle.index));
+      for (const [index, control] of cornerControls) {
+        if (!liveIndices.has(index)) { control.button.remove(); control.guide.removeFromParent(); disposeObject(control.guide); cornerControls.delete(index); }
+      }
+      for (const corner of corners?.handles || []) {
+        let control = cornerControls.get(corner.index);
+        if (!control) { control = createCornerControl(corner.index); cornerControls.set(corner.index, control); }
+        const root = objectMapRef.current.get(corners!.line.id)!.root;
+        const world = root.localToWorld(new THREE.Vector3(...corner.handle));
+        const screen = world.clone().project(sceneHandle.camera);
+        const pointWorld = root.localToWorld(new THREE.Vector3(...corner.point));
+        const point = pointWorld.clone().project(sceneHandle.camera);
+        const canvas = sceneHandle.renderer.domElement;
+        const x = (screen.x + 1) * canvas.clientWidth / 2, y = (1 - screen.y) * canvas.clientHeight / 2;
+        control.button.style.left = `${x - 14}px`;
+        control.button.style.top = `${y - 14}px`;
+        control.diamond.style.background = styleColorsRef.current.accent;
+        control.diamond.style.borderColor = styleColorsRef.current.panel;
+        for (const [index, child] of control.guide.children.entries()) {
+          const stroke = child as LineSegments2;
+          stroke.geometry.attributes.instanceStart.setXYZ(0, pointWorld.x, pointWorld.y, pointWorld.z);
+          stroke.geometry.attributes.instanceEnd.setXYZ(0, world.x, world.y, world.z);
+          stroke.geometry.attributes.instanceStart.needsUpdate = true;
+          stroke.geometry.attributes.instanceEnd.needsUpdate = true;
+          stroke.material.color.set(index === 0 ? styleColorsRef.current.panel : styleColorsRef.current.textStrong);
+          stroke.material.resolution.set(canvas.clientWidth || 1, canvas.clientHeight || 1);
+        }
+        cornerOcclusionRay.setFromCamera(new THREE.Vector2(screen.x, screen.y), sceneHandle.camera);
+        const front = cornerOcclusionRay.intersectObjects(pointOccluders, true)[0];
+        const depth = world.sub(cornerOcclusionRay.ray.origin).dot(cornerOcclusionRay.ray.direction);
+        const visible = screen.z >= -1 && screen.z <= 1 && point.z >= -1 && point.z <= 1 && (!front || front.distance >= depth);
+        control.button.style.display = visible ? 'block' : 'none';
+        control.guide.visible = visible;
+      }
       // Fat-line widths are in pixels; keep their resolution uniform in sync with
       // the canvas so they stay crisp through resizes/dolly.
       const gridMaterials = gridMaterialsRef.current;
@@ -2523,7 +3117,7 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
       const selectedRoot = selectedRef.current ? objectMapRef.current.get(selectedRef.current)?.root : null;
       if (helper && selectedRoot) {
         selectedRoot.updateMatrixWorld(true);
-        const selectedBox = new THREE.Box3().setFromObject(selectedRoot);
+        const selectedBox = editorSelectionBounds(selectedRoot);
         if (!selectedBox.isEmpty()) {
           updateCornerBoundsHelper(helper, selectedBox);
           helper.visible = true;
@@ -2544,7 +3138,7 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
       }
       const handles = friendlyHandlesRef.current?.root;
       const selectedObject = objectsRef.current.find((item) => item.id === selectedRef.current);
-      if (handles && selectedRoot && builderModeRef.current === 'edit' && controlSchemeRef.current === 'friendly' && canTransform(selectedObject)) {
+      if (handles && selectedRoot && builderModeRef.current === 'edit' && lineActionsRef.current.lineOperation.mode === 'select' && controlSchemeRef.current === 'friendly' && canTransform(selectedObject)) {
         handles.visible = true;
         handles.position.copy(selectedRoot.position);
         handles.position.y = 0.01;
@@ -2564,9 +3158,22 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
       scheduler.cancel();
       sceneHandle.controls.removeEventListener('change', handleControlsChange);
       sceneHandle.renderer.domElement.removeEventListener('pointerdown', handlePointerDown);
+      sceneHandle.renderer.domElement.removeEventListener('pointercancel', cancelLineTransform);
+      sceneHandle.renderer.domElement.removeEventListener('dblclick', handleDoubleClick);
+      sceneHandle.renderer.domElement.removeEventListener('pointerleave', clearCloseHint);
+      sceneHandle.renderer.domElement.removeEventListener('pointerleave', clearDrawingPreview);
+      drawingPreview.removeFromParent();
+      disposeObject(drawingPreview);
+      closeHint.remove();
+      for (const control of lineTransformControls.values()) { control.button.remove(); control.mesh.removeFromParent(); disposeObject(control.mesh); }
+      for (const icon of transformIcons) icon.texture.dispose();
+      rotationGuide.removeFromParent(); disposeObject(rotationGuide); rotationLabel.remove();
+      lineTransformControls.clear();
       window.removeEventListener('pointermove', handlePointerMove);
       window.removeEventListener('pointerup', handlePointerUp);
-      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keydown', handleKeyDown, true);
+      for (const control of cornerControls.values()) { control.button.remove(); control.guide.removeFromParent(); disposeObject(control.guide); }
+      cornerControls.clear();
       window.removeEventListener('keyup', handleKeyUp);
       transform.dispose();
       for (const record of objectMapRef.current.values()) disposeObject(record.root);
@@ -2726,7 +3333,7 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
 
   useEffect(() => {
     syncTransformAttachment();
-  }, [objects, groups, selectedId, selectedGroupId, controlScheme, builderMode, transformMode]);
+  }, [objects, groups, selectedId, selectedGroupId, controlScheme, builderMode, transformMode, lineOperation]);
 
   useEffect(() => {
     transformModeRef.current = transformMode;
@@ -2763,7 +3370,7 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
     for (const id of ids) {
       const root = objectMapRef.current.get(id)?.root;
       if (!root) continue;
-      const next = new THREE.Box3().setFromObject(root);
+      const next = editorSelectionBounds(root);
       if (!hasBox) box.copy(next);
       else box.union(next);
       hasBox = true;
@@ -2957,7 +3564,22 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
     return dataUrl;
   }, []);
 
-  useImperativeHandle(ref, () => ({ captureStagePreview }), [captureStagePreview]);
+  useImperativeHandle(ref, () => ({
+    captureStagePreview,
+    measureLowestPoint: async (object) => {
+      const existing = objectMapRef.current.get(object.id)?.root;
+      const root = existing || makeObjectRoot(object, {}, { resolveAssetUrl }).root;
+      try {
+        if (object.kind === 'model' && !(await root.userData.stageBuilderVisualReady)) {
+          throw new Error('The model could not load. Floor placement has not changed the stage.');
+        }
+        if (root.userData.stageBuilderDisposed) throw new Error('The selection changed. Try Place on floor again.');
+        return lowestGeometryPoint(root);
+      } finally {
+        if (!existing) disposeObject(root);
+      }
+    },
+  }), [captureStagePreview, resolveAssetUrl]);
 
   return <div ref={containerRef} style={{ width: '100%', height: '100%', minHeight: 420, position: 'relative' }} />;
 });

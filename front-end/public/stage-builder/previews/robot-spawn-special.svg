@@ -1,0 +1,13 @@
+<svg viewBox="0 0 120 88" role="img" aria-label="FOSSBot robot spawn" xmlns="http://www.w3.org/2000/svg">
+<g stroke="#29333d" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+<path d="M19 36L30 32L36 61L26 70L17 64Z" fill="#84909b"/>
+<path d="M89 40L101 45L102 68L91 76L84 65Z" fill="#84909b"/>
+<path d="M28 30L86 28L94 43L89 63Q65 78 33 58Z" fill="#b3bbc3"/>
+<path d="M28 30Q35 16 58 17Q79 17 89 30L94 43Q68 58 28 38Z" fill="#d3d8dd"/>
+<ellipse cx="60" cy="30" rx="25" ry="10" fill="#d3d8dd"/>
+<path d="M35 44L80 56L79 64L35 53Z" fill="#b3bbc3" stroke="none"/>
+<ellipse cx="46" cy="54" rx="7" ry="8" fill="#d3d8dd"/>
+<ellipse cx="63" cy="59" rx="7" ry="8" fill="#d3d8dd"/>
+<ellipse cx="46" cy="54" rx="3" ry="4" fill="#84909b" stroke="none"/>
+<ellipse cx="63" cy="59" rx="3" ry="4" fill="#84909b" stroke="none"/>
+</g></svg>
