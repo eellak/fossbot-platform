@@ -1,3 +1,7 @@
+import { sharpLineCorners } from '../../simulator/stages/lineGeometryCore';
+import { normalizeStageHierarchy } from './stageBuilderHierarchy';
+import { upgradeStageRecord } from './stageBuilderMigration';
+import { Color } from 'three';
 import type {
   EditorStage,
   EditorStageFloorSettings,
@@ -29,6 +33,7 @@ import { inferSemanticKindFromConfig } from './stageBuilderCatalog';
 import { cloneStage } from './stageBuilderGeometry';
 import { activeValidationResults, validateStageBuilderStage } from './stageBuilderValidation';
 import { normalizeStageBuilderSkybox } from './stageBuilderSkybox';
+import { editorLineToRuntime, hiddenEditorObjectIds } from '../../simulator/stages/stageFormatCore';
 
 export const DEFAULT_STAGE_FLOOR: EditorStageFloorSettings = {
   name: 'floor',
@@ -40,12 +45,13 @@ export const DEFAULT_STAGE_FLOOR: EditorStageFloorSettings = {
 };
 
 export const DEFAULT_STAGE_METADATA: StageBuilderMetadata = {
-  version: 2,
+  version: 3,
   groups: [],
   validationOverrides: {},
-  gridVisible: true,
+  gridVisible: false,
   gridSize: 0.5,
   defaultSnapPreset: 'fine',
+  lastMovementSnapPreset: 'fine',
   defaultRotationSnapPreset: '15',
   skybox: normalizeStageBuilderSkybox(),
 };
@@ -156,11 +162,10 @@ export function editorStageToConfig(stage: EditorStage): StageJsonEntry[] {
   const skybox = skyboxToConfig(stage);
   const entries: StageJsonEntry[] = skybox ? [skybox, floorToConfig(stage.floor || DEFAULT_STAGE_FLOOR)] : [floorToConfig(stage.floor || DEFAULT_STAGE_FLOOR)];
 
-  const hiddenObjectIds = new Set(stage.objects.filter((object) => object.hidden).map((object) => object.id));
+  const hiddenObjectIds = hiddenEditorObjectIds(stage.objects);
 
   for (const object of stage.objects) {
-    if (object.hidden) continue;
-    if (object.kind === 'text' && object.attachment?.parentId && hiddenObjectIds.has(object.attachment.parentId)) continue;
+    if (hiddenObjectIds.has(object.id)) continue;
     if (object.kind === 'base') {
       entries.push({
         type: 'base',
@@ -242,14 +247,8 @@ export function editorStageToConfig(stage: EditorStage): StageJsonEntry[] {
         name: object.name || object.semanticKind || 'direction arrow',
       });
     } else if (object.kind === 'line') {
-      entries.push({
-        type: 'line',
-        points: object.points,
-        width: object.width,
-        color: object.color,
-        y: object.y,
-        name: object.name || 'line',
-      });
+      const entry = editorLineToRuntime(object);
+      if (entry) entries.push(entry as StageLineEntry);
     } else if (object.kind === 'text') {
       const parent = object.attachment?.parentId ? stage.objects.find((candidate) => candidate.id === object.attachment?.parentId) : null;
       entries.push({
@@ -325,7 +324,7 @@ export function editorStageToConfig(stage: EditorStage): StageJsonEntry[] {
     }
   }
 
-  const robotStart = stage.objects.find((object) => object.kind === 'fossbot' && !object.hidden);
+  const robotStart = stage.objects.find((object) => object.kind === 'fossbot' && !hiddenObjectIds.has(object.id));
   if (robotStart?.kind === 'fossbot') {
     entries.push({
       type: 'fossbot',
@@ -339,6 +338,7 @@ export function editorStageToConfig(stage: EditorStage): StageJsonEntry[] {
 }
 
 export function editorStageToRecord(stage: EditorStage): LocalStageRecord {
+  stage = { ...stage, objects: stage.objects.map(object => object.kind === 'line' && object.curveVersion === undefined ? { ...object, curveVersion: 1, corners: sharpLineCorners(object.points) } : object) };
   const now = new Date().toISOString();
   return {
     id: stage.id,
@@ -349,7 +349,7 @@ export function editorStageToRecord(stage: EditorStage): LocalStageRecord {
     config: editorStageToConfig(stage),
     editor: {
       ...(stage.metadata || DEFAULT_STAGE_METADATA),
-      version: 2,
+      version: 3,
       floor: clone(stage.floor || DEFAULT_STAGE_FLOOR),
       objects: clone(stage.objects),
     },
@@ -471,8 +471,11 @@ function configEntryToEditorObject(entry: StageJsonEntry, index: number): Editor
       semanticKind: inferSemanticKindFromConfig('line', line.name, line.color),
       name: line.name || 'line path',
       points: line.points,
-      width: line.width || 0.03,
-      color: String(line.color || 'black'),
+      curveVersion: line.curveVersion,
+      closed: line.closed,
+      corners: line.corners,
+      width: line.width ?? 0.01,
+      color: new Color(line.color ?? 'black').getStyle(),
       y: line.y,
     };
   }
@@ -610,9 +613,11 @@ function floorFromConfig(config: StageJsonEntry[]): EditorStageFloorSettings {
 }
 
 export function configToEditorStage(record: LocalStageRecord): EditorStage {
+  record = upgradeStageRecord(record).record;
   const editor = record.editor;
   const metadata: StageBuilderMetadata = {
     ...DEFAULT_STAGE_METADATA,
+    gridVisible: true,
     ...(editor ? {
       groups: editor.groups || [],
       validationOverrides: editor.validationOverrides || {},
@@ -620,15 +625,19 @@ export function configToEditorStage(record: LocalStageRecord): EditorStage {
       gridSize: editor.gridSize,
       defaultSnapPreset: editor.defaultSnapPreset,
       defaultRotationSnapPreset: editor.defaultRotationSnapPreset,
+      lastMovementSnapPreset: editor.lastMovementSnapPreset,
+      hierarchyOrder: editor.hierarchyOrder,
+      attachedOrder: editor.attachedOrder,
+      lockCamera: editor.lockCamera,
       skybox: normalizeStageBuilderSkybox(editor.skybox),
     } : { skybox: skyboxFromConfig(record.config) }),
-    version: 2,
+    version: 3,
   };
-  const objects = Array.isArray(editor?.objects) && editor.objects.length
+  const objects = Array.isArray(editor?.objects)
     ? cloneStage(editor.objects)
     : record.config.map(configEntryToEditorObject).filter((object): object is EditorStageObject => !!object);
 
-  return {
+  return normalizeStageHierarchy({
     id: record.id,
     title: record.title,
     description: record.description,
@@ -637,7 +646,7 @@ export function configToEditorStage(record: LocalStageRecord): EditorStage {
     floor: editor?.floor ? clone(editor.floor) : floorFromConfig(record.config),
     metadata,
     objects,
-  };
+  });
 }
 
 export function createDemoEditorStage(): EditorStage {
@@ -652,7 +661,7 @@ export function createDemoEditorStage(): EditorStage {
     metadata: clone(DEFAULT_STAGE_METADATA),
     objects: [
       { id: makeLocalStageId(), kind: 'fossbot', semanticKind: 'robotSpawn', name: 'robot spawn', position: [-1.6, 0, 1.2], rotationY: 2.35 },
-      { id: makeLocalStageId(), kind: 'line', semanticKind: 'line', name: 'line path', points: [[-1.4, 0.9], [-0.4, 0.1], [0.6, -0.2], [1.4, -0.8]], width: 0.03, color: 'black' },
+      { id: makeLocalStageId(), kind: 'line', semanticKind: 'line', name: 'line path', curveVersion: 1, corners: [null, { mode: 'sharp' }, { mode: 'sharp' }, null], points: [[-1.4, 0.9], [-0.4, 0.1], [0.6, -0.2], [1.4, -0.8]], width: 0.03, color: 'black' },
       { id: makeLocalStageId(), kind: 'cylinder', semanticKind: 'obstacle', name: 'orange cone', position: [0.2, 0.1, -0.3], dimensions: [0.05, 0.1, 0.2, 32], color: 'orange', mass: 0, immovable: true },
       { id: makeLocalStageId(), kind: 'cylinder', semanticKind: 'obstacle', name: 'blue cone', position: [0.9, 0.1, 0.4], dimensions: [0.05, 0.1, 0.2, 32], color: 'lightblue', mass: 0, immovable: true },
       { id: makeLocalStageId(), kind: 'cube', semanticKind: 'block', name: 'pushable block', position: [-0.8, 0.1, -0.8], rotationY: 0.2, dimensions: [0.2, 0.2, 0.2], color: '#4caf50', mass: 0.4, immovable: false },

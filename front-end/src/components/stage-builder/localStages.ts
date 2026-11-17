@@ -1,4 +1,5 @@
 import type { LocalStageRecord, StageJsonEntry } from './types';
+import { validateStageFormat } from '../../simulator/stages/stageFormatCore';
 
 const STORAGE_PREFIX = 'fossbot.stageBuilder.stages.v1';
 
@@ -42,6 +43,7 @@ export const localStageRepository = {
   },
 
   save(stage: LocalStageRecord, scope?: string | number | null): LocalStageRecord {
+    validateStageFormat(stage, { editable: true });
     const now = new Date().toISOString();
     const stages = readAll(scope);
     const next: LocalStageRecord = {
@@ -65,6 +67,7 @@ export const localStageRepository = {
       createdAt: now,
       updatedAt: now,
     };
+    validateStageFormat(record, { editable: true });
     const stages = readAll(scope);
     stages.push(record);
     writeAll(stages, scope);
@@ -91,11 +94,15 @@ export const localStageRepository = {
 };
 
 export function downloadStageJson(stage: LocalStageRecord): void {
-  const blob = new Blob([JSON.stringify(stage, null, 2)], { type: 'application/json' });
+  downloadStageSource(JSON.stringify(stage, null, 2), stage.title);
+}
+
+export function downloadStageSource(raw: string, title = 'stage-source'): void {
+  const blob = new Blob([raw], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
-  link.download = `${stage.title.replace(/[^a-zA-Z0-9_.-]/g, '_') || 'stage'}.json`;
+  link.download = `${title.replace(/[^a-zA-Z0-9_.-]/g, '_') || 'stage'}.json`;
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
@@ -103,6 +110,7 @@ export function downloadStageJson(stage: LocalStageRecord): void {
 }
 
 export function stageRecordFromImportedJson(value: unknown): LocalStageRecord {
+  validateStageFormat(value, { editable: true });
   const now = new Date().toISOString();
   if (Array.isArray(value)) {
     return {

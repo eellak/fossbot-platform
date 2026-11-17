@@ -1,4 +1,5 @@
 import type { EditorStage, EditorStageObject, Vec3 } from './types';
+import { validateLineGeometry } from '../../simulator/stages/lineGeometryCore';
 
 export type StageObjectBounds = {
   objectId: string;
@@ -39,14 +40,14 @@ export function objectPosition(object: EditorStageObject): Vec3 {
   if ('position' in object) return object.position;
   if (object.kind === 'line' && object.points.length) {
     const sum = object.points.reduce((acc, point) => [acc[0] + point[0], acc[1] + point[1]] as [number, number], [0, 0]);
-    return [sum[0] / object.points.length, object.y || 0, sum[1] / object.points.length];
+    return [sum[0] / object.points.length, object.y ?? 0.001, sum[1] / object.points.length];
   }
   return [0, 0, 0];
 }
 
 export function translateObject(object: EditorStageObject, delta: Vec3): EditorStageObject {
   if (object.kind === 'line') {
-    return { ...object, points: object.points.map(([x, z]) => [x + delta[0], z + delta[2]]) };
+    return { ...object, points: object.points.map(([x, z]) => [x + delta[0], z + delta[2]]), ...(delta[1] ? { y: (object.y ?? 0.001) + delta[1] } : {}) };
   }
   if ('position' in object) {
     return { ...object, position: [object.position[0] + delta[0], object.position[1] + delta[1], object.position[2] + delta[2]] } as EditorStageObject;
@@ -356,7 +357,7 @@ export function objectDimensionsAreValid(object: EditorStageObject): boolean {
   if (object.kind === 'sphere') return object.dimensions[0] > 0;
   if (object.kind === 'wedge') return object.dimensions.every((value) => Number.isFinite(value) && value > 0);
   if (object.kind === 'arrow') return object.dimensions.every((value) => Number.isFinite(value) && value > 0);
-  if (object.kind === 'line') return object.points.length >= 2 && object.width > 0;
+  if (object.kind === 'line') return validateLineGeometry(object).length === 0;
   if (object.kind === 'text') return object.scale > 0;
   if (object.kind === 'model') return object.scale > 0 && !!object.filename;
   return true;
