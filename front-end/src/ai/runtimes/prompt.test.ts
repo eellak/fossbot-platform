@@ -27,6 +27,9 @@ describe('parseClientSuggestionText', () => {
     } as any);
     expect(messages[0].content).toContain('wall: cube dimensions [1,0.5,0.08]');
     expect(messages[0].content).toContain('use its tempId as objectId');
+    expect(messages[0].content).toContain('Whole replacements of curved paths require complete corners');
+    expect(messages[0].content).toContain('Preserve manual requested trims');
+    expect(messages[0].content).toContain('Never add URLs, assets, provider data');
   });
 
   it('lets a code-capable model choose a plain answer outcome', () => {

@@ -18,7 +18,7 @@ STAGE_CATALOG_GEOMETRY_PROMPT = " ".join((
     "collectible: sphere diameter [0.12].",
     "pushObject: cube dimensions [0.3,0.3,0.3].",
     "targetZone: flat marker dimensions [0.8,0.8] in [x,z].",
-    "line: default floor points [[x-0.5,z],[x,z+0.4],[x+0.5,z]]; set_line_points uses [x,z] pairs.",
+    "line: default floor points [[x-0.5,z],[x,z+0.4],[x+0.5,z]] with automatic rounded interiors. set_line_points uses [x,z] pairs and optional aligned corners with null endpoints on open paths. Closed paths (closed: true, curveVersion: 2) have at least three points and a corner at every point, with no repeated endpoint. Preserve closure on replacements. Interior corners are {mode: sharp}, {mode: rounded, sizing: auto}, or {mode: rounded, sizing: manual, trim: positive metres}. Whole replacements of curved paths require complete corners. Missing corners on sharp legacy paths stay sharp. Preserve manual requested trims. A single point is editable but has no runnable line.",
     "baseTile: flat marker dimensions [0.6,0.6] in [x,z].",
     "dangerZone: flat marker dimensions [0.8,0.8] in [x,z].",
     "sensorZone: flat marker dimensions [0.8,0.8] in [x,z].",

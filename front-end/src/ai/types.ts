@@ -228,6 +228,7 @@ export type StageOperation = {
   dimensions?: number[];
   rotationY?: number;
   points?: number[][];
+  corners?: import('src/components/stage-builder/types').LineCorner[];
   patch?: Record<string, unknown>;
   objectIds?: string[];
   groupName?: string;
