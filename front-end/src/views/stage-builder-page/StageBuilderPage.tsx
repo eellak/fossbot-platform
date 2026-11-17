@@ -1,4 +1,6 @@
 import { SavedStagePreview } from 'src/components/stage-builder/SavedStagePreview';
+import { SaveStageBeforeLeavingDialog } from 'src/components/stage-builder/SaveStageBeforeLeavingDialog';
+import { useStageBuilderDeparture } from 'src/components/stage-builder/useStageBuilderDeparture';
 import { sharpLineCorners } from 'src/simulator/stages/lineGeometryCore';
 import { insertDrawnLinePoint, reconcileLineOperation, type LineOperation } from 'src/components/stage-builder/stageBuilderLineEditing';
 import type { EditorLineObject } from 'src/components/stage-builder/types';
@@ -94,7 +96,7 @@ function isTypingTarget(target: EventTarget | null): boolean {
   return !!element?.tagName.match(/INPUT|TEXTAREA|SELECT/) || !!element?.isContentEditable;
 }
 
-const leaveMessage = 'You have unsaved changes. A local recovery draft will be kept, but you should save JSON when you are ready to keep a copy.';
+const leaveMessage = 'You have unsaved changes. Save your stage before leaving.';
 const DRAFT_SAVE_DELAY_MS = 2_000;
 const desktopPanelsInitiallyVisible = () => typeof window === 'undefined'
   || typeof window.matchMedia !== 'function'
@@ -462,12 +464,16 @@ const StageBuilderPage = () => {
   const [lastExportFingerprint, setLastExportFingerprint] = useState(() => stageFingerprint(emptyEditorStage()));
   const [appearancePreview, setAppearancePreview] = useState<EditorStage | null>(null);
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
+  const [leavePrompt, setLeavePrompt] = useState<{ backupFailed: boolean } | null>(null);
+  const leaveAnswer = useRef<((leave: boolean) => void) | null>(null);
   const recoverySession = useRef<StageRecoverySession | null>(null);
   const [recoverySources, setRecoverySources] = useState<RecoverySources>({ draft: null, original: null, matching: false });
   const [recoveryOpen, setRecoveryOpen] = useState(false);
   const [recentDrafts, setRecentDrafts] = useState<RecentStageDraft[]>([]);
   const [savedPreviewOpen, setSavedPreviewOpen] = useState(false);
   const [restoredSavedVersion, setRestoredSavedVersion] = useState<LocalStageRecord | null>(null);
+  const [unfinishedEdits, setUnfinishedEdits] = useState<RecentStageDraft | null>(null);
+  const [recoveryNotice, setRecoveryNotice] = useState<'restored' | 'saved' | null>(null);
   const [recoveryWarning, setRecoveryWarning] = useState('');
   const [migrationDiagnostics, setMigrationDiagnostics] = useState<StageMigrationDiagnostic[]>([]);
   const migrationNotice = migrationDiagnostics.map(item => item.message).join(' ');
@@ -977,6 +983,10 @@ const StageBuilderPage = () => {
     if (!session) return;
     // Edits made while a remote save was in flight still need their draft.
     if (stageFingerprint(latestStageRef.current) !== stageFingerprint(savedStage) || recoverySession.current !== session) return;
+    setRecoveryNotice(null);
+    setRestoredSavedVersion(null);
+    setUnfinishedEdits(null);
+    setSavedPreviewOpen(false);
     session.checkpoint = false;
     const ok = clearMatchingStageRecovery(session.identity, session.storageScope ?? scope);
     setRecoveryWarning(ok ? '' : 'The stage was saved, but recovery cleanup failed. A redundant recovery source is retained.');
@@ -1019,12 +1029,14 @@ const StageBuilderPage = () => {
       if (useDraft) {
         if (!await restoreRecovery('draft', previous, true)) return false;
         setRestoredSavedVersion(record);
-        setMessage('Your previous edits were restored. Save when you are ready.');
         return true;
       }
     }
     const session: StageRecoverySession = { identity, sourceRaw: raw, checkpoint: !!options.checkpoint, storageScope: recoverySessionScope(scope, identity) };
     setRestoredSavedVersion(null);
+    setRecoveryNotice(null);
+    setUnfinishedEdits(null);
+    setSavedPreviewOpen(false);
     recoverySession.current = session;
     if (session.checkpoint) {
       const result = writeOriginalCheckpoint(raw, record.title, identity, session.storageScope);
@@ -1039,7 +1051,7 @@ const StageBuilderPage = () => {
   };
 
   const applyAssistantStage = async (next: EditorStage, target: StageAuthoringTarget): Promise<boolean> => {
-    if (target === 'create' && !(await confirmIfDirty('Replace the current stage with this generated draft? Unsaved changes will remain in the existing recovery draft.'))) return false;
+    if (target === 'create' && !(await confirmIfDirty())) return false;
     const now = new Date().toISOString();
     if (target === 'create') {
       if (!(await openRecord(editorStageToRecord(next), { locator: 'Reviewed Buddy proposal', clean: false }))) return false;
@@ -1058,15 +1070,23 @@ const StageBuilderPage = () => {
     return true;
   };
 
-  const confirmIfDirty = async (messageText = leaveMessage, discardRecovery = true): Promise<boolean> => {
+  const confirmIfDirty = async (): Promise<boolean> => {
     if (!dirty) return true;
-    if (persistRecovery()) return true;
-    return confirmDialog.confirm({
-      title: 'Your edits could not be backed up',
-      message: <>Download your work before leaving.<br /><Button onClick={() => downloadStageJson(editorStageToRecord(stage))}>Download stage</Button></>,
-      confirmLabel: 'Leave without backup', cancelLabel: 'Keep editing', danger: true,
+    const backupFailed = !persistRecovery();
+    return new Promise(resolve => {
+      leaveAnswer.current?.(false);
+      leaveAnswer.current = resolve;
+      setLeavePrompt({ backupFailed });
     });
   };
+
+  const finishDeparture = (leave: boolean) => {
+    leaveAnswer.current?.(leave);
+    leaveAnswer.current = null;
+    setLeavePrompt(null);
+  };
+  useEffect(() => () => { leaveAnswer.current?.(false); }, []);
+  const releaseDeparture = useStageBuilderDeparture(dirty, confirmIfDirty);
 
   const handleSelectionChange = (ids: string[]) => {
     setLineOperation({ mode: 'select' });
@@ -1273,7 +1293,7 @@ const StageBuilderPage = () => {
   const handleStageChange = (next: EditorStage) => commitStage(() => next);
 
   const handleNew = async () => {
-    if (!(await confirmIfDirty('Create a new blank stage? Unsaved changes will remain only as a recovery draft.'))) return;
+    if (!(await confirmIfDirty())) return;
     const next = emptyEditorStage();
     if (!(await openRecord(editorStageToRecord(next), { locator: 'New stage', undoable: false, message: 'New blank stage created.' }))) return;
     setLocalStage(null);
@@ -1283,7 +1303,7 @@ const StageBuilderPage = () => {
   };
 
   const handleDemo = async () => {
-    if (!(await confirmIfDirty('Load the demo stage? Unsaved changes will remain only as a recovery draft.'))) return;
+    if (!(await confirmIfDirty())) return;
     if (!(await openRecord(editorStageToRecord(createDemoEditorStage()), { locator: 'Built-in demo', clean: false, message: 'Demo stage loaded.' }))) return;
     setLocalStage(null);
     setRemoteStage(null);
@@ -1338,7 +1358,7 @@ const StageBuilderPage = () => {
 
   const handleImportFile = async (file?: File) => {
     if (!file) return;
-    if (!(await confirmIfDirty('Import this JSON file and replace the current stage? Unsaved changes will remain only as a recovery draft.'))) {
+    if (!(await confirmIfDirty())) {
       if (importInputRef.current) importInputRef.current.value = '';
       return;
     }
@@ -1385,11 +1405,12 @@ const StageBuilderPage = () => {
       ? { source: 'browser' as const, id: guestLocalStageId, title: stage.title }
       : localStage ? { source: 'account' as const, id: localStage.id, title: localStage.title } : null;
     if (target && await deleteStage(target)) {
+      releaseDeparture();
       navigate('/dashboard', { replace: true });
     }
   };
 
-  const handleLocalSave = async () => {
+  const handleLocalSave = async (): Promise<boolean> => {
     const savedSession = recoverySession.current;
     if (isGuest) {
       setLocalStageSaving(true);
@@ -1406,22 +1427,23 @@ const StageBuilderPage = () => {
         releaseSavedRecovery(savedSession, stage);
         if (savedSession && recoverySession.current === savedSession) { savedSession.checkpoint = false; savedSession.identity.sourceLocator = `Browser stage ${saved.id} revision ${saved.updatedAt}`; savedSession.sourceRaw = JSON.stringify(saved); }
         setMessage('Saved in this browser.');
+        return true;
       } catch (error) {
         setMessage(error instanceof Error ? error.message : 'Local stage save failed.');
+        return false;
       } finally {
         setLocalStageSaving(false);
       }
-      return;
     }
     if (!token) {
       setMessage('Sign in before saving a stage to your account.');
-      return;
+      return false;
     }
     // A stage without a preview (imported, migrated, or seeded) must still be
     // able to capture one: only short-circuit when there is an existing image.
     if (localStage && !localStageHasChanges && localStage.previewUrl) {
       setMessage(`No changes to save. ${localStage.title} is already at v${localStage.revision}.`);
-      return;
+      return true;
     }
     setLocalStageSaving(true);
     try {
@@ -1444,12 +1466,14 @@ const StageBuilderPage = () => {
       invalidateLocalStages();
       setMessage(`Saved to your account: ${saved.title} · v${saved.revision}`);
       if (openLocalStageOpen) setLocalStages(await listLocalStages(token));
+      return true;
     } catch (error) {
       if (error instanceof LocalStageRequestError && error.code === 'revision_conflict') {
         setMessage(`${error.message} Current revision: v${error.currentRevision || '?'}.`);
       } else {
         setMessage(error instanceof Error ? error.message : 'Local stage save failed.');
       }
+      return false;
     } finally {
       setLocalStageSaving(false);
     }
@@ -1481,7 +1505,7 @@ const StageBuilderPage = () => {
   };
 
   const handleGuestOpenLocalStage = async (item: LocalStageRecord) => {
-    if (!(await confirmIfDirty('Open this browser-saved stage and replace the current editor stage? Unsaved changes will remain only as a recovery draft.'))) return;
+    if (!(await confirmIfDirty())) return;
     try {
       if (!(await openRecord(item, { locator: `Browser stage ${item.id} revision ${item.updatedAt}`, message: 'Opened stage from this browser.' }))) return;
       setGuestLocalStageId(item.id);
@@ -1495,7 +1519,7 @@ const StageBuilderPage = () => {
   };
 
   const handleOpenLocalStage = async (item: LocalStageSummary) => {
-    if (isGuest || !token || !(await confirmIfDirty('Open this saved stage and replace the current editor stage? Unsaved changes will remain only as a recovery draft.'))) return;
+    if (isGuest || !token || !(await confirmIfDirty())) return;
     setLocalStagesLoading(true);
     setLocalStagesError('');
     try {
@@ -1511,12 +1535,12 @@ const StageBuilderPage = () => {
     }
   };
 
-  const handleProviderSave = async ({ slug, commitMessage, visibility }: SaveToProviderValues) => {
+  const handleProviderSave = async ({ slug, commitMessage, visibility }: SaveToProviderValues): Promise<boolean> => {
     const savedSession = recoverySession.current;
     if (!token || isGuest) {
       setProviderError('Sign in before saving to GitHub.');
       setProviderErrorCode('not_connected');
-      return;
+      return false;
     }
     setProviderSaving(true);
     setProviderError('');
@@ -1547,6 +1571,7 @@ const StageBuilderPage = () => {
       setProviderErrorCode(null);
       setMessage(`Saved to GitHub: ${saved.repoOwner}/${saved.repoName}`);
       refreshProviderStatus({ force: true });
+      return true;
     } catch (error) {
       if (error instanceof ProviderRequestError) {
         setProviderErrorCode(error.code || null);
@@ -1570,6 +1595,7 @@ const StageBuilderPage = () => {
         setProviderErrorCode(null);
         setProviderError(error instanceof Error ? error.message : 'Save to GitHub failed.');
       }
+      return false;
     } finally {
       setProviderSaving(false);
     }
@@ -1683,7 +1709,7 @@ const StageBuilderPage = () => {
 
   const handleOpenProviderStage = async (item: ProviderStageListItem) => {
     if (!token) return;
-    if (!(await confirmIfDirty('Open this GitHub stage and replace the current editor stage? Unsaved changes will remain only as a recovery draft.'))) return;
+    if (!(await confirmIfDirty())) return;
     setProviderListLoading(true);
     setProviderListError('');
     setProviderListWarning(false);
@@ -1736,8 +1762,7 @@ const StageBuilderPage = () => {
     }
   };
 
-  const handleBack = async () => {
-    if (!(await confirmIfDirty(leaveMessage, false))) return;
+  const handleBack = () => {
     navigate('/stages?tab=mine');
   };
 
@@ -1850,7 +1875,12 @@ const StageBuilderPage = () => {
       if (kind === 'draft' && !savedIdentity.recoveryId && !adoptLegacyDraft(sources.draft!, identity)) throw new Error('The draft changed or could not be updated. Its existing bytes are preserved.');
       const original = sources.original?.value;
       recoverySession.current = { identity, sourceRaw: original && sameRecoverySource(original, identity) ? original.sourceRaw : raw, checkpoint: !!original && sameRecoverySource(original, identity), storageScope: item?.scope ?? recoverySession.current?.storageScope ?? String(scope) };
-      replaceStage(configToEditorStage(migration.record), { undoable: false, clean: kind === 'original', message: kind === 'draft' ? 'Recovered latest edits.' : 'Opened original source. Later edits have not been recovered.' });
+      replaceStage(configToEditorStage(migration.record), { undoable: false, clean: kind === 'original' });
+      setRestoredSavedVersion(null);
+      setUnfinishedEdits(null);
+      setSavedPreviewOpen(false);
+      setRecoveryNotice(kind === 'draft' ? 'restored' : null);
+      if (kind === 'original') setMessage('Opened original source. Later edits have not been recovered.');
       if (kind === 'draft') setLastExportFingerprint('');
       setMigrationDiagnostics(migration.diagnostics);
       setRecoveryOpen(false);
@@ -1860,6 +1890,19 @@ const StageBuilderPage = () => {
       refreshRecoverySources();
       return true;
     } catch (error) { setRecoveryWarning(error instanceof Error ? error.message : String(error)); return false; }
+  };
+
+  const returnToUnfinishedEdits = async () => {
+    if (!unfinishedEdits) return;
+    try {
+      if (!discoverStageRecovery(unfinishedEdits.scope).draft?.value) {
+        setRecoveryWarning('Your unfinished edits could not be found in this browser. Your current stage is still open.');
+        return;
+      }
+      if (dirty && !persistRecovery()) return;
+      const savedVersion = restoredSavedVersion;
+      if (await restoreRecovery('draft', unfinishedEdits, true)) setRestoredSavedVersion(savedVersion);
+    } catch (error) { setRecoveryWarning(error instanceof Error ? error.message : String(error)); }
   };
 
   const resumeRecentDraft = async (item: RecentStageDraft) => {
@@ -1886,7 +1929,6 @@ const StageBuilderPage = () => {
         } else await restoreRecovery('draft', item);
       } else {
         await restoreRecovery('draft', item);
-        setMessage('Your previous edits were restored.');
       }
     } catch (error) {
       setRecoveryWarning(`Could not open your previous work: ${String(error)}. Your draft is still available in Recent drafts.`);
@@ -2009,18 +2051,30 @@ const StageBuilderPage = () => {
       ) : (
     <Box ref={rootRef} sx={{ '--fossbot-box-border-radius': '0px', borderRadius: 0, width: '100vw', height: '100vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', bgcolor: editorColors.viewport }}>
       {recoveryWarning && <Alert severity="warning" action={<><Button onClick={() => { refreshRecoverySources(); setRecoveryOpen(true); }}>Recent drafts</Button><Button onClick={() => downloadStageJson(editorStageToRecord(stage))}>Download JSON</Button></>}>{recoveryWarning}</Alert>}
-      {restoredSavedVersion && <Alert severity="info" action={<Button onClick={() => setSavedPreviewOpen(true)}>View saved version</Button>}>Your unfinished edits</Alert>}
+      {recoveryNotice && <Alert severity="info" sx={{ '& .MuiAlert-message': { flex: 1, minWidth: 0 } }}>
+        <Stack direction={{ xs: 'column', sm: 'row' }} alignItems={{ sm: 'center' }} spacing={1}>
+          <Box sx={{ flex: 1 }}>
+            <Typography variant="body2" fontWeight={600}>{recoveryNotice === 'restored' ? 'Continue where you left off' : 'You’re working from the saved version'}</Typography>
+            <Typography variant="body2">{recoveryNotice === 'restored' ? 'Your latest changes haven’t been saved yet.' : 'Your unfinished edits are still here if you want to go back.'}</Typography>
+          </Box>
+          {recoveryNotice === 'restored' && restoredSavedVersion && <Button onClick={() => setSavedPreviewOpen(true)}>Preview saved version</Button>}
+          {recoveryNotice === 'saved' && unfinishedEdits && <Button onClick={returnToUnfinishedEdits}>Return to my unfinished edits</Button>}
+        </Stack>
+      </Alert>}
       {savedPreviewOpen && restoredSavedVersion && <SavedStagePreview record={restoredSavedVersion} assetBaseUrl={remoteStage?.rawBaseUrl}
         onBack={() => setSavedPreviewOpen(false)} onEdit={async () => {
           if (dirty && !persistRecovery()) { setSavedPreviewOpen(false); return; }
           try {
+            const draftScope = recoverySession.current?.storageScope ?? String(scope);
+            const sources = discoverStageRecovery(draftScope);
+            if (!sources.draft?.value) throw new Error('Your unfinished edits could not be kept. Your current stage is still open.');
             const raw = JSON.stringify(restoredSavedVersion);
             const identity = await createRecoveryIdentity(raw, recoverySession.current?.identity.sourceLocator || 'Saved version', 'unchanged');
             recoverySession.current = { identity, sourceRaw: raw, checkpoint: false, storageScope: recoverySessionScope(scope, identity) };
             replaceStage(configToEditorStage(restoredSavedVersion), { undoable: false, clean: true });
-            setRestoredSavedVersion(null);
+            setUnfinishedEdits({ scope: draftScope, sources });
             setSavedPreviewOpen(false);
-            setMessage('Editing the saved version. Your unfinished edits are in Recent drafts.');
+            setRecoveryNotice('saved');
           } catch (error) { setSavedPreviewOpen(false); setRecoveryWarning(String(error)); }
         }} />}
       {migrationNotice && <Alert severity="info" onClose={() => setMigrationDiagnostics([])}>{migrationNotice}</Alert>}
@@ -2249,7 +2303,7 @@ const StageBuilderPage = () => {
                 {value && <Typography variant="body2">{new Date(value.savedAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })}</Typography>}
                 {source.error && <Alert severity="warning">This copy could not be opened. Download it to keep it safe.</Alert>}
                 <Stack direction="row" spacing={1} flexWrap="wrap">
-                  <Button disabled={!value} onClick={async () => { if (dirty && !persistRecovery()) return; if (item.sources.draft) await resumeRecentDraft(item); else await restoreRecovery('original', item); setRecoveryOpen(false); }}>Continue editing</Button>
+                  <Button disabled={!value} onClick={async () => { if (!await confirmIfDirty()) return; if (item.sources.draft) await resumeRecentDraft(item); else await restoreRecovery('original', item); setRecoveryOpen(false); }}>Continue editing</Button>
                   <Button onClick={() => { if (value && 'stageRecord' in value) downloadStageJson(editorStageToRecord(configToEditorStage(value.stageRecord))); else downloadStageSource(value && 'sourceRaw' in value ? value.sourceRaw : source.raw, title); }}>Download copy</Button>
                   {item.sources.draft && item.sources.original && <Button onClick={() => downloadStageSource(item.sources.original!.value?.sourceRaw || item.sources.original!.raw, `${title}-original`)}>Download original</Button>}
                   <Button color="error" onClick={async () => {
@@ -2264,6 +2318,21 @@ const StageBuilderPage = () => {
         </DialogContent>
         <DialogActions><Button onClick={() => setRecoveryOpen(false)}>Close</Button></DialogActions>
       </Dialog>
+
+      {leavePrompt && <SaveStageBeforeLeavingDialog
+        destination={isGuest ? 'in this browser' : remoteStage ? 'to GitHub' : 'to your account'}
+        backupFailed={leavePrompt.backupFailed}
+        onDownload={() => downloadStageJson(editorStageToRecord(stage))}
+        onClose={finishDeparture}
+        onSave={async () => {
+          if (localStageSaving || providerSaving || deletingStage) return false;
+          const session = recoverySession.current;
+          const saved = remoteStage && !isGuest
+            ? await handleProviderSave({ slug: remoteStage.repoName, commitMessage: '', visibility: remoteStage.private ? 'private' : 'public' })
+            : await handleLocalSave();
+          return saved && recoverySession.current === session && stageFingerprint(latestStageRef.current) === stageFingerprint(stage);
+        }}
+      />}
 
       <SaveToProviderDialog
         open={saveProviderOpen}
