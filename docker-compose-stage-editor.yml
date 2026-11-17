@@ -1,0 +1,22 @@
+name: fossbot-stage-editor
+
+services:
+  stage-editor:
+    image: node:20-alpine
+    working_dir: /workspace/front-end
+    command: sh -c "npm ci --no-audit --no-fund && npm run dev:stage-editor"
+    ports:
+      - "127.0.0.1:${STAGE_EDITOR_PORT:-3100}:3100"
+    environment:
+      HOST: 0.0.0.0
+      PORT: 3100
+      BROWSER: none
+      WATCHPACK_POLLING: "true"
+      CHOKIDAR_USEPOLLING: "true"
+    volumes:
+      - ./front-end:/workspace/front-end
+      - ./sim:/workspace/sim:ro
+      - stage-editor-dependencies:/workspace/front-end/node_modules
+
+volumes:
+  stage-editor-dependencies:
