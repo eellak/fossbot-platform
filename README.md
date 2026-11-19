@@ -123,8 +123,10 @@ docker compose -f docker-compose-dev.yml up -d --build
 
 Open:
 
-- Platform: [http://localhost:3000](http://localhost:3000)
-- API documentation: [http://localhost:8000/docs](http://localhost:8000/docs)
+- Platform: [http://localhost:3101](http://localhost:3101)
+- API documentation: [http://localhost:8101/docs](http://localhost:8101/docs)
+
+For SSH or IDE port forwarding, forward port `3101` for the frontend and `8101` for its API requests.
 
 The default development account is `admin` with password `admin`. These credentials are intended only for a local development environment.
 

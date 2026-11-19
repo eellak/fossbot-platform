@@ -34,6 +34,7 @@ import { builtInStageBuilderPrefabs, prefabInsertionOffset, type StageBuilderPre
 import { hasFloorGeometry, placeObjectsOnFloor } from 'src/components/stage-builder/stageBuilderFloorPlacement';
 import { EditorTopBar } from 'src/components/stage-builder/EditorTopBar';
 import { EditorLeftPanel } from 'src/components/stage-builder/EditorLeftPanel';
+import { restoreBlankStageFavourites, useLibraryShortlists } from 'src/components/stage-builder/stageBuilderRecentItems';
 import type { HierarchyDropTarget } from 'src/components/stage-builder/StageSceneHierarchy';
 import { StageLineToolbar } from 'src/components/stage-builder/StageLineToolbar';
 import { EditorViewportToolRail, EditorViewportSnapControls } from 'src/components/stage-builder/EditorViewportToolRail';
@@ -463,6 +464,7 @@ const StageBuilderPage = () => {
   const [appearancePreview, setAppearancePreview] = useState<EditorStage | null>(null);
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
   const recoverySession = useRef<StageRecoverySession | null>(null);
+  const { recentLibraryItems, rememberRecentItem, favouriteItems, toggleFavourite, carryLibraryItemsTo } = useLibraryShortlists(scope, recoverySession.current?.identity ?? null);
   const [recoverySources, setRecoverySources] = useState<RecoverySources>({ draft: null, original: null, matching: false });
   const [recoveryOpen, setRecoveryOpen] = useState(false);
   const [recentDrafts, setRecentDrafts] = useState<RecentStageDraft[]>([]);
@@ -486,6 +488,21 @@ const StageBuilderPage = () => {
   const [providerError, setProviderError] = useState('');
   const [providerErrorCode, setProviderErrorCode] = useState<string | null>(null);
   const [remoteStage, setRemoteStage] = useState<ProviderStageRef | null>(null);
+  useEffect(() => {
+    if (!draftReady) return;
+    // Keep the active stage in the URL so refresh reopens it after its recovery draft is cleared on save.
+    let search = '';
+    if (isGuest && guestLocalStageId) {
+      search = `?guestStage=${encodeURIComponent(guestLocalStageId)}`;
+    } else if (localStage) {
+      search = `?open=local&id=${localStage.id}`;
+    } else if (remoteStage) {
+      search = `?open=github&repo=${encodeURIComponent(`${remoteStage.repoOwner}/${remoteStage.repoName}`)}`;
+    }
+    if (window.location.search !== search) {
+      window.history.replaceState(window.history.state, '', window.location.pathname + search + window.location.hash);
+    }
+  }, [draftReady, isGuest, guestLocalStageId, localStage, remoteStage]);
   const [bootstrapRepoName, setBootstrapRepoName] = useState<string | null>(null);
   const [openProviderOpen, setOpenProviderOpen] = useState(false);
   const [livePreviewStage, setLivePreviewStage] = useState<EditorStage | null>(null);
@@ -693,7 +710,6 @@ const StageBuilderPage = () => {
         });
         setLocalStage(null);
         if (marketplaceEnabled && githubDeepLinkTarget.action === 'publish') setPublishMarketplaceOpen(true);
-        window.history.replaceState(window.history.state, '', window.location.pathname);
         setGithubDeepLinkLoad({ status: 'idle' });
       } catch (error) {
         if (!cancelled) {
@@ -722,7 +738,6 @@ const StageBuilderPage = () => {
       setGuestLocalStageId(record.id);
       setLocalStage(null);
       setRemoteStage(null);
-      window.history.replaceState(window.history.state, '', window.location.pathname);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Could not open the local stage.');
     } };
@@ -737,13 +752,12 @@ const StageBuilderPage = () => {
     loadLocalStage(token, localDeepLinkStageId)
       .then(async (loaded) => {
         if (cancelled) return;
-        const publishAfterOpen = new URLSearchParams(window.location.search).get('action') === 'publish';
+        const action = new URLSearchParams(window.location.search).get('action');
         if (!(await openRecord(loaded.record, { locator: `Account stage ${loaded.id} revision ${loaded.revision}`, initial: true, message: 'Opened stage from your account.' }))) return;
         setLocalStage(loaded);
         setRemoteStage(null);
-        if (publishAfterOpen) setPublishMarketplaceOpen(true);
-        if (new URLSearchParams(window.location.search).get('action') === 'github-copy') setSaveProviderOpen(true);
-        window.history.replaceState(window.history.state, '', window.location.pathname);
+        if (action === 'publish') setPublishMarketplaceOpen(true);
+        if (action === 'github-copy') setSaveProviderOpen(true);
       })
       .catch((error) => { if (!cancelled) setMessage(error instanceof Error ? error.message : 'Could not open local stage.'); })
       .finally(() => { if (!cancelled) setLocalStagesLoading(false); });
@@ -767,7 +781,6 @@ const StageBuilderPage = () => {
         if (!(await openRecord(record, { raw, locator: remoteStageUrl, checkpoint: true, initial: true, clean: false, message: 'Opened stage as a new editable copy.' }))) return;
         setLocalStage(null);
         setRemoteStage(null);
-        window.history.replaceState(window.history.state, '', window.location.pathname);
       })
       .catch((error) => { if (!cancelled) setMessage(error instanceof Error ? error.message : 'Could not open the selected stage.'); })
       .finally(() => { if (!cancelled) setLocalStagesLoading(false); });
@@ -787,7 +800,10 @@ const StageBuilderPage = () => {
       } else if (!explicitSource) {
         const initialRaw = JSON.stringify(editorStageToRecord(stage));
         void createRecoveryIdentity(initialRaw, 'New stage', 'unchanged').then(identity => {
-          if (!recoverySession.current) recoverySession.current = { identity, sourceRaw: initialRaw, checkpoint: false, storageScope: recoverySessionScope(scope, identity) };
+          if (!recoverySession.current) {
+            restoreBlankStageFavourites(scope, identity);
+            recoverySession.current = { identity, sourceRaw: initialRaw, checkpoint: false, storageScope: recoverySessionScope(scope, identity) };
+          }
           setDraftReady(true);
         }).catch(error => setRecoveryWarning(String(error)));
       }
@@ -1050,6 +1066,7 @@ const StageBuilderPage = () => {
     if (target === 'create') {
       setLocalStage(null);
       setRemoteStage(null);
+      setGuestLocalStageId(null);
     } else if (target === 'selection') {
       setSelectedIds(assistantSelectedIds);
       setSelectedId(assistantSelectedIds[assistantSelectedIds.length - 1] || null);
@@ -1210,6 +1227,7 @@ const StageBuilderPage = () => {
       setBuilderMode('edit');
       setLineOperation({ mode: 'edit', pathId: null });
       setMessage('Click the floor to add points. Drag squares to move them or diamonds to adjust rounding. Escape finishes editing.');
+      rememberRecentItem({ type: 'object', id: kind });
       return;
     }
     if (kind === 'floor') {
@@ -1232,6 +1250,7 @@ const StageBuilderPage = () => {
           ? [...current.objects.filter((item) => item.kind !== 'camera'), nextObject]
           : [...current.objects, nextObject],
     }), { selectIds: [id], message: labelParent ? `Label attached to ${labelParent.name}.` : `${displayObjectType(nextObject)} added at floor center.` });
+    rememberRecentItem({ type: 'object', id: kind });
   };
 
   const appendLinePoint = (point: [number, number]) => {
@@ -1268,6 +1287,7 @@ const StageBuilderPage = () => {
       objects: [...current.objects, ...copies],
       metadata: { ...current.metadata, groups: [...current.metadata.groups, { id: groupId, name: prefab.title, objectIds: copies.map((object) => object.id), createdAt: now, updatedAt: now }] },
     }), { selectIds: copies.map((object) => object.id), message: `${prefab.title} prefab added at floor center.` });
+    rememberRecentItem({ type: 'prefab', id: prefab.id });
   };
 
   const handleStageChange = (next: EditorStage) => commitStage(() => next);
@@ -1279,7 +1299,6 @@ const StageBuilderPage = () => {
     setLocalStage(null);
     setRemoteStage(null);
     setGuestLocalStageId(null);
-    window.history.replaceState(window.history.state, '', window.location.pathname);
   };
 
   const handleDemo = async () => {
@@ -1288,7 +1307,6 @@ const StageBuilderPage = () => {
     setLocalStage(null);
     setRemoteStage(null);
     setGuestLocalStageId(null);
-    window.history.replaceState(window.history.state, '', window.location.pathname);
   };
 
   const readFileAsDataUrl = (file: File): Promise<string> => new Promise((resolve, reject) => {
@@ -1351,7 +1369,6 @@ const StageBuilderPage = () => {
       setLocalStage(null);
       setRemoteStage(null);
       setGuestLocalStageId(null);
-    window.history.replaceState(window.history.state, '', window.location.pathname);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Import failed.');
     } finally {
@@ -1400,11 +1417,10 @@ const StageBuilderPage = () => {
           ? localStageRepository.save({ ...record, id: existing.id, createdAt: existing.createdAt }, scope)
           : localStageRepository.create(record, scope);
         setGuestLocalStageId(saved.id);
-        window.history.replaceState(window.history.state, '', `/stage-builder?guestStage=${encodeURIComponent(saved.id)}`);
         setLastExportFingerprint(stageFingerprint(stage));
         setSaveStatus('Saved in this browser');
         releaseSavedRecovery(savedSession, stage);
-        if (savedSession && recoverySession.current === savedSession) { savedSession.checkpoint = false; savedSession.identity.sourceLocator = `Browser stage ${saved.id} revision ${saved.updatedAt}`; savedSession.sourceRaw = JSON.stringify(saved); }
+        if (savedSession && recoverySession.current === savedSession) { carryLibraryItemsTo(`Browser stage ${saved.id} revision ${saved.updatedAt}`); savedSession.checkpoint = false; savedSession.identity.sourceLocator = `Browser stage ${saved.id} revision ${saved.updatedAt}`; savedSession.sourceRaw = JSON.stringify(saved); }
         setMessage('Saved in this browser.');
       } catch (error) {
         setMessage(error instanceof Error ? error.message : 'Local stage save failed.');
@@ -1438,7 +1454,7 @@ const StageBuilderPage = () => {
       setLastExportFingerprint(stageFingerprint(stage));
       setSaveStatus('Saved to account');
       releaseSavedRecovery(savedSession, stage);
-      if (savedSession && recoverySession.current === savedSession) { savedSession.checkpoint = false; savedSession.identity.sourceLocator = `Account stage ${saved.id} revision ${saved.revision}`; savedSession.sourceRaw = JSON.stringify(saved.record); }
+      if (savedSession && recoverySession.current === savedSession) { carryLibraryItemsTo(`Account stage ${saved.id} revision ${saved.revision}`); savedSession.checkpoint = false; savedSession.identity.sourceLocator = `Account stage ${saved.id} revision ${saved.revision}`; savedSession.sourceRaw = JSON.stringify(saved.record); }
       // Tell the Stages panel to refetch even if it already mounted while this
       // save was in flight.
       invalidateLocalStages();
@@ -1488,7 +1504,6 @@ const StageBuilderPage = () => {
       setLocalStage(null);
       setRemoteStage(null);
       setGuestOpenLocalOpen(false);
-      window.history.replaceState(window.history.state, '', `/stage-builder?guestStage=${encodeURIComponent(item.id)}`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Could not open the local stage.');
     }
@@ -1542,7 +1557,7 @@ const StageBuilderPage = () => {
       setLastExportFingerprint(stageFingerprint(stage));
       setSaveStatus('Saved to GitHub');
       releaseSavedRecovery(savedSession, stage);
-      if (savedSession && recoverySession.current === savedSession) { savedSession.checkpoint = false; savedSession.identity.sourceLocator = `GitHub ${saved.repoOwner}/${saved.repoName} @ ${saved.commitSha}`; }
+      if (savedSession && recoverySession.current === savedSession) { carryLibraryItemsTo(`GitHub ${saved.repoOwner}/${saved.repoName} @ ${saved.commitSha}`); savedSession.checkpoint = false; savedSession.identity.sourceLocator = `GitHub ${saved.repoOwner}/${saved.repoName} @ ${saved.commitSha}`; }
       setSaveProviderOpen(false);
       setProviderErrorCode(null);
       setMessage(`Saved to GitHub: ${saved.repoOwner}/${saved.repoName}`);
@@ -1930,6 +1945,9 @@ const StageBuilderPage = () => {
       selectedIds={selectedIds}
       selectedGroupId={selectedGroupId}
       prefabs={prefabs}
+      recentItems={recentLibraryItems}
+      favouriteItems={favouriteItems}
+      onToggleFavourite={toggleFavourite}
       onAddKind={addObject}
       onAddPrefab={addPrefab}
       onImportObject={() => customObjectInputRef.current?.click()}
