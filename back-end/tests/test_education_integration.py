@@ -987,3 +987,84 @@ def test_guest_marketplace_index_is_read_only_and_view_gated(client_for, users, 
     settings.allowed_views = ["classrooms"]
     db.commit()
     assert guest.get("/api/marketplace/index", headers=headers).status_code == 403
+
+
+def test_classroom_release_helpers_and_error_handling(db):
+    from fastapi import HTTPException
+    from database.database import ClassChallenge, CourseAssignment
+    from routers.classrooms import (
+        release_lessons,
+        released_mission,
+        challenge_payload,
+        assignment_payload,
+        _safe_assignment_payload,
+        enrollment_analytics,
+    )
+
+    # 1. Test release_lessons with null snapshot, empty lessons, and missing position
+    class MockRelease:
+        id = 9999
+        version = 1
+        snapshot = None
+
+    assert release_lessons(MockRelease()) == []
+
+    mock_with_lessons = MockRelease()
+    mock_with_lessons.snapshot = {
+        "lessons": [
+            {"lessonKey": "l2", "title": "Lesson 2"},
+            {"lessonKey": "l1", "title": "Lesson 1", "position": -1},
+        ]
+    }
+    ordered = release_lessons(mock_with_lessons)
+    assert len(ordered) == 2
+    assert ordered[0]["lessonKey"] == "l1"
+    assert ordered[1]["lessonKey"] == "l2"
+
+    # 2. Test released_mission with missing keys
+    with pytest.raises(HTTPException) as exc_info:
+        released_mission(mock_with_lessons, "non_existent", "route")
+    assert exc_info.value.status_code == 422
+
+    # 3. Test challenge_payload with non-existent release (returns 404 instead of 500)
+    mock_challenge = ClassChallenge(
+        id=1,
+        assignment_id=1,
+        release_id=999999,
+        lesson_key="l1",
+        activity_key="act1",
+        enabled=True,
+        board_type="highest_score",
+        tie_tolerance=0.01,
+        season=1,
+    )
+    with pytest.raises(HTTPException) as exc_info:
+        challenge_payload(db, mock_challenge)
+    assert exc_info.value.status_code == 404
+    assert exc_info.value.detail == "Course release not found"
+
+    # 4. Test assignment_payload with non-existent course/release
+    mock_assignment = CourseAssignment(
+        id=1,
+        group_id=1,
+        course_id=999999,
+        release_id=999999,
+    )
+    with pytest.raises(HTTPException) as exc_info:
+        assignment_payload(db, mock_assignment, 1)
+    assert exc_info.value.status_code == 404
+    assert _safe_assignment_payload(db, mock_assignment, 1) is None
+
+    # 5. Test enrollment_analytics with non-existent release
+    from database.database import Enrollment
+    mock_enrollment = Enrollment(
+        id=1,
+        student_id=1,
+        course_id=1,
+        active_release_id=999999,
+    )
+    with pytest.raises(HTTPException) as exc_info:
+        enrollment_analytics(db, mock_enrollment, None)
+    assert exc_info.value.status_code == 404
+    assert exc_info.value.detail == "Course release not found"
+
