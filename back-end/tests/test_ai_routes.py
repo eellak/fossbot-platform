@@ -383,10 +383,13 @@ def test_answer_code_validation_is_capability_gated_and_syntax_checked(db, users
         top_level_await = client.post("/api/ai/validate", json={"surface": "python", "content": "await move_step('forward')\n"})
         assert top_level_await.status_code == 200
         assert top_level_await.json()["valid"] is False
-        blockly = client.post("/api/ai/validate", json={"surface": "blockly", "content": "<xml xmlns=\"https://developers.google.com/blockly/xml\"></xml>"})
-        assert blockly.status_code == 200 and blockly.json()["valid"] is True
-        malformed = client.post("/api/ai/validate", json={"surface": "blockly", "content": "<xml>"})
-        assert malformed.status_code == 200 and malformed.json()["valid"] is False
+        workspace = '<xml xmlns="https://developers.google.com/blockly/xml"><field>A &amp; B</field></xml>'
+        blockly = client.post("/api/ai/validate", json={"surface": "blockly", "content": workspace})
+        assert blockly.json() == {"valid": True, "message": ""}
+        for content in ("<xml>", '<!DOCTYPE xml [<!ENTITY label "Hello">]><xml>&label;</xml>'):
+            invalid_xml = client.post("/api/ai/validate", json={"surface": "blockly", "content": content})
+            assert invalid_xml.status_code == 200
+            assert invalid_xml.json() == {"valid": False, "message": "Blockly workspace XML is invalid"}
 
 
 def test_provider_secret_create_preserve_rotate_and_clear(db, users, monkeypatch):
@@ -855,6 +858,8 @@ def test_invalid_suggestion_emits_safe_error_without_done(db, users, monkeypatch
             "context": {"source": source, "sourceFingerprint": fingerprint},
         })
     assert '"code":"invalid_suggestion"' in response.text
+    assert "The AI provider returned an invalid suggestion." in response.text
+    assert "The suggested Python is not syntactically valid" not in response.text
     assert "event: done" not in response.text
     assert len(adapter.requests) == 3
     assert len(adapter.requests[2].messages) == len(adapter.requests[1].messages) + 2

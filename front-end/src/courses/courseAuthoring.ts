@@ -122,7 +122,9 @@ export function markdownToTiptap(source: string): TiptapNode {
       const marker = fence[1];
       const codeLines: string[] = [];
       index += 1;
-      while (index < lines.length && !new RegExp(`^ {0,3}${marker[0]}{${marker.length},}\\s*$`).test(lines[index])) {
+      while (index < lines.length) {
+        const closing = lines[index].match(/^ {0,3}(`{3,}|~{3,})\s*$/);
+        if (closing?.[1].startsWith(marker)) break;
         codeLines.push(lines[index]);
         index += 1;
       }

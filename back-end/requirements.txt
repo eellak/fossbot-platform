@@ -8,6 +8,7 @@ passlib[bcrypt]==1.7.4
 pydantic==2.9.2
 PyJWT==2.15.1
 cryptography==50.0.2
+defusedxml==0.7.1
 psycopg2==2.9.9
 httpx==0.26.0
 pytest==9.0.3

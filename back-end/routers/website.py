@@ -92,6 +92,17 @@ def safe_url(value):
         raise HTTPException(422, 'Links must be local paths or HTTPS URLs')
 
 
+def valid_image_path(value, *, allow_bundled):
+    if not isinstance(value, str):
+        return False
+    if re.fullmatch(r'/website/media/[0-9]+', value):
+        return True
+    if not allow_bundled or not value.startswith('/landing-media/'):
+        return False
+    stem, _, extension = value.removeprefix('/landing-media/').rpartition('.')
+    return extension in ('png', 'jpg', 'jpeg', 'webp') and re.fullmatch(r'[a-zA-Z0-9_./-]+', stem) is not None
+
+
 def validate(data):
     if not LOCALE.fullmatch(data.locale) or not SLUG.fullmatch(data.slug) or not data.title.strip():
         raise HTTPException(422, 'Use a language code, a lowercase URL slug and a title')
@@ -115,7 +126,7 @@ def validate(data):
                     raise HTTPException(422, 'Invalid landing text')
                 if name.startswith('href:'):
                     safe_url(value)
-                if name.startswith('image:') and not re.fullmatch(r'(?:/website/media/[0-9]+|/landing-media/[a-zA-Z0-9_./-]+\.(?:png|jpg|jpeg|webp))', value):
+                if name.startswith('image:') and not valid_image_path(value, allow_bundled=True):
                     raise HTTPException(422, 'Choose a bundled or uploaded website image')
             menu = section.get('menu', [])
             if not isinstance(menu, list) or len(menu) > 12:
@@ -138,7 +149,7 @@ def validate(data):
             raise HTTPException(422, 'Choose an uploaded or bundled funding image')
         if section.get('type') == 'feature' and section.get('layout', 'image-right') not in ('image-left', 'image-right'):
             raise HTTPException(422, 'Invalid image position')
-        if section.get('image') and not (section.get('type') in ('feature','projects') and re.fullmatch(r'/landing-media/[a-zA-Z0-9_./-]+\.(?:png|jpg|jpeg|webp)', str(section['image']))) and not re.fullmatch(r'/website/media/[0-9]+', str(section['image'])):
+        if section.get('image') and not valid_image_path(section['image'], allow_bundled=section['type'] in ('feature', 'projects')):
             raise HTTPException(422, 'Choose an uploaded website image')
         if section.get('type') in ('cards', 'feature', 'people', 'testimonials', 'projects'):
             cards = section.get('cards', [])
@@ -151,7 +162,7 @@ def validate(data):
                 for field in ('role', 'organization', 'alt'):
                     if field in card and (not isinstance(card[field], str) or len(card[field]) > 10000):
                         raise HTTPException(422, 'Invalid person or testimonial text')
-                if 'image' in card and (not isinstance(card['image'], str) or card['image'] and not re.fullmatch(r'/website/media/[0-9]+', card['image']) and not (section.get('type')=='projects' and re.fullmatch(r'/landing-media/[a-zA-Z0-9_./-]+\.(?:png|jpg|jpeg|webp)',card['image']))):
+                if 'image' in card and card['image'] != '' and not valid_image_path(card['image'], allow_bundled=section['type'] == 'projects'):
                     raise HTTPException(422, 'Choose an uploaded photo')
                 safe_url(card.get('href'))
         if 'content' in section:

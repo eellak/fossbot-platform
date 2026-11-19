@@ -71,6 +71,16 @@ describe('markdown to tiptap conversion', () => {
     expect(textFromTiptap(code)).toBe('print("hi")');
   });
 
+  it.each(['`', '~'])('closes a %s fence only with a matching run at least as long as the opener', (char: string) => {
+    const marker = char.repeat(4);
+    const body = ['value', char.repeat(3), char === '~' ? '````' : '~~~~', `    ${marker}`, `${marker} more`];
+    const document = markdownToTiptap([`  ${marker}python`, ...body, `   ${marker}${char}\t`, 'After'].join('\n'));
+    expect(document.content).toEqual([
+      { type: 'codeBlock', attrs: { language: 'python' }, content: [{ type: 'text', text: body.join('\n') }] },
+      { type: 'paragraph', content: [{ type: 'text', text: 'After' }] },
+    ]);
+  });
+
   it('recovers Markdown from the single-paragraph document the old editor produced', () => {
     const converted: TiptapNode = { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: '# Title\n\nBody text' }] }] };
     const document = normalizeTiptapDocument(converted);

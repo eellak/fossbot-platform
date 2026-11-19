@@ -5,7 +5,6 @@ import datetime
 import json
 import os
 import uuid
-import xml.etree.ElementTree as ET
 
 from database.database import (
     AIInstanceSettings,
@@ -35,6 +34,7 @@ from utils.ai.secrets import decrypt_ai_secret
 from utils.ai.suggestion_contracts import is_suggestion_capability, suggestion_json_schema
 from utils.ai.suggestions import MAX_SUGGESTION_REPAIR_ATTEMPTS, SuggestionError, build_suggestion_repair_request, output_token_budget, parse_suggestion_with_normalizations, repair_incomplete_json_object, suggestion_payload, suggestion_response_character_limit
 from utils.ai.usage import QuotaError, ensure_quota, record_usage
+from utils.blockly import blockly_xml_error
 from utils.guest_access import Participant, get_participant
 
 
@@ -425,13 +425,8 @@ def validate_artifact(
             line = f"line {error.lineno}: " if error.lineno else ""
             return {"valid": False, "message": f"{line}{error.msg}"}
         return {"valid": True, "message": ""}
-    try:
-        root = ET.fromstring(payload.content)
-    except ET.ParseError as error:
-        return {"valid": False, "message": str(error)}
-    if root.tag.split("}")[-1] != "xml":
-        return {"valid": False, "message": "The Blockly workspace must have an xml root"}
-    return {"valid": True, "message": ""}
+    message = blockly_xml_error(payload.content)
+    return {"valid": message is None, "message": message or ""}
 
 
 @router.post("/usage", status_code=204)
@@ -771,7 +766,7 @@ async def stream_assistance(
                 entry = trace.error("backend", "suggestion.rejected", error)
                 if entry:
                     yield sse_event("debug", entry)
-            yield sse_event("error", {"code": "invalid_suggestion", "message": str(error), "retryable": False})
+            yield sse_event("error", {"code": "invalid_suggestion", "message": "The AI provider returned an invalid suggestion.", "retryable": False})
         except Exception as error:
             outcome = "provider_error"
             entry = trace.error("backend", "request.failed", error)
