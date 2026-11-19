@@ -2,8 +2,6 @@
 
 Single source of feature context for humans and coding agents. Read this before changing Stage Builder. Keep it current when architecture, routes, persistence, or simulator handoff behavior changes.
 
-The [stage editor improvement backlog](../../../../docs/stage-editor-improvements.md) tracks reported problems, open design decisions, verification and release notes. Keep its issue IDs linked to implementation work. It is a planning record, not a replacement for the current behaviour documented here.
-
 ## What this feature is
 
 Stage Builder is a full-screen editor for creating runnable FOSSBot simulator stages. It edits a friendly `EditorStage` model, exports simulator-compatible JSON, and can open a separate simulator test route with the current stage.
@@ -275,9 +273,7 @@ Manual smoke test after meaningful changes:
 ## Native curves and current controls
 
 The coordinated format is editor metadata v3 and runtime line `curveVersion: 1` for open paths and `curveVersion: 2` for closed-path support.
-See [the line format](../../../../sim/docs/stage-line-format.md) and
-[verification evidence](../../../../docs/stage-editor-verification.md).
-Deployment requires all updated readers and writers together.
+Deploy all updated readers and writers together. See the [stage line format](../../../../sim/docs/stage-line-format.md).
 
 - The **Line** library tool starts a new path in **Edit line** mode. The first floor click creates a lone point. **Done** or Escape keeps it. Clicking another object selects it and leaves line editing without adding a point.
 - **Edit line** in the viewport or inspector, or double-clicking a path, enters the same mode for existing lines. Drag a square to move a point, drag a diamond to adjust rounding, click a square to choose the insertion point, and click the floor to add a point. There is no separate drawing/editing switch. Escape during a drag cancels only that adjustment. Otherwise Escape or Done exits editing.
@@ -296,7 +292,7 @@ Opening a stage restores its unfinished edits automatically, with the notice **C
 
 Unsaved changes trigger **Save changes before leaving?** on in-app navigation (including browser Back/Forward) and before replacing the stage through New, Open, Import or Recent drafts. **Save and leave** saves to the current browser/account/GitHub destination, then completes the original action only after a successful save of the current edits. While saving, the dialog prevents dismissal and repeated actions. Failed saves leave it open for retry. **Keep editing** cancels the action, while **Leave for now** keeps unfinished edits in this browser and continues. The dialog explains this before leaving, unless the backup failed. A failed recovery write retains the stronger backup warning and download action. Browser reload, tab close and external navigation use the browser's native unsaved-changes warning, whose text and availability are controlled by the browser. Clean stages leave without a reminder. Confirmed stage deletion does not ask a second time.
 
-The library uses rendered physical objects and complete prefab compositions, fixed semantic SVGs and the exact approved robot-spawn SVG. Imported-model previews wait for the actual asset. Failed previews say so. Preview tuning is a development-only action. Account, provider, publishing and Buddy destinations remain in the production editor and are absent from the standalone workspace by design.
+The library renders physical objects and complete prefab compositions. It uses light and dark SVG icons for semantic objects, including the robot spawn. Imported-model previews wait for the actual asset. Failed previews say so. Preview tuning is a development-only action. Account, provider, publishing and Buddy destinations remain in the production editor and are absent from the standalone workspace by design.
 
 
 ### Floor placement

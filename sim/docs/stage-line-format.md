@@ -26,7 +26,7 @@ Zero-length sections, non-finite values and invalid widths or trims need repair.
 
 Simulator preflight validates before replacing a scene. Failed loads pause driving and expose Retry. The v1 simulator rejects native lines with an explicit switch to the current runtime. It never silently straightens them. The backend validates shapes, while the shared JavaScript evaluator owns geometry semantics. Hidden paths and attached descendants export no runtime geometry.
 
-Tests: `sim/tests/lineGeometry.test.mjs`, `sim/tests/stageFormat.test.mjs`, shared `line-contract.json`, frontend `LineGeometry.test.ts`, serialization/migration/recovery/Buddy suites and backend geometry/storage tests. See [verification](../../docs/stage-editor-verification.md) for executed results and remaining author/hardware gates. Physical following is a separate test involving the robot and control programme.
+Tests: `sim/tests/lineGeometry.test.mjs`, `sim/tests/stageFormat.test.mjs`, shared `line-contract.json`, frontend `LineGeometry.test.ts`, serialization/migration/recovery/Buddy suites and backend geometry/storage tests. Physical following is a separate test involving the robot and control programme.
 
 
 ## Closed paths

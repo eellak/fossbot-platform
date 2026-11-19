@@ -1,8 +1,0 @@
-npm notice run fossbot-platform@0.0.0 test
-npm notice run craco test --watchAll=false --runInBand --silent --testPathPattern=stageBuilderLinePicking.test
-PASS src/components/stage-builder/stageBuilderLinePicking.test.ts
-
-Test Suites: 1 passed, 1 total
-Tests:       4 passed, 4 total
-Snapshots:   0 total
-Time:        0.233 s, estimated 1 s
