@@ -1,14 +1,24 @@
+import { SavedStagePreview } from 'src/components/stage-builder/SavedStagePreview';
+import { SaveStageBeforeLeavingDialog } from 'src/components/stage-builder/SaveStageBeforeLeavingDialog';
+import { useStageBuilderDeparture } from 'src/components/stage-builder/useStageBuilderDeparture';
+import { sharpLineCorners } from 'src/simulator/stages/lineGeometryCore';
+import { insertDrawnLinePoint, reconcileLineOperation, type LineOperation } from 'src/components/stage-builder/stageBuilderLineEditing';
+import type { EditorLineObject } from 'src/components/stage-builder/types';
+import { copyHierarchySelection, moveHierarchyRow, normalizeStageHierarchy } from 'src/components/stage-builder/stageBuilderHierarchy';
+import type { StageHierarchyRow } from 'src/components/stage-builder/types';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { Alert, Box, Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Drawer, Paper, Stack, Typography, useMediaQuery } from '@mui/material';
+import { createTheme, ThemeProvider, useTheme } from '@mui/material/styles';
+import { approvedThemeOptions } from 'src/theme/ApprovedTheme';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from 'src/authentication/AuthProvider';
 import type { EditorStage, EditorStageObject, StageBuilderMode, StageLabelAttachment, StageSemanticKind, Vec3 } from 'src/components/stage-builder/types';
-import { downloadStageJson, makeLocalStageId, stageRecordFromImportedJson } from 'src/components/stage-builder/localStages';
+import { downloadStageJson, downloadStageSource, makeLocalStageId, stageRecordFromImportedJson } from 'src/components/stage-builder/localStages';
 import { StageBuilderScene, type StageBuilderCameraView, type StageBuilderSceneHandle, type StageBuilderTransformMode } from 'src/components/stage-builder/StageBuilderScene';
 import { configToEditorStage, createDemoEditorStage, DEFAULT_STAGE_FLOOR, DEFAULT_STAGE_METADATA, editorStageToRecord } from 'src/components/stage-builder/serialize';
 import {
@@ -18,20 +28,24 @@ import {
   writeStageBuilderPreferences,
 } from 'src/components/stage-builder/stageBuilderPreferences';
 import { createCatalogObject, displayObjectType } from 'src/components/stage-builder/stageBuilderCatalog';
-import { getSnapSettings, snapLabel } from 'src/components/stage-builder/stageBuilderSnapping';
+import { getSnapSettings, setStageSnapping, stageSnapMetadata } from 'src/components/stage-builder/stageBuilderSnapping';
 import { blockingValidationResults, validateStageBuilderStage } from 'src/components/stage-builder/stageBuilderValidation';
-import { cloneStage, selectedCentroid, translateObject } from 'src/components/stage-builder/stageBuilderGeometry';
+import { cloneStage, translateObject } from 'src/components/stage-builder/stageBuilderGeometry';
 import { canRedo, canUndo, createStageBuilderHistory, pushStageHistory, redoStageHistory, undoStageHistory, type StageBuilderHistory } from 'src/components/stage-builder/stageBuilderHistory';
-import { builtInStageBuilderPrefabs, type StageBuilderPrefab } from 'src/components/stage-builder/stageBuilderPrefabs';
+import { builtInStageBuilderPrefabs, prefabInsertionOffset, type StageBuilderPrefab } from 'src/components/stage-builder/stageBuilderPrefabs';
+import { hasFloorGeometry, placeObjectsOnFloor } from 'src/components/stage-builder/stageBuilderFloorPlacement';
 import { EditorTopBar } from 'src/components/stage-builder/EditorTopBar';
 import { EditorLeftPanel } from 'src/components/stage-builder/EditorLeftPanel';
 import type { HierarchyDropTarget } from 'src/components/stage-builder/StageSceneHierarchy';
-import { EditorViewportToolRail } from 'src/components/stage-builder/EditorViewportToolRail';
+import { StageLineToolbar } from 'src/components/stage-builder/StageLineToolbar';
+import { EditorViewportToolRail, EditorViewportSnapControls } from 'src/components/stage-builder/EditorViewportToolRail';
 import { EditorViewportCameraGizmo } from 'src/components/stage-builder/EditorViewportCameraGizmo';
 import VideocamIcon from '@mui/icons-material/Videocam';
 import { EditorPanelTab } from 'src/components/stage-builder/EditorPanelTab';
 import { EditorRightInspector, type InspectorTab } from 'src/components/stage-builder/EditorRightInspector';
-import { clearStageBuilderDraft, draftToEditorStage, readStageBuilderDraft, stageFingerprint, writeStageBuilderDraft, type StageBuilderDraft } from 'src/components/stage-builder/stageBuilderDrafts';
+import { stageFingerprint } from 'src/components/stage-builder/stageBuilderDrafts';
+import { listStageRecovery, recoverySessionScope, findStageRecovery, type RecentStageDraft, recoverySourceKey, adoptLegacyDraft, clearMatchingStageRecovery, createRecoveryIdentity, discardRecoverySource, discoverStageRecovery, persistStageRecovery, sameRecoverySource, writeOriginalCheckpoint, type RecoverySources, type StageRecoverySession } from 'src/components/stage-builder/stageBuilderRecovery';
+import { upgradeStageRecord, type StageMigrationDiagnostic } from 'src/components/stage-builder/stageBuilderMigration';
 import { writeStageBuilderRunHandoff } from 'src/components/stage-builder/stageBuilderRunHandoff';
 import { EditorThemeProvider, getEditorColors, getEditorPanelSx, getEditorTabsSx, getEditorTones, getEditorType, getInspectorPanelSx, useEditorTheme } from 'src/components/stage-builder/stageBuilderEditorTheme';
 import { CUSTOM_OBJECT_DEFAULT_FIT_METERS, CUSTOM_OBJECT_DIMENSION_EPSILON, CUSTOM_OBJECT_MAX_FILE_SIZE_BYTES } from 'src/components/stage-builder/stageBuilderCustomObjects';
@@ -82,7 +96,7 @@ function isTypingTarget(target: EventTarget | null): boolean {
   return !!element?.tagName.match(/INPUT|TEXTAREA|SELECT/) || !!element?.isContentEditable;
 }
 
-const leaveMessage = 'You have unsaved changes. A local recovery draft will be kept, but you should save JSON when you are ready to keep a copy.';
+const leaveMessage = 'You have unsaved changes. Save your stage before leaving.';
 const DRAFT_SAVE_DELAY_MS = 2_000;
 const desktopPanelsInitiallyVisible = () => typeof window === 'undefined'
   || typeof window.matchMedia !== 'function'
@@ -399,9 +413,15 @@ const StageBuilderPage = () => {
   const [guestLocalStageId, setGuestLocalStageId] = useState<string | null>(null);
   const [guestOpenLocalOpen, setGuestOpenLocalOpen] = useState(false);
   const [guestLocalStages, setGuestLocalStages] = useState<LocalStageRecord[]>([]);
-  const [prefs, setPrefs] = useState<StageBuilderPreferences>(() => readStageBuilderPreferences(scope));
-  const editorColors = useMemo(() => getEditorColors(prefs.styleVariant), [prefs.styleVariant]);
-  const editorTones = useMemo(() => getEditorTones(prefs.styleVariant), [prefs.styleVariant]);
+  const [browserPrefs, setPrefs] = useState<StageBuilderPreferences>(() => readStageBuilderPreferences(scope));
+  const platformTheme = useTheme();
+  const editorVariant = browserPrefs.styleVariant === 'studio' || platformTheme.palette.mode === 'dark' ? 'studio' : 'fossbot';
+  const editorMuiTheme = useMemo(() => {
+    const approved = approvedThemeOptions(editorVariant === 'studio');
+    return createTheme(platformTheme, { ...approved, palette: { ...approved.palette, mode: editorVariant === 'studio' ? 'dark' : 'light' } });
+  }, [platformTheme, editorVariant]);
+  const editorColors = useMemo(() => getEditorColors(editorVariant), [editorVariant]);
+  const editorTones = useMemo(() => getEditorTones(editorVariant), [editorVariant]);
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const customObjectInputRef = useRef<HTMLInputElement | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -411,16 +431,26 @@ const StageBuilderPage = () => {
   const historyRef = useRef<StageBuilderHistory>(createStageBuilderHistory());
   const [historyVersion, setHistoryVersion] = useState(0);
   const [stage, setStage] = useState<EditorStage>(() => emptyEditorStage());
+  const [placingOnFloor, setPlacingOnFloor] = useState(false);
+  const latestStageRef = useRef(stage);
+  latestStageRef.current = stage;
+  const openRequestRef = useRef(0);
+  const stageSnap = stageSnapMetadata(stage.metadata);
+  const prefs = { ...browserPrefs, snapPreset: stageSnap.defaultSnapPreset, rotationSnapPreset: stageSnap.defaultRotationSnapPreset };
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
   const [builderMode, setBuilderMode] = useState<StageBuilderMode>('edit');
+  const [lineOperation, setLineOperation] = useState<LineOperation>({ mode: 'select' });
+  const [objectPreview, setObjectPreview] = useState<EditorStageObject | null>(null);
+  useEffect(() => { setLineOperation(current => reconcileLineOperation(current, stage.objects)); }, [stage.objects]);
   const [transformMode, setTransformMode] = useState<StageBuilderTransformMode>('translate');
   const [focusRequestNonce, setFocusRequestNonce] = useState(0);
   const [cameraViewRequest, setCameraViewRequest] = useState<{ view: StageBuilderCameraView; nonce: number } | null>(null);
   const [lookThroughCameraId, setLookThroughCameraId] = useState<string | null>(null);
   const [sensorHelpersVisible, setSensorHelpersVisible] = useState(false);
   const [collisionWireVisible, setCollisionWireVisible] = useState(false);
+  const [leftPanelTab, setLeftPanelTab] = useState<'library' | 'scene'>('library');
   const [leftPanelVisible, setLeftPanelVisible] = useState(desktopPanelsInitiallyVisible);
   const [rightPanelVisible, setRightPanelVisible] = useState(desktopPanelsInitiallyVisible);
   const previousDesktopPanels = useRef(desktopPanels);
@@ -432,8 +462,22 @@ const StageBuilderPage = () => {
     if (message) notify(message, { severity: 'info', duration: 3600 });
   }, [notify]);
   const [lastExportFingerprint, setLastExportFingerprint] = useState(() => stageFingerprint(emptyEditorStage()));
-  const [exportedAt, setExportedAt] = useState<string | null>(null);
-  const [pendingDraft, setPendingDraft] = useState<StageBuilderDraft | null>(null);
+  const [appearancePreview, setAppearancePreview] = useState<EditorStage | null>(null);
+  const [saveStatus, setSaveStatus] = useState<string | null>(null);
+  const [leavePrompt, setLeavePrompt] = useState<{ backupFailed: boolean } | null>(null);
+  const leaveAnswer = useRef<((leave: boolean) => void) | null>(null);
+  const recoverySession = useRef<StageRecoverySession | null>(null);
+  const [recoverySources, setRecoverySources] = useState<RecoverySources>({ draft: null, original: null, matching: false });
+  const [recoveryOpen, setRecoveryOpen] = useState(false);
+  const [recentDrafts, setRecentDrafts] = useState<RecentStageDraft[]>([]);
+  const [savedPreviewOpen, setSavedPreviewOpen] = useState(false);
+  const [restoredSavedVersion, setRestoredSavedVersion] = useState<LocalStageRecord | null>(null);
+  const [unfinishedEdits, setUnfinishedEdits] = useState<RecentStageDraft | null>(null);
+  const [recoveryNotice, setRecoveryNotice] = useState<'restored' | 'saved' | null>(null);
+  const [recoveryWarning, setRecoveryWarning] = useState('');
+  const [migrationDiagnostics, setMigrationDiagnostics] = useState<StageMigrationDiagnostic[]>([]);
+  const migrationNotice = migrationDiagnostics.map(item => item.message).join(' ');
+  const [rejectedSource, setRejectedSource] = useState<{ raw: string; message: string } | null>(null);
   const [draftReady, setDraftReady] = useState(false);
   const [providerStatus, setProviderStatus] = useState<GitHubProviderStatus | null>(null);
   const [localStage, setLocalStage] = useState<LocalStage | null>(null);
@@ -456,7 +500,7 @@ const StageBuilderPage = () => {
     setLivePreviewStage(previewStage);
     setLivePreviewTarget(previewStage ? target : null);
   }, []);
-  const activeStage = livePreviewStage || stage;
+  const activeStage = livePreviewStage || appearancePreview || (objectPreview ? { ...stage, objects: stage.objects.map(object => object.id === objectPreview.id ? objectPreview : object) } : stage);
   const [providerStages, setProviderStages] = useState<ProviderStageListItem[]>([]);
   const [providerListLoading, setProviderListLoading] = useState(false);
   const [providerListError, setProviderListError] = useState('');
@@ -481,11 +525,14 @@ const StageBuilderPage = () => {
   const prefabs = useMemo(() => builtInStageBuilderPrefabs(), []);
   const snapSettings = useMemo(() => getSnapSettings(prefs.snapPreset, prefs.rotationSnapPreset), [prefs.snapPreset, prefs.rotationSnapPreset]);
   const validationResults = useMemo(() => validateStageBuilderStage(stage), [stage]);
-  const selectedObject = stage.objects.find((object) => object.id === selectedId) || null;
+  const selectedObject = activeStage.objects.find((object) => object.id === selectedId) || null;
   const selectedGroup = selectedGroupId ? stage.metadata.groups.find((group) => group.id === selectedGroupId) || null : null;
   const selectedGroupObjectIds = selectedGroup ? selectedGroup.objectIds.filter((id) => stage.objects.some((object) => object.id === id)) : [];
   const selectedCount = selectedGroup ? selectedGroupObjectIds.length : selectedIds.length || (selectedId ? 1 : 0);
   const assistantSelectedIds = selectedGroup ? selectedGroupObjectIds : selectedIds.length ? selectedIds : selectedId ? [selectedId] : [];
+  const floorSelectionKey = JSON.stringify(assistantSelectedIds);
+  const latestFloorSelectionRef = useRef(floorSelectionKey);
+  latestFloorSelectionRef.current = floorSelectionKey;
   const currentFingerprint = useMemo(() => stageFingerprint(stage), [stage]);
   const savedLocalFingerprint = useMemo(() => localStage ? stageFingerprint(configToEditorStage(localStage.record)) : null, [localStage]);
   const dirty = currentFingerprint !== lastExportFingerprint;
@@ -639,7 +686,7 @@ const StageBuilderPage = () => {
         setGithubDeepLinkLoad({ status: 'loading', repoLabel: githubDeepLinkTarget.label, step: 'Preparing editor…' });
         await delay(320);
         if (cancelled) return;
-        replaceStage(configToEditorStage(loaded.record), { undoable: true, clean: true, message: 'Opened stage from GitHub.' });
+        if (!(await openRecord(loaded.record, { locator: `GitHub ${loaded.repoOwner}/${loaded.repoName} @ ${loaded.commitSha}`, checkpoint: true, initial: true, message: 'Opened stage from GitHub.' }))) return;
         setRemoteStage({
           repoOwner: loaded.repoOwner,
           repoName: loaded.repoName,
@@ -673,17 +720,20 @@ const StageBuilderPage = () => {
 
   useEffect(() => {
     if (!isGuest || !guestStageIdFromUrl) return;
-    try {
+    let cancelled = false;
+    const openSaved = async () => { try {
       const record = localStageRepository.get(guestStageIdFromUrl, scope);
       if (!record) return;
-      replaceStage(configToEditorStage(record), { undoable: false, clean: true, message: 'Opened stage from this browser.' });
+      if (cancelled || !(await openRecord(record, { locator: `Browser stage ${record.id} revision ${record.updatedAt}`, initial: true, message: 'Opened stage from this browser.' }))) return;
       setGuestLocalStageId(record.id);
       setLocalStage(null);
       setRemoteStage(null);
       window.history.replaceState(window.history.state, '', window.location.pathname);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Could not open the local stage.');
-    }
+    } };
+    void openSaved();
+    return () => { cancelled = true; };
   }, [guestStageIdFromUrl, isGuest, scope]);
 
   useEffect(() => {
@@ -691,10 +741,10 @@ const StageBuilderPage = () => {
     let cancelled = false;
     setLocalStagesLoading(true);
     loadLocalStage(token, localDeepLinkStageId)
-      .then((loaded) => {
+      .then(async (loaded) => {
         if (cancelled) return;
         const publishAfterOpen = new URLSearchParams(window.location.search).get('action') === 'publish';
-        replaceStage(configToEditorStage(loaded.record), { undoable: false, clean: true, message: 'Opened stage from your account.' });
+        if (!(await openRecord(loaded.record, { locator: `Account stage ${loaded.id} revision ${loaded.revision}`, initial: true, message: 'Opened stage from your account.' }))) return;
         setLocalStage(loaded);
         setRemoteStage(null);
         if (publishAfterOpen) setPublishMarketplaceOpen(true);
@@ -713,12 +763,14 @@ const StageBuilderPage = () => {
     fetch(remoteStageUrl)
       .then((response) => {
         if (!response.ok) throw new Error(`Could not load stage (${response.status}).`);
-        return response.json();
+        return response.text();
       })
-      .then((value) => {
+      .then(async (raw) => {
         if (cancelled) return;
-        const record = stageRecordFromImportedJson(value);
-        replaceStage(configToEditorStage(record), { undoable: false, clean: false, message: 'Opened stage as a new editable copy.' });
+        let record;
+        try { record = stageRecordFromImportedJson(JSON.parse(raw)); }
+        catch (error) { await rejectStageSource(raw, remoteStageUrl, error); throw error; }
+        if (!(await openRecord(record, { raw, locator: remoteStageUrl, checkpoint: true, initial: true, clean: false, message: 'Opened stage as a new editable copy.' }))) return;
         setLocalStage(null);
         setRemoteStage(null);
         window.history.replaceState(window.history.state, '', window.location.pathname);
@@ -730,17 +782,28 @@ const StageBuilderPage = () => {
 
   useEffect(() => {
     setPrefs(readStageBuilderPreferences(scope));
-    const draft = readStageBuilderDraft(scope);
-    if (draft) {
-      setPendingDraft(draft);
+    try {
+      const recent = listStageRecovery(scope);
+      setRecentDrafts(recent);
+      const explicitSource = !!(guestStageIdFromUrl || localDeepLinkStageId || githubDeepLinkTarget || remoteStageUrl);
       setDraftReady(false);
-    } else {
-      setPendingDraft(null);
+      const latest = recent.find(item => item.sources.draft?.value);
+      if (!explicitSource && latest) {
+        void resumeRecentDraft(latest);
+      } else if (!explicitSource) {
+        const initialRaw = JSON.stringify(editorStageToRecord(stage));
+        void createRecoveryIdentity(initialRaw, 'New stage', 'unchanged').then(identity => {
+          if (!recoverySession.current) recoverySession.current = { identity, sourceRaw: initialRaw, checkpoint: false, storageScope: recoverySessionScope(scope, identity) };
+          setDraftReady(true);
+        }).catch(error => setRecoveryWarning(String(error)));
+      }
+    } catch (error) {
+      setRecoveryWarning(`Recovery storage could not be read: ${String(error)}. Download JSON before closing.`);
       setDraftReady(true);
     }
   }, [scope]);
 
-  useEffect(() => { writeStageBuilderPreferences(prefs, scope); }, [prefs, scope]);
+  useEffect(() => { writeStageBuilderPreferences(browserPrefs, scope); }, [browserPrefs, scope]);
 
   useEffect(() => {
     if (selectedId) setInspectorTab('object');
@@ -748,19 +811,15 @@ const StageBuilderPage = () => {
   }, [selectedId]);
 
   useEffect(() => {
-    if (!draftReady) return;
-    if (!dirty) {
-      clearStageBuilderDraft(scope);
-      return;
-    }
-    const timeout = window.setTimeout(() => writeStageBuilderDraft(stage, scope), DRAFT_SAVE_DELAY_MS);
+    if (!draftReady || !dirty) return;
+    const timeout = window.setTimeout(() => { persistRecovery(); }, DRAFT_SAVE_DELAY_MS);
     return () => window.clearTimeout(timeout);
   }, [stage, dirty, draftReady, scope]);
 
   useEffect(() => {
     if (!dirty) return undefined;
     const onBeforeUnload = (event: BeforeUnloadEvent) => {
-      writeStageBuilderDraft(stage, scope);
+      persistRecovery();
       event.preventDefault();
       event.returnValue = leaveMessage;
       return leaveMessage;
@@ -825,7 +884,13 @@ const StageBuilderPage = () => {
   const toggleRightPanel = () => setRightPanelVisible((value) => !value);
 
   const bumpHistory = () => setHistoryVersion((value) => value + 1);
-  const setPref = (patch: Partial<StageBuilderPreferences>) => setPrefs((current) => ({ ...current, ...patch }));
+  const setPref = (patch: Partial<StageBuilderPreferences>) => {
+    const { snapPreset, rotationSnapPreset, ...browserPatch } = patch;
+    if (Object.keys(browserPatch).length) setPrefs((current) => ({ ...current, ...browserPatch }));
+    if (snapPreset !== undefined || rotationSnapPreset !== undefined) {
+      setStage((current) => setStageSnapping(current, snapPreset, rotationSnapPreset));
+    }
+  };
   const requestCameraView = (view: StageBuilderCameraView) => {
     if (view === 'camera') {
       const activeCamera = stage.objects.find((o) => o.kind === 'camera' && !o.hidden);
@@ -849,8 +914,9 @@ const StageBuilderPage = () => {
 
   const commitStage = (updater: (current: EditorStage) => EditorStage, options: { selectIds?: string[]; selectGroupId?: string | null; message?: string } = {}) => {
     setStage((current) => {
+      const next = normalizeStageHierarchy(normalizeCameraMetadata(updater(cloneStage(current))));
+      if (stageFingerprint(next) === stageFingerprint(current)) return current;
       historyRef.current = pushStageHistory(historyRef.current, current);
-      const next = normalizeCameraMetadata(updater(cloneStage(current)));
       return { ...next, updatedAt: new Date().toISOString() };
     });
     bumpHistory();
@@ -869,7 +935,7 @@ const StageBuilderPage = () => {
   };
 
   const replaceStage = (next: EditorStage, options: { undoable?: boolean; clean?: boolean; message?: string } = {}) => {
-    const normalizedNext = normalizeCameraMetadata(cloneStage(next));
+    const normalizedNext = normalizeStageHierarchy(normalizeCameraMetadata(cloneStage(next)));
     const undoable = options.undoable ?? true;
     if (undoable) {
       setStage((current) => {
@@ -887,18 +953,112 @@ const StageBuilderPage = () => {
     setSelectedGroupId(null);
     setInspectorTab('empty');
     setBuilderMode('edit');
+    setLineOperation({ mode: 'select' });
+    setObjectPreview(null);
+    setAppearancePreview(null);
     if (options.clean) {
       setLastExportFingerprint(stageFingerprint(normalizedNext));
-      setExportedAt(null);
-      clearStageBuilderDraft(scope);
+      setSaveStatus(null);
     }
     if (options.message) setMessage(options.message);
   };
 
+  const refreshRecoverySources = (refreshRecent = true) => {
+    const sources = discoverStageRecovery(recoverySession.current?.storageScope ?? scope);
+    setRecoverySources(sources);
+    if (refreshRecent) setRecentDrafts(listStageRecovery(scope));
+    return sources;
+  };
+
+  const persistRecovery = (): boolean => {
+    const session = recoverySession.current;
+    let reason = session ? '' : 'The recovery session is not ready.';
+    const ok = !!session && persistStageRecovery(stage, session, session.storageScope ?? scope, message => { reason = message; });
+    setRecoveryWarning(ok ? '' : `Recovery could not save your latest edits. ${reason} Your work is still open. Existing drafts and originals are preserved. Download JSON before closing.`);
+    if (ok) refreshRecoverySources(false);
+    return ok;
+  };
+
+  const releaseSavedRecovery = (session: StageRecoverySession | null, savedStage: EditorStage) => {
+    if (!session) return;
+    // Edits made while a remote save was in flight still need their draft.
+    if (stageFingerprint(latestStageRef.current) !== stageFingerprint(savedStage) || recoverySession.current !== session) return;
+    setRecoveryNotice(null);
+    setRestoredSavedVersion(null);
+    setUnfinishedEdits(null);
+    setSavedPreviewOpen(false);
+    session.checkpoint = false;
+    const ok = clearMatchingStageRecovery(session.identity, session.storageScope ?? scope);
+    setRecoveryWarning(ok ? '' : 'The stage was saved, but recovery cleanup failed. A redundant recovery source is retained.');
+    refreshRecoverySources();
+  };
+
+  const rejectStageSource = async (raw: string, locator: string, error: unknown) => {
+    setRejectedSource({ raw, message: error instanceof Error ? error.message : String(error) });
+    try {
+      const identity = await createRecoveryIdentity(raw, locator, 'repair-required');
+      const saved = writeOriginalCheckpoint(raw, locator, identity, scope);
+      if (!saved.ok) setRecoveryWarning(`The rejected source could not be stored: ${saved.error} Export the rejected source before closing.`);
+      refreshRecoverySources();
+    } catch (failure) { setRecoveryWarning(`The rejected source remains open but is not protected: ${String(failure)}. Export it before closing.`); }
+  };
+
+  const openRecord = async (record: LocalStageRecord, options: { locator: string; raw?: string; checkpoint?: boolean; initial?: boolean; undoable?: boolean; clean?: boolean; message?: string; recoveryItem?: RecentStageDraft }) => {
+    const request = ++openRequestRef.current;
+    const raw = options.raw ?? JSON.stringify(record);
+    let migration;
+    try {
+      migration = upgradeStageRecord(record);
+    } catch (error) {
+      await rejectStageSource(raw, options.locator, error);
+      throw error;
+    }
+    const identity = await createRecoveryIdentity(raw, options.locator, migration.upgraded ? 'upgraded' : 'unchanged');
+    if (request !== openRequestRef.current) return false;
+    const recent = listStageRecovery(scope);
+    const previous = options.recoveryItem ?? findStageRecovery(recent, options.locator);
+    if (previous?.sources.draft?.value) {
+      const draft = previous.sources.draft.value;
+      const conflict = draft.sourceLocator !== options.locator;
+      const useDraft = !conflict || await confirmDialog.confirm({
+        title: 'This stage has two versions',
+        message: 'The saved stage changed since your unfinished edits. Which version would you like to open? Both copies will be kept.',
+        confirmLabel: 'Continue my edits', cancelLabel: 'Open saved version',
+      });
+      if (request !== openRequestRef.current) return false;
+      if (useDraft) {
+        if (!await restoreRecovery('draft', previous, true)) return false;
+        setRestoredSavedVersion(record);
+        return true;
+      }
+    }
+    const session: StageRecoverySession = { identity, sourceRaw: raw, checkpoint: !!options.checkpoint, storageScope: recoverySessionScope(scope, identity) };
+    setRestoredSavedVersion(null);
+    setRecoveryNotice(null);
+    setUnfinishedEdits(null);
+    setSavedPreviewOpen(false);
+    recoverySession.current = session;
+    if (session.checkpoint) {
+      const result = writeOriginalCheckpoint(raw, record.title, identity, session.storageScope);
+      setRecoveryWarning(result.ok ? '' : `Original source could not be protected: ${result.error} Download the source before closing.`);
+    }
+    replaceStage(configToEditorStage(migration.record), { undoable: options.undoable ?? !options.initial, clean: options.clean ?? true, message: options.message });
+    setMigrationDiagnostics(migration.diagnostics);
+    setRejectedSource(null);
+    setDraftReady(true);
+    refreshRecoverySources();
+    return true;
+  };
+
   const applyAssistantStage = async (next: EditorStage, target: StageAuthoringTarget): Promise<boolean> => {
-    if (target === 'create' && !(await confirmIfDirty('Replace the current stage with this generated draft? Unsaved changes will remain in the existing recovery draft.'))) return false;
+    if (target === 'create' && !(await confirmIfDirty())) return false;
     const now = new Date().toISOString();
-    replaceStage({ ...next, createdAt: target === 'create' ? now : stage.createdAt, updatedAt: now }, { undoable: true, clean: false, message: 'Reviewed Buddy proposal applied as one undoable draft change. Nothing was saved, exported, published, or run.' });
+    if (target === 'create') {
+      if (!(await openRecord(editorStageToRecord(next), { locator: 'Reviewed Buddy proposal', clean: false }))) return false;
+    } else {
+      replaceStage({ ...next, createdAt: stage.createdAt, updatedAt: now }, { undoable: true, clean: false });
+    }
+    setMessage('Reviewed Buddy proposal applied. Nothing was saved, exported, published or run.');
     if (target === 'create') {
       setLocalStage(null);
       setRemoteStage(null);
@@ -910,20 +1070,26 @@ const StageBuilderPage = () => {
     return true;
   };
 
-  const confirmIfDirty = async (messageText = leaveMessage): Promise<boolean> => {
+  const confirmIfDirty = async (): Promise<boolean> => {
     if (!dirty) return true;
-    writeStageBuilderDraft(stage, scope);
-    // Replacing a dirty stage discards unsaved viewport work, so the confirm action reads as destructive.
-    return confirmDialog.confirm({
-      title: 'Unsaved changes',
-      message: messageText,
-      confirmLabel: 'Discard and continue',
-      cancelLabel: 'Keep editing',
-      danger: true,
+    const backupFailed = !persistRecovery();
+    return new Promise(resolve => {
+      leaveAnswer.current?.(false);
+      leaveAnswer.current = resolve;
+      setLeavePrompt({ backupFailed });
     });
   };
 
+  const finishDeparture = (leave: boolean) => {
+    leaveAnswer.current?.(leave);
+    leaveAnswer.current = null;
+    setLeavePrompt(null);
+  };
+  useEffect(() => () => { leaveAnswer.current?.(false); }, []);
+  const releaseDeparture = useStageBuilderDeparture(dirty, confirmIfDirty);
+
   const handleSelectionChange = (ids: string[]) => {
+    setLineOperation({ mode: 'select' });
     const existing = ids.filter((id) => stage.objects.some((object) => object.id === id));
     setSelectedGroupId(null);
     setSelectedIds(existing);
@@ -932,6 +1098,7 @@ const StageBuilderPage = () => {
   };
 
   const handleSelect = (id: string | null) => {
+    setLineOperation({ mode: 'select' });
     setSelectedGroupId(null);
     setSelectedId(id);
     setSelectedIds(id ? [id] : []);
@@ -946,6 +1113,7 @@ const StageBuilderPage = () => {
   };
 
   const handleSelectGroup = (id: string | null) => {
+    setLineOperation({ mode: 'select' });
     const group = id ? stage.metadata.groups.find((item) => item.id === id) : null;
     setSelectedGroupId(group ? group.id : null);
     setSelectedId(null);
@@ -955,6 +1123,8 @@ const StageBuilderPage = () => {
   };
 
   const handleOpenStageSettings = () => {
+    setLineOperation({ mode: 'select' });
+    setObjectPreview(null);
     setSelectedId(null);
     setSelectedIds([]);
     setSelectedGroupId(null);
@@ -990,6 +1160,32 @@ const StageBuilderPage = () => {
     return Array.from(collected);
   };
 
+  const floorSelectionIds = new Set(descendantIdsFor(stage.objects, assistantSelectedIds));
+  const floorSelection = stage.objects.filter(object => floorSelectionIds.has(object.id));
+  const canPlaceOnFloor = !placingOnFloor && floorSelection.some(hasFloorGeometry) && !floorSelection.some(object => object.locked);
+  const placeSelectionOnFloor = async () => {
+    const scene = sceneHandleRef.current;
+    if (!scene || !canPlaceOnFloor) return;
+    const source = stage;
+    setPlacingOnFloor(true);
+    setLineOperation({ mode: 'select' });
+    setObjectPreview(null);
+    try {
+      const placed = await placeObjectsOnFloor(floorSelection, scene.measureLowestPoint);
+      if (sceneHandleRef.current !== scene) return;
+      if (latestStageRef.current !== source || latestFloorSelectionRef.current !== floorSelectionKey) {
+        setMessage('The stage or selection changed while measuring. Try Place on floor again.');
+        return;
+      }
+      updateObjects(placed);
+      setMessage(placed === floorSelection ? 'The selection is already on the floor.' : 'Selection placed on the floor.');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not place the selection on the floor.');
+    } finally {
+      setPlacingOnFloor(false);
+    }
+  };
+
   const deleteObjects = (ids: string[]) => {
     if (!ids.length) return;
     const idsWithChildren = descendantIdsFor(stage.objects, ids);
@@ -1017,31 +1213,25 @@ const StageBuilderPage = () => {
   const deleteSelected = () => deleteObjects(selectedGroup ? selectedGroupObjectIds : selectedIds.length ? selectedIds : (selectedId ? [selectedId] : []));
 
   const duplicateObjects = (ids: string[]) => {
-    const idsWithChildren = descendantIdsFor(stage.objects, ids);
-    const source = stage.objects.filter((object) => idsWithChildren.includes(object.id));
-    if (!source.length) return;
-    const idMap = new Map(source.map((object) => [object.id, makeLocalStageId()]));
-    const copies = source.map((object) => {
-      const copy = translateObject(cloneStage(object), [object.parentId ? 0 : 0.5, 0, object.parentId ? 0 : 0.5]) as EditorStageObject;
-      const nextParentId = object.parentId && idMap.has(object.parentId) ? idMap.get(object.parentId) : object.parentId;
-      const nextAttachment = object.kind === 'text' && object.attachment
-        ? { ...object.attachment, parentId: nextParentId || object.attachment.parentId }
-        : undefined;
-      return {
-        ...copy,
-        id: idMap.get(object.id)!,
-        name: `${object.name} copy`,
-        groupId: undefined,
-        parentId: nextParentId,
-        ...(nextAttachment ? { attachment: nextAttachment } : {}),
-      } as EditorStageObject;
-    });
-    commitStage((current) => ({ ...current, objects: [...current.objects, ...copies] }), { selectIds: copies.filter((copy) => ids.includes(source.find((object) => idMap.get(object.id) === copy.id)?.id || '')).map((copy) => copy.id), message: 'Duplicated selection.' });
+    const result = copyHierarchySelection(stage, { objectIds: ids });
+    if (result.stage === stage) return;
+    commitStage(() => result.stage, { selectIds: result.selectedIds, message: 'Duplicated selection.' });
   };
-
-  const duplicateSelected = () => duplicateObjects(selectedGroup ? selectedGroupObjectIds : selectedIds.length ? selectedIds : (selectedId ? [selectedId] : []));
+  const duplicateGroup = (groupId: string) => {
+    const result = copyHierarchySelection(stage, { groupId });
+    if (result.stage === stage) return;
+    commitStage(() => result.stage, { selectGroupId: result.groupId, message: 'Duplicated group and its members.' });
+  };
+  const duplicateSelected = () => selectedGroup ? duplicateGroup(selectedGroup.id) : duplicateObjects(selectedIds.length ? selectedIds : (selectedId ? [selectedId] : []));
 
   const addObject = (kind: StageSemanticKind) => {
+    if (kind === 'line') {
+      handleSelect(null);
+      setBuilderMode('edit');
+      setLineOperation({ mode: 'edit', pathId: null });
+      setMessage('Click the floor to add points. Drag squares to move them or diamonds to adjust rounding. Escape finishes editing.');
+      return;
+    }
     if (kind === 'floor') {
       setInspectorTab('stage');
       setMessage('Floor settings are edited in the Stage inspector.');
@@ -1064,12 +1254,32 @@ const StageBuilderPage = () => {
     }), { selectIds: [id], message: labelParent ? `Label attached to ${labelParent.name}.` : `${displayObjectType(nextObject)} added at floor center.` });
   };
 
+  const appendLinePoint = (point: [number, number]) => {
+    if (lineOperation.mode !== 'edit') return;
+    const existing = lineOperation.pathId ? stage.objects.find(object => object.id === lineOperation.pathId && object.kind === 'line') as EditorLineObject | undefined : undefined;
+    if (existing?.locked) return;
+    const insertion = existing ? insertDrawnLinePoint(existing, lineOperation.pointIndex, point) : null;
+    const next: EditorLineObject = insertion ? insertion.line
+      : { id: makeLocalStageId(), kind: 'line', semanticKind: 'line', name: 'line path', curveVersion: 1, points: [point], corners: [null], width: 0.03, color: 'black' };
+    commitStage(current => ({ ...current, objects: existing ? current.objects.map(object => object.id === next.id ? next : object) : [...current.objects, next] }), { selectIds: [next.id] });
+    setLineOperation({ mode: 'edit', pathId: next.id, pointIndex: insertion?.pointIndex ?? 0 });
+  };
+  const changeLineOperation = (operation: LineOperation) => {
+    setBuilderMode('edit');
+    setLineOperation(operation);
+    setObjectPreview(null);
+    setAppearancePreview(null);
+    if (operation.mode !== 'select' && operation.pathId) {
+      setSelectedId(operation.pathId); setSelectedIds([operation.pathId]); setSelectedGroupId(null);
+    }
+  };
+
   const addPrefab = (prefab: StageBuilderPrefab) => {
-    const center = selectedCentroid(prefab.objects);
-    const delta: Vec3 = [-center[0], prefab.id.startsWith('builtin_floor_') ? 0 : -center[1], -center[2]];
+    const delta = prefabInsertionOffset(prefab);
     const groupId = makeLocalStageId();
     const copies = prefab.objects.map((object) => {
-      const copy = translateObject(cloneStage(object), delta) as EditorStageObject;
+      const template = object.kind === 'line' && object.curveVersion === undefined ? { ...object, curveVersion: 1 as const, corners: sharpLineCorners(object.points) } : object;
+      const copy = translateObject(cloneStage(template), delta) as EditorStageObject;
       return { ...copy, id: makeLocalStageId(), groupId, prefabSourceId: prefab.id } as EditorStageObject;
     });
     const now = new Date().toISOString();
@@ -1083,20 +1293,22 @@ const StageBuilderPage = () => {
   const handleStageChange = (next: EditorStage) => commitStage(() => next);
 
   const handleNew = async () => {
-    if (!(await confirmIfDirty('Create a new blank stage? Unsaved changes will remain only as a recovery draft.'))) return;
+    if (!(await confirmIfDirty())) return;
     const next = emptyEditorStage();
-    replaceStage(next, { undoable: false, clean: true, message: 'New blank stage created.' });
+    if (!(await openRecord(editorStageToRecord(next), { locator: 'New stage', undoable: false, message: 'New blank stage created.' }))) return;
     setLocalStage(null);
     setRemoteStage(null);
     setGuestLocalStageId(null);
+    window.history.replaceState(window.history.state, '', window.location.pathname);
   };
 
   const handleDemo = async () => {
-    if (!(await confirmIfDirty('Load the demo stage? Unsaved changes will remain only as a recovery draft.'))) return;
-    replaceStage(createDemoEditorStage(), { undoable: true, clean: false, message: 'Demo stage loaded.' });
+    if (!(await confirmIfDirty())) return;
+    if (!(await openRecord(editorStageToRecord(createDemoEditorStage()), { locator: 'Built-in demo', clean: false, message: 'Demo stage loaded.' }))) return;
     setLocalStage(null);
     setRemoteStage(null);
     setGuestLocalStageId(null);
+    window.history.replaceState(window.history.state, '', window.location.pathname);
   };
 
   const readFileAsDataUrl = (file: File): Promise<string> => new Promise((resolve, reject) => {
@@ -1146,17 +1358,20 @@ const StageBuilderPage = () => {
 
   const handleImportFile = async (file?: File) => {
     if (!file) return;
-    if (!(await confirmIfDirty('Import this JSON file and replace the current stage? Unsaved changes will remain only as a recovery draft.'))) {
+    if (!(await confirmIfDirty())) {
       if (importInputRef.current) importInputRef.current.value = '';
       return;
     }
     try {
-      const record = stageRecordFromImportedJson(JSON.parse(await file.text()));
-      const imported = configToEditorStage(record);
-      replaceStage(imported, { undoable: true, clean: true, message: 'Imported stage JSON.' });
+      const raw = await file.text();
+      let record;
+      try { record = stageRecordFromImportedJson(JSON.parse(raw)); }
+      catch (error) { await rejectStageSource(raw, file.name, error); throw error; }
+      if (!(await openRecord(record, { raw, locator: file.name, checkpoint: true, message: 'Imported stage JSON.' }))) return;
       setLocalStage(null);
       setRemoteStage(null);
       setGuestLocalStageId(null);
+    window.history.replaceState(window.history.state, '', window.location.pathname);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Import failed.');
     } finally {
@@ -1190,12 +1405,13 @@ const StageBuilderPage = () => {
       ? { source: 'browser' as const, id: guestLocalStageId, title: stage.title }
       : localStage ? { source: 'account' as const, id: localStage.id, title: localStage.title } : null;
     if (target && await deleteStage(target)) {
-      clearStageBuilderDraft(scope);
+      releaseDeparture();
       navigate('/dashboard', { replace: true });
     }
   };
 
-  const handleLocalSave = async () => {
+  const handleLocalSave = async (): Promise<boolean> => {
+    const savedSession = recoverySession.current;
     if (isGuest) {
       setLocalStageSaving(true);
       try {
@@ -1207,25 +1423,27 @@ const StageBuilderPage = () => {
         setGuestLocalStageId(saved.id);
         window.history.replaceState(window.history.state, '', `/stage-builder?guestStage=${encodeURIComponent(saved.id)}`);
         setLastExportFingerprint(stageFingerprint(stage));
-        setExportedAt(new Date().toISOString());
-        clearStageBuilderDraft(scope);
+        setSaveStatus('Saved in this browser');
+        releaseSavedRecovery(savedSession, stage);
+        if (savedSession && recoverySession.current === savedSession) { savedSession.checkpoint = false; savedSession.identity.sourceLocator = `Browser stage ${saved.id} revision ${saved.updatedAt}`; savedSession.sourceRaw = JSON.stringify(saved); }
         setMessage('Saved in this browser.');
+        return true;
       } catch (error) {
         setMessage(error instanceof Error ? error.message : 'Local stage save failed.');
+        return false;
       } finally {
         setLocalStageSaving(false);
       }
-      return;
     }
     if (!token) {
       setMessage('Sign in before saving a stage to your account.');
-      return;
+      return false;
     }
     // A stage without a preview (imported, migrated, or seeded) must still be
     // able to capture one: only short-circuit when there is an existing image.
     if (localStage && !localStageHasChanges && localStage.previewUrl) {
       setMessage(`No changes to save. ${localStage.title} is already at v${localStage.revision}.`);
-      return;
+      return true;
     }
     setLocalStageSaving(true);
     try {
@@ -1240,19 +1458,22 @@ const StageBuilderPage = () => {
       setLocalStage(saved);
       setRemoteStage(null);
       setLastExportFingerprint(stageFingerprint(stage));
-      setExportedAt(new Date().toISOString());
-      clearStageBuilderDraft(scope);
+      setSaveStatus('Saved to account');
+      releaseSavedRecovery(savedSession, stage);
+      if (savedSession && recoverySession.current === savedSession) { savedSession.checkpoint = false; savedSession.identity.sourceLocator = `Account stage ${saved.id} revision ${saved.revision}`; savedSession.sourceRaw = JSON.stringify(saved.record); }
       // Tell the Stages panel to refetch even if it already mounted while this
       // save was in flight.
       invalidateLocalStages();
       setMessage(`Saved to your account: ${saved.title} · v${saved.revision}`);
       if (openLocalStageOpen) setLocalStages(await listLocalStages(token));
+      return true;
     } catch (error) {
       if (error instanceof LocalStageRequestError && error.code === 'revision_conflict') {
         setMessage(`${error.message} Current revision: v${error.currentRevision || '?'}.`);
       } else {
         setMessage(error instanceof Error ? error.message : 'Local stage save failed.');
       }
+      return false;
     } finally {
       setLocalStageSaving(false);
     }
@@ -1284,9 +1505,9 @@ const StageBuilderPage = () => {
   };
 
   const handleGuestOpenLocalStage = async (item: LocalStageRecord) => {
-    if (!(await confirmIfDirty('Open this browser-saved stage and replace the current editor stage? Unsaved changes will remain only as a recovery draft.'))) return;
+    if (!(await confirmIfDirty())) return;
     try {
-      replaceStage(configToEditorStage(item), { undoable: true, clean: true, message: 'Opened stage from this browser.' });
+      if (!(await openRecord(item, { locator: `Browser stage ${item.id} revision ${item.updatedAt}`, message: 'Opened stage from this browser.' }))) return;
       setGuestLocalStageId(item.id);
       setLocalStage(null);
       setRemoteStage(null);
@@ -1298,12 +1519,12 @@ const StageBuilderPage = () => {
   };
 
   const handleOpenLocalStage = async (item: LocalStageSummary) => {
-    if (isGuest || !token || !(await confirmIfDirty('Open this saved stage and replace the current editor stage? Unsaved changes will remain only as a recovery draft.'))) return;
+    if (isGuest || !token || !(await confirmIfDirty())) return;
     setLocalStagesLoading(true);
     setLocalStagesError('');
     try {
       const loaded = await loadLocalStage(token, item.id);
-      replaceStage(configToEditorStage(loaded.record), { undoable: true, clean: true, message: 'Opened stage from your account.' });
+      if (!(await openRecord(loaded.record, { locator: `Account stage ${loaded.id} revision ${loaded.revision}`, message: 'Opened stage from your account.' }))) return;
       setLocalStage(loaded);
       setRemoteStage(null);
       setOpenLocalStageOpen(false);
@@ -1314,11 +1535,12 @@ const StageBuilderPage = () => {
     }
   };
 
-  const handleProviderSave = async ({ slug, commitMessage, visibility }: SaveToProviderValues) => {
+  const handleProviderSave = async ({ slug, commitMessage, visibility }: SaveToProviderValues): Promise<boolean> => {
+    const savedSession = recoverySession.current;
     if (!token || isGuest) {
       setProviderError('Sign in before saving to GitHub.');
       setProviderErrorCode('not_connected');
-      return;
+      return false;
     }
     setProviderSaving(true);
     setProviderError('');
@@ -1342,12 +1564,14 @@ const StageBuilderPage = () => {
       }
       setBootstrapRepoName(null);
       setLastExportFingerprint(stageFingerprint(stage));
-      setExportedAt(new Date().toISOString());
-      clearStageBuilderDraft(scope);
+      setSaveStatus('Saved to GitHub');
+      releaseSavedRecovery(savedSession, stage);
+      if (savedSession && recoverySession.current === savedSession) { savedSession.checkpoint = false; savedSession.identity.sourceLocator = `GitHub ${saved.repoOwner}/${saved.repoName} @ ${saved.commitSha}`; }
       setSaveProviderOpen(false);
       setProviderErrorCode(null);
       setMessage(`Saved to GitHub: ${saved.repoOwner}/${saved.repoName}`);
       refreshProviderStatus({ force: true });
+      return true;
     } catch (error) {
       if (error instanceof ProviderRequestError) {
         setProviderErrorCode(error.code || null);
@@ -1371,6 +1595,7 @@ const StageBuilderPage = () => {
         setProviderErrorCode(null);
         setProviderError(error instanceof Error ? error.message : 'Save to GitHub failed.');
       }
+      return false;
     } finally {
       setProviderSaving(false);
     }
@@ -1484,13 +1709,13 @@ const StageBuilderPage = () => {
 
   const handleOpenProviderStage = async (item: ProviderStageListItem) => {
     if (!token) return;
-    if (!(await confirmIfDirty('Open this GitHub stage and replace the current editor stage? Unsaved changes will remain only as a recovery draft.'))) return;
+    if (!(await confirmIfDirty())) return;
     setProviderListLoading(true);
     setProviderListError('');
     setProviderListWarning(false);
     try {
       const loaded = await loadStageFromProvider(token, item.repoOwner, item.repoName);
-      replaceStage(configToEditorStage(loaded.record), { undoable: true, clean: true, message: 'Opened stage from GitHub.' });
+      if (!(await openRecord(loaded.record, { locator: `GitHub ${loaded.repoOwner}/${loaded.repoName} @ ${loaded.commitSha}`, checkpoint: true, message: 'Opened stage from GitHub.' }))) return;
       setRemoteStage({
         repoOwner: loaded.repoOwner,
         repoName: loaded.repoName,
@@ -1513,14 +1738,11 @@ const StageBuilderPage = () => {
 
   const handleExport = () => {
     downloadStageJson(editorStageToRecord(stage));
-    setLastExportFingerprint(stageFingerprint(stage));
-    setExportedAt(new Date().toISOString());
-    clearStageBuilderDraft(scope);
-    setMessage('Saved stage JSON to your downloads.');
+    setMessage('Stage JSON download started. Recovery is retained until a confirmed save or explicit discard.');
   };
 
   const handleRunTest = () => {
-    if (dirty) writeStageBuilderDraft(stage, scope);
+    if (dirty) persistRecovery();
     const blocking = blockingValidationResults(validationResults);
     if (blocking.length) {
       setInspectorTab('validation');
@@ -1529,7 +1751,7 @@ const StageBuilderPage = () => {
     }
     const handoffId = writeStageBuilderRunHandoff(editorStageToRecord(stage), undefined, { collisionWireVisible, stageAssetBaseUrl: remoteStage?.rawBaseUrl });
     if (!handoffId) {
-      setMessage('Run Test could not store this stage locally. Remove a large imported object or export JSON, then try again.');
+      setMessage('Run Test could not store this stage locally. Your work and recovery drafts are preserved. Download stage JSON to keep a copy, then retry.');
       return;
     }
     const url = `/stage-builder/test?handoff=${encodeURIComponent(handoffId)}`;
@@ -1540,12 +1762,13 @@ const StageBuilderPage = () => {
     }
   };
 
-  const handleBack = async () => {
-    if (!(await confirmIfDirty())) return;
+  const handleBack = () => {
     navigate('/stages?tab=mine');
   };
 
   const handleOpenSettings = () => {
+    setLineOperation({ mode: 'select' });
+    setObjectPreview(null);
     setSelectedId(null);
     setSelectedIds([]);
     setSelectedGroupId(null);
@@ -1554,6 +1777,8 @@ const StageBuilderPage = () => {
   };
 
   const handleOpenPreviewSettings = () => {
+    setLineOperation({ mode: 'select' });
+    setObjectPreview(null);
     setSelectedId(null);
     setSelectedIds([]);
     setSelectedGroupId(null);
@@ -1561,28 +1786,28 @@ const StageBuilderPage = () => {
     setRightPanelVisible(true);
   };
 
+  const restoreHistoryStage = (restored: EditorStage) => {
+    const operation = reconcileLineOperation(lineOperation, restored.objects);
+    const editingId = operation.mode === 'select' ? null : operation.pathId;
+    setStage(normalizeCameraMetadata(restored));
+    setLineOperation(operation);
+    setObjectPreview(null);
+    setSelectedId(editingId);
+    setSelectedIds(editingId ? [editingId] : []);
+    setSelectedGroupId(null);
+    bumpHistory();
+  };
+
   const undo = () => {
     const { history, stage: previous } = undoStageHistory(historyRef.current, stage);
     historyRef.current = history;
-    if (previous) {
-      setStage(normalizeCameraMetadata(previous));
-      setSelectedId(null);
-      setSelectedIds([]);
-      setSelectedGroupId(null);
-      bumpHistory();
-    }
+    if (previous) restoreHistoryStage(previous);
   };
 
   const redo = () => {
     const { history, stage: next } = redoStageHistory(historyRef.current, stage);
     historyRef.current = history;
-    if (next) {
-      setStage(normalizeCameraMetadata(next));
-      setSelectedId(null);
-      setSelectedIds([]);
-      setSelectedGroupId(null);
-      bumpHistory();
-    }
+    if (next) restoreHistoryStage(next);
   };
 
   const groupSelected = () => {
@@ -1603,118 +1828,23 @@ const StageBuilderPage = () => {
     }, { selectGroupId: groupId, message: 'Grouped selected objects.' });
   };
 
-  const handleHierarchyDrop = (draggedId: string, target: HierarchyDropTarget) => {
-    if (target.type === 'object' && draggedId === target.id) return;
-    const dragged = stage.objects.find((object) => object.id === draggedId);
-    if (!dragged) return;
-
+  const handleHierarchyDrop = (source: StageHierarchyRow, target: HierarchyDropTarget) => {
+    if (source.kind === target.type && source.id === target.id) return;
     commitStage((current) => {
-      const moving = current.objects.find((object) => object.id === draggedId);
-      const targetObject = target.type === 'object' ? current.objects.find((object) => object.id === target.id) : null;
-      if (!moving || (target.type === 'object' && !targetObject)) return current;
-
-      if (moving.kind === 'text' && target.position === 'inside' && targetObject && canAttachLabelTo(targetObject)) {
+      const moving = source.kind === 'object' ? current.objects.find(object => object.id === source.id) : null;
+      const parent = target.type === 'object' ? current.objects.find(object => object.id === target.id) : null;
+      if (moving?.kind === 'text' && target.position === 'inside' && parent && canAttachLabelTo(parent)) {
         return {
           ...current,
-          objects: current.objects.map((object) => object.id === moving.id ? {
-            ...moving,
-            parentId: targetObject.id,
-            groupId: undefined,
-            onFloor: false,
-            attachment: moving.attachment?.parentId === targetObject.id ? moving.attachment : defaultLabelAttachment(targetObject),
+          objects: current.objects.map(object => object.id === moving.id ? {
+            ...moving, parentId: parent.id, groupId: undefined, onFloor: false,
+            attachment: moving.attachment?.parentId === parent.id ? moving.attachment : defaultLabelAttachment(parent),
           } as EditorStageObject : object),
-          metadata: { ...current.metadata, groups: current.metadata.groups.map((group) => ({ ...group, objectIds: group.objectIds.filter((objectId) => objectId !== moving.id) })).filter((group) => group.objectIds.length > 0) },
+          metadata: { ...current.metadata, groups: current.metadata.groups.map(group => ({ ...group, objectIds: group.objectIds.filter(id => id !== moving.id) })) },
         };
       }
-
-      const now = new Date().toISOString();
-      const existingObjectIds = new Set(current.objects.map((object) => object.id));
-      let groups = current.metadata.groups
-        .map((group) => ({ ...group, objectIds: group.objectIds.filter((objectId) => existingObjectIds.has(objectId)) }))
-        .filter((group) => group.objectIds.length > 0);
-      const groupForObject = (objectId: string) => groups.find((group) => group.objectIds.includes(objectId))?.id || null;
-      const moveObject = (objects: EditorStageObject[], anchorId: string, position: 'before' | 'after') => {
-        const objectToMove = objects.find((object) => object.id === draggedId);
-        if (!objectToMove) return objects;
-        const withoutMoving = objects.filter((object) => object.id !== draggedId);
-        const anchorIndex = withoutMoving.findIndex((object) => object.id === anchorId);
-        if (anchorIndex < 0) return objects;
-        const insertAt = position === 'before' ? anchorIndex : anchorIndex + 1;
-        return [...withoutMoving.slice(0, insertAt), objectToMove, ...withoutMoving.slice(insertAt)];
-      };
-      const groupAnchor = (groupId: string, position: 'before' | 'after', objects: EditorStageObject[]) => {
-        const group = groups.find((item) => item.id === groupId);
-        if (!group) return null;
-        const members = new Set(group.objectIds);
-        const orderedIds = objects.filter((object) => members.has(object.id)).map((object) => object.id);
-        if (!orderedIds.length) return null;
-        return position === 'before' ? orderedIds[0] : orderedIds[orderedIds.length - 1];
-      };
-      const insertIntoGroup = (groupId: string, anchorId?: string, position: 'before' | 'after' = 'after') => {
-        groups = groups.map((group) => {
-          if (group.id !== groupId) return group;
-          const withoutMoving = group.objectIds.filter((objectId) => objectId !== draggedId);
-          const anchorIndex = anchorId ? withoutMoving.indexOf(anchorId) : -1;
-          const insertAt = anchorIndex < 0 ? withoutMoving.length : position === 'before' ? anchorIndex : anchorIndex + 1;
-          return {
-            ...group,
-            objectIds: [...withoutMoving.slice(0, insertAt), draggedId, ...withoutMoving.slice(insertAt)],
-            updatedAt: now,
-          };
-        });
-      };
-
-      groups = groups.map((group) => group.objectIds.includes(draggedId)
-        ? { ...group, objectIds: group.objectIds.filter((objectId) => objectId !== draggedId), updatedAt: now }
-        : group);
-
-      let objects = current.objects;
-      if (target.type === 'object' && targetObject) {
-        const targetGroupId = groupForObject(targetObject.id);
-        if (target.position === 'inside') {
-          const destinationGroupId = targetGroupId || makeLocalStageId();
-          if (!targetGroupId) {
-            groups = [...groups, { id: destinationGroupId, name: `${targetObject.name || 'Object'} group`, objectIds: [targetObject.id], createdAt: now, updatedAt: now }];
-          }
-          insertIntoGroup(destinationGroupId, targetObject.id, 'after');
-          objects = moveObject(objects, targetObject.id, 'after');
-        } else if (targetGroupId) {
-          insertIntoGroup(targetGroupId, targetObject.id, target.position);
-          objects = moveObject(objects, targetObject.id, target.position);
-        } else {
-          objects = moveObject(objects, targetObject.id, target.position);
-        }
-      } else if (target.type === 'group') {
-        const targetGroup = groups.find((group) => group.id === target.id);
-        if (!targetGroup) return current;
-        if (target.position === 'inside') {
-          insertIntoGroup(target.id);
-          const anchorId = groupAnchor(target.id, 'after', objects);
-          if (anchorId) objects = moveObject(objects, anchorId, 'after');
-        } else {
-          const anchorId = groupAnchor(target.id, target.position, objects);
-          if (anchorId) objects = moveObject(objects, anchorId, target.position);
-        }
-      }
-
-      groups = groups.filter((group) => group.objectIds.length > 0);
-      const objectGroupIds = new Map<string, string>();
-      groups.forEach((group) => group.objectIds.forEach((objectId) => objectGroupIds.set(objectId, group.id)));
-
-      return {
-        ...current,
-        objects: objects.map((object) => {
-          const nextGroupId = objectGroupIds.get(object.id);
-          if (nextGroupId) {
-            if (object.groupId === nextGroupId && object.id !== draggedId) return object;
-            return { ...object, groupId: nextGroupId, prefabSourceId: object.id === draggedId ? undefined : object.prefabSourceId } as EditorStageObject;
-          }
-          if (object.groupId || object.id === draggedId) return { ...object, groupId: undefined, prefabSourceId: object.id === draggedId ? undefined : object.prefabSourceId } as EditorStageObject;
-          return object;
-        }),
-        metadata: { ...current.metadata, groups },
-      };
-    }, { selectIds: [draggedId], message: `${dragged.name} moved in hierarchy.` });
+      return moveHierarchyRow(current, source, { kind: target.type, id: target.id, position: target.position });
+    });
   };
 
   const renameGroup = (groupId: string, name: string) => {
@@ -1730,48 +1860,113 @@ const StageBuilderPage = () => {
     });
   };
 
-  const restoreDraft = () => {
-    if (!pendingDraft) return;
-    const restored = draftToEditorStage(pendingDraft);
-    replaceStage(restored, { undoable: false, clean: false, message: 'Recovered browser draft.' });
-    setLastExportFingerprint('');
-    setPendingDraft(null);
-    setDraftReady(true);
+  const restoreRecovery = async (kind: 'draft' | 'original', item?: RecentStageDraft, keepDestination = false) => {
+    try {
+      const sources = item ? discoverStageRecovery(item.scope) : refreshRecoverySources();
+      const selected = sources[kind];
+      if (!selected?.value) return false;
+      const raw = kind === 'original' ? sources.original!.value!.sourceRaw : JSON.stringify(sources.draft!.value!.stageRecord);
+      const record = kind === 'original' ? stageRecordFromImportedJson(JSON.parse(raw)) : sources.draft!.value!.stageRecord;
+      const migration = upgradeStageRecord(record);
+      const savedIdentity = selected.value;
+      const identity = savedIdentity.recoveryId && savedIdentity.sourceFingerprint
+        ? { recoveryId: savedIdentity.recoveryId, sourceFingerprint: savedIdentity.sourceFingerprint, sourceLocator: savedIdentity.sourceLocator || 'Browser recovery', upgradeState: savedIdentity.upgradeState || 'unchanged' } as StageRecoverySession['identity']
+        : await createRecoveryIdentity(raw, 'Legacy recovery draft', migration.upgraded ? 'upgraded' : 'unchanged');
+      if (kind === 'draft' && !savedIdentity.recoveryId && !adoptLegacyDraft(sources.draft!, identity)) throw new Error('The draft changed or could not be updated. Its existing bytes are preserved.');
+      const original = sources.original?.value;
+      recoverySession.current = { identity, sourceRaw: original && sameRecoverySource(original, identity) ? original.sourceRaw : raw, checkpoint: !!original && sameRecoverySource(original, identity), storageScope: item?.scope ?? recoverySession.current?.storageScope ?? String(scope) };
+      replaceStage(configToEditorStage(migration.record), { undoable: false, clean: kind === 'original' });
+      setRestoredSavedVersion(null);
+      setUnfinishedEdits(null);
+      setSavedPreviewOpen(false);
+      setRecoveryNotice(kind === 'draft' ? 'restored' : null);
+      if (kind === 'original') setMessage('Opened original source. Later edits have not been recovered.');
+      if (kind === 'draft') setLastExportFingerprint('');
+      setMigrationDiagnostics(migration.diagnostics);
+      setRecoveryOpen(false);
+      setDraftReady(true);
+      if (!keepDestination) { setLocalStage(null); setRemoteStage(null); setGuestLocalStageId(null); }
+      setRecoveryWarning('');
+      refreshRecoverySources();
+      return true;
+    } catch (error) { setRecoveryWarning(error instanceof Error ? error.message : String(error)); return false; }
   };
 
-  const discardDraft = () => {
-    clearStageBuilderDraft(scope);
-    setPendingDraft(null);
-    setDraftReady(true);
-    setMessage('Discarded browser recovery draft.');
+  const returnToUnfinishedEdits = async () => {
+    if (!unfinishedEdits) return;
+    try {
+      if (!discoverStageRecovery(unfinishedEdits.scope).draft?.value) {
+        setRecoveryWarning('Your unfinished edits could not be found in this browser. Your current stage is still open.');
+        return;
+      }
+      if (dirty && !persistRecovery()) return;
+      const savedVersion = restoredSavedVersion;
+      if (await restoreRecovery('draft', unfinishedEdits, true)) setRestoredSavedVersion(savedVersion);
+    } catch (error) { setRecoveryWarning(error instanceof Error ? error.message : String(error)); }
+  };
+
+  const resumeRecentDraft = async (item: RecentStageDraft) => {
+    try {
+      const locator = item.sources.draft?.value?.sourceLocator || '';
+      const account = /^Account stage (\d+) revision /.exec(locator);
+      if (account && token && !isGuest) {
+        const saved = await loadLocalStage(token, Number(account[1]));
+        if (await openRecord(saved.record, { locator: `Account stage ${saved.id} revision ${saved.revision}`, initial: true, recoveryItem: item })) {
+          setLocalStage(saved); setRemoteStage(null);
+        }
+      } else if (locator.startsWith('GitHub ') && token && !isGuest) {
+        const match = /^GitHub ([^/]+)\/(.+) @ /.exec(locator);
+        if (!match) throw new Error('The saved repository could not be identified.');
+        const saved = await loadStageFromProvider(token, match[1], match[2]);
+        if (await openRecord(saved.record, { locator: `GitHub ${saved.repoOwner}/${saved.repoName} @ ${saved.commitSha}`, initial: true, recoveryItem: item })) {
+          setRemoteStage(saved); setLocalStage(null);
+        }
+      } else if (locator.startsWith('Browser stage ')) {
+        const id = recoverySourceKey(locator).slice('Browser stage '.length);
+        const saved = localStageRepository.get(id, scope);
+        if (saved) {
+          if (await openRecord(saved, { locator: `Browser stage ${saved.id} revision ${saved.updatedAt}`, initial: true, recoveryItem: item })) setGuestLocalStageId(id);
+        } else await restoreRecovery('draft', item);
+      } else {
+        await restoreRecovery('draft', item);
+      }
+    } catch (error) {
+      setRecoveryWarning(`Could not open your previous work: ${String(error)}. Your draft is still available in Recent drafts.`);
+      setRecentDrafts(listStageRecovery(scope));
+      setRecoveryOpen(true);
+    }
   };
 
   useEffect(() => {
-    if (!prefs.keyboardShortcutsEnabled || deletingStage) return undefined;
+    if (savedPreviewOpen || !prefs.keyboardShortcutsEnabled || deletingStage) return undefined;
     const onKey = (event: KeyboardEvent) => {
       if (isTypingTarget(event.target)) return;
       const key = event.key.toLowerCase();
       const ctrl = event.ctrlKey || event.metaKey;
-      if (ctrl && key === 'z') { event.preventDefault(); undo(); return; }
+      if (ctrl && key === 'z' && !event.shiftKey) { event.preventDefault(); undo(); return; }
       if (ctrl && (key === 'y' || (event.shiftKey && key === 'z'))) { event.preventDefault(); redo(); return; }
       if (ctrl && key === 'd') { event.preventDefault(); duplicateSelected(); return; }
       if (event.key === 'Delete' || event.key === 'Backspace') { event.preventDefault(); deleteSelected(); return; }
-      if (key === 'w') { setBuilderMode('edit'); setTransformMode('translate'); }
-      if (key === 'e') { setBuilderMode('edit'); setTransformMode('rotate'); }
-      if (key === 'r') { setBuilderMode('edit'); setTransformMode('scale'); }
+      if (key === 'w') { setBuilderMode('edit'); setLineOperation({ mode: 'select' }); setTransformMode('translate'); }
+      if (key === 'e') { setBuilderMode('edit'); setLineOperation({ mode: 'select' }); setTransformMode('rotate'); }
+      if (key === 'r') { setBuilderMode('edit'); setLineOperation({ mode: 'select' }); setTransformMode('scale'); }
       if (key === 'f') setFocusRequestNonce((value) => value + 1);
       if (key === 'g') groupSelected();
       if (key === 'escape') {
+        if (lineOperation.mode !== 'select') { setLineOperation({ mode: 'select' }); return; }
         if (lookThroughCameraId) setLookThroughCameraId(null);
         else handleSelect(null);
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [prefs.keyboardShortcutsEnabled, deletingStage, stage, selectedId, selectedIds, selectedGroupId, snapSettings, historyVersion, lookThroughCameraId]);
+  }, [savedPreviewOpen, prefs.keyboardShortcutsEnabled, deletingStage, stage, selectedId, selectedIds, selectedGroupId, snapSettings, historyVersion, lookThroughCameraId, lineOperation]);
 
   const leftPanel = (
     <EditorLeftPanel
+      stageAssetBaseUrl={remoteStage?.rawBaseUrl}
+      tab={leftPanelTab}
+      onTabChange={setLeftPanelTab}
       stage={stage}
       selectedId={selectedId}
       selectedIds={selectedIds}
@@ -1785,6 +1980,7 @@ const StageBuilderPage = () => {
       onSelectionChange={handleSelectionChange}
       onObjectChange={updateObject}
       onDuplicateObjects={duplicateObjects}
+      onDuplicateGroup={duplicateGroup}
       onDeleteObjects={deleteObjects}
       onHierarchyDrop={handleHierarchyDrop}
       onGroupRename={renameGroup}
@@ -1802,7 +1998,19 @@ const StageBuilderPage = () => {
       validationResults={validationResults}
       prefs={prefs}
       onStageChange={handleStageChange}
+      lineOperation={lineOperation}
+      onLineOperationChange={changeLineOperation}
+      onLinePreview={setObjectPreview}
+      onDeleteLine={(id) => {
+        deleteObjects([id]);
+        setLeftPanelVisible(true);
+        setLeftPanelTab('scene');
+        requestAnimationFrame(() => (document.querySelector('[aria-label="Search hierarchy"]') as HTMLElement | null)?.focus());
+      }}
       onObjectChange={updateObject}
+      onObjectPreview={setObjectPreview}
+      onStagePreview={setAppearancePreview}
+      onFocusObjects={(ids) => { handleSelectionChange(ids); setFocusRequestNonce(value => value + 1); setInspectorTab('object'); }}
       onLookThroughCamera={requestLookThroughCamera}
       onToggleValidationOverride={toggleValidationOverride}
       onPrefsChange={setPref}
@@ -1813,7 +2021,7 @@ const StageBuilderPage = () => {
 
   return (
     <EditorThemeProvider value={useMemo(() => {
-      const variant = prefs.styleVariant;
+      const variant = editorVariant;
       return {
         variant,
         colors: getEditorColors(variant),
@@ -1823,7 +2031,7 @@ const StageBuilderPage = () => {
         tabsSx: getEditorTabsSx(variant),
         inspectorSx: getInspectorPanelSx(variant),
       };
-    }, [prefs.styleVariant])}>
+    }, [editorVariant])}><ThemeProvider theme={editorMuiTheme}>
       {githubDeepLinkLoad.status !== 'idle' ? (
         <GitHubStageLoadScreen
           state={githubDeepLinkLoad}
@@ -1842,10 +2050,39 @@ const StageBuilderPage = () => {
         />
       ) : (
     <Box ref={rootRef} sx={{ '--fossbot-box-border-radius': '0px', borderRadius: 0, width: '100vw', height: '100vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', bgcolor: editorColors.viewport }}>
+      {recoveryWarning && <Alert severity="warning" action={<><Button onClick={() => { refreshRecoverySources(); setRecoveryOpen(true); }}>Recent drafts</Button><Button onClick={() => downloadStageJson(editorStageToRecord(stage))}>Download JSON</Button></>}>{recoveryWarning}</Alert>}
+      {recoveryNotice && <Alert severity="info" sx={{ '& .MuiAlert-message': { flex: 1, minWidth: 0 } }}>
+        <Stack direction={{ xs: 'column', sm: 'row' }} alignItems={{ sm: 'center' }} spacing={1}>
+          <Box sx={{ flex: 1 }}>
+            <Typography variant="body2" fontWeight={600}>{recoveryNotice === 'restored' ? 'Continue where you left off' : 'You’re working from the saved version'}</Typography>
+            <Typography variant="body2">{recoveryNotice === 'restored' ? 'Your latest changes haven’t been saved yet.' : 'Your unfinished edits are still here if you want to go back.'}</Typography>
+          </Box>
+          {recoveryNotice === 'restored' && restoredSavedVersion && <Button onClick={() => setSavedPreviewOpen(true)}>Preview saved version</Button>}
+          {recoveryNotice === 'saved' && unfinishedEdits && <Button onClick={returnToUnfinishedEdits}>Return to my unfinished edits</Button>}
+        </Stack>
+      </Alert>}
+      {savedPreviewOpen && restoredSavedVersion && <SavedStagePreview record={restoredSavedVersion} assetBaseUrl={remoteStage?.rawBaseUrl}
+        onBack={() => setSavedPreviewOpen(false)} onEdit={async () => {
+          if (dirty && !persistRecovery()) { setSavedPreviewOpen(false); return; }
+          try {
+            const draftScope = recoverySession.current?.storageScope ?? String(scope);
+            const sources = discoverStageRecovery(draftScope);
+            if (!sources.draft?.value) throw new Error('Your unfinished edits could not be kept. Your current stage is still open.');
+            const raw = JSON.stringify(restoredSavedVersion);
+            const identity = await createRecoveryIdentity(raw, recoverySession.current?.identity.sourceLocator || 'Saved version', 'unchanged');
+            recoverySession.current = { identity, sourceRaw: raw, checkpoint: false, storageScope: recoverySessionScope(scope, identity) };
+            replaceStage(configToEditorStage(restoredSavedVersion), { undoable: false, clean: true });
+            setUnfinishedEdits({ scope: draftScope, sources });
+            setSavedPreviewOpen(false);
+            setRecoveryNotice('saved');
+          } catch (error) { setSavedPreviewOpen(false); setRecoveryWarning(String(error)); }
+        }} />}
+      {migrationNotice && <Alert severity="info" onClose={() => setMigrationDiagnostics([])}>{migrationNotice}</Alert>}
+      {rejectedSource && <Alert severity="error" action={<Button onClick={() => downloadStageSource(rejectedSource.raw)}>Export rejected source</Button>}>{rejectedSource.message} The current stage is unchanged. Repair the source before importing it again.</Alert>}
       <EditorTopBar
         stageName={stage.title}
         dirty={dirty}
-        exportedAt={exportedAt}
+        saveStatus={saveStatus}
         validationResults={validationResults}
         selectedCount={selectedCount}
         canUndo={canUndo(historyRef.current)}
@@ -1866,6 +2103,7 @@ const StageBuilderPage = () => {
         marketplacePublishLabel={marketplacePublishLabel}
         marketplacePublishReady={marketplacePublishReady}
         onImport={() => importInputRef.current?.click()}
+        onReviewRecovery={() => { refreshRecoverySources(); setRecoveryOpen(true); }}
         onSaveLocal={handleLocalSave}
         onOpenLocal={() => { if (isGuest) { void refreshLocalStageList(); return; } setOpenLocalStageOpen(true); void refreshLocalStageList(); }}
         allowCloud={!isGuest}
@@ -1879,12 +2117,15 @@ const StageBuilderPage = () => {
         onUndo={undo}
         onRedo={redo}
         onDuplicate={duplicateSelected}
+        onPlaceOnFloor={placeSelectionOnFloor}
+        canPlaceOnFloor={canPlaceOnFloor}
         onDelete={deleteSelected}
         onDeleteStage={localStage || (isGuest && guestLocalStageId) ? handleDeleteStage : undefined}
         deleteStageBusy={deletingStage}
-        onOpenValidation={() => setInspectorTab('validation')}
+        onOpenValidation={() => { setInspectorTab('validation'); setRightPanelVisible(true); }}
         onOpenSettings={handleOpenSettings}
         onOpenStageSettings={handleOpenStageSettings}
+        onOpenTestSettings={() => { setInspectorTab('testSettings'); setRightPanelVisible(true); }}
         onOpenPreviewSettings={handleOpenPreviewSettings}
         onToggleLeftPanel={toggleLeftPanel}
         onToggleRightPanel={toggleRightPanel}
@@ -1901,6 +2142,7 @@ const StageBuilderPage = () => {
         <Box sx={{ flex: '1 1 0%', minWidth: 0, minHeight: 0, position: 'relative', bgcolor: editorColors.viewport }}>
           <StageBuilderScene
             ref={sceneHandleRef}
+            keyboardEnabled={!savedPreviewOpen}
             objects={activeStage.objects}
             groups={activeStage.metadata.groups}
             selectedId={selectedId}
@@ -1917,7 +2159,7 @@ const StageBuilderPage = () => {
             transformSpace={prefs.transformSpace}
             controlScheme="legacyGizmo"
             lockMode={prefs.lockMode}
-            styleVariant={prefs.styleVariant}
+            styleVariant={editorVariant}
             validationResults={validationResults}
             focusRequestNonce={focusRequestNonce}
             cameraViewRequest={cameraViewRequest}
@@ -1929,6 +2171,10 @@ const StageBuilderPage = () => {
             onSelectionChange={handleSelectionChange}
             onObjectChange={updateObject}
             onObjectsChange={updateObjects}
+            lineOperation={lineOperation}
+            onLineOperationChange={changeLineOperation}
+            onAppendLinePoint={appendLinePoint}
+            onLinePreview={setObjectPreview}
             onLockedSelectionAttempt={() => setMessage('Selection is locked to the current object. Change Selection behavior in Settings to select through objects.')}
           />
           {livePreviewStage && (
@@ -1947,19 +2193,18 @@ const StageBuilderPage = () => {
           <Box sx={{ position: 'absolute', top: 12, left: 12, zIndex: 5 }}>
             <EditorViewportToolRail
               transformMode={transformMode}
-              snapPreset={prefs.snapPreset}
               selectedCount={selectedCount}
               canUndo={canUndo(historyRef.current)}
               sensorHelpersVisible={sensorHelpersVisible}
               collisionWireVisible={collisionWireVisible}
               canRedo={canRedo(historyRef.current)}
-              onTransformModeChange={(mode) => { setBuilderMode('edit'); setTransformMode(mode); }}
-              onSnapPresetChange={(snapPreset) => {
-                setPref({ snapPreset });
-                commitStage((current) => ({ ...current, metadata: { ...current.metadata, defaultSnapPreset: snapPreset === 'free' || snapPreset === 'grid' ? 'medium' : snapPreset } }));
-              }}
+              lineOperation={lineOperation.mode}
+              onFinishLine={() => changeLineOperation({ mode: 'select' })}
+              onTransformModeChange={(mode) => { setBuilderMode('edit'); setLineOperation({ mode: 'select' }); setTransformMode(mode); }}
               onSensorHelpersToggle={() => setSensorHelpersVisible((visible) => !visible)}
               onCollisionWireToggle={() => setCollisionWireVisible((visible) => !visible)}
+              onPlaceOnFloor={placeSelectionOnFloor}
+              canPlaceOnFloor={canPlaceOnFloor}
               onFocusSelected={() => setFocusRequestNonce((value) => value + 1)}
               onUndo={undo}
               onRedo={redo}
@@ -1969,7 +2214,13 @@ const StageBuilderPage = () => {
           <Box sx={{ position: 'absolute', top: 12, right: 12, zIndex: 5 }}>
             <EditorViewportCameraGizmo currentView={lookThroughCameraId && lookThroughCamera ? 'camera' : (cameraViewRequest?.view || 'perspective')} hasActiveCamera={hasVisibleStageCamera(activeStage)} onCameraViewChange={requestCameraView} />
           </Box>
-          {!isGuest && <StageAuthoringAssistant stage={stage} selectedIds={assistantSelectedIds} validation={validationResults} localStageId={localStage?.id} onApply={applyAssistantStage} onPreviewStageChange={handleAssistantPreviewStageChange} />}
+          <Box sx={{ position: 'absolute', top: 64, left: 64, right: 64, zIndex: 5, display: 'flex', justifyContent: 'center', pointerEvents: 'none', '& > *': { pointerEvents: 'auto' } }}>
+            {!livePreviewStage && <StageLineToolbar line={selectedCount === 1 && selectedObject?.kind === 'line' ? selectedObject : undefined} operation={lineOperation} onChange={changeLineOperation} />}
+          </Box>
+          <Box sx={{ position: 'absolute', bottom: 12, left: '50%', transform: 'translateX(-50%)', zIndex: 5 }}>
+            <EditorViewportSnapControls movement={stageSnap.defaultSnapPreset} rotation={stageSnap.defaultRotationSnapPreset} lastMovement={stageSnap.lastMovementSnapPreset} onChange={setPref} />
+          </Box>
+          {!isGuest && <StageAuthoringAssistant stage={stage} selectedIds={assistantSelectedIds} validation={validationResults} migrationDiagnostics={migrationDiagnostics} localStageId={localStage?.id} onApply={applyAssistantStage} onPreviewStageChange={handleAssistantPreviewStageChange} />}
           {lookThroughCamera && lookThroughCamera.kind === 'camera' && (
             <Box sx={{ position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)', zIndex: 6, maxWidth: 'min(420px, calc(100% - 32px))', pointerEvents: 'none' }}>
               <Stack
@@ -2026,11 +2277,10 @@ const StageBuilderPage = () => {
         {rightPanelVisible && !desktopPanels && <Drawer anchor="right" open onClose={() => setRightPanelVisible(false)} PaperProps={{ sx: { width: 'min(400px, calc(100vw - 40px))', overflow: 'hidden' } }}>{rightPanel}</Drawer>}
       </Box>
 
-      <Box sx={{ height: 28, pl: 1, pr: 1.25, display: 'flex', alignItems: 'center', gap: 2, bgcolor: editorColors.topbar, color: editorColors.keycapInk, borderTop: `1px solid ${editorColors.divider}` }}>
+      <Box sx={{ height: 28, pl: 1, pr: 1.25, overflowX: 'auto', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 2, bgcolor: editorColors.topbar, color: editorColors.keycapInk, borderTop: `1px solid ${editorColors.divider}` }}>
         <Stack direction="row" spacing={1.75} alignItems="baseline" sx={{ minWidth: 0, flexShrink: 0 }}>
-          <StatusItem label="Mode" value={builderMode === 'edit' ? transformMode : builderMode} tone={editorColors.accentText} />
+          <StatusItem label="Mode" value={lineOperation.mode === 'edit' ? 'Editing line' : builderMode === 'edit' ? transformMode : builderMode} tone={editorColors.accentText} />
           <StatusItem label="Selected" value={selectedStatus} tone={selectedTone} />
-          <StatusItem label="Snap" value={snapLabel(snapSettings)} tone={snapSettings.move ? editorColors.success : editorColors.textMuted} />
           <StatusItem label="Grid" value={gridVisible ? `${gridSize} m` : 'Hidden'} tone={editorColors.text} />
           <StatusItem label="GitHub" value={providerStatusValue} tone={providerStatusTone} />
           <StatusItem label="Collision" value={collisionWireVisible ? 'Wire' : 'Hidden'} tone={collisionWireVisible ? editorColors.warning : editorColors.textMuted} />
@@ -2038,20 +2288,51 @@ const StageBuilderPage = () => {
         <ShortcutHint />
       </Box>
 
-      <Dialog open={!!pendingDraft && !draftReady} maxWidth="sm" fullWidth>
-        <DialogTitle>Recover unsaved Stage Builder draft?</DialogTitle>
+      <Dialog open={recoveryOpen} onClose={() => setRecoveryOpen(false)} maxWidth="sm" fullWidth aria-labelledby="stage-recovery-title">
+        <DialogTitle id="stage-recovery-title">Recent drafts</DialogTitle>
         <DialogContent>
-          <Stack spacing={1.5}>
-            <Alert severity="warning">A local browser recovery draft was found. This is only unsaved-work recovery, not project storage.</Alert>
-            <Typography variant="body2">Draft saved: {pendingDraft ? new Date(pendingDraft.savedAt).toLocaleString() : ''}</Typography>
-            <Typography variant="body2">Stage: {pendingDraft?.stageRecord.title || 'Untitled Stage'}</Typography>
+          <Stack spacing={2}>
+            <Typography>Your unfinished work stays here until you save or delete it.</Typography>
+            {!recentDrafts.length && <Typography>No unfinished drafts.</Typography>}
+            {recentDrafts.map(item => {
+              const source = item.sources.draft || item.sources.original!;
+              const value = source.value;
+              const title = value && ('stageRecord' in value ? value.stageRecord.title : value.title) || 'Unreadable draft';
+              return <Stack key={item.scope} spacing={1}>
+                <Typography variant="subtitle2">{title}</Typography>
+                {value && <Typography variant="body2">{new Date(value.savedAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })}</Typography>}
+                {source.error && <Alert severity="warning">This copy could not be opened. Download it to keep it safe.</Alert>}
+                <Stack direction="row" spacing={1} flexWrap="wrap">
+                  <Button disabled={!value} onClick={async () => { if (!await confirmIfDirty()) return; if (item.sources.draft) await resumeRecentDraft(item); else await restoreRecovery('original', item); setRecoveryOpen(false); }}>Continue editing</Button>
+                  <Button onClick={() => { if (value && 'stageRecord' in value) downloadStageJson(editorStageToRecord(configToEditorStage(value.stageRecord))); else downloadStageSource(value && 'sourceRaw' in value ? value.sourceRaw : source.raw, title); }}>Download copy</Button>
+                  {item.sources.draft && item.sources.original && <Button onClick={() => downloadStageSource(item.sources.original!.value?.sourceRaw || item.sources.original!.raw, `${title}-original`)}>Download original</Button>}
+                  <Button color="error" onClick={async () => {
+                    if (!await confirmDialog.confirm({ title: `Delete “${title}” draft?`, message: 'This deletes the browser backup. Your saved account stage is unchanged.', confirmLabel: 'Delete draft', cancelLabel: 'Keep draft', danger: true })) return;
+                    for (const retained of [item.sources.draft, item.sources.original]) if (retained && !discardRecoverySource(retained)) { setRecoveryWarning('The draft changed. Please review it again.'); break; }
+                    refreshRecoverySources();
+                  }}>Delete draft</Button>
+                </Stack>
+              </Stack>;
+            })}
           </Stack>
         </DialogContent>
-        <DialogActions>
-          <Button color="error" onClick={discardDraft}>Discard Draft</Button>
-          <Button variant="contained" onClick={restoreDraft}>Restore Draft</Button>
-        </DialogActions>
+        <DialogActions><Button onClick={() => setRecoveryOpen(false)}>Close</Button></DialogActions>
       </Dialog>
+
+      {leavePrompt && <SaveStageBeforeLeavingDialog
+        destination={isGuest ? 'in this browser' : remoteStage ? 'to GitHub' : 'to your account'}
+        backupFailed={leavePrompt.backupFailed}
+        onDownload={() => downloadStageJson(editorStageToRecord(stage))}
+        onClose={finishDeparture}
+        onSave={async () => {
+          if (localStageSaving || providerSaving || deletingStage) return false;
+          const session = recoverySession.current;
+          const saved = remoteStage && !isGuest
+            ? await handleProviderSave({ slug: remoteStage.repoName, commitMessage: '', visibility: remoteStage.private ? 'private' : 'public' })
+            : await handleLocalSave();
+          return saved && recoverySession.current === session && stageFingerprint(latestStageRef.current) === stageFingerprint(stage);
+        }}
+      />}
 
       <SaveToProviderDialog
         open={saveProviderOpen}
@@ -2066,7 +2347,7 @@ const StageBuilderPage = () => {
         onClose={() => setSaveProviderOpen(false)}
         onConnect={handleProviderConnect}
         onRefreshStatus={() => refreshProviderStatus({ force: true })}
-        onBeforeInstall={() => writeStageBuilderDraft(stage, scope)}
+        onBeforeInstall={() => persistRecovery()}
         onOpenFromGitHub={() => { setSaveProviderOpen(false); handleProviderOpenDialog(); }}
         onCreateBootstrapLinks={handleCreateBootstrapLinks}
         onSave={handleProviderSave}
@@ -2131,7 +2412,7 @@ const StageBuilderPage = () => {
 
     </Box>
       )}
-    </EditorThemeProvider>
+    </ThemeProvider></EditorThemeProvider>
   );
 };
 

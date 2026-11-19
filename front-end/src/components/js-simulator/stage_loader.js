@@ -1,3 +1,4 @@
+import { validateStageFormat } from '../../simulator/stages/stageFormatCore.js';
 import * as THREE from 'three';
 import { plane, updateTexture,updateColor,updateDimensions } from './floor_loader.js';
 import { loadBaseObject,setPosition } from './robot_loader.js';
@@ -32,12 +33,15 @@ function applyPhysicsConfig(target, obj) {
     target.userData.physics = physics;
 }
 
-export function loadObjectsFromJSON(url, scene) {
-    const loader = new THREE.FileLoader();    
-    loader.load(
-        url,
-        (data) => {
-            const objects = JSON.parse(data);
+export async function loadObjectsFromJSON(url, scene) {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`Could not load stage: HTTP ${response.status}`);
+    const entries = validateStageFormat(await response.json(), { legacy: true });
+    return loadObjectsFromEntries(entries, scene);
+}
+
+export function loadObjectsFromEntries(entries, scene) {
+    const objects = validateStageFormat(entries, { legacy: true });
             objects.forEach((obj) => {
                
                 if (obj.type === 'floor') {                    
@@ -97,11 +101,4 @@ export function loadObjectsFromJSON(url, scene) {
                     scene.add(mesh);
                 }
             });
-        },
-        undefined,
-        (error) => {
-            console.error('An error occurred while loading the JSON file:', error);
-        }
-    );
 }
-

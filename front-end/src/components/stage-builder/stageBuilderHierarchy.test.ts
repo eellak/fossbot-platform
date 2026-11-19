@@ -1,0 +1,63 @@
+import { copyHierarchySelection, moveHierarchyRow, normalizeStageHierarchy, numberedCopyName } from './stageBuilderHierarchy';
+import { editorStageToConfig } from './serialize';
+import type { EditorStage, EditorStageObject } from './types';
+declare const test: any, expect: any;
+const cube = (id: string, extra = {}): EditorStageObject => ({ id, name: id, kind: 'cube', position: [1, 0.37, 2], dimensions: [0.3, 0.3, 0.3], rotationY: 0, color: 'red', mass: 0, immovable: true, ...extra });
+const stage = (): EditorStage => ({ id: 'stage', objects: [cube('a', { groupId: 'group' }), cube('b', { groupId: 'group', hidden: true }), cube('c'), { id: 'label', kind: 'text', name: 'Label', parentId: 'a', attachment: { parentId: 'a', face: 'top' }, position: [1, 0.37, 2], color: 'black', text: 'A', scale: 1, onFloor: false }], metadata: { version: 2, groups: [{ id: 'group', name: 'Group', objectIds: ['a', 'b'], createdAt: '', updatedAt: '' }], validationOverrides: {} } } as EditorStage);
+test('normalisation keeps hidden members, filters dangling/duplicate rows and preserves valid relative order', () => {
+  const source = stage();
+  source.metadata.hierarchyOrder = [{ kind: 'object', id: 'missing' }, { kind: 'object', id: 'c' }, { kind: 'object', id: 'c' }, { kind: 'object', id: 'label' }];
+  const next = normalizeStageHierarchy(source);
+  expect(next.metadata.hierarchyOrder).toEqual([{ kind: 'object', id: 'c' }, { kind: 'group', id: 'group' }]);
+  expect(next.metadata.groups[0].objectIds).toEqual(['a', 'b']);
+  expect(next.metadata.attachedOrder).toEqual({ a: ['label'] });
+  expect(normalizeStageHierarchy(next)).toBe(next);
+});
+test('whole-group reorder preserves positions, membership, attachments and runtime object order', () => {
+  const source = normalizeStageHierarchy(stage());
+  const before = editorStageToConfig(source);
+  const next = moveHierarchyRow(source, { kind: 'group', id: 'group' }, { kind: 'object', id: 'c', position: 'after' });
+  expect(next.metadata.hierarchyOrder?.map(row => row.id)).toEqual(['c', 'group']);
+  expect(next.objects).toBe(source.objects);
+  expect(next.metadata.groups).toEqual(source.metadata.groups);
+  expect(editorStageToConfig(next)).toEqual(before);
+  expect(moveHierarchyRow(next, { kind: 'group', id: 'group' }, { kind: 'object', id: 'c', position: 'after' })).toBe(next);
+  expect(moveHierarchyRow(source, { kind: 'group', id: 'group' }, { kind: 'object', id: 'c', position: 'inside' })).toBe(source);
+});
+test('group copy includes hidden members and attachments, remaps IDs, selects the new group and inserts beside its source', () => {
+  const source = normalizeStageHierarchy(stage());
+  let nextId = 0;
+  const result = copyHierarchySelection(source, { groupId: 'group' }, () => `copy-${++nextId}`);
+  const group = result.stage.metadata.groups.find(item => item.id === result.groupId)!;
+  expect(group.name).toBe('Group (1)');
+  expect(group.objectIds).toHaveLength(2);
+  const copies = result.stage.objects.slice(source.objects.length);
+  expect(copies).toHaveLength(3);
+  expect(copies.find(item => item.name === 'b (1)')?.hidden).toBe(true);
+  const parent = copies.find(item => item.name === 'a (1)')!;
+  const label = copies.find(item => item.kind === 'text') as any;
+  expect(label.parentId).toBe(parent.id);
+  expect(label.attachment.parentId).toBe(parent.id);
+  expect(result.stage.metadata.hierarchyOrder?.map(row => row.id)).toEqual(['group', result.groupId, 'c']);
+  expect(source.objects).toHaveLength(4);
+});
+test('partial selection copies ungrouped objects, keeps attached relations and reuses the smallest free suffix', () => {
+  const source = stage();
+  source.objects.push(cube('occupied', { name: 'a (1)' }));
+  const result = copyHierarchySelection(source, { objectIds: ['a'] });
+  expect(result.groupId).toBeNull();
+  expect(result.stage.metadata.groups).toHaveLength(1);
+  const copies = result.stage.objects.slice(source.objects.length);
+  expect(copies[0].name).toBe('a (2)');
+  expect(copies[0].groupId).toBeUndefined();
+  expect(copies[1].parentId).toBe(copies[0].id);
+  expect(numberedCopyName('a (9)', new Set(['a', 'a (2)', 'a (3)']))).toBe('a (1)');
+});
+test('member and attached-sibling reorders change presentation only, with invalid drops ignored', () => {
+  const source = normalizeStageHierarchy(stage());
+  const next = moveHierarchyRow(source, { kind: 'object', id: 'b' }, { kind: 'object', id: 'a', position: 'before' });
+  expect(next.metadata.groups[0].objectIds).toEqual(['b', 'a']);
+  expect(editorStageToConfig(next)).toEqual(editorStageToConfig(source));
+  expect(moveHierarchyRow(source, { kind: 'object', id: 'label' }, { kind: 'object', id: 'c', position: 'before' })).toBe(source);
+  expect(moveHierarchyRow(source, { kind: 'object', id: 'missing' }, { kind: 'object', id: 'c', position: 'after' })).toBe(source);
+});

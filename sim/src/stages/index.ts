@@ -41,3 +41,7 @@ export const DEFAULT_STAGE: StageName = 'stage_white_rect'
 
 export { loadStage, loadStageEntries, type StageHandle } from './loader'
 export type { LineSegment } from './visuals'
+
+export { evaluateLineGeometry, validateLineGeometry } from './lineGeometryCore'
+export type { LineCorner, LineGeometry, LineDiagnostic, EvaluatedLine } from './lineGeometryCore'
+export { validateStageFormat, StageLoadError } from './stageFormatCore'

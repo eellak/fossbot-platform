@@ -6,6 +6,47 @@ Single source of feature context for humans and coding agents. Read this before 
 
 Stage Builder is a full-screen editor for creating runnable FOSSBot simulator stages. It edits a friendly `EditorStage` model, exports simulator-compatible JSON, and can open a separate simulator test route with the current stage.
 
+## Standalone editor development
+
+From the repository root:
+
+```bash
+docker compose -f docker-compose-stage-editor.yml up -d
+```
+
+Open <http://localhost:3100/stage-builder>. The first start installs the locked
+frontend dependencies. Follow startup with
+`docker compose -f docker-compose-stage-editor.yml logs -f`.
+No image build, backend, database or login is needed. Stop it with
+`docker compose -f docker-compose-stage-editor.yml down`.
+Set `STAGE_EDITOR_PORT=3101` before the Compose command if port 3100 is occupied.
+
+Without Docker, run `npm ci` once in `front-end`, then
+`npm run dev:stage-editor`. This uses the existing CRACO development server and
+React Fast Refresh. Editor, shared component and simulator source changes
+recompile automatically. Simulator assets are served directly from `sim/public`
+with `front-end/public` as a fallback, so no asset-copy step is needed.
+Restart after configuration changes. Restart Compose after dependency changes
+to install the updated lockfile.
+
+This runs the real Stage Builder and Run Test pages. Geometry, imports, exports,
+previews, undo/redo, validation and simulator controls use the production code.
+Save in this browser stores one stage. Saving another stage replaces that slot.
+The saved stage opens automatically on return or reload. Unsaved edits use the
+normal recovery prompt after a full reload. Fast Refresh usually preserves live
+state, but save before edits that change component state structure.
+Browser storage has a size limit, so export JSON for a durable backup, especially
+with embedded models. Keep the same hostname and port to retain access to the
+same browser storage.
+
+Account storage, GitHub, publishing and backend AI are unavailable. Back returns
+to this standalone editor. The entry and two adapters live in
+`src/dev/stage-editor`, selected only by `craco.stage-editor.config.cjs`, which
+rejects production builds. The platform entry, routes, authentication, normal
+Compose stack and production build configuration are unchanged. Browser saves
+have a dedicated storage scope. Recovery and preferences use the guest scope
+on this separate origin.
+
 Routes:
 
 - `/stage-builder` → full-screen builder page, protected by `PrivateRoute`, rendered in `BlankLayout`.
@@ -154,7 +195,7 @@ Minimum valid stage currently requires:
 - non-empty title,
 - valid floor,
 - visible robot spawn,
-- visible target.
+- a target is optional.
 
 Other validation includes bounds, invalid dimensions, steep ramps, overlaps, blocked spawn, object-count warnings, camera warnings, and audio warnings.
 
@@ -222,8 +263,53 @@ Manual smoke test after meaningful changes:
 1. Visit `/stage-builder`; confirm full-screen editor, no platform sidebar/header/footer.
 2. Add library objects and prefabs; verify selection and inspector updates.
 3. Move/rotate/scale objects; verify undo/redo and snapping.
-4. Rename, hide/show, lock/unlock, duplicate/delete, group/ungroup in Scene hierarchy.
+4. Rename, hide/show, lock/unlock, duplicate/delete, group/ungroup in the Hierarchy panel.
 5. Edit stage title, floor size/color, grid, and snap settings.
 6. Confirm validation blocks a missing robot spawn, allows a stage without a target, and opens the Validation context for errors.
 7. Export JSON, import it back, and confirm objects/metadata survive.
 8. Run Test and confirm the separate simulator route receives the current exported config.
+
+
+## Native curves and current controls
+
+The coordinated format is editor metadata v3 and runtime line `curveVersion: 1` for open paths and `curveVersion: 2` for closed-path support.
+Deploy all updated readers and writers together. See the [stage line format](../../../../sim/docs/stage-line-format.md).
+
+- The **Line** library tool starts a new path in **Edit line** mode. The first floor click creates a lone point. **Done** or Escape keeps it. Clicking another object selects it and leaves line editing without adding a point.
+- **Edit line** in the viewport or inspector, or double-clicking a path, enters the same mode for existing lines. Drag a square to move a point, drag a diamond to adjust rounding, click a square to choose the insertion point, and click the floor to add a point. There is no separate drawing/editing switch. Escape during a drag cancels only that adjustment. Otherwise Escape or Done exits editing.
+- The filled point and compact Line · point N toolbar identify where the next point goes. The help button explains moving, adding, rounding and Escape. New points follow an interior point and reconnect to the following route. Choosing the first endpoint of an open path extends the beginning. With an endpoint selected, clicking the opposite endpoint closes the loop. Hover shows Close loop, while dragging still moves the point. Closure is undoable. The inspector also offers Close loop for keyboard access. Closed paths insert after any selected point and support rounding at every point. The compact Path inspector shows one point at a time, with a point dropdown and previous/next arrows that follow canvas selection. Its Add point action appends at the end and selects the new point. Each insertion and completed drag is independently undoable.
+- Point squares remain 14 CSS pixels while zooming. Rounding diamonds are smaller, with larger invisible click targets. Every rounded interior corner has a solid guide with contrasting light/dark outlines to its authored point. Endpoints, straight joins and sharp corners have no rounding diamond. Use any diamond directly, or select a point for Sharp/Rounded controls. Rounded corners have an Auto checkbox; turn it off to type or drag a custom size in 0.001 m steps. The idle field displays up to four decimals without changing stored precision, and manual focus shows the full value. A Limited to message appears only when neighbouring sections limit the requested size. Requested trim survives neighbouring constraints. Diamond keyboard adjustment uses 0.01 m, or 0.001 m with Shift. Drag and held-key adjustments commit once. Escape cancels them.
+- Movement and rotation snapping appear together below the viewport and are saved per stage. Movement includes 0.01 m (1 cm), 0.1 m, 0.5 m, 1 m and Off. Shift keeps the 1 cm option precise. Undo preserves the current snap choices. Grid spacing is independent.
+- Stage settings holds the name, description, floor and background. Editor settings holds the grid and local preferences, with selection options under Advanced. Test settings beside Run Test holds camera locking. New stages hide the editor-only grid. Missing legacy visibility remains visible.
+- The colour swatch opens a palette and labelled value field. Preview is temporary. Apply creates one history entry, and Cancel/Escape restores the original.
+- Hidden objects and their attached descendants stay editable but are excluded from simulation rendering, collisions and sensors. Rigid-body controls remain available.
+- Validation remains openable with no active issues. Ignored warnings can be inspected and restored. Errors cannot be ignored. Select and repair focuses affected objects.
+- Hierarchy group moves preserve all members and world positions. Group copies get a new group and member IDs. Copy names use the smallest free numbered suffix. Enter/Space selects a row, and Alt+Up/Down changes presentation order.
+
+Original-source checkpoints and working recovery drafts are separate and matched by identity. A successful explicit browser/account/GitHub save clears only its matching recovery sources. Starting a download or Run Test does not establish a confirmed save. Failed storage writes retain the previous successful draft and show export/recovery controls. Unreadable and future-version sources remain available for raw export. Native snapshot/runtime disagreements require repair, never silent selection of one route.
+
+Opening a stage restores its unfinished edits automatically, with the notice **Continue where you left off** and **Your latest changes haven’t been saved yet.** **Preview saved version** opens a read-only dialog over the editor. **Continue my edits** closes it without changing the stage. **Use saved version** preserves the unfinished edits before switching, then offers **Return to my unfinished edits** directly in the editor. Returning reopens that specific draft and keeps the save destination. Any new unsaved work is preserved before returning. A failed backup or missing draft leaves the current stage open. A successful save clears the recovery notice. If the saved source changed, the existing version-choice prompt still applies.
+
+Unsaved changes trigger **Save changes before leaving?** on in-app navigation (including browser Back/Forward) and before replacing the stage through New, Open, Import or Recent drafts. **Save and leave** saves to the current browser/account/GitHub destination, then completes the original action only after a successful save of the current edits. While saving, the dialog prevents dismissal and repeated actions. Failed saves leave it open for retry. **Keep editing** cancels the action, while **Leave for now** keeps unfinished edits in this browser and continues. The dialog explains this before leaving, unless the backup failed. A failed recovery write retains the stronger backup warning and download action. Browser reload, tab close and external navigation use the browser's native unsaved-changes warning, whose text and availability are controlled by the browser. Clean stages leave without a reminder. Confirmed stage deletion does not ask a second time.
+
+The library renders physical objects and complete prefab compositions. It uses light and dark SVG icons for semantic objects, including the robot spawn. Imported-model previews wait for the actual asset. Failed previews say so. Preview tuning is a development-only action. Account, provider, publishing and Buddy destinations remain in the production editor and are absent from the standalone workspace by design.
+
+
+### Floor placement
+
+Select a physical object, multiple objects or a group, then use **Place on floor** in the viewport toolbar or More editor actions. The command translates the selection vertically as one unit until its lowest physical geometry reaches Y = 0. It preserves X/Z, rotation, scale, group offsets and attachments. It does not apply grid rounding or create a permanent floor constraint. One Undo restores the full operation.
+
+Boxes, cylinders, spheres, wedges and imported models supply physical bounds. Other selected group members move with them. Locked members block the whole action. Hidden physical members remain part of the calculation. Imported geometry must finish loading successfully. Collision wires and picking proxies are excluded. A stage or selection change during measurement cancels the pending result.
+
+Prefab insertion centres the composition horizontally and retains every authored height, including elevated decks and floor markers. Existing saved stages are not repositioned automatically. Use Place on floor explicitly to correct an existing elevated or buried selection.
+
+
+While editing a line, a dashed canvas preview shows the same evaluated geometry that the next floor click will create, including head/tail extensions and reconnection after interior or closed-path insertion. A square marks the snapped new point. Hovering existing objects/handles, dragging, navigation, leaving the canvas and exiting edit mode hide it. Preview geometry stays outside the stage model, history and saved records.
+
+
+Only the selected, unlocked line has a compact four-arrow move icon. It lies flat on the X/Z floor, anchored just outside the evaluated curve nearest its maximum-X/maximum-Z corner. It has a transparent background and a fixed 0.22 m world size, so camera movement changes its perspective without relocating it. Dragging translates the complete path with one shared snapped X/Z offset, preserving height and curve intent. Release commits one Undo entry, while Escape cancels. A labelled keyboard target supports arrow-key movement. Movement also works during point editing without adding a node. Hidden paths and non-editing workspace modes hide the control.
+
+Line selection, group bounds and Focus selected exclude point-editing helper geometry. Bounds follow the rendered strip, with a point-position fallback before a strip exists.
+
+
+A matching curved-arrow handle beside Move rotates the selected path around the centre of its rendered bounds on the Y axis. The pivot is fixed for the drag. Temporary pivot/arc/angle feedback appears during rotation. Rotation snapping follows the existing setting, Alt allows free rotation, release commits one Undo step and Escape cancels. Arrow keys on the rotation target use the selected angle increment, or 1° with Alt/snapping off. Both handles remain outside saved stage data and selection bounds.

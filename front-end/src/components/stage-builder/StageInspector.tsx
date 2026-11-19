@@ -1,10 +1,11 @@
+import { StageLineControls, type LineEditorActions } from './StageLineControls';
 import React from 'react';
 import {
   Accordion, AccordionDetails, AccordionSummary, Alert, Box, Button, Checkbox, FormControlLabel,
-  MenuItem, Stack, Switch, TextField, Typography,
+  MenuItem, Popover, Stack, Switch, TextField, Typography,
 } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import { Sketch, Swatch } from '@uiw/react-color';
+import { Sketch } from '@uiw/react-color';
 import type { EditorCameraObject, EditorStageObject, StageAudioSourceType, StageLabelFace, StageLightSubtype, StageModelCollisionMode, StageSemanticKind, Vec2, Vec3 } from './types';
 import { displayObjectType, STAGE_OBJECT_CATALOG } from './stageBuilderCatalog';
 import { useEditorTheme } from './stageBuilderEditorTheme';
@@ -151,12 +152,13 @@ function colorInputValue(value: string): string {
   return normalizeColorValue(value) || '#ffffff';
 }
 
-export interface StageInspectorProps {
+export interface StageInspectorProps extends LineEditorActions {
   object: EditorStageObject | null;
   selectedCount?: number;
   advancedOpen?: boolean;
   onAdvancedOpenChange?: (open: boolean) => void;
   onChange: (object: EditorStageObject) => void;
+  onObjectPreview?: (object: EditorStageObject | null) => void;
   objects?: EditorStageObject[];
   onLookThroughCamera?: (camera: EditorCameraObject) => void;
   // Kept for deprecated drawer callers; deletion now lives outside the inspector body.
@@ -219,160 +221,53 @@ function EnabledSwitch({ checked, disabled, onChange }: { checked: boolean; disa
   return <Switch size="small" checked={checked} disabled={disabled} onChange={(event) => onChange?.(event.target.checked)} />;
 }
 
-export function ColorPickerField({
-  value,
-  disabled,
-  onChange,
-  pickerAriaLabel = 'Color picker',
-  valueAriaLabel = 'Color value',
-}: {
+export function ColorPickerField({ value, disabled, onChange, onPreview, pickerAriaLabel = 'Colour picker', valueAriaLabel = 'Colour value' }: {
   value: string;
   disabled?: boolean;
   onChange: (value: string) => void;
+  onPreview?: (value: string | null) => void;
   pickerAriaLabel?: string;
   valueAriaLabel?: string;
 }) {
-  const { colors: editorColors, type: editorType } = useEditorTheme();
-  const currentHex = colorInputValue(value);
-  const [draftHex, setDraftHex] = React.useState(currentHex);
-  const draftHexRef = React.useRef(currentHex);
-  const pickerRef = React.useRef<HTMLDivElement | null>(null);
-  const [pickerWidth, setPickerWidth] = React.useState(180);
-  const [advancedOpen, setAdvancedOpen] = React.useState(false);
-
-  const setDraftColor = React.useCallback((nextValue: string) => {
-    draftHexRef.current = nextValue;
-    setDraftHex(nextValue);
-  }, []);
-
-  React.useEffect(() => {
-    const nextHex = colorInputValue(value);
-    setDraftColor(nextHex);
-  }, [setDraftColor, value]);
-
-  React.useEffect(() => {
-    const element = pickerRef.current;
-    if (!element || typeof ResizeObserver === 'undefined') return undefined;
-
-    const updateWidth = () => {
-      const width = Math.floor(element.getBoundingClientRect().width);
-      if (width > 0) setPickerWidth(Math.max(96, Math.min(180, width)));
-    };
-
-    updateWidth();
-    const observer = new ResizeObserver(updateWidth);
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, []);
-
-  const commitColor = React.useCallback((nextValue: string): boolean => {
-    const normalized = normalizeColorValue(nextValue);
-    if (!normalized) return false;
-    setDraftColor(normalized);
-    if (normalized.toLowerCase() !== currentHex.toLowerCase()) onChange(normalized);
-    return true;
-  }, [currentHex, onChange, setDraftColor]);
-
-  const commitDraft = React.useCallback(() => {
-    commitColor(draftHexRef.current);
-  }, [commitColor]);
-
-  const sketchStyle = {
-    '--sketch-background': editorColors.panelInset,
-    '--sketch-box-shadow': 'none',
-    '--sketch-alpha-box-shadow': 'none',
-    '--editable-input-label-color': editorColors.textMuted,
-    '--editable-input-box-shadow': `${editorColors.border} 0 0 0 1px inset`,
-    '--editable-input-color': editorColors.textStrong,
-    borderRadius: 6,
-  } as React.CSSProperties;
-
-  return (
-    <Stack ref={pickerRef} spacing={0.75}>
-      <Box sx={{ display: 'grid', gridTemplateColumns: '28px minmax(0, 1fr)', gap: 0.75, alignItems: 'center' }}>
-        <Box sx={{ width: 28, height: 28, borderRadius: 0.75, bgcolor: draftHex, boxShadow: `inset 0 0 0 1px ${editorColors.keycapBorder}` }} />
-        <Typography variant="caption" noWrap sx={{ ...editorType.caption, color: editorColors.textMuted }}>{draftHex}</Typography>
-      </Box>
-
-      <Box sx={{ opacity: disabled ? 0.45 : 1, pointerEvents: disabled ? 'none' : 'auto' }}>
-        <Swatch
-          aria-label={pickerAriaLabel}
-          colors={COLOR_PRESETS}
-          color={draftHex}
-          onChange={(_, color) => commitColor(color.hex)}
-          rectProps={{
-            style: {
-              width: 20,
-              height: 20,
-              marginRight: 5,
-              marginBottom: 5,
-              borderRadius: 3,
-              boxShadow: `inset 0 0 0 1px ${editorColors.keycapBorder}, 0 0 0 1px ${editorColors.glassDeep}`,
-            },
-          }}
-          style={{ maxWidth: pickerWidth }}
-        />
-      </Box>
-
-      <Box
-        component="button"
-        type="button"
-        onClick={() => setAdvancedOpen((open) => !open)}
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          width: '100%',
-          p: 0,
-          border: 0,
-          bgcolor: 'transparent',
-          color: editorColors.textStrong,
-          font: 'inherit',
-          fontSize: '0.8125rem',
-          fontWeight: 650,
-          cursor: 'pointer',
-          '&:hover': { color: editorColors.textStrong },
-          '&:focus-visible': { outline: 'none', textDecoration: 'underline' },
-        }}
-      >
-        <span>Advanced color</span>
-        <ExpandMoreIcon sx={{ width: 16, height: 16, color: 'inherit', transform: advancedOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 120ms ease' }} />
-      </Box>
-
-      {advancedOpen && (
-        <Box
-          sx={{
-            opacity: disabled ? 0.45 : 1,
-            pointerEvents: disabled ? 'none' : 'auto',
-            '& .w-color-editable-input input': {
-              bgcolor: `${editorColors.panelInset} !important`,
-              boxShadow: `0 0 0 1px ${editorColors.borderStrong} inset !important`,
-              color: `${editorColors.textStrong} !important`,
-              fontWeight: '700 !important',
-            },
-            '& .w-color-editable-input label': { color: `${editorColors.textMuted} !important` },
-          }}
-        >
-          <Sketch
-            aria-label={valueAriaLabel}
-            color={draftHex}
-            width={pickerWidth}
-            disableAlpha
-            editableDisable
-            presetColors={false}
-            style={sketchStyle}
-            onChange={(color) => setDraftColor(color.hex)}
-            onMouseUp={commitDraft}
-            onTouchEnd={commitDraft}
-            onBlur={commitDraft}
-          />
+  const { colors } = useEditorTheme();
+  const [anchor, setAnchor] = React.useState<HTMLElement | null>(null);
+  const [draft, setDraft] = React.useState(colorInputValue(value));
+  const original = React.useRef(value);
+  const previewRef = React.useRef(onPreview);
+  previewRef.current = onPreview;
+  React.useEffect(() => () => { previewRef.current?.(null); }, []);
+  const close = () => { onPreview?.(null); setAnchor(null); };
+  const preview = (next: string) => {
+    setDraft(next);
+    const valid = normalizeColorValue(next);
+    if (valid) onPreview?.(valid);
+  };
+  const valid = normalizeColorValue(draft);
+  return <>
+    <Button size="small" variant="outlined" disabled={disabled} aria-label={pickerAriaLabel} aria-haspopup="dialog" aria-expanded={!!anchor}
+      onClick={(event) => { original.current = value; setDraft(colorInputValue(value)); setAnchor(event.currentTarget); }}
+      sx={{ justifyContent: 'flex-start', gap: 0.75, width: '100%', minHeight: 32, height: 32, px: 0.5, py: 0.5, borderRadius: 0.75, color: colors.text, borderColor: colors.border, '&:hover': { borderColor: colors.borderStrong } }}>
+      <Box component="span" sx={{ width: 22, height: 22, flexShrink: 0, borderRadius: 0.5, bgcolor: value, boxShadow: `inset 0 0 0 1px ${colors.border}` }} />
+      <Box component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{colorInputValue(value)}</Box>
+    </Button>
+    <Popover open={!!anchor} anchorEl={anchor} onClose={close} anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}>
+      <Stack role="dialog" aria-label={pickerAriaLabel} spacing={1.5} sx={{ p: 2, width: 256, maxHeight: 'calc(100dvh - 32px)', overflow: 'auto', boxSizing: 'border-box', bgcolor: colors.panel, color: colors.text }}>
+        <Typography variant="subtitle2">Choose colour</Typography>
+        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 0.5 }}>
+          {COLOR_PRESETS.map(color => <Button key={color} aria-label={`Colour ${color}`} onClick={() => preview(color)} sx={{ minWidth: 0, minHeight: 28, height: 28, bgcolor: color, border: `1px solid ${colors.borderStrong}`, '&:hover': { bgcolor: color, outline: `2px solid ${colors.accent}` }, '&:focus-visible': { outline: `2px solid ${colors.accent}` } }} />)}
         </Box>
-      )}
-    </Stack>
-  );
+        <Sketch color={valid || colorInputValue(value)} width={224} disableAlpha editableDisable={false} presetColors={false} onChange={color => preview(color.hex)} style={{ background: colors.panel, boxShadow: 'none' }} />
+        <TextField autoFocus sx={{ '& .MuiInputBase-root': { color: colors.text }, '& .MuiInputLabel-root, & .MuiFormHelperText-root': { color: colors.textMuted }, '& .MuiOutlinedInput-notchedOutline': { borderColor: colors.border } }} size="small" label="Colour value" inputProps={{ 'aria-label': valueAriaLabel }} value={draft} error={!valid} helperText={!valid ? 'Enter a hex colour, for example #ff8800.' : 'Preview only until you apply.'} onChange={event => preview(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && valid) { close(); if (valid !== colorInputValue(original.current)) onChange(valid); } }} />
+        <Stack direction="row" spacing={1} justifyContent="flex-end">
+          <Button onClick={close}>Cancel</Button>
+          <Button variant="contained" disabled={!valid} onClick={() => { close(); if (valid && valid !== colorInputValue(original.current)) onChange(valid); }}>Apply</Button>
+        </Stack>
+      </Stack>
+    </Popover>
+  </>;
 }
 
-export function StageInspector({ object, selectedCount = object ? 1 : 0, advancedOpen = false, onAdvancedOpenChange, onChange, objects = [], onLookThroughCamera }: StageInspectorProps) {
+export function StageInspector({ object, selectedCount = object ? 1 : 0, advancedOpen = false, onAdvancedOpenChange, onChange, onObjectPreview, objects = [], onLookThroughCamera, lineOperation, onLineOperationChange, onDeleteLine, onLinePreview }: StageInspectorProps) {
   const { colors: editorColors, type: editorType } = useEditorTheme();
   const audioPreviewRef = React.useRef<HTMLAudioElement | null>(null);
   const [audioPreviewPlaying, setAudioPreviewPlaying] = React.useState(false);
@@ -449,17 +344,18 @@ export function StageInspector({ object, selectedCount = object ? 1 : 0, advance
 
   return (
     <Stack spacing={0} sx={{ color: editorColors.text }}>
-      <Section title="Entity" meta={`${displayObjectType(object)}${selectedCount > 1 ? ` · ${selectedCount} selected` : ''}${locked ? ' · Locked' : ''}`}>
+      <Section title="Object" meta={`${displayObjectType(object)}${selectedCount > 1 ? ` · ${selectedCount} selected` : ''}${locked ? ' · Locked' : ''}`}>
         <FieldRow label="Name">
           <TextField {...commonFieldProps} value={object.name} disabled={locked} inputProps={{ 'aria-label': 'Object name' }} onChange={(event) => set({ name: event.target.value } as Partial<EditorStageObject>)} />
         </FieldRow>
-        <FieldRow label="Type">
-          <TextField {...commonFieldProps} value={displayObjectType(object)} disabled inputProps={{ 'aria-label': 'Object type' }} />
+        <FieldRow label="Geometry">
+          <Typography variant="body2" aria-label="Object geometry">{displayObjectType({ ...object, semanticKind: undefined })}</Typography>
         </FieldRow>
         <FieldRow label="State">
           <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', rowGap: 0.25 }}>
-            <FormControlLabel control={<EnabledSwitch checked={!object.hidden} onChange={(checked) => set({ hidden: !checked } as Partial<EditorStageObject>)} />} label="Enabled" />
+            <FormControlLabel control={<EnabledSwitch checked={!!object.hidden} onChange={(checked) => set({ hidden: checked } as Partial<EditorStageObject>)} />} label="Hidden" />
             <FormControlLabel control={<EnabledSwitch checked={!!object.locked} onChange={(checked) => set({ locked: checked } as Partial<EditorStageObject>)} />} label="Locked" />
+            <Typography variant="caption">Hidden objects and their attachments stay editable. They are excluded from simulation rendering, collisions and sensor effects.</Typography>
           </Stack>
         </FieldRow>
         <FieldRow label="Role">
@@ -502,7 +398,7 @@ export function StageInspector({ object, selectedCount = object ? 1 : 0, advance
         </FieldRow>}
       </Section>
 
-      <Section title="Transform">
+      <Section title={object.kind === 'line' ? 'Path' : 'Transform'}>
         {object.kind === 'base' && (
           <FieldRow label="Position">
             <InlineFields>
@@ -622,27 +518,7 @@ export function StageInspector({ object, selectedCount = object ? 1 : 0, advance
           </>
         )}
 
-        {object.kind === 'line' && (
-          <>
-            <FieldRow label="Scale">
-              <StageBuilderNumberField {...commonNumberProps} disabled={locked} value={object.width} inputProps={{ step: 0.01, 'aria-label': 'Line width' }} onChange={(event) => onChange({ ...object, width: minPositive(event.target.value, object.width, 0.005) })} />
-            </FieldRow>
-            {object.points.map((point, index) => (
-              <FieldRow key={index} label={`Point ${index + 1}`}>
-                <Stack direction="row" spacing={0.75} sx={{ minWidth: 0 }}>
-                  <StageBuilderNumberField axis="X" {...commonNumberProps} disabled={locked} value={point[0]} onChange={(event) => {
-                    const points = [...object.points]; points[index] = updateVec2(point, 0, event.target.value); onChange({ ...object, points });
-                  }} />
-                  <StageBuilderNumberField axis="Z" {...commonNumberProps} disabled={locked} value={point[1]} onChange={(event) => {
-                    const points = [...object.points]; points[index] = updateVec2(point, 1, event.target.value); onChange({ ...object, points });
-                  }} />
-                  <Button size="small" disabled={locked || object.points.length <= 2} onClick={() => onChange({ ...object, points: object.points.filter((_, i) => i !== index) })}>Remove</Button>
-                </Stack>
-              </FieldRow>
-            ))}
-            <FullRow><Button size="small" disabled={locked} onClick={() => onChange({ ...object, points: [...object.points, [0, 0]] })}>Add point</Button></FullRow>
-          </>
-        )}
+        {object.kind === 'line' && <FullRow><StageLineControls line={object} onChange={onChange} lineOperation={lineOperation} onLineOperationChange={onLineOperationChange} onDeleteLine={onDeleteLine} onLinePreview={onLinePreview} /></FullRow>}
 
         {object.kind === 'model' && (
           <FieldRow label="Scale">
@@ -668,12 +544,13 @@ export function StageInspector({ object, selectedCount = object ? 1 : 0, advance
       {supportsAppearance(object) && (
         <Section title="Appearance">
           {supportsColor(object) && (
-            <FieldRow label="Color" align="start">
+            <FieldRow label="Color">
               <ColorPickerField
                 value={object.color}
                 disabled={locked}
                 pickerAriaLabel="Color picker"
                 valueAriaLabel="Object color value"
+                onPreview={(color) => onObjectPreview?.(color ? { ...object, color } as EditorStageObject : null)}
                 onChange={(color) => set({ color } as Partial<EditorStageObject>)}
               />
             </FieldRow>
@@ -697,8 +574,8 @@ export function StageInspector({ object, selectedCount = object ? 1 : 0, advance
                       <StageBuilderNumberField label="H" {...commonNumberProps} disabled={locked} value={labelStyle(object).backgroundSize[1]} onChange={(event) => onChange({ ...object, style: { ...labelStyle(object), backgroundSize: [labelStyle(object).backgroundSize[0], minPositive(event.target.value, labelStyle(object).backgroundSize[1], 0.03)] } })} />
                     </InlineFields>
                   </FieldRow>
-                  <FieldRow label="Background color" align="start">
-                    <ColorPickerField value={labelStyle(object).backgroundColor} disabled={locked} pickerAriaLabel="Label background color picker" valueAriaLabel="Label background color value" onChange={(color) => onChange({ ...object, style: { ...labelStyle(object), backgroundColor: color } })} />
+                  <FieldRow label="Background color">
+                    <ColorPickerField value={labelStyle(object).backgroundColor} disabled={locked} pickerAriaLabel="Label background color picker" valueAriaLabel="Label background color value" onPreview={(color) => onObjectPreview?.(color ? { ...object, style: { ...labelStyle(object), backgroundColor: color } } : null)} onChange={(color) => onChange({ ...object, style: { ...labelStyle(object), backgroundColor: color } })} />
                   </FieldRow>
                   <FieldRow label="Background opacity">
                     <StageBuilderNumberField {...commonNumberProps} disabled={locked} value={labelStyle(object).backgroundOpacity} inputProps={{ step: 0.05, min: 0, max: 1, 'aria-label': 'Label background opacity' }} onChange={(event) => onChange({ ...object, style: { ...labelStyle(object), backgroundOpacity: clamp01(event.target.value, labelStyle(object).backgroundOpacity) } })} />
@@ -710,8 +587,8 @@ export function StageInspector({ object, selectedCount = object ? 1 : 0, advance
               </FieldRow>
               {labelStyle(object).borderVisible && (
                 <>
-                  <FieldRow label="Border color" align="start">
-                    <ColorPickerField value={labelStyle(object).borderColor} disabled={locked} pickerAriaLabel="Label border color picker" valueAriaLabel="Label border color value" onChange={(color) => onChange({ ...object, style: { ...labelStyle(object), borderColor: color } })} />
+                  <FieldRow label="Border color">
+                    <ColorPickerField value={labelStyle(object).borderColor} disabled={locked} pickerAriaLabel="Label border color picker" valueAriaLabel="Label border color value" onPreview={(color) => onObjectPreview?.(color ? { ...object, style: { ...labelStyle(object), borderColor: color } } : null)} onChange={(color) => onChange({ ...object, style: { ...labelStyle(object), borderColor: color } })} />
                   </FieldRow>
                   <FieldRow label="Border size">
                     <StageBuilderNumberField {...commonNumberProps} disabled={locked} value={labelStyle(object).borderWidth} inputProps={{ step: 1, min: 0, 'aria-label': 'Label border width' }} onChange={(event) => onChange({ ...object, style: { ...labelStyle(object), borderWidth: Math.max(0, num(event.target.value, labelStyle(object).borderWidth)) } })} />
@@ -1006,12 +883,7 @@ export function StageInspector({ object, selectedCount = object ? 1 : 0, advance
             </FieldRow>
           ) : (
             <FieldRow label="Type">
-              <TextField
-                {...commonFieldProps}
-                value={object.kind === 'cube' ? 'Box' : object.kind === 'sphere' ? 'Sphere' : object.kind === 'wedge' ? 'Convex wedge' : object.dimensions[0] === 0 ? 'Cone approximation' : 'Cylinder'}
-                disabled
-                inputProps={{ 'aria-label': 'Collider type' }}
-              />
+              <Typography variant="body2" aria-label="Collider type">{object.kind === 'cube' ? 'Box' : object.kind === 'sphere' ? 'Sphere' : object.kind === 'wedge' ? 'Convex wedge' : object.dimensions[0] === 0 ? 'Cone approximation' : 'Cylinder'}</Typography>
             </FieldRow>
           )}
           {object.kind === 'model' && (

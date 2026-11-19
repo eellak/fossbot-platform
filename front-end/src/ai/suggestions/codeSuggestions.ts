@@ -38,6 +38,7 @@ export type SuggestionPreview = {
     removed: number;
     resolvedIssues: string[];
     newIssues: string[];
+    geometryChanges?: string[];
     floor: [number, number];
     objects: Array<{ id: string; kind: string; position: [number, number, number] }>;
     editorStage?: any;

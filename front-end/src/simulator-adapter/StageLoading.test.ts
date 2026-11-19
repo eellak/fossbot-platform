@@ -26,6 +26,38 @@ function deferred<T>() {
 beforeAll(async () => { await RAPIER.init(); });
 
 describe('cancelled asynchronous stage loads', () => {
+  for (const failureAt of ['visual', 'collider', 'physics']) {
+    it(`disposes partial resources and rejects when ${failureAt} construction fails`, async () => {
+      const world = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
+      const scene = new THREE.Scene();
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshBasicMaterial());
+      const debug = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshBasicMaterial());
+      const disposeGeometry = jest.spyOn(mesh.geometry, 'dispose');
+      const disposeDebug = jest.spyOn(debug.geometry, 'dispose');
+      (buildModelVisual as any).mockImplementation(() => failureAt === 'visual' ? Promise.reject(new Error('model failed')) : Promise.resolve({ object: mesh, dynamicBody: { mass: 1, position: [0, 0, 0] } }));
+      (buildModelCollider as any).mockImplementation(() => failureAt === 'collider' ? Promise.reject(new Error('collider failed')) : Promise.resolve({ colliders: [RAPIER.ColliderDesc.cuboid(1, 1, 1)], debugMeshes: [debug] }));
+      if (failureAt === 'physics') jest.spyOn(world, 'createCollider').mockImplementation(() => { throw new Error('physics failed'); });
+      await expect(loadStageEntries('broken', [{ type: 'model', filename: 'test.obj' }], scene, world)).rejects.toMatchObject({ phase: 'construction' });
+      expect(scene.children).toHaveLength(0);
+      const bodies: unknown[] = [];
+      world.forEachRigidBody(body => bodies.push(body));
+      expect(bodies).toHaveLength(0);
+      if (failureAt !== 'visual') expect(disposeGeometry).toHaveBeenCalledTimes(1);
+      if (failureAt === 'physics') expect(disposeDebug).toHaveBeenCalledTimes(1);
+      world.free();
+    });
+  }
+  it('rejects unsupported line geometry before creating any scene or physics resources', async () => {
+    const world = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
+    const scene = new THREE.Scene();
+    const retained = new THREE.Group();
+    scene.add(retained);
+    const createBody = jest.spyOn(world, 'createRigidBody');
+    await expect(loadStageEntries('invalid', [{ type: 'line', curveVersion: 99, points: [[0, 0], [1, 0]] }], scene, world)).rejects.toThrow('unsupported curve version');
+    expect(createBody).not.toHaveBeenCalled();
+    expect(scene.children).toEqual([retained]);
+    world.free();
+  });
   for (const cancelDuring of ['visual', 'collider']) {
     it(`does not mutate a stopped world after its ${cancelDuring} load resumes`, async () => {
       const world = new RAPIER.World({ x: 0, y: -9.81, z: 0 });

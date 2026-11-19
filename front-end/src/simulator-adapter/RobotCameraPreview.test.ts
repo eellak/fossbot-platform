@@ -68,8 +68,8 @@ describe('robot camera preview', () => {
     expect(robot.visible).toBe(true);
     expect(renderer.shadowMap.autoUpdate).toBe(true);
     expect(renderer.setRenderTarget).toHaveBeenLastCalledWith(originalTarget);
-    expect(renderer.setViewport).toHaveBeenLastCalledWith(viewport);
-    expect(renderer.setScissor).toHaveBeenLastCalledWith(scissor);
+    expect(renderer.setViewport.mock.calls.at(-1)[0].toArray()).toEqual(viewport.toArray());
+    expect(renderer.setScissor.mock.calls.at(-1)[0].toArray()).toEqual(scissor.toArray());
     expect(renderer.setScissorTest).toHaveBeenLastCalledWith(true);
     preview.dispose();
     expect(context.clearRect).toHaveBeenCalled();

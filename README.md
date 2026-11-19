@@ -112,6 +112,9 @@ Administrators choose which guest views are available and whether guests receive
 
 ### Start the development stack
 
+For editor-only work with hot reload and no backend, see the
+[standalone Stage Builder workflow](front-end/src/components/stage-builder/README.md#standalone-editor-development).
+
 ```bash
 git clone https://github.com/eellak/fossbot-platform.git
 cd fossbot-platform
@@ -184,6 +187,9 @@ fossbot-platform/
 ## Production deployment
 
 Production deployment is handled by the GitHub Actions workflow in `.github/workflows/deploy.yml`. The workflow builds the application, preserves the existing PostgreSQL volume, creates a database backup before migration, and verifies the deployed health endpoints. Deployment credentials and Firebase values belong in GitHub Actions secrets rather than tracked environment files.
+
+For stages with native curves, deploy the editor, simulators and backend validators together.
+See the [stage line format](sim/docs/stage-line-format.md).
 
 ## Simulator camera vision
 

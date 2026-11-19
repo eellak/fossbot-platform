@@ -44,8 +44,8 @@ export function EditorViewportCameraGizmo({ currentView, onCameraViewChange, has
   };
 
   return (
-    <Box ref={rootRef} sx={{ width: 170 }}>
-      <Paper elevation={0} sx={{ overflow: 'hidden', bgcolor: editorColors.glass, color: editorColors.text, border: `1px solid ${editorColors.border}`, borderRadius: 0.75, boxShadow: 'none', backdropFilter: 'blur(10px)' }}>
+    <Box ref={rootRef} onKeyDown={(event) => { if (event.key === 'Escape') { setOpen(false); rootRef.current?.querySelector('button')?.focus(); } }} sx={{ width: 150 }}>
+      <Paper elevation={0} sx={{ overflow: 'hidden', bgcolor: editorColors.panel, color: editorColors.text, border: `1px solid ${editorColors.border}`, borderRadius: 0.75, boxShadow: 'none' }}>
         <ButtonBase
           onClick={() => setOpen((value) => !value)}
           sx={{
@@ -70,7 +70,7 @@ export function EditorViewportCameraGizmo({ currentView, onCameraViewChange, has
           <KeyboardArrowDownIcon sx={{ fontSize: 18, color: editorColors.textMuted, transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 120ms ease' }} />
         </ButtonBase>
         {open && (
-          <Box sx={{ px: 1, pb: 1, pt: 0.75, bgcolor: editorColors.glassDeep }}>
+          <Box sx={{ px: 1, pb: 1, pt: 0.75, bgcolor: editorColors.panelInset }}>
             <Stack spacing={0.25}>
               {cameraViewOptions.map((view) => {
                 const selected = currentView === view;

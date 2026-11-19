@@ -5,7 +5,7 @@ import { registerCameraCapture } from 'src/components/camera/cameraCapture';
 import { cameraDetectionsForPython, cameraVisionForPython } from './cameraPythonApi';
 import type { CameraVisionMode, CameraVisionSnapshot } from 'src/simulator/robot/cameraVision';
 import React, { forwardRef, lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Box, CircularProgress, FormControlLabel, Switch, Typography, Slider } from '@mui/material';
+import { Alert, Box, Button, CircularProgress, FormControlLabel, Switch, Typography, Slider } from '@mui/material';
 import CameraView from 'src/components/camera/CameraView';
 import { useTranslation } from 'react-i18next';
 import {
@@ -26,6 +26,8 @@ import {
   drawLine as legacyDrawLine,
 } from 'src/components/js-simulator/Simulator';
 import CardDialog from 'src/components/stage-select-popup/CardDialog';
+import { validateStageFormat } from 'src/simulator/stages/stageFormatCore';
+import { stageAssetBaseUrlFromStageUrl } from 'src/simulator/stages/assets';
 import type { RawStageConfig } from 'src/simulator/stages';
 import type { FossbotSimulatorHandle } from 'src/simulator/FossbotSimulator';
 import type { SensorRunSummary, SensorTelemetryListener, SensorTelemetrySnapshot } from 'src/simulator/sensors/telemetry';
@@ -68,6 +70,8 @@ const LazyFossbotSimulator = lazy(() =>
 );
 
 let activeV2Handle: FossbotSimulatorHandle | null = null;
+let activeSimulatorVersion: SimulatorVersion | null = null;
+const runtimeVersion = () => activeSimulatorVersion ?? getSimulatorVersion();
 const missionListeners = new Set<MissionEventListener>();
 const missionSubscriptions = new Map<MissionEventListener, () => void>();
 
@@ -152,6 +156,8 @@ const V2WebGLApp = forwardRef<SimulatorControlHandle, WebGLAppProps>((props, ref
     catch { return false; }
   });
   const v2Config = useV2Config();
+  const [stageAssetBase, setStageAssetBase] = useState(props.initialStageAssetBaseUrl || undefined);
+  const [loadRetry, setLoadRetry] = useState(0);
   const [cameraPreviewEnabled, setCameraPreviewEnabled] = useState(true);
   const [cameraMode, setCameraMode] = useState<CameraVisionMode>('normal');
   const [blackThreshold, setBlackThreshold] = useState(105);
@@ -182,11 +188,11 @@ const V2WebGLApp = forwardRef<SimulatorControlHandle, WebGLAppProps>((props, ref
     () => ({
       ...v2Config,
       aiCameraTopEnabled,
-      stageAssetBaseUrl: props.initialStageAssetBaseUrl || undefined,
+      stageAssetBaseUrl: stageAssetBase,
       sensorHelpersVisible: props.sensorHelpersVisible ?? false,
       sensorTelemetryAutoStart: props.sensorTelemetryAutoStart ?? true,
     }),
-    [v2Config, aiCameraTopEnabled, props.initialStageAssetBaseUrl, props.sensorHelpersVisible, props.sensorTelemetryAutoStart],
+    [v2Config, aiCameraTopEnabled, stageAssetBase, props.sensorHelpersVisible, props.sensorTelemetryAutoStart],
   );
   const handleRef = useRef<FossbotSimulatorHandle | null>(null);
   const setCameraCanvas = useCallback((canvas: HTMLCanvasElement | null) => {
@@ -215,43 +221,42 @@ const V2WebGLApp = forwardRef<SimulatorControlHandle, WebGLAppProps>((props, ref
     handleRef.current?.setCameraVisionMode(cameraMode, blackThreshold);
   }, [cameraMode, blackThreshold]);
 
-  // Use pre-fetched config from parent if provided; otherwise fetch from URL
   useEffect(() => {
-    if (props.initialStageConfig) {
-      setCurrentURL(props.initialStageUrl || DEFAULT_STAGE_URL);
-      setInitialStageConfig(props.initialStageConfig);
-      setStageLoadError(null);
-      return;
-    }
-    if (!props.initialStageUrl) {
-      setInitialStageConfig(null);
-      setStageLoadError(null);
-      return;
-    }
-    setCurrentURL(props.initialStageUrl);
-    setInitialStageConfig(undefined);
-    setStageLoadError(null);
-
     let cancelled = false;
-    fetch(props.initialStageUrl)
-      .then((res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return res.json();
-      })
-      .then((payload) => {
+    const load = async () => {
+      try {
+        const url = props.initialStageUrl || DEFAULT_STAGE_URL;
+        const base = props.initialStageAssetBaseUrl || (props.initialStageUrl ? stageAssetBaseUrlFromStageUrl(url) : undefined);
+        if (handleRef.current) {
+          if (props.initialStageConfig) await handleRef.current.setStageConfig(props.initialStageConfig, 'custom_stage', base);
+          else await handleRef.current.setStage(url);
+          if (!cancelled) { setCurrentURL(url); setStageLoadError(null); }
+          return;
+        }
+        let entries: RawStageConfig | null = null;
+        if (props.initialStageConfig) entries = validateStageFormat(props.initialStageConfig);
+        else if (props.initialStageUrl) {
+          const response = await fetch(url);
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          entries = validateStageFormat(await response.json());
+        }
         if (cancelled) return;
-        const entries = Array.isArray(payload) ? payload : payload?.config;
-        if (!Array.isArray(entries)) throw new Error('stage JSON must contain a config array');
+        setStageAssetBase(base);
         setInitialStageConfig(entries);
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        console.warn('[Simulator] Could not pre-fetch stage, will load default then swap:', err);
-        setInitialStageConfig(null);
-        setStageLoadError(err instanceof Error ? err.message : String(err));
-      });
+        if (!cancelled) {
+          setCurrentURL(url);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          handleRef.current?.stopMotion();
+          props.onMountChange(false);
+          setStageLoadError(error instanceof Error ? error.message : String(error));
+        }
+      }
+    };
+    void load();
     return () => { cancelled = true; };
-  }, [props.initialStageUrl, props.initialStageConfig, props.initialStageAssetBaseUrl]);
+  }, [props.initialStageUrl, props.initialStageConfig, props.initialStageAssetBaseUrl, loadRetry]);
 
   const setV2Handle = useCallback(
     (handle: FossbotSimulatorHandle | null) => {
@@ -279,26 +284,9 @@ const V2WebGLApp = forwardRef<SimulatorControlHandle, WebGLAppProps>((props, ref
       if (mounted) handleRef.current?.setAiCameraTopEnabled(aiCameraTopEnabled);
       if (mounted) handleRef.current?.setCameraVisionMode(cameraMode, blackThreshold);
       if (mounted) handleRef.current?.setRobotCameraPreview(cameraCanvasRef.current, setVision);
-      // After simulator is mounted-with-correct-stage, apply subsequent stage changes
-      // via setStage (e.g. from dialog or reload). The initial stage is handled by initialStageConfig.
-      if (mounted && initialStageConfig === null && stageLoadError) {
-        // Pre-fetch failed; try swapping now that the engine is ready
-        if (handleRef.current && props.initialStageUrl) {
-          void handleRef.current.setStage(props.initialStageUrl);
-        }
-      }
     },
-    [initialStageConfig, stageLoadError, props.initialStageUrl, props.onMountChange, aiCameraTopEnabled, cameraMode, blackThreshold],
+    [props.onMountChange, aiCameraTopEnabled, cameraMode, blackThreshold],
   );
-
-  // Listen for subsequent stage changes (dialog, reload button)
-  useEffect(() => {
-    if (!handleRef.current) return;
-    if (props.initialStageConfig && currentURL === (props.initialStageUrl || DEFAULT_STAGE_URL)) {
-      return;
-    }
-    void handleRef.current.setStage(currentURL);
-  }, [currentURL, props.initialStageConfig, props.initialStageUrl]);
 
   const handleForward = async () => {
     if (props.autoStartMissionAttempt) handleRef.current?.ensureAttempt();
@@ -324,12 +312,33 @@ const V2WebGLApp = forwardRef<SimulatorControlHandle, WebGLAppProps>((props, ref
     handleRef.current?.changeCamera();
   };
 
-  const handleReload = async () => {
-    await handleRef.current?.setStage(currentURL);
+  const loadUrl = async (url: string) => {
+    try {
+      if (handleRef.current) {
+        await handleRef.current.setStage(url);
+        setStageLoadError(null);
+      }
+      else {
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const entries = validateStageFormat(await response.json());
+        setStageAssetBase(stageAssetBaseUrlFromStageUrl(url));
+        setInitialStageConfig(entries);
+      }
+      setCurrentURL(url);
+    } catch (error) {
+      props.onMountChange(false);
+      setStageLoadError(error instanceof Error ? error.message : String(error));
+    }
   };
-
+  const handleReload = async () => {
+    if (stageLoadError && handleRef.current) await handleRef.current.retryStageLoad().catch(() => {});
+    else if (props.initialStageConfig && currentURL === (props.initialStageUrl || DEFAULT_STAGE_URL)) {
+      await handleRef.current?.setStageConfig(props.initialStageConfig, 'custom_stage', props.initialStageAssetBaseUrl || undefined).catch(() => {});
+    } else await loadUrl(currentURL);
+  };
   const handleCardSelect = (url: string) => {
-    setCurrentURL(url);
+    void loadUrl(url);
     setOpenDialog(false);
   };
 
@@ -337,25 +346,7 @@ const V2WebGLApp = forwardRef<SimulatorControlHandle, WebGLAppProps>((props, ref
     resetStage: handleReload,
     changeCamera: handleCamera,
     openStageSelection: () => setOpenDialog(true),
-  }), [currentURL]);
-
-  // While pre-fetching the stage, show a centered loading spinner
-  if (initialStageConfig === undefined) {
-    return (
-      <Box
-        display="flex"
-        flexDirection="column"
-        alignItems="center"
-        justifyContent="center"
-        height="100%"
-        width="100%"
-        gap={2}
-      >
-        <CircularProgress size={48} />
-        <Typography variant="body2" color="text.secondary">Loading stage…</Typography>
-      </Box>
-    );
-  }
+  }), [currentURL, stageLoadError, props.initialStageConfig, props.initialStageUrl, props.initialStageAssetBaseUrl]);
 
   return (
     <Box
@@ -368,16 +359,22 @@ const V2WebGLApp = forwardRef<SimulatorControlHandle, WebGLAppProps>((props, ref
       overflow="hidden"
       position="relative"
     >
+      {stageLoadError && <Alert severity="error" sx={{ width: '100%', zIndex: 2, overflowWrap: 'anywhere' }} action={<Button color="inherit" onClick={() => {
+        if (handleRef.current) void handleReload();
+        else setLoadRetry(value => value + 1);
+      }}>Retry</Button>}>{stageLoadError}</Alert>}
       <Box width="100%" flex="1 1 auto" minHeight={240}>
+        {initialStageConfig === undefined ? (!stageLoadError && <CircularProgress aria-label="Loading stage" />) : (
         <Suspense fallback={<div style={{ width: '100%', height: '100%' }} />}>
           <LazyFossbotSimulator
             appsessionId={props.appsessionId}
             onMountChange={handleMountChange}
+            onLoadError={error => setStageLoadError(error?.message || null)}
             config={effectiveV2Config}
             ref={setV2Handle}
             initialStageConfig={initialStageConfig || undefined}
           />
-        </Suspense>
+        </Suspense>)}
       </Box>
       {props.showControls !== false && (
         <Box sx={aiCameraTopEnabled ? { '& > .visual-language-supporting-panel': { right: 'auto', left: 8 } } : undefined}>
@@ -428,49 +425,60 @@ const V2WebGLApp = forwardRef<SimulatorControlHandle, WebGLAppProps>((props, ref
 V2WebGLApp.displayName = 'V2SimulatorAdapter';
 
 const WebGLApp = forwardRef<SimulatorControlHandle, WebGLAppProps>((props, ref) => {
-  const version = getSimulatorVersion();
-
-  if (version === 'v2') {
-    return <V2WebGLApp {...props} ref={ref} />;
-  }
-
-  return <LegacyWebGLApp {...props} ref={ref as React.ForwardedRef<LegacySimulatorControlHandle>} />;
+  const [version, setVersion] = useState(getSimulatorVersion);
+  const [switchedStage, setSwitchedStage] = useState<{ initialStageConfig: RawStageConfig; initialStageAssetBaseUrl?: string; initialStageUrl?: string } | null>(null);
+  useEffect(() => {
+    activeSimulatorVersion = version;
+    return () => { if (activeSimulatorVersion === version) activeSimulatorVersion = null; };
+  }, [version]);
+  if (version === 'v2') return <V2WebGLApp {...props} {...(switchedStage || {})} ref={ref} />;
+  return <LegacyWebGLApp {...props} ref={ref as React.ForwardedRef<LegacySimulatorControlHandle>}
+    onSwitchToCurrent={(entries, base, url) => {
+      setSwitchedStage({ initialStageConfig: entries, initialStageAssetBaseUrl: base, initialStageUrl: url });
+      setVersion('v2');
+      try { window.localStorage.setItem(SIMULATOR_VERSION_KEY, 'v2'); } catch { /* Switching works without browser persistence. */ }
+      const location = new URL(window.location.href);
+      if (location.searchParams.has('simulator')) {
+        location.searchParams.set('simulator', 'v2');
+        window.history.replaceState(window.history.state, '', location);
+      }
+    }} />;
 });
 
 WebGLApp.displayName = 'SimulatorAdapter';
 
 function getActiveV2Handle(): FossbotSimulatorHandle | null {
-  return getSimulatorVersion() === 'v2' ? activeV2Handle : null;
+  return runtimeVersion() === 'v2' ? activeV2Handle : null;
 }
 
 export function moveStep(distance: number): Promise<void> {
   const handle = getActiveV2Handle();
   if (handle) return handle.moveStep(distance);
-  return getSimulatorVersion() === 'v2' ? Promise.resolve() : legacyMoveStep(distance);
+  return runtimeVersion() === 'v2' ? Promise.resolve() : legacyMoveStep(distance);
 }
 
 export function rotateStep(angle: number): Promise<void> {
   const handle = getActiveV2Handle();
   if (handle) return handle.rotateStep(angle);
-  return getSimulatorVersion() === 'v2' ? Promise.resolve() : legacyRotateStep(angle);
+  return runtimeVersion() === 'v2' ? Promise.resolve() : legacyRotateStep(angle);
 }
 
 export function stopMotion(): void {
   const handle = getActiveV2Handle();
   if (handle) handle.stopMotion();
-  else if (getSimulatorVersion() !== 'v2') legacyStopMotion();
+  else if (runtimeVersion() !== 'v2') legacyStopMotion();
 }
 
 export function get_distance(): number {
   const handle = getActiveV2Handle();
   if (handle) return handle.getDistance();
-  return getSimulatorVersion() === 'v2' ? 3 : legacyGetDistance();
+  return runtimeVersion() === 'v2' ? 3 : legacyGetDistance();
 }
 
 export function rgb_set_color(color: string): void {
   const handle = getActiveV2Handle();
   if (handle) handle.rgbSetColor(color);
-  else if (getSimulatorVersion() !== 'v2') legacyRgbSetColor(color);
+  else if (runtimeVersion() !== 'v2') legacyRgbSetColor(color);
 }
 
 export function buzzer_beep(frequencyHz: number, durationMs: number): Promise<void> {
@@ -480,49 +488,49 @@ export function buzzer_beep(frequencyHz: number, durationMs: number): Promise<vo
 export function get_acceleration(axis: string): any {
   const handle = getActiveV2Handle();
   if (handle) return handle.getAcceleration(axis);
-  return getSimulatorVersion() === 'v2' ? 0 : legacyGetAcceleration(axis);
+  return runtimeVersion() === 'v2' ? 0 : legacyGetAcceleration(axis);
 }
 
 export function get_gyroscope(axis: string): any {
   const handle = getActiveV2Handle();
   if (handle) return handle.getGyroscope(axis);
-  return getSimulatorVersion() === 'v2' ? 0 : legacyGetGyroscope(axis);
+  return runtimeVersion() === 'v2' ? 0 : legacyGetGyroscope(axis);
 }
 
 export function get_floor_sensor(sensorId: number): boolean {
   const handle = getActiveV2Handle();
   if (handle) return handle.getFloorSensor(sensorId);
-  return getSimulatorVersion() === 'v2' ? false : legacyGetFloorSensor(sensorId);
+  return runtimeVersion() === 'v2' ? false : legacyGetFloorSensor(sensorId);
 }
 
 export function just_move(direction: string): void {
   const handle = getActiveV2Handle();
   if (handle) handle.justMove(direction);
-  else if (getSimulatorVersion() !== 'v2') legacyJustMove(direction);
+  else if (runtimeVersion() !== 'v2') legacyJustMove(direction);
 }
 
 export function just_rotate(direction: string): void {
   const handle = getActiveV2Handle();
   if (handle) handle.justRotate(direction);
-  else if (getSimulatorVersion() !== 'v2') legacyJustRotate(direction);
+  else if (runtimeVersion() !== 'v2') legacyJustRotate(direction);
 }
 
 export function rc_drive(throttle: number, steering: number): void {
   const handle = getActiveV2Handle();
   if (handle) handle.rcDrive(throttle, steering);
-  else if (getSimulatorVersion() !== 'v2') legacyRcDrive(throttle, steering);
+  else if (runtimeVersion() !== 'v2') legacyRcDrive(throttle, steering);
 }
 
 export function get_light_sensor(): number {
   const handle = getActiveV2Handle();
   if (handle) return handle.getLightSensor();
-  return getSimulatorVersion() === 'v2' ? 0 : legacyGetLightSensor();
+  return runtimeVersion() === 'v2' ? 0 : legacyGetLightSensor();
 }
 
 export function drawLine(status: boolean): void {
   const handle = getActiveV2Handle();
   if (handle) handle.drawLine(status);
-  else if (getSimulatorVersion() !== 'v2') legacyDrawLine(status);
+  else if (runtimeVersion() !== 'v2') legacyDrawLine(status);
 }
 
 export function changeCameraView(): void {

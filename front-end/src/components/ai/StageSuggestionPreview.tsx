@@ -56,6 +56,7 @@ export default function StageSuggestionPreview({
       )}
     </Stack>
     <Typography variant="body2">{suggestion.rationale}</Typography>
+    {!!stage.geometryChanges?.length && <Alert severity="info"><Box component="ul" sx={{ m: 0, pl: 2 }}>{stage.geometryChanges.map((change, index) => <Typography component="li" variant="body2" key={index}>{change}</Typography>)}</Box></Alert>}
     <Box sx={{ py: 0.25 }}>
       <Typography variant="caption" color="text.secondary" fontWeight={700}>{t('aiAssistant.stage.modelExpectation')}</Typography>
       <Typography variant="body2">{suggestion.expectedValidation}</Typography>
@@ -68,6 +69,6 @@ export default function StageSuggestionPreview({
       </Box>
     </Alert>}
     {stage.resolvedIssues.length > 0 && <Alert severity="success">{t('aiAssistant.stage.resolvedIssues', { count: stage.resolvedIssues.length })}</Alert>}
-    {stage.newIssues.length > 0 && <Alert severity="warning">{t('aiAssistant.stage.newIssues', { count: stage.newIssues.length })}</Alert>}
+    {stage.newIssues.length > 0 && <Alert severity="warning">{t('aiAssistant.stage.newIssues', { count: stage.newIssues.length })}<Box component="ul" sx={{ my: 0.5, pl: 2 }}>{stage.newIssues.map(issue => <Typography component="li" variant="body2" key={issue}>{issue}</Typography>)}</Box></Alert>}
   </Stack>;
 }

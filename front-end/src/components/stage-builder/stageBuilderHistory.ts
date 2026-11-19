@@ -1,5 +1,6 @@
 import type { EditorStage } from './types';
 import { cloneStage } from './stageBuilderGeometry';
+import { preserveStageSnapping } from './stageBuilderSnapping';
 
 export type StageBuilderHistory = {
   past: EditorStage[];
@@ -20,14 +21,15 @@ export function pushStageHistory(history: StageBuilderHistory, current: EditorSt
 export function undoStageHistory(history: StageBuilderHistory, current: EditorStage): { history: StageBuilderHistory; stage: EditorStage | null } {
   if (!history.past.length) return { history, stage: null };
   const past = [...history.past];
-  const stage = past.pop() || null;
+  const snapshot = past.pop();
+  const stage = snapshot ? preserveStageSnapping(cloneStage(snapshot), current) : null;
   return { history: { ...history, past, future: [cloneStage(current), ...history.future] }, stage };
 }
 
 export function redoStageHistory(history: StageBuilderHistory, current: EditorStage): { history: StageBuilderHistory; stage: EditorStage | null } {
   if (!history.future.length) return { history, stage: null };
   const [stage, ...future] = history.future;
-  return { history: { ...history, past: [...history.past, cloneStage(current)], future }, stage: cloneStage(stage) };
+  return { history: { ...history, past: [...history.past, cloneStage(current)], future }, stage: preserveStageSnapping(cloneStage(stage), current) };
 }
 
 export function canUndo(history: StageBuilderHistory): boolean {

@@ -1,5 +1,6 @@
 import type { EditorStage, LocalStageRecord, StageJsonEntry } from './types';
 import { configToEditorStage, editorStageToRecord } from './serialize';
+import type { RecoveryIdentity } from './stageBuilderRecovery';
 
 const DRAFT_PREFIX = 'fossbot.stageBuilder.recoveryDraft.v1';
 
@@ -11,7 +12,8 @@ export function stageBuilderDraftKey(scope?: string | number | null): string {
   return `${DRAFT_PREFIX}:${safeScope(scope)}`;
 }
 
-export type StageBuilderDraft = {
+export type StageBuilderDraft = Partial<RecoveryIdentity> & {
+  version?: 1;
   savedAt: string;
   stageRecord: LocalStageRecord;
 };
@@ -83,15 +85,22 @@ function draftRecordFor(stage: EditorStage): LocalStageRecord {
   return { ...record, config: record.config.map(compactDraftConfigEntry) };
 }
 
-export function writeStageBuilderDraft(stage: EditorStage, scope?: string | number | null): void {
-  if (typeof window === 'undefined') return;
+export function writeStageBuilderDraft(stage: EditorStage, scope?: string | number | null, identity?: RecoveryIdentity, onError?: (message: string) => void): boolean {
+  if (typeof window === 'undefined') return false;
   const key = stageBuilderDraftKey(scope);
-  const draft: StageBuilderDraft = { savedAt: new Date().toISOString(), stageRecord: draftRecordFor(stage) };
   try {
+    const existing = window.localStorage.getItem(key);
+    if (identity && existing !== null) {
+      const previous = JSON.parse(existing) as StageBuilderDraft;
+      if (previous.recoveryId !== identity.recoveryId || previous.sourceFingerprint !== identity.sourceFingerprint) throw new Error('Another recovery draft is retained. Review recovery sources before replacing it.');
+    }
+    const draft: StageBuilderDraft = { ...identity, version: 1, savedAt: new Date().toISOString(), stageRecord: draftRecordFor(stage) };
     window.localStorage.setItem(key, JSON.stringify(draft));
+    return true;
   } catch (error) {
     console.warn('[stage-builder] Failed to write recovery draft', error);
-    try { window.localStorage.removeItem(key); } catch { /* ignore cleanup errors */ }
+    onError?.(error instanceof Error ? error.message : String(error));
+    return false;
   }
 }
 

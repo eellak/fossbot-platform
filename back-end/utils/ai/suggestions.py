@@ -11,6 +11,7 @@ from pydantic import ValidationError
 from utils.activity_schema import validate_activities
 from utils.ai.schemas import AssistantAnswer, BlocklyReplaceSuggestion, ConversationTurn, LessonAuthoringSuggestion, ProviderStreamRequest, PythonEdit, PythonEditsSuggestion, PythonReplaceSuggestion, StageAuthoringSuggestion
 from utils.ai.stage_geometry import generated_wall_geometry, requires_wall_enclosure, wall_enclosure_status
+from utils.stage_geometry_contract import validate_line_shape
 
 
 SUGGESTION_VERSION = "1"
@@ -456,6 +457,8 @@ def _validate_stage_operations(suggestion: StageAuthoringSuggestion, context: di
         "intensity", "range", "angle", "penumbra", "fov", "pitch", "subtype", "challenge",
     }
     generated: set[str] = set()
+    line_corners = {str(item.get("id")): item.get("corners", []) for item in payload.get("objects", []) if isinstance(item, dict) and item.get("kind") == "line"}
+    closed_lines = {str(item.get("id")) for item in payload.get("objects", []) if isinstance(item, dict) and item.get("kind") == "line" and item.get("closed") is True}
 
     def finite(values: Optional[list[float]], *, positive: bool = False) -> bool:
         return bool(values) and all(isinstance(value, (int, float)) and value == value and abs(value) <= 1_000 and (not positive or 0 < value <= 500) for value in values)
@@ -488,6 +491,8 @@ def _validate_stage_operations(suggestion: StageAuthoringSuggestion, context: di
             if operation.semantic_kind not in supported_kinds or not finite(operation.position):
                 raise SuggestionError(f"operations[{index}] add_object semanticKind or position is not supported")
             generated.add(operation.temp_id)
+            if operation.semantic_kind == "line":
+                line_corners[operation.temp_id] = [None, {"mode": "rounded", "sizing": "auto"}, None]
             continue
         references = operation.object_ids if operation.op in {"group_objects", "ungroup_objects"} else [operation.object_id]
         if not references or any(not existing(reference) for reference in references):
@@ -508,6 +513,16 @@ def _validate_stage_operations(suggestion: StageAuthoringSuggestion, context: di
         elif operation.op == "set_line_points":
             if not operation.points or any(len(point) != 2 or not finite(point) for point in operation.points):
                 raise SuggestionError("The stage line points are invalid")
+            previous = line_corners.get(operation.object_id, [])
+            if operation.corners is None and any(isinstance(corner, dict) and corner.get("mode") == "rounded" for corner in previous):
+                raise SuggestionError("Supply complete corner records when replacing a curved path. Move individual points to retain their rounding.")
+            closed = operation.object_id in closed_lines
+            corners = operation.corners if operation.corners is not None else [None if not closed and index in (0, len(operation.points) - 1) else {"mode": "sharp"} for index in range(len(operation.points))]
+            try:
+                validate_line_shape({"curveVersion": 2 if closed else 1, "closed": closed, "points": operation.points, "corners": corners})
+            except ValueError as error:
+                raise SuggestionError(str(error)) from error
+            line_corners[operation.object_id] = corners
         elif operation.op == "group_objects" and (len(set(operation.object_ids)) != len(operation.object_ids) or not operation.group_name):
             raise SuggestionError("The stage group is invalid")
     if target == "create":

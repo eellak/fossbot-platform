@@ -1,4 +1,5 @@
-import type { SxProps, Theme } from '@mui/material/styles';
+import { createTheme, type SxProps, type Theme } from '@mui/material/styles';
+import { approvedThemeOptions } from 'src/theme/ApprovedTheme';
 import { createContext, useContext } from 'react';
 
 export type EditorVariant = 'studio' | 'fossbot';
@@ -222,12 +223,37 @@ const FOSSBOT_TONES: EditorTones = {
 
 // ── Public API ──────────────────────────────────────────────────────────────
 
+const approvedPalettes = {
+  fossbot: createTheme(approvedThemeOptions(false)).palette,
+  studio: createTheme(approvedThemeOptions(true)).palette,
+};
+
 export function getEditorColors(variant: EditorVariant): EditorColors {
-  return variant === 'fossbot' ? FOSSBOT_COLORS : STUDIO_COLORS;
+  const p = approvedPalettes[variant];
+  return {
+    ...(variant === 'fossbot' ? FOSSBOT_COLORS : STUDIO_COLORS),
+    topbar: p.background.paper, viewport: p.background.default,
+    panel: p.background.paper, panelRaised: p.action.hover, panelInset: p.background.default,
+    panelDisabled: p.background.default, glass: p.background.paper, glassDeep: p.background.default,
+    border: p.divider, borderStrong: p.divider, borderSoft: p.divider, divider: p.divider,
+    keycapBorder: p.divider, keycapBorderStrong: p.divider, keycapBg: p.action.hover, keycapInk: p.text.primary,
+    text: p.text.primary, textStrong: p.text.primary, textMuted: p.text.secondary,
+    textSubtle: p.text.secondary, textDisabled: p.text.disabled,
+    accent: p.primary.main, accentSoft: p.primary.light, accentText: p.primary.main,
+    success: p.success.main, successInk: p.success.main,
+    warning: p.warning.main, warningInk: p.warning.main,
+    danger: p.error.main, dangerInk: p.error.main, dangerSurface: p.error.light,
+  };
 }
 
 export function getEditorTones(variant: EditorVariant): EditorTones {
-  return variant === 'fossbot' ? FOSSBOT_TONES : STUDIO_TONES;
+  const p = approvedPalettes[variant];
+  const tone = (colour: typeof p.primary): EditorTone => ({ accent: colour.main, surface: colour.light, text: colour.main });
+  return {
+    floorPaths: tone(p.secondary), structures: tone(p.secondary), robot: tone(p.primary),
+    challenge: tone(p.secondary), labels: tone(p.secondary), lighting: tone(p.warning),
+    camera: tone(p.info), audio: tone(p.secondary), prefab: tone(p.secondary),
+  };
 }
 
 export function getEditorType(variant: EditorVariant): EditorTypeStyles {
@@ -397,8 +423,8 @@ export function getInspectorPanelSx(variant: EditorVariant): SxProps<Theme> {
 // EditorThemeContext hook. These remain so legacy imports still compile and so
 // the theme is debuggable from the browser console.
 
-export const editorColors: EditorColors = STUDIO_COLORS;
-export const editorTones: EditorTones = STUDIO_TONES;
+export const editorColors: EditorColors = getEditorColors('studio');
+export const editorTones: EditorTones = getEditorTones('studio');
 export const editorType: EditorTypeStyles = getEditorType('studio');
 export const editorTabsSx: SxProps<Theme> = getEditorTabsSx('studio');
 export const editorPanelSx: SxProps<Theme> = getEditorPanelSx('studio');
@@ -418,8 +444,8 @@ export type EditorThemeContextValue = {
 
 const EditorThemeContext = createContext<EditorThemeContextValue>({
   variant: 'studio',
-  colors: STUDIO_COLORS,
-  tones: STUDIO_TONES,
+  colors: getEditorColors('studio'),
+  tones: getEditorTones('studio'),
   type: getEditorType('studio'),
   panelSx: getEditorPanelSx('studio'),
   tabsSx: getEditorTabsSx('studio'),

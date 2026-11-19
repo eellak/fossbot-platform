@@ -13,6 +13,15 @@ describe('stage builder required objects', () => {
     expect(blockingValidationResults(validateStageBuilderStage(stage))).toEqual([]);
   });
 
+  it('does not count a spawn excluded by a hidden ancestor', () => {
+    const stage = createDemoEditorStage();
+    const parent = stage.objects.find(object => object.kind !== 'fossbot')!;
+    parent.hidden = true;
+    const spawn = stage.objects.find(object => object.kind === 'fossbot')!;
+    spawn.parentId = parent.id;
+    expect(blockingValidationResults(validateStageBuilderStage(stage)).map(item => item.id)).toContain('stage:spawn-missing');
+  });
+
   it('requires a visible robot spawn even when a target exists', () => {
     const stage = createDemoEditorStage();
     stage.objects = stage.objects.filter((object) => object.semanticKind === 'target');

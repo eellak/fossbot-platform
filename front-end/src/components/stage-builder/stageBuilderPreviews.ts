@@ -1,39 +1,9 @@
-/**
- * Stage Builder preview rendering.
- *
- * Generates small PNG previews for library tiles and hierarchy rows by rendering
- * the same `makeObjectRoot` meshes the editor uses into a single offscreen
- * WebGLRenderer. Previews are cached so repeated lookups (e.g. the library grid,
- * the hierarchy list) share the same PNG data URL.
- *
- * Settings (per-kind zoom/padding/rotation/outline/color override) are read from
- * `stageBuilderPreviewSettings` at render time. Any change there invalidates the
- * cache so the next request picks up the new look.
- *
- * Prefabs are intentionally not rendered here: the user only wants the per-kind
- * primitives baked into static assets, and prefab tiles show a generic
- * placeholder in `PreviewShape` instead. Once the per-kind PNGs are committed
- * to the repo, this module can be swapped for a thin asset loader.
- *
- * Design notes:
- * - One shared renderer, resized per kind so different kinds can render at
- *   different sizes. Browser WebGL context limits (~16) and the fact that the
- *   renderer is only used to dump PNGs make sharing a single context safe.
- * - `preserveDrawingBuffer: true` is required so the canvas can be read via
- *   `toDataURL` after a render.
- * - Per-kind category accents come from `editorTones` so library colors stay
- *   in sync with the rest of the editor palette. Robot spawn, camera, and
- *   audio keep their inherent multi-color look — they have an iconic identity
- *   that's stronger than a single accent.
- * - Opaque outlines use a back-face silhouette only (outer rim, no x-ray
- *   internals). Transparent flat markers get a depth-tested boundary line.
- *   Robot spawn already has its own rim and is skipped.
- * - Fossbot previews await the shared robot model promise so the robot appears
- *   in the first render. Without that gate the first request would snapshot
- *   only the halo/arrow decoration.
- */
+// Library and hierarchy artwork uses the editor geometry and one shared preview renderer.
 
 import * as THREE from 'three';
+import type { StageBuilderPrefab } from './stageBuilderPrefabs';
+import { hiddenEditorObjectIds } from '../../simulator/stages/stageFormatCore';
+import { objectVisualKey } from './stageBuilderVisualKey';
 import type { EditorStageObject, StageSemanticKind } from './types';
 import { editorTones, type EditorTone } from './stageBuilderEditorTheme';
 import { createCatalogObject } from './stageBuilderCatalog';
@@ -105,7 +75,8 @@ let robotModelReady: Promise<void> | null = null;
 let robotModelInFlight: Promise<void> | null = null;
 
 const kindCache = new Map<StageSemanticKind, string>();
-const objectCache = new Map<string, string>();
+const objectCache = new Map<string, { key: string; url: string }>();
+const prefabCache = new Map<string, string>();
 const inflight = new Map<string, Promise<string>>();
 
 // Re-render whenever settings change. The cache key is just the kind — when
@@ -258,7 +229,6 @@ function addOutline(root: THREE.Object3D, settings: PreviewSettings): void {
       outlineMesh.userData.previewOutline = true;
       outlineMesh.renderOrder = (mesh.renderOrder ?? 0) - 2;
       mesh.add(outlineMesh);
-      continue;
     }
 
     // Transparent/flat primitives (floor markers, zones) need an explicit
@@ -287,16 +257,20 @@ function frameCamera(group: THREE.Object3D, settings: PreviewSettings): void {
   }
   const center = box.getCenter(new THREE.Vector3());
   const size = box.getSize(new THREE.Vector3());
-  const maxDim = Math.max(size.x, size.y, size.z, 0.4);
-  // Fit-to-FOV distance uses the vertical FOV — at 4:3 aspect the horizontal FOV is
-  // wider, so a vertical fit leaves comfortable margin on the sides.
-  const fovRad = (PREVIEW_FOV * Math.PI) / 180;
-  const distance = (maxDim * 0.5) / Math.tan(fovRad / 2);
-  const padded = Math.max(distance * settings.padding * settings.zoom, 0.4);
-  // Camera offset is a fixed iso-ish vector so previews share a consistent look
-  // across kinds (same angle = same lighting = same feel).
-  const offset = new THREE.Vector3(0.72, 0.55, 0.72).normalize().multiplyScalar(padded);
-  camera.position.copy(center).add(offset);
+  const maxDim = Math.max(size.x, size.y, size.z, 0.01);
+  const direction = new THREE.Vector3(0.72, 0.55, 0.72).normalize();
+  const viewRotation = new THREE.Matrix4().lookAt(direction, new THREE.Vector3(), camera.up).invert();
+  const tanY = Math.tan((PREVIEW_FOV * Math.PI) / 360);
+  const tanX = tanY * camera.aspect;
+  let distance = 0;
+  // Fit every projected corner, including depth, rather than only the longest world axis.
+  for (const x of [box.min.x, box.max.x]) for (const y of [box.min.y, box.max.y]) for (const z of [box.min.z, box.max.z]) {
+    const corner = new THREE.Vector3(x, y, z).sub(center).applyMatrix4(viewRotation);
+    distance = Math.max(distance, corner.z + Math.abs(corner.x) / tanX, corner.z + Math.abs(corner.y) / tanY);
+  }
+  const padded = Math.max(distance * settings.padding * settings.zoom, 0.1);
+  camera.far = Math.max(50, padded + maxDim * 4);
+  camera.position.copy(center).addScaledVector(direction, padded);
   camera.lookAt(center);
   camera.updateProjectionMatrix();
 }
@@ -311,15 +285,15 @@ function renderGroup(group: THREE.Object3D, settings: PreviewSettings): string {
   root.rotation.set(settings.rotation[0], settings.rotation[1], settings.rotation[2]);
   root.add(group);
   scene.add(root);
-  addOutline(group, settings);
-  frameCamera(group, settings);
-  ctx.renderer.render(scene, ctx.camera);
-  const dataUrl = ctx.renderer.domElement.toDataURL('image/png');
-  // Disconnect the group from the scene before disposing so we don't try to
-  // release Three.js resources that the scene still references.
-  scene.remove(root);
-  disposeObject(group);
-  return dataUrl;
+  try {
+    addOutline(group, settings);
+    frameCamera(group, settings);
+    ctx.renderer.render(scene, ctx.camera);
+    return ctx.renderer.domElement.toDataURL('image/png');
+  } finally {
+    scene.remove(root);
+    disposeObject(group);
+  }
 }
 
 function resolveKindForObject(object: EditorStageObject): StageSemanticKind {
@@ -341,8 +315,11 @@ function resolveKindForObject(object: EditorStageObject): StageSemanticKind {
       return 'light';
     case 'camera':
       return 'camera';
-    case 'audio':
-      return 'audio';
+    case 'audio': return 'audio';
+    case 'model': return 'customObject';
+    case 'sphere': return 'sphere';
+    case 'wedge': return 'ramp';
+    case 'arrow': return 'directionArrow';
     default:
       return 'block';
   }
@@ -357,9 +334,8 @@ function scheduleRender(key: string, work: () => Promise<string> | string): Prom
   if (existing) return existing;
   const promise = Promise.resolve().then(work);
   inflight.set(key, promise);
-  promise.finally(() => {
-    if (inflight.get(key) === promise) inflight.delete(key);
-  });
+  const clear = () => { if (inflight.get(key) === promise) inflight.delete(key); };
+  promise.then(clear, clear);
   return promise;
 }
 
@@ -382,30 +358,58 @@ export function getKindPreview(kind: StageSemanticKind): string | Promise<string
   });
 }
 
+async function readyObjectRoot(object: EditorStageObject, objects?: EditorStageObject[]): Promise<THREE.Object3D> {
+  if (object.kind === 'fossbot') await ensureRobotModel();
+  const { root } = makeObjectRoot(object, {}, { objects });
+  if (root.userData.stageBuilderVisualReady && !await root.userData.stageBuilderVisualReady) {
+    disposeObject(root);
+    throw new Error('Model preview could not load.');
+  }
+  return root;
+}
+
 export function getObjectPreview(object: EditorStageObject): string | Promise<string> {
   if (!isBrowser()) return '';
   const kind = resolveKindForObject(object);
-  // Cache by kind, not by object ID: previews are meant to be a stable visual
-  // hint for the type. Position, exact color, and exact dimensions don't
-  // change the silhouette enough to justify per-object invalidation here.
-  const cached = objectCache.get(kind);
-  if (cached) return cached;
-  return scheduleRender(`object:${kind}`, async () => {
-    if (kind === 'robotSpawn') {
-      await ensureRobotModel();
-    }
+  const key = objectVisualKey(object);
+  const cached = objectCache.get(object.id);
+  if (cached?.key === key) return cached.url;
+  return scheduleRender(`object:${key}`, async () => {
     const settings = getKindSettings(kind);
-    const previewObject = previewObjectFor(object, kind, settings);
-    const { root } = makeObjectRoot(previewObject);
+    // Actual imported materials and geometry identify the asset, including GLB textures.
+    const root = await readyObjectRoot(object);
     const dataUrl = renderGroup(root, settings);
-    objectCache.set(kind, dataUrl);
+    objectCache.set(object.id, { key, url: dataUrl });
     return dataUrl;
+  });
+}
+
+export function getPrefabPreview(prefab: StageBuilderPrefab): string | Promise<string> {
+  if (!isBrowser()) return '';
+  const key = `${prefab.id}:${prefab.updatedAt}`;
+  const cached = prefabCache.get(key);
+  if (cached) return cached;
+  return scheduleRender(`prefab:${key}`, async () => {
+    const group = new THREE.Group();
+    try {
+      const hidden = hiddenEditorObjectIds(prefab.objects);
+      for (const object of prefab.objects) {
+        if (!hidden.has(object.id)) group.add(await readyObjectRoot(object, prefab.objects));
+      }
+      const dataUrl = renderGroup(group, getKindSettings('block'));
+      prefabCache.set(key, dataUrl);
+      return dataUrl;
+    } catch (error) {
+      disposeObject(group);
+      throw error;
+    }
   });
 }
 
 export function invalidatePreviewCache(): void {
   kindCache.clear();
   objectCache.clear();
+  prefabCache.clear();
   inflight.clear();
 }
 

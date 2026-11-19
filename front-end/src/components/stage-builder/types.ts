@@ -1,3 +1,6 @@
+import type { LineCorner } from '../../simulator/stages/lineGeometryCore';
+export type { LineCorner } from '../../simulator/stages/lineGeometryCore';
+
 export type StageEntryMaterial = {
   color?: string | number;
   opacity?: number;
@@ -124,6 +127,9 @@ export type StageArrowEntry = {
 
 export type StageLineEntry = {
   type: 'line';
+  closed?: boolean;
+  curveVersion?: 1 | 2;
+  corners?: LineCorner[];
   points: [number, number][];
   width?: number;
   color?: string | number;
@@ -308,15 +314,19 @@ export type StageBuilderGroup = {
 };
 
 export type StageValidationOverrideMap = Record<string, boolean>;
+export type StageHierarchyRow = { kind: 'object' | 'group'; id: string };
 
 export type StageBuilderMetadata = {
-  version: 2;
+  version: 2 | 3;
   groups: StageBuilderGroup[];
   validationOverrides: StageValidationOverrideMap;
   gridVisible?: boolean;
   gridSize?: number;
-  defaultSnapPreset?: 'off' | 'fine' | 'medium' | 'coarse';
+  defaultSnapPreset?: 'off' | 'precise' | 'fine' | 'medium' | 'coarse';
   defaultRotationSnapPreset?: 'off' | '15' | '30' | '45';
+  lastMovementSnapPreset?: 'precise' | 'fine' | 'medium' | 'coarse';
+  hierarchyOrder?: StageHierarchyRow[];
+  attachedOrder?: Record<string, string[]>;
   lockCamera?: boolean;
   skybox?: StageBuilderSkyboxSettings;
 };
@@ -403,6 +413,9 @@ export type EditorArrowObject = EditorObjectCommon & {
 
 export type EditorLineObject = EditorObjectCommon & {
   kind: 'line';
+  closed?: boolean;
+  curveVersion?: 1 | 2;
+  corners?: LineCorner[];
   points: Vec2[];
   width: number;
   color: string;

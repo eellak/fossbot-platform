@@ -245,7 +245,8 @@ class StageOperation(StrictModel):
     position: Optional[list[float]] = Field(default=None, min_length=3, max_length=3)
     dimensions: Optional[list[float]] = Field(default=None, min_length=1, max_length=4)
     rotation_y: Optional[float] = None
-    points: Optional[list[list[float]]] = Field(default=None, min_length=2, max_length=128)
+    points: Optional[list[list[float]]] = Field(default=None, min_length=1, max_length=128)
+    corners: Optional[list[Optional[dict[str, Any]]]] = Field(default=None, min_length=1, max_length=128)
     patch: Optional[dict[str, Any]] = None
     object_ids: list[str] = Field(default_factory=list, max_length=128)
     group_name: Optional[str] = Field(default=None, min_length=1, max_length=120)

@@ -3,6 +3,8 @@ import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js'
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { parseColor } from './parseColor'
+import { evaluateLineGeometry, type LineGeometry, type EvaluatedLine } from './lineGeometryCore'
+import { StageLoadError } from './stageFormatCore'
 
 /**
  * Visual result from a stage builder. Contains only the Three.js object
@@ -110,7 +112,7 @@ interface ModelEntry {
   immovable?: boolean
 }
 
-interface LineEntry {
+interface LineEntry extends LineGeometry {
   type: 'line'
   points: [number, number][]
   width?: number
@@ -127,18 +129,24 @@ export interface LineSegment {
   width: number
 }
 
-export function lineSegmentsFromEntry(entry: LineEntry): LineSegment[] {
+function runnableLine(entry: LineEntry): EvaluatedLine {
+  const evaluated = evaluateLineGeometry(entry)
+  if (!evaluated.runnable) throw new StageLoadError(evaluated.diagnostics.map(item => ({ ...item, severity: 'error' })))
+  return evaluated
+}
+
+export function lineSegmentsFromEntry(entry: LineEntry, evaluated = runnableLine(entry)): LineSegment[] {
   const width = entry.width ?? 0.01
   const out: LineSegment[] = []
-  for (let i = 0; i < entry.points.length - 1; i++) {
-    const [ax, az] = entry.points[i]
-    const [bx, bz] = entry.points[i + 1]
+  for (let i = 0; i < evaluated.route.length - 1; i++) {
+    const [ax, az] = evaluated.route[i]
+    const [bx, bz] = evaluated.route[i + 1]
     out.push({ ax, az, bx, bz, width })
   }
   return out
 }
 
-export function buildLineVisual(entry: LineEntry): VisualBuilt {
+export function buildLineVisual(entry: LineEntry, evaluated = runnableLine(entry)): VisualBuilt {
   const width = entry.width ?? 0.01
   const y = entry.y ?? 0.001
   const color = parseColor(entry.color ?? 'black')
@@ -152,32 +160,47 @@ export function buildLineVisual(entry: LineEntry): VisualBuilt {
 
   const group = new THREE.Group()
   group.name = entry.name ?? 'line'
-
-  for (let i = 0; i < entry.points.length - 1; i++) {
-    const [ax, az] = entry.points[i]
-    const [bx, bz] = entry.points[i + 1]
+  const segmentCount = evaluated.route.length - 1
+  const strip = new THREE.PlaneGeometry(1, width)
+  strip.rotateX(-Math.PI / 2)
+  const cap = new THREE.CircleGeometry(width * 0.5, 12)
+  cap.rotateX(-Math.PI / 2)
+  const vertexCount = segmentCount * strip.attributes.position.count + evaluated.route.length * cap.attributes.position.count
+  const positions = new Float32Array(vertexCount * 3)
+  const indices: number[] = []
+  const vertex = new THREE.Vector3()
+  const matrix = new THREE.Matrix4()
+  const scale = new THREE.Vector3(1, 1, 1)
+  let offset = 0
+  const append = (geometry: THREE.BufferGeometry) => {
+    const source = geometry.attributes.position
+    for (let i = 0; i < source.count; i++) {
+      vertex.fromBufferAttribute(source, i).applyMatrix4(matrix).toArray(positions, (offset + i) * 3)
+    }
+    for (const index of geometry.index!.array) indices.push(offset + index)
+    offset += source.count
+  }
+  for (let i = 0; i < segmentCount; i++) {
+    const [ax, az] = evaluated.route[i]
+    const [bx, bz] = evaluated.route[i + 1]
     const dx = bx - ax
     const dz = bz - az
-    const len = Math.hypot(dx, dz)
-    if (len === 0) continue
-    const geom = new THREE.PlaneGeometry(len, width)
-    geom.rotateX(-Math.PI / 2)
-    const mesh = new THREE.Mesh(geom, mat)
-    mesh.position.set((ax + bx) / 2, y, (az + bz) / 2)
-    mesh.rotation.y = -Math.atan2(dz, dx)
-    mesh.renderOrder = 5
-    group.add(mesh)
+    matrix.makeRotationY(-Math.atan2(dz, dx)).scale(scale.set(Math.hypot(dx, dz), 1, 1))
+    matrix.setPosition((ax + bx) / 2, y, (az + bz) / 2)
+    append(strip)
   }
-
-  // Round caps at each vertex (and endpoints) to fill joint gaps.
-  const capGeom = new THREE.CircleGeometry(width * 0.5, 12)
-  capGeom.rotateX(-Math.PI / 2)
-  for (const [px, pz] of entry.points) {
-    const cap = new THREE.Mesh(capGeom, mat)
-    cap.position.set(px, y, pz)
-    cap.renderOrder = 5
-    group.add(cap)
+  for (const [px, pz] of evaluated.route) {
+    matrix.makeTranslation(px, y, pz)
+    append(cap)
   }
+  strip.dispose()
+  cap.dispose()
+  const geometry = new THREE.BufferGeometry()
+  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
+  geometry.setIndex(indices)
+  const mesh = new THREE.Mesh(geometry, mat)
+  mesh.renderOrder = 5
+  group.add(mesh)
 
   return { object: group }
 }

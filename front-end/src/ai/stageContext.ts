@@ -1,6 +1,7 @@
 import { STAGE_OBJECT_CATALOG } from 'src/components/stage-builder/stageBuilderCatalog';
 import type { StageBuilderValidationResult } from 'src/components/stage-builder/stageBuilderValidation';
 import type { EditorStage, EditorStageObject } from 'src/components/stage-builder/types';
+import type { StageMigrationDiagnostic } from 'src/components/stage-builder/stageBuilderMigration';
 import type { StageAuthoringTarget } from './suggestions/stageSuggestions';
 
 const WHOLE_STAGE_OBJECT_LIMIT = 48;
@@ -21,7 +22,7 @@ function validationPayload(result: StageBuilderValidationResult) {
   return { id: result.id, severity: result.severity, objectIds: result.objectIds, message: result.message, reason: result.reason };
 }
 
-export function buildStageAssistantContext(stage: EditorStage, target: StageAuthoringTarget, selectedIds: string[], validation: StageBuilderValidationResult[]) {
+export function buildStageAssistantContext(stage: EditorStage, target: StageAuthoringTarget, selectedIds: string[], validation: StageBuilderValidationResult[], migrationDiagnostics: StageMigrationDiagnostic[] = []) {
   const selected = new Set(selectedIds);
   const validationIds = new Set(validation.flatMap((item) => item.objectIds));
   const sourceObjects = target === 'create'
@@ -59,7 +60,7 @@ export function buildStageAssistantContext(stage: EditorStage, target: StageAuth
     stagePayload,
     selectedObjectIds,
     catalog: STAGE_OBJECT_CATALOG.filter((item) => item.placeable && item.id !== 'customObject' && item.id !== 'audio').map((item) => item.id),
-    validation: target === 'validation' ? validation.slice(0, 64).map(validationPayload) : [],
+    validation: target === 'validation' ? [...validation.map(validationPayload), ...migrationDiagnostics.map(item => ({ id: `migration:${item.code}`, severity: 'info', objectIds: [], message: item.message, reason: 'Automatic update of the working copy. The original source was retained.' }))].slice(0, 64) : [],
     contextTruncated: sourceObjects.length < (target === 'selection' ? selectedIds.length : target === 'create' ? 0 : stage.objects.length) || knownObjectIds.length < stage.objects.length,
   };
 }
