@@ -6,5 +6,9 @@
 
 front-end/build
 front-end/node_modules
+front-end/.env
+front-end/.env.local
+front-end/.env.*.local
+front-end/.local-certs
 sim/dist
 sim/node_modules

@@ -18,6 +18,8 @@ RUN npm run build
 
 FROM nginx:stable-alpine AS production-stage
 
+RUN apk upgrade --no-cache
+
 COPY --from=build-stage /usr/src/app/front-end/build /usr/share/nginx/html
 COPY front-end/nginx.conf /etc/nginx/conf.d/default.conf
 

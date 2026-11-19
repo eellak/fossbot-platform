@@ -18,12 +18,14 @@ cd /usr/src/app/sim
 npm run sync:frontend
 
 cd /usr/src/app/front-end
-exec npm start -- --host 0.0.0.0
+exec npm start
 EOF
 RUN chmod +x /usr/local/bin/front-end-dev-start
 
 ENV CHOKIDAR_USEPOLLING=true
 ENV WATCHPACK_POLLING=true
+# The host-side port is published on loopback by Compose.
+ENV HOST=0.0.0.0
 
 EXPOSE 3000
 

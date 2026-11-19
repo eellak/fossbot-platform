@@ -1,11 +1,11 @@
-# Add Firebase settings to ignored *.env.local files to test social login.
+# Local Firebase settings go in front-end/.env.development.local and back-end/.env.local.
 services:
   frontend:
     build:
       context: .
       dockerfile: front-end/Dockerfile.dev
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     volumes:
       - ./front-end:/usr/src/app/front-end
       - ./sim:/usr/src/app/sim
