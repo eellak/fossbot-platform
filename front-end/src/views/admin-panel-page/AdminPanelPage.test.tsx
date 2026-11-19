@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { act } from 'react-dom/test-utils';
 import { createRoot, type Root } from 'react-dom/client';
-import { Link, MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
+import { Link, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
+import { createMemoryHistory } from 'history';
+import { ProjectHistoryRouter } from 'src/routes/ProjectHistoryRouter';
 import AdminPanelPage from './AdminPanelPage';
 
 declare const afterEach: any;
@@ -73,14 +75,14 @@ describe('admin panel page', () => {
   const renderPage = async (entries: string[], showPage = true) => {
     await act(async () => {
       root.render(
-        <MemoryRouter initialEntries={entries}>
+        <ProjectHistoryRouter history={createMemoryHistory({ initialEntries: entries })}>
           <Routes>
             <Route path="/admin-panel" element={showPage ? <AdminPanelPage /> : <div>page removed</div>} />
             <Route path="/website-admin" element={<div>website admin</div>} />
           </Routes>
           <Navigation />
           <LocationProbe />
-        </MemoryRouter>,
+        </ProjectHistoryRouter>,
       );
       await flush();
     });

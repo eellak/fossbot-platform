@@ -12,7 +12,7 @@ from urllib.parse import urlsplit
 from database.database import ActivityAnswer, ClassChallenge, ClassGroup, ClassMembership, Course, CourseAssignment, CourseRelease, Enrollment, Lesson, LessonProgress, LessonWorkspace, LocalStage, MarketplaceModerationOverride, MissionAttempt, User
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from fastapi.security import OAuth2PasswordBearer
-from jose import JWTError
+from jwt import PyJWTError
 from models.models import LessonCreate as LegacyLessonCreate
 from models.models import LessonUpdate as LegacyLessonUpdate
 from models.models import UserRole
@@ -2512,7 +2512,7 @@ def optional_current_user(token: Optional[str] = Depends(optional_oauth2), db: S
         return None
     try:
         username = verify_access_token(token).get("sub")
-    except JWTError:
+    except PyJWTError:
         return None
     return db.query(User).filter(User.username == username, User.access_revoked.is_(False)).first()
 

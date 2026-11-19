@@ -18,7 +18,7 @@ cd /usr/src/app/sim
 npm run sync:frontend
 
 cd /usr/src/app/front-end
-exec npm start
+exec npm start -- --host 0.0.0.0
 EOF
 RUN chmod +x /usr/local/bin/front-end-dev-start
 

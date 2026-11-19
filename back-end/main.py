@@ -24,7 +24,9 @@ from fastapi import Body, Depends, FastAPI, HTTPException, Query, Request, Respo
 from pydantic import ValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer
-from jose import JWTError, jwt
+import jwt
+from jwt import PyJWTError
+from cryptography.x509 import load_pem_x509_certificate
 from models.models import (
     EmailVerificationRequest,
     FirebaseTokenRequest,
@@ -170,11 +172,11 @@ def verify_firebase_id_token(id_token: str):
     key_id = headers.get('kid')
     cert = get_firebase_public_certs().get(key_id)
     if not cert:
-        raise JWTError('Firebase token has an unknown key ID')
+        raise PyJWTError('Firebase token has an unknown key ID')
 
     decoded_token = jwt.decode(
         id_token,
-        cert,
+        load_pem_x509_certificate(cert.encode('utf-8')).public_key(),
         algorithms=['RS256'],
         audience=project_id,
         issuer=f'https://securetoken.google.com/{project_id}',
@@ -453,7 +455,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: SessionLocal
         username: str = payload.get("sub")
         if username is None:
             raise credentials_exception
-    except JWTError:
+    except PyJWTError:
         raise credentials_exception
     user = get_user(db, username=username)
     if user is None:
@@ -514,7 +516,7 @@ async def read_users_me(token: str = Depends(oauth2_scheme), db: SessionLocal = 
         username: str = payload.get("sub")
         if username is None:
             raise credentials_exception
-    except JWTError:
+    except PyJWTError:
         raise credentials_exception
     user = get_user(db, username=username)
     if user is None:

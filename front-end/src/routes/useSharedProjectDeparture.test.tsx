@@ -2,7 +2,7 @@ import React from 'react';
 import { act } from 'react-dom/test-utils';
 import { createRoot } from 'react-dom/client';
 import { createMemoryHistory } from 'history';
-import { unstable_HistoryRouter as HistoryRouter } from 'react-router-dom';
+import { ProjectHistoryRouter } from 'src/routes/ProjectHistoryRouter';
 import { useSharedProjectDeparture } from './useSharedProjectDeparture';
 declare const it: any, expect: any, jest: any;
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
@@ -18,7 +18,7 @@ it('blocks dirty PUSH/REPLACE/POP, keeps the first pending request, and releases
   let answer: (accepted: boolean) => void = () => {};
   mockConfirm.mockImplementation(() => new Promise((resolve) => { answer = resolve; }));
   try {
-    await act(async () => { root.render(<HistoryRouter history={history as any}><Probe dirty /></HistoryRouter>); });
+    await act(async () => { root.render(<ProjectHistoryRouter history={history}><Probe dirty /></ProjectHistoryRouter>); });
     act(() => { history.push('/first'); history.push('/ignored'); });
     expect(history.location.pathname).toBe('/shared');
     expect(mockConfirm).toHaveBeenCalledTimes(1);
