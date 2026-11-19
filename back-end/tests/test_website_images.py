@@ -36,3 +36,16 @@ def test_busy_image_processors_return_retryable_error():
         with pytest.raises(HTTPException) as error:normalize_website_image(b'anything')
         assert error.value.status_code==429
         slots.release.assert_not_called()
+
+
+@pytest.mark.parametrize('kind', ['TIFF', 'EPS', 'PNG'])
+def test_rejects_unsupported_formats_and_multiple_frames(kind):
+    source = BytesIO()
+    first = Image.new('RGB', (12, 8), 'blue')
+    options = {}
+    if kind == 'PNG':
+        options = {'save_all': True, 'append_images': [Image.new('RGB', (12, 8), 'red')]}
+    first.save(source, format=kind, **options)
+    with pytest.raises(HTTPException) as error:
+        normalize_website_image(source.getvalue())
+    assert error.value.status_code == 422

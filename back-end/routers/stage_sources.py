@@ -8,7 +8,7 @@ from database.database import SourceProviderConnection, User, getSessionLocal
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import RedirectResponse
 from fastapi.security import OAuth2PasswordBearer
-from jose import JWTError
+from jwt import PyJWTError
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from utils.beta_access import require_beta_access
@@ -77,7 +77,7 @@ async def get_current_user(
         username: str = payload.get("sub")
         if username is None:
             raise credentials_exception
-    except JWTError:
+    except PyJWTError:
         raise credentials_exception
 
     user = db.query(User).filter(User.username == username).first()

@@ -5,14 +5,13 @@ import hashlib
 import json
 import math
 import uuid
-import xml.etree.ElementTree as ElementTree
 from typing import Any, Literal, Optional, Union
 from urllib.parse import urlsplit
 
 from database.database import ActivityAnswer, ClassChallenge, ClassGroup, ClassMembership, Course, CourseAssignment, CourseRelease, Enrollment, Lesson, LessonProgress, LessonWorkspace, LocalStage, MarketplaceModerationOverride, MissionAttempt, User
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from fastapi.security import OAuth2PasswordBearer
-from jose import JWTError
+from jwt import PyJWTError
 from models.models import LessonCreate as LegacyLessonCreate
 from models.models import LessonUpdate as LegacyLessonUpdate
 from models.models import UserRole
@@ -33,6 +32,7 @@ from routers.stage_sources import (
     stage_error,
     stage_repo_list_item,
 )
+from utils.blockly import blockly_xml_error
 from utils.github_app_auth import create_github_app_jwt
 from utils.activity_schema import (
     ACTIVITY_SCHEMA_VERSION,
@@ -456,12 +456,9 @@ def validate_starter_for_publication(editor_type: str, starter_content: Any) -> 
         xml = starter_content.get("xml")
         if not isinstance(xml, str):
             raise ValueError("Blockly starter_content must contain an XML workspace")
-        try:
-            root = ElementTree.fromstring(xml)
-        except ElementTree.ParseError as error:
-            raise ValueError(f"Blockly workspace XML is invalid: {error}") from error
-        if root.tag.rsplit("}", 1)[-1] != "xml":
-            raise ValueError("Blockly workspace must have an xml root element")
+        message = blockly_xml_error(xml)
+        if message:
+            raise ValueError(message)
 
 
 def require_teacher(user: User) -> None:
@@ -2512,7 +2509,7 @@ def optional_current_user(token: Optional[str] = Depends(optional_oauth2), db: S
         return None
     try:
         username = verify_access_token(token).get("sub")
-    except JWTError:
+    except PyJWTError:
         return None
     return db.query(User).filter(User.username == username, User.access_revoked.is_(False)).first()
 

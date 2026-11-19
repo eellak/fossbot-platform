@@ -24,6 +24,8 @@ RUN chmod +x /usr/local/bin/front-end-dev-start
 
 ENV CHOKIDAR_USEPOLLING=true
 ENV WATCHPACK_POLLING=true
+# The host-side port is published on loopback by Compose.
+ENV HOST=0.0.0.0
 
 EXPOSE 3000
 

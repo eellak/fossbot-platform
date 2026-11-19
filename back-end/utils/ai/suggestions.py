@@ -3,7 +3,6 @@ from __future__ import annotations
 import copy
 import json
 import re
-import xml.etree.ElementTree as ET
 from typing import Any, Optional, Union
 
 from pydantic import ValidationError
@@ -11,6 +10,7 @@ from pydantic import ValidationError
 from utils.activity_schema import validate_activities
 from utils.ai.schemas import AssistantAnswer, BlocklyReplaceSuggestion, ConversationTurn, LessonAuthoringSuggestion, ProviderStreamRequest, PythonEdit, PythonEditsSuggestion, PythonReplaceSuggestion, StageAuthoringSuggestion
 from utils.ai.stage_geometry import generated_wall_geometry, requires_wall_enclosure, wall_enclosure_status
+from utils.blockly import blockly_xml_error
 
 
 SUGGESTION_VERSION = "1"
@@ -346,12 +346,9 @@ def validate_suggestion(suggestion: Suggestion, context: Optional[dict[str, Any]
     if isinstance(suggestion, StageAuthoringSuggestion):
         _validate_stage_operations(suggestion, context or {})
         return
-    try:
-        root = ET.fromstring(suggestion.xml)
-    except ET.ParseError as error:
-        raise SuggestionError("The suggested Blockly XML is malformed") from error
-    if root.tag.split("}")[-1] != "xml":
-        raise SuggestionError("The suggested Blockly workspace must have an xml root")
+    message = blockly_xml_error(suggestion.xml)
+    if message:
+        raise SuggestionError(message)
 
 
 def _validate_lesson_operations(suggestion: LessonAuthoringSuggestion, context: dict[str, Any]) -> None:

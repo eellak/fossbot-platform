@@ -32,6 +32,15 @@ def create(client, kind='page'):
     return result.json()['key']
 
 
+@pytest.mark.parametrize('extension', ['png', 'jpg', 'jpeg', 'webp'])
+def test_bundled_images_require_a_complete_local_path(extension):
+    path = f'/landing-media/projects_2026/class-1/robot.v2.{extension}'
+    assert website.valid_image_path(path, allow_bundled=True)
+    assert not website.valid_image_path(path, allow_bundled=False)
+    assert not website.valid_image_path(path + '?v=1', allow_bundled=True)
+    assert not website.valid_image_path(f'/landing-media/.{extension}', allow_bundled=True)
+
+
 def test_publication_is_immutable_and_per_language(cms_client):
     client,_=cms_client;key=create(client)
     en=document();assert client.put(f'/website/entries/{key}/en',json=en).status_code==200

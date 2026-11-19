@@ -3,7 +3,7 @@ import ReactDOM from 'react-dom/client';
 import './index.css';
 import App from './App';
 import { Provider } from 'react-redux';
-import { unstable_HistoryRouter as HistoryRouter } from 'react-router-dom';
+import { ProjectHistoryRouter } from 'src/routes/ProjectHistoryRouter';
 import { appHistory } from './routes/appHistory';
 import { store } from './store/Store';
 import Spinner from './views/spinner/Spinner';
@@ -13,9 +13,9 @@ import reportWebVitals from './reportWebVitals';
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <Provider store={store}>
     <Suspense fallback={<Spinner />}>
-      <HistoryRouter history={appHistory}>
+      <ProjectHistoryRouter history={appHistory}>
         <App />
-      </HistoryRouter>
+      </ProjectHistoryRouter>
     </Suspense>
   </Provider>,
 )

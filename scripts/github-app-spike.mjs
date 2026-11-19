@@ -6,6 +6,7 @@ import { stdin as input, stdout as output } from 'node:process'
 import { randomBytes, createSign } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { spawn } from 'node:child_process'
+import { once } from 'node:events'
 import { loadLocalEnv } from './load-local-env.mjs'
 
 loadLocalEnv()
@@ -244,22 +245,15 @@ function printApiError(error) {
   console.error(error)
 }
 
-async function openUrl(url) {
-  let command
-  let args
-  if (process.platform === 'darwin') {
-    command = 'open'
-    args = [url]
-  } else if (process.platform === 'win32') {
-    command = 'cmd'
-    args = ['/c', 'start', '', url]
-  } else {
-    command = 'xdg-open'
-    args = [url]
-  }
+function installationUrl(appSlug) {
+  return appSlug ? `${GITHUB_WEB}/apps/${encodeURIComponent(appSlug)}/installations/new` : `${GITHUB_WEB}/settings/apps`
+}
 
+async function openUrl(url) {
+  const command = { darwin: 'open', win32: 'explorer.exe' }[process.platform] || 'xdg-open'
   try {
-    const child = spawn(command, args, { detached: true, stdio: 'ignore' })
+    const child = spawn(command, [url], { detached: true, stdio: 'ignore' })
+    await once(child, 'spawn')
     child.unref()
   } catch {
     logWarn('Could not open browser automatically. Copy the URL below instead.')
@@ -407,9 +401,7 @@ async function ensureSelectedInstallation({ userToken, appId, appSlug, owner, re
   let installations = await listUserInstallations(userToken, appId, owner)
 
   if (!installations.length) {
-    const installUrl = appSlug
-      ? `${GITHUB_WEB}/apps/${appSlug}/installations/new`
-      : `${GITHUB_WEB}/settings/apps`
+    const installUrl = installationUrl(appSlug)
     logWarn(`No installation found for ${owner}. Install the app for selected repositories and select ${repo.full_name}.`)
     console.log(`Install URL: ${installUrl}`)
     await openUrl(installUrl)
@@ -734,9 +726,7 @@ async function main() {
   logStep('Check GitHub App installation before repo creation')
   let preInstallations = await listUserInstallations(userToken, appId, owner)
   if (!preInstallations.length) {
-    const installUrl = appSlug
-      ? `${GITHUB_WEB}/apps/${appSlug}/installations/new`
-      : `${GITHUB_WEB}/settings/apps`
+    const installUrl = installationUrl(appSlug)
     logWarn('No GitHub App installation found on the target account.')
     logWarn('GitHub App user tokens appear to need an installation before repo creation receives repository permissions.')
     logWarn('Install the app with selected repositories. If GitHub requires selecting something, choose any existing throwaway repo for this account.')

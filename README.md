@@ -118,10 +118,19 @@ cd fossbot-platform
 docker compose -f docker-compose-dev.yml up -d --build
 ```
 
+If you already have a development stack, refresh the frontend dependency volume after pulling a change to `front-end/package-lock.json`. A rebuild can reuse the packages from the previous container. This command recreates just the frontend and preserves the PostgreSQL volume.
+
+```bash
+docker compose -f docker-compose-dev.yml up -d --build \
+	--no-deps --force-recreate --renew-anon-volumes frontend
+```
+
 Open:
 
 - Platform: [http://localhost:3000](http://localhost:3000)
 - API documentation: [http://localhost:8000/docs](http://localhost:8000/docs)
+
+Compose publishes the frontend on `127.0.0.1`. Starting it directly with `npm run dev` or `npm start` uses the same address by default and honours `HOST`.
 
 The default development account is `admin` with password `admin`. These credentials are intended only for a local development environment.
 
@@ -141,7 +150,11 @@ Adding `-v` removes the local PostgreSQL volume and all projects stored in that 
 
 ## Optional social-login setup
 
-Username and password login works without Firebase. To test Google or GitHub sign-in locally, create `front-end/.env.development.local` with your Firebase web-app configuration:
+Username and password login works without Firebase. The development server defaults to `http://localhost:8000` for the API. You can override `REACT_APP_BACKEND_URL` and Firebase settings in `front-end/.env.development.local`. Existing `front-end/.env.local` settings also work. When both files define a key, the development-specific file wins.
+
+The local HTTPS script uses the development Firebase settings and sends API requests through its own `/api` proxy. The deployment build reads `front-end/.env.production` and any explicitly exported build variables.
+
+To test Google or GitHub sign-in locally, add your Firebase web-app configuration to `front-end/.env.development.local`.
 
 ```dotenv
 REACT_APP_FIREBASE_API_KEY=

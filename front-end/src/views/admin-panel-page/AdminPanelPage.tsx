@@ -25,7 +25,7 @@ const AdminPanelPage = () => {
 
     useEffect(() => {
         if (!guestDirty) return;
-        // React Router 6.3 exposes blocking only through its underlying history.
+        // The app history exposes blocking for unsaved drafts.
         const history = navigator as unknown as BlockingNavigator;
         let active = true;
         let pending = false;

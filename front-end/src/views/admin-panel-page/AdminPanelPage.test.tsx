@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { act } from 'react-dom/test-utils';
 import { createRoot, type Root } from 'react-dom/client';
-import { Link, MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
+import { Link, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
+import { createMemoryHistory } from 'history';
+import { ProjectHistoryRouter } from 'src/routes/ProjectHistoryRouter';
 import AdminPanelPage from './AdminPanelPage';
 
 declare const afterEach: any;
@@ -14,7 +16,6 @@ declare const jest: any;
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 
 let mockConfirm: any;
-let navigateFromTest: ((to: any, options?: any) => void) | null;
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 jest.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
@@ -39,7 +40,6 @@ function mockGuestCard({ onDirtyChange }: { onDirtyChange?: (dirty: boolean) => 
 
 function LocationProbe() {
   const location = useLocation();
-  navigateFromTest = useNavigate();
   return <div id="location">{`${location.pathname}${location.search}`}</div>;
 }
 
@@ -59,7 +59,6 @@ describe('admin panel page', () => {
 
   beforeEach(() => {
     mockConfirm = jest.fn().mockResolvedValue(true);
-    navigateFromTest = null;
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
@@ -70,20 +69,22 @@ describe('admin panel page', () => {
     container.remove();
   });
 
-  const renderPage = async (entries: string[], showPage = true) => {
+  const renderPage = async (entries: string[]) => {
+    const history = createMemoryHistory({ initialEntries: entries });
     await act(async () => {
       root.render(
-        <MemoryRouter initialEntries={entries}>
+        <ProjectHistoryRouter history={history}>
           <Routes>
-            <Route path="/admin-panel" element={showPage ? <AdminPanelPage /> : <div>page removed</div>} />
+            <Route path="/admin-panel" element={<AdminPanelPage />} />
             <Route path="/website-admin" element={<div>website admin</div>} />
           </Routes>
           <Navigation />
           <LocationProbe />
-        </MemoryRouter>,
+        </ProjectHistoryRouter>,
       );
       await flush();
     });
+    return history;
   };
 
   const tab = (id: 'users' | 'guests') => container.querySelector(`#admin-${id}-tab`) as HTMLElement;
@@ -188,14 +189,21 @@ describe('admin panel page', () => {
   });
 
   it('removes the navigation guard when the page unmounts', async () => {
-    await renderPage(['/admin-panel?tab=guests']);
+    const history = await renderPage(['/admin-panel?tab=guests']);
     await click(Array.from(container.querySelectorAll('button')).find((node) => node.textContent === 'mark guest dirty') as HTMLElement);
-    await renderPage(['/admin-panel?tab=guests'], false);
+    mockConfirm.mockResolvedValueOnce(false);
+    await act(async () => {
+      history.push('/website-admin');
+      await flush();
+    });
+    expect(mockConfirm).toHaveBeenCalledTimes(1);
+    expect(history.location.pathname).toBe('/admin-panel');
+
+    act(() => root.unmount());
     mockConfirm.mockClear();
 
-    await act(async () => { navigateFromTest?.('/website-admin'); await flush(); });
+    history.push('/website-admin');
     expect(mockConfirm).not.toHaveBeenCalled();
-    expect(location()).toBe('/website-admin');
-    expect(container.textContent).toContain('website admin');
+    expect(history.location.pathname).toBe('/website-admin');
   });
 });

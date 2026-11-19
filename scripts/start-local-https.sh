@@ -39,7 +39,8 @@ chmod 600 "$CERT_DIR"/*.key
 
 (
   cd "$ROOT_DIR/front-end"
-  npm run build
+  # Local nginx proxies /api to the local backend. Use local Firebase settings.
+  REACT_APP_BACKEND_URL=/api PUBLIC_URL=/ npm run build:bundle -- --env-mode development
 )
 
 docker compose -f "$ROOT_DIR/docker-compose-local-https.yml" up -d
