@@ -190,6 +190,9 @@ fossbot-platform/
 
 Production deployment is handled by the GitHub Actions workflow in `.github/workflows/deploy.yml`. The workflow builds the application, preserves the existing PostgreSQL volume, creates a database backup before migration, and verifies the deployed health endpoints. Deployment credentials and Firebase values belong in GitHub Actions secrets rather than tracked environment files.
 
+For stages with native curves, deploy the editor, simulators and backend validators together.
+See the [stage line format](sim/docs/stage-line-format.md).
+
 ## Simulator camera vision
 
 Enable **AI camera top** in the v2 simulator, then choose a camera mode:
@@ -247,9 +250,3 @@ The simulator also supports `robot.motor_left` and `robot.motor_right` with
 wheels does not start movement. `robot.stop()` stops both wheels. Percentage
 inputs approximate motion and are not a physical PWM calibration; bounded
 distance/angle commands retain their existing simulator drive speed.
-
-
-Stage editor implementation references: [approved design](design_draft.md),
-[verification and open release gates](docs/stage-editor-verification.md), and
-[issue evidence](docs/stage-editor-improvements.md). Native curved stages require
-the coordinated editor/runtime/backend rollout described in the design.

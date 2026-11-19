@@ -16,7 +16,11 @@ test('saved preview is read-only and exposes a direct return and an explicit edi
   const back = jest.fn(), edit = jest.fn();
   try {
     act(() => root.render(<SavedStagePreview record={record} onBack={back} onEdit={edit} />));
-    expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Viewing saved version · read-only');
+    const dialog = document.querySelector('[role="dialog"]')!;
+    expect(dialog.textContent).toContain(`Saved version of ${record.title}`);
+    expect(document.getElementById(dialog.getAttribute('aria-describedby')!)?.textContent).toContain('Preview only. Your unfinished edits are still open behind this window.');
+    expect(dialog.textContent).toContain('You can return to your unfinished edits before saving.');
+    expect(dialog.classList.contains('MuiDialog-paperFullScreen')).toBe(false);
     expect(mockSceneProps.selectedId).toBeNull();
     expect(mockSceneProps.transformMode).toBe('select');
     expect(mockSceneProps.keyboardEnabled).toBe(false);
@@ -25,10 +29,10 @@ test('saved preview is read-only and exposes a direct return and an explicit edi
     mockSceneProps.onObjectChange({});
     expect(JSON.stringify(record)).toBe(before);
     const button = (label: string) => [...document.querySelectorAll('button')].find(el => el.textContent === label)!;
-    act(() => button('Back to my edits').click());
+    act(() => button('Continue my edits').click());
     expect(back).toHaveBeenCalledTimes(1);
     expect(edit).not.toHaveBeenCalled();
-    act(() => button('Edit this version').click());
+    act(() => button('Use saved version').click());
     expect(edit).toHaveBeenCalledTimes(1);
   } finally { act(() => root.unmount()); host.remove(); }
 });
