@@ -155,6 +155,7 @@ type ModerationAction =
 
 function ModerationWorkspace({ canModerate, canVerify }: { canModerate: boolean; canVerify: boolean }) {
   const { token } = useAuth();
+  const { githubStages } = useFeatureFlags();
   const [reports, setReports] = useState<MarketplaceReport[]>([]);
   const [overrides, setOverrides] = useState<MarketplaceModerationOverride[]>([]);
   const confirmDialog = useConfirmDialog();
@@ -208,7 +209,7 @@ function ModerationWorkspace({ canModerate, canVerify }: { canModerate: boolean;
   const activeOverrides = overrides.filter((override) => override.active);
   return <Stack spacing={3}>
     {(canVerify || canModerate) && <><LocalPublicationQueue /><Divider /></>}
-    {canVerify && <><VerificationQueue /><Divider /></>}
+    {canVerify && githubStages && <><VerificationQueue /><Divider /></>}
     {canModerate && <>
     {error && <Alert severity="error">{error}</Alert>}
     <Box>
@@ -223,7 +224,7 @@ function ModerationWorkspace({ canModerate, canVerify }: { canModerate: boolean;
       </Stack>
     </Box>)}</Box>}
     <Typography variant="h6">Local overrides</Typography>
-    {!loading && (activeOverrides.length === 0 ? <Alert severity="info">No local moderation overrides.</Alert> : <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden' }}>{activeOverrides.map((override, index) => <Box key={`${override.sourceType}:${override.localPublicationId || `${override.repoOwner}/${override.repoName}`}`} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, p: 2, borderTop: index ? '1px solid' : 'none', borderColor: 'divider' }}><Box><Typography fontWeight={700}>{override.repoOwner}/{override.repoName}</Typography><Typography variant="body2" color="text.secondary">{override.sourceType} · {override.state} · {override.reason}</Typography></Box><Button size="small" disabled={busyTarget === `${override.repoOwner}/${override.repoName}`} onClick={() => void runAction({ kind: 'restore', override })}>Restore</Button></Box>)}</Box>)}
+    {!loading && (activeOverrides.length === 0 ? <Alert severity="info">No local moderation overrides.</Alert> : <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden' }}>{activeOverrides.map((override, index) => <Box key={`${override.sourceType}:${override.localPublicationId || `${override.repoOwner}/${override.repoName}`}`} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, p: 2, borderTop: index ? '1px solid' : 'none', borderColor: 'divider' }}><Box><Typography fontWeight={700}>{override.repoOwner}/{override.repoName}</Typography><Typography variant="body2" color="text.secondary">{override.sourceType === 'local' ? 'Local stage' : 'External stage'} · {override.state} · {override.reason}</Typography></Box><Button size="small" disabled={busyTarget === `${override.repoOwner}/${override.repoName}`} onClick={() => void runAction({ kind: 'restore', override })}>Restore</Button></Box>)}</Box>)}
     </>}
   </Stack>;
 }
@@ -231,9 +232,9 @@ function ModerationWorkspace({ canModerate, canVerify }: { canModerate: boolean;
 export default function StagesPage() {
   const { token, user, isGuest, guestSettings } = useAuth();
   const canBuild = !isGuest || guestCanView(guestSettings, 'stage_builder');
-  const { marketplace } = useFeatureFlags();
+  const { githubStages, marketplace } = useFeatureFlags();
   const [searchParams, setSearchParams] = useSearchParams();
-  const userKey = stageListUserKey(user);
+  const userKey = githubStages ? stageListUserKey(user) : null;
   const requestedTab = searchParams.get('tab');
   const [canModerate, setCanModerate] = useState(false);
   const [canVerify, setCanVerify] = useState(false);
@@ -260,7 +261,7 @@ export default function StagesPage() {
     <Stack spacing={3}>
       <TabbedPageHeader
         title="Stages"
-        description="Discover public stages or manage stages stored here. GitHub is optional."
+        description="Discover public stages or manage stages stored here."
         titleAdornment={<BetaBadge feature="stages" />}
         action={marketplace && tab === 'explore' ? <Button variant="contained" onClick={() => void refreshStages()} disabled={refreshing}>{refreshing ? 'Refreshing…' : 'Refresh stages'}</Button> : undefined}
         tabs={<Tabs value={tab} onChange={(_, value) => { const next = new URLSearchParams(searchParams); next.set('tab', value); next.delete('stage'); setSearchParams(next); }} aria-label="Stages sections" variant="scrollable" scrollButtons="auto" allowScrollButtonsMobile sx={pageTabsSx}>{canBuild && <Tab value="mine" label={MARKETPLACE_COPY.myStages} />}{marketplace && <Tab value="explore" label="Explore" />}{marketplace && (canModerate || canVerify) && <Tab value="moderation" label="Moderation" />}</Tabs>}

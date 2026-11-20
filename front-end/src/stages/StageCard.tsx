@@ -1,17 +1,19 @@
 import React from 'react';
 import { Avatar, Box, Button, Skeleton, Stack, Typography } from '@mui/material';
 import GitHubIcon from '@mui/icons-material/GitHub';
+import { useFeatureFlags } from 'src/config/FeatureFlags';
 
 export function GitHubIdentity({ username, suffix }: { username: string; suffix?: string }) {
+  const { githubStages } = useFeatureFlags();
   return (
     <Stack direction="row" spacing={0.75} alignItems="center" sx={{ minWidth: 0 }}>
-      <Avatar
+      {githubStages && <Avatar
         src={`https://github.com/${encodeURIComponent(username)}.png?size=40`}
         alt=""
         sx={{ width: 20, height: 20, bgcolor: 'action.selected', color: 'text.secondary' }}
       >
         <GitHubIcon sx={{ fontSize: 14 }} />
-      </Avatar>
+      </Avatar>}
       <Typography variant="caption" color="text.secondary" noWrap>
         @{username}{suffix}
       </Typography>

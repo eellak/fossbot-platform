@@ -35,6 +35,7 @@ import MoreVertIcon from '@mui/icons-material/MoreVert';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import StorageIcon from '@mui/icons-material/Storage';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useFeatureFlags } from 'src/config/FeatureFlags';
 import { useAuth } from 'src/authentication/AuthProvider';
 import { completeMarketplaceFork, getMarketplaceForkStatus, getMarketplaceIndex, getMarketplacePermissions, reportMarketplaceStage, setModerationOverride, MarketplaceRequestError, type MarketplaceIndexResponse, type MarketplacePermissions, type MarketplaceReportCategory, type MarketplaceStageEntry, type MarketplaceValidationState } from 'src/stages/MarketplaceApi';
 import { invalidateMarketplaceFirstPage, invalidateUserStages, marketplaceFirstPageSnapshot, refreshMarketplaceFirstPage, refreshStageLists, stageListUserKey, subscribeMarketplaceFirstPage } from 'src/stages/stageListCache';
@@ -125,6 +126,7 @@ function writeForkFlow(flow: ForkFlow | null): void {
 }
 
 function MarketplaceStageCard({ entry, onSelect, embedded = false }: { entry: MarketplaceStageEntry; onSelect: (entry: MarketplaceStageEntry) => void; embedded?: boolean }) {
+  const { githubStages } = useFeatureFlags();
   return (
     <StageCard
       title={entry.title}
@@ -137,7 +139,7 @@ function MarketplaceStageCard({ entry, onSelect, embedded = false }: { entry: Ma
         <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 1 }}>
           {entry.badges?.verified && <Chip size="small" color="primary" icon={<VerifiedIcon />} label="Verified" variant="outlined" />}
           {entry.sourceType === 'local' && <Chip size="small" icon={<StorageIcon />} label="Local" variant="outlined" sx={{ '& .MuiChip-icon': { fontSize: 15 } }} />}
-          {entry.badges?.github && <Chip size="small" icon={<GitHubIcon />} label="GitHub source" variant="outlined" />}
+          {githubStages && entry.badges?.github && <Chip size="small" icon={<GitHubIcon />} label="GitHub source" variant="outlined" />}
           <ValidationChip entry={entry} />
           {(entry.tags || []).slice(0, 2).map((tag) => <Chip key={tag} size="small" label={tag} />)}
         </Stack>
@@ -233,6 +235,7 @@ function MarketplaceDetailDrawer({
   moderationError: string;
   onModerate: (state: 'hidden' | 'removed') => void;
 }) {
+  const { githubStages } = useFeatureFlags();
   const [moreAnchor, setMoreAnchor] = useState<HTMLElement | null>(null);
   const githubOrigin = entry ? githubAttribution(entry) : null;
   const stageTestUrl = entry?.recordUrl ? `/stage-test?stage=${encodeURIComponent(entry.recordUrl)}` : entry ? `/stage-test?repo=${encodeURIComponent(`${entry.repoOwner}/${entry.repoName}`)}&ref=${encodeURIComponent(entry.commitSha)}` : '#';
@@ -264,7 +267,7 @@ function MarketplaceDetailDrawer({
                   </Tooltip>
                 )}
                 {entry.sourceType === 'local' && <Chip size="small" icon={<StorageIcon />} label="Local" variant="outlined" sx={{ '& .MuiChip-icon': { fontSize: 15 } }} />}
-                {entry.badges?.github && <Chip size="small" icon={<GitHubIcon />} label="GitHub source" variant="outlined" />}
+                {githubStages && entry.badges?.github && <Chip size="small" icon={<GitHubIcon />} label="GitHub source" variant="outlined" />}
                 <ValidationChip entry={entry} />
                 {(entry.tags || []).map((tag) => <Chip key={tag} size="small" label={tag} />)}
               </Stack>
@@ -289,17 +292,17 @@ function MarketplaceDetailDrawer({
                 {!readOnly && <Button variant="outlined" onClick={() => onCopyLocal(entry)} disabled={localCopyBusy} startIcon={<ContentCopyIcon />}>
                   {localCopyBusy ? 'Copying…' : 'Copy to my stages'}
                 </Button>}
-                {!readOnly && entry.sourceType !== 'local' && !forkStep && (
+                {githubStages && !readOnly && entry.sourceType !== 'local' && !forkStep && (
                   <Button variant="outlined" onClick={() => onOpenFork(entry)} disabled={forkBusy} startIcon={<GitHubIcon />}>
                     {forkBusy ? 'Checking GitHub…' : 'Fork on GitHub'}
                   </Button>
                 )}
-                {entry.repoUrl && <Button component="a" href={entry.repoUrl} target="_blank" rel="noreferrer" variant="outlined" startIcon={<GitHubIcon />} endIcon={<OpenInNewIcon />}>
+                {githubStages && entry.repoUrl && <Button component="a" href={entry.repoUrl} target="_blank" rel="noreferrer" variant="outlined" startIcon={<GitHubIcon />} endIcon={<OpenInNewIcon />}>
                   Source
                 </Button>}
               </Stack>
               {localCopyError && <Alert severity="error">{localCopyError}</Alert>}
-              {canModerate && <Box sx={{ p: 1.5, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}><Stack spacing={1}><Typography variant="subtitle2" fontWeight={600}>Moderator actions</Typography><Typography variant="body2" color="text.secondary">Applies only to this FOSSBot instance. GitHub source content is not changed.</Typography><Stack direction="row" spacing={1}><Button size="small" color="warning" variant="outlined" disabled={moderationBusy} onClick={() => onModerate('hidden')}>{moderationBusy ? <CircularProgress size={14} color="inherit" /> : 'Hide locally'}</Button><Button size="small" color="error" variant="outlined" disabled={moderationBusy} onClick={() => onModerate('removed')}>{moderationBusy ? <CircularProgress size={14} color="inherit" /> : 'Remove locally'}</Button></Stack>{moderationError && <Alert severity="error">{moderationError}</Alert>}</Stack></Box>}
+              {canModerate && <Box sx={{ p: 1.5, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}><Stack spacing={1}><Typography variant="subtitle2" fontWeight={600}>Moderator actions</Typography><Typography variant="body2" color="text.secondary">Applies only to this FOSSBot instance.</Typography><Stack direction="row" spacing={1}><Button size="small" color="warning" variant="outlined" disabled={moderationBusy} onClick={() => onModerate('hidden')}>{moderationBusy ? <CircularProgress size={14} color="inherit" /> : 'Hide locally'}</Button><Button size="small" color="error" variant="outlined" disabled={moderationBusy} onClick={() => onModerate('removed')}>{moderationBusy ? <CircularProgress size={14} color="inherit" /> : 'Remove locally'}</Button></Stack>{moderationError && <Alert severity="error">{moderationError}</Alert>}</Stack></Box>}
               {forkStep === 'ready' ? (
                 <Box sx={{ p: 2, borderRadius: 1, bgcolor: 'success.light' }}>
                   <Stack spacing={1.5}>
@@ -373,7 +376,7 @@ function MarketplaceDetailDrawer({
                   </Stack>
                 </Box>
               )}
-              {forkError && (
+              {githubStages && forkError && (
                 <Alert severity="error">
                   {forkError}
                 </Alert>
@@ -391,7 +394,8 @@ export default function StageMarketplacePanel({ embedded = false, preview = fals
   const inPage = appearance === 'page';
   const confirmDialog = useConfirmDialog();
   const { token, user, isGuest } = useAuth();
-  const userKey = stageListUserKey(user);
+  const { githubStages } = useFeatureFlags();
+  const userKey = githubStages ? stageListUserKey(user) : null;
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [index, setIndex] = useState<MarketplaceIndexResponse | null>(null);
@@ -510,7 +514,7 @@ export default function StageMarketplacePanel({ embedded = false, preview = fals
   };
 
   useEffect(() => {
-    if (!token || isGuest || !forkFlow || forkFlow.step !== 'select' || forkFlow.installationUrl) return;
+    if (!githubStages || !token || isGuest || !forkFlow || forkFlow.step !== 'select' || forkFlow.installationUrl) return;
     let active = true;
     getMarketplaceForkStatus(token, forkFlow.repoOwner, forkFlow.repoName)
       .then((status) => {
@@ -526,7 +530,7 @@ export default function StageMarketplacePanel({ embedded = false, preview = fals
       })
       .catch(() => undefined);
     return () => { active = false; };
-  }, [forkFlow, isGuest, token]);
+  }, [forkFlow, githubStages, isGuest, token]);
 
   const canonicalRequest = preview || (!query.trim() && !activeTag && sort === 'updated' && page === 1);
 
@@ -584,7 +588,7 @@ export default function StageMarketplacePanel({ embedded = false, preview = fals
   const stages = preview ? (index?.stages || []).slice(0, 3) : index?.stages || [];
   const pagination = index?.pagination;
   const tags = index?.tags || [];
-  const selectedForkFlow = forkFlow && selected && selected.sourceType !== 'local' && forkFlow.repoOwner === selected.repoOwner && forkFlow.repoName === selected.repoName
+  const selectedForkFlow = githubStages && forkFlow && selected && selected.sourceType !== 'local' && forkFlow.repoOwner === selected.repoOwner && forkFlow.repoName === selected.repoName
     ? forkFlow
     : null;
 

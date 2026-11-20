@@ -44,7 +44,7 @@ interface PublishToMarketplaceDialogProps {
   localRequest?: LocalPublicationSubmissionSummary | null;
   lifecycle?: MarketplaceLifecycle | null;
   onClose: () => void;
-  onSaveToGitHub: () => void;
+  onSaveToGitHub?: () => void;
   onSaveLocal: () => void;
   onPublish: (values: PublishMarketplaceValues) => void;
 }
@@ -158,8 +158,8 @@ export function PublishToMarketplaceDialog({
               severity="info"
               action={<Button color="inherit" size="small" onClick={onSaveLocal}>Save</Button>}
             >
-              Save this stage to your account before publishing. GitHub publishing remains available from the GitHub menu.
-              <Box><Button color="inherit" size="small" onClick={onSaveToGitHub} sx={{ mt: 0.5, p: 0 }}>Save to GitHub instead</Button></Box>
+              Save this stage to your account before publishing.
+              {onSaveToGitHub && <Box><Button color="inherit" size="small" onClick={onSaveToGitHub} sx={{ mt: 0.5, p: 0 }}>Save to GitHub instead</Button></Box>}
             </Alert>
           ) : localStage ? (
             <Box sx={{ p: 1.5, bgcolor: 'action.hover', borderRadius: 1 }}>

@@ -50,7 +50,7 @@ function recordTitle(payload: unknown, fallbackUrl: string): string {
   try {
     return new URL(fallbackUrl).pathname.split('/').filter(Boolean).slice(-2).join('/');
   } catch {
-    return 'GitHub stage';
+    return 'Stage';
   }
 }
 

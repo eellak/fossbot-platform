@@ -114,6 +114,20 @@ def _fernet_key() -> bytes:
     return base64.urlsafe_b64encode(hashlib.sha256(configured.encode("utf-8")).digest())
 
 
+def github_stages_configured() -> bool:
+    """Check the local GitHub App configuration without contacting GitHub."""
+    try:
+        return all((
+            github_app_id().strip(),
+            github_client_id().strip(),
+            github_client_secret().strip(),
+            github_private_key().strip(),
+            _fernet_key(),
+        ))
+    except (RuntimeError, OSError, UnicodeError):
+        return False
+
+
 def encrypt_secret(value: Optional[str]) -> Optional[str]:
     if not value:
         return None

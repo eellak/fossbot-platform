@@ -47,6 +47,7 @@ export interface EditorTopBarProps {
   onSaveLocal: () => void;
   onOpenLocal: () => void;
   allowCloud?: boolean;
+  githubEnabled: boolean;
   onExport: () => void;
   onRefreshGitHubStatus?: () => void;
   onConnectProvider: () => void;
@@ -151,6 +152,7 @@ export function EditorTopBar({
   onSaveLocal,
   onOpenLocal,
   allowCloud = true,
+  githubEnabled,
   onExport,
   onRefreshGitHubStatus,
   onConnectProvider,
@@ -242,7 +244,7 @@ export function EditorTopBar({
       </Stack>
       <Stack direction="row" spacing={0.75} alignItems="center" sx={{ pl: 0.75, ml: 0.25 }}>
         <Button size="small" color="inherit" variant="outlined" startIcon={localStageBusy ? <CircularProgress size={15} color="inherit" /> : <SaveIcon />} onClick={onSaveLocal} disabled={localStageBusy} sx={{ ...exportButtonSx, display: { xs: 'none', sm: 'inline-flex' } }}>{localStageBusy ? allowCloud ? 'Saving to account…' : 'Saving in this browser…' : allowCloud ? 'Save to account' : 'Save in this browser'}</Button>
-        {allowCloud && <Tooltip title={providerLabel || 'GitHub actions'}>
+        {githubEnabled && <Tooltip title={providerLabel || 'GitHub actions'}>
           <span>
             <Button
               size="small"
@@ -273,7 +275,7 @@ export function EditorTopBar({
         <Tooltip title="Test settings"><IconButton aria-label="Test settings" onClick={onOpenTestSettings} sx={topbarIconButtonSx}><TuneIcon fontSize="small" /></IconButton></Tooltip>
         <IconButton size="small" onClick={overflow.openMenu} aria-label="More editor actions" sx={topbarIconButtonSx}><MoreVertIcon fontSize="small" /></IconButton>
       </Stack>
-      {allowCloud && <Menu anchorEl={github.anchorEl} open={github.open} onClose={github.closeMenu}>
+      {githubEnabled && <Menu anchorEl={github.anchorEl} open={github.open} onClose={github.closeMenu}>
         <Box sx={{ px: 2, py: 1.25, maxWidth: 360 }}>
           <Typography variant="subtitle2" fontWeight={600}>GitHub</Typography>
           <Typography variant="caption" color="text.secondary" sx={{ display: 'block', wordBreak: 'break-word' }}>

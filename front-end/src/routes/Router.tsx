@@ -251,7 +251,7 @@ const Router = [
   },
   {
     path: '/stage-test',
-    title: 'GitHub Stage Test',
+    title: 'Stage test',
     element: <PrivateRoute><RoleBasedRoute betaTesterOnly><BlankLayout /></RoleBasedRoute></PrivateRoute>,
     children: [
       { path: '', exact: true, element: <StageGitHubTestPage /> },

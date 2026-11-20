@@ -410,7 +410,8 @@ const StageBuilderPage = () => {
   const { deleteStage, busy: deletingStage } = useDeleteStage();
   const { t } = useTranslation();
   const { user, token, isGuest } = useAuth();
-  const { marketplace: marketplaceAllowed, ready: featureFlagsReady } = useFeatureFlags();
+  const { githubStages, marketplace: marketplaceAllowed, ready: featureFlagsReady } = useFeatureFlags();
+  const githubEnabled = githubStages && !isGuest;
   const marketplaceEnabled = marketplaceAllowed && !isGuest;
   const navigate = useNavigate();
   const desktopPanels = useMediaQuery((theme: any) => theme.breakpoints.up('lg'));
@@ -500,7 +501,8 @@ const StageBuilderPage = () => {
   const [providerSaving, setProviderSaving] = useState(false);
   const [providerError, setProviderError] = useState('');
   const [providerErrorCode, setProviderErrorCode] = useState<string | null>(null);
-  const [remoteStage, setRemoteStage] = useState<ProviderStageRef | null>(null);
+  const [providerStage, setRemoteStage] = useState<ProviderStageRef | null>(null);
+  const remoteStage = githubEnabled ? providerStage : null;
   useEffect(() => {
     if (!draftReady) return;
     // Keep the active stage in the URL so refresh reopens it after its recovery draft is cleared on save.
@@ -544,7 +546,7 @@ const StageBuilderPage = () => {
     const target = githubDeepLinkTargetFromLocation();
     return target ? { status: 'loading', repoLabel: target.label, step: 'Checking GitHub connection…' } : { status: 'idle' };
   });
-  const stageListUser = useMemo(() => stageListUserKey(user), [user]);
+  const stageListUser = githubEnabled ? stageListUserKey(user) : null;
 
   const prefabs = useMemo(() => builtInStageBuilderPrefabs(), []);
   const snapSettings = useMemo(() => getSnapSettings(prefs.snapPreset, prefs.rotationSnapPreset), [prefs.snapPreset, prefs.rotationSnapPreset]);
@@ -592,7 +594,7 @@ const StageBuilderPage = () => {
   }, [desktopPanels]);
 
   const refreshProviderStatus = async ({ force = false }: RefreshCacheOptions = {}) => {
-    if (!token || isGuest) {
+    if (!token || !githubEnabled) {
       providerStatusCacheRef.current = 0;
       setProviderStatus(null);
       return;
@@ -638,7 +640,7 @@ const StageBuilderPage = () => {
     }
   };
 
-  useEffect(() => { refreshProviderStatus(); }, [isGuest, token]);
+  useEffect(() => { refreshProviderStatus(); }, [githubEnabled, token]);
   useEffect(() => { refreshMarketplaceStatus(); }, [isGuest, marketplaceEnabled, token, remoteStage?.repoOwner, remoteStage?.repoName, remoteStage?.private]);
 
   useEffect(() => {
@@ -661,7 +663,7 @@ const StageBuilderPage = () => {
   }, [stageListUser]);
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
+    if (!githubEnabled || typeof window === 'undefined') return;
     const params = new URLSearchParams(window.location.search);
     if (params.get('github_error')) {
       setSaveProviderOpen(true);
@@ -677,12 +679,12 @@ const StageBuilderPage = () => {
       window.history.replaceState(window.history.state, '', window.location.pathname);
       refreshProviderStatus({ force: true });
     }
-  }, []);
+  }, [githubEnabled]);
 
   useEffect(() => {
     if (!featureFlagsReady || !githubDeepLinkTarget) return undefined;
-    if (isGuest) {
-      setGithubDeepLinkLoad({ status: 'error', repoLabel: githubDeepLinkTarget.label, error: 'Guest sessions cannot open GitHub stages.' });
+    if (!githubEnabled) {
+      navigate('/stages?tab=mine', { replace: true });
       return undefined;
     }
     if (!token) {
@@ -739,7 +741,7 @@ const StageBuilderPage = () => {
 
     openDeepLinkedStage();
     return () => { cancelled = true; };
-  }, [featureFlagsReady, githubDeepLinkRetry, githubDeepLinkTarget, isGuest, marketplaceEnabled, token]);
+  }, [featureFlagsReady, githubDeepLinkRetry, githubDeepLinkTarget, githubEnabled, marketplaceEnabled, navigate, token]);
 
   useEffect(() => {
     if (!isGuest || !guestStageIdFromUrl) return;
@@ -1652,7 +1654,7 @@ const StageBuilderPage = () => {
       return;
     }
     if (!localStage && !remoteStage) {
-      setMarketplaceError('Save this stage to your account or GitHub before publishing.');
+      setMarketplaceError('Save this stage before publishing.');
       return;
     }
     if (localStage ? localStageHasChanges : dirty) {
@@ -1964,7 +1966,7 @@ const StageBuilderPage = () => {
         if (await openRecord(saved.record, { locator: `Account stage ${saved.id} revision ${saved.revision}`, initial: true, recoveryItem: item })) {
           setLocalStage(saved); setRemoteStage(null);
         }
-      } else if (locator.startsWith('GitHub ') && token && !isGuest) {
+      } else if (locator.startsWith('GitHub ') && token && githubEnabled) {
         const match = /^GitHub ([^/]+)\/(.+) @ /.exec(locator);
         if (!match) throw new Error('The saved repository could not be identified.');
         const saved = await loadStageFromProvider(token, match[1], match[2]);
@@ -2098,7 +2100,7 @@ const StageBuilderPage = () => {
         inspectorSx: getInspectorPanelSx(variant),
       };
     }, [editorVariant])}><ThemeProvider theme={editorMuiTheme}>
-      {githubDeepLinkLoad.status !== 'idle' ? (
+      {githubDeepLinkLoad.status !== 'idle' ? githubEnabled && (
         <GitHubStageLoadScreen
           state={githubDeepLinkLoad}
           onRetry={() => {
@@ -2173,6 +2175,7 @@ const StageBuilderPage = () => {
         onSaveLocal={handleLocalSave}
         onOpenLocal={() => { if (isGuest) { void refreshLocalStageList(); return; } setOpenLocalStageOpen(true); void refreshLocalStageList(); }}
         allowCloud={!isGuest}
+        githubEnabled={githubEnabled}
         onExport={handleExport}
         onRefreshGitHubStatus={() => { refreshProviderStatus(); refreshMarketplaceStatus(); }}
         onConnectProvider={handleProviderConnect}
@@ -2359,7 +2362,7 @@ const StageBuilderPage = () => {
           <StatusItem label="Mode" value={lineOperation.mode === 'edit' ? 'Editing line' : builderMode === 'edit' ? transformMode : builderMode} tone={editorColors.accentText} />
           <StatusItem label="Selected" value={selectedStatus} tone={selectedTone} />
           <StatusItem label="Grid" value={gridVisible ? `${gridSize} m` : 'Hidden'} tone={editorColors.text} />
-          <StatusItem label="GitHub" value={providerStatusValue} tone={providerStatusTone} />
+          {githubEnabled && <StatusItem label="GitHub" value={providerStatusValue} tone={providerStatusTone} />}
           <StatusItem label="Collision" value={collisionWireVisible ? 'Wire' : 'Hidden'} tone={collisionWireVisible ? editorColors.warning : editorColors.textMuted} />
         </Stack>
         <ShortcutHint />
@@ -2412,7 +2415,7 @@ const StageBuilderPage = () => {
       />}
 
       <SaveToProviderDialog
-        open={saveProviderOpen}
+        open={githubEnabled && saveProviderOpen}
         stageTitle={stage.title}
         sourceLabel={localStage ? `local revision ${localStage.title} · v${localStage.revision}` : null}
         status={providerStatus}
@@ -2431,7 +2434,7 @@ const StageBuilderPage = () => {
       />
 
       <OpenFromProviderDialog
-        open={openProviderOpen}
+        open={githubEnabled && openProviderOpen}
         stages={providerStages}
         busy={providerListLoading}
         error={providerListError}
@@ -2482,7 +2485,7 @@ const StageBuilderPage = () => {
         localRequest={localPublicationRequest}
         lifecycle={marketplaceStatus?.lifecycle}
         onClose={() => setPublishMarketplaceOpen(false)}
-        onSaveToGitHub={() => { setPublishMarketplaceOpen(false); setSaveProviderOpen(true); }}
+        onSaveToGitHub={githubEnabled ? () => { setPublishMarketplaceOpen(false); setSaveProviderOpen(true); } : undefined}
         onSaveLocal={() => { setPublishMarketplaceOpen(false); void handleLocalSave(); }}
         onPublish={handlePublishMarketplace}
       />}
