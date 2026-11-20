@@ -1,4 +1,4 @@
-import { cloneStage, objectBounds, wallEnclosureStatus } from './stageBuilderGeometry';
+import { cloneStage, objectBounds, placementFitsStage, wallEnclosureStatus } from './stageBuilderGeometry';
 import type { EditorCubeObject, EditorStage } from './types';
 
 declare const describe: any;
@@ -33,6 +33,15 @@ describe('stageBuilderGeometry', () => {
     const bounds = objectBounds(wall('vertical', [0, 0.25, 0], Math.PI / 2));
     expect(bounds?.maxX).toBeCloseTo(0.04);
     expect(bounds?.maxZ).toBeCloseTo(3);
+  });
+
+  it('accepts a placement only when every translated member fits on the floor', () => {
+    const first = wall('a', [-1, 0.25, 0], 0, [1, 0.5, 1]);
+    const second = wall('b', [1, 0.75, 0], 0, [1, 0.5, 1]);
+    expect(placementFitsStage([first, second], [1.5, 0, -0.5], [6, 2])).toBe(true);
+    expect(placementFitsStage([first], [2, 0, -0.5], [6, 2])).toBe(true);
+    expect(placementFitsStage([first, second], [2, 0, -0.5], [6, 2])).toBe(false);
+    expect(second.position).toEqual([1, 0.75, 0]);
   });
 
   it('recognizes one connected, closed wall loop', () => {

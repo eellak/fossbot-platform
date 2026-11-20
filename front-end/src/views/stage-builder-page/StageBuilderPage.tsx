@@ -17,7 +17,7 @@ import { approvedThemeOptions } from 'src/theme/ApprovedTheme';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from 'src/authentication/AuthProvider';
-import type { EditorStage, EditorStageObject, StageBuilderMode, StageLabelAttachment, StageSemanticKind, Vec3 } from 'src/components/stage-builder/types';
+import type { EditorStage, EditorStageObject, StageLabelAttachment, StageSemanticKind, Vec3 } from 'src/components/stage-builder/types';
 import { downloadStageJson, downloadStageSource, makeLocalStageId, stageRecordFromImportedJson } from 'src/components/stage-builder/localStages';
 import { StageBuilderScene, type StageBuilderCameraView, type StageBuilderSceneHandle, type StageBuilderTransformMode } from 'src/components/stage-builder/StageBuilderScene';
 import { configToEditorStage, createDemoEditorStage, DEFAULT_STAGE_FLOOR, DEFAULT_STAGE_METADATA, editorStageToRecord } from 'src/components/stage-builder/serialize';
@@ -30,13 +30,13 @@ import {
 import { createCatalogObject, displayObjectType } from 'src/components/stage-builder/stageBuilderCatalog';
 import { getSnapSettings, setStageSnapping, stageSnapMetadata } from 'src/components/stage-builder/stageBuilderSnapping';
 import { blockingValidationResults, validateStageBuilderStage } from 'src/components/stage-builder/stageBuilderValidation';
-import { cloneStage, translateObject } from 'src/components/stage-builder/stageBuilderGeometry';
+import { cloneStage, objectPosition, placementFitsStage, translateObject } from 'src/components/stage-builder/stageBuilderGeometry';
 import { canRedo, canUndo, createStageBuilderHistory, pushStageHistory, redoStageHistory, undoStageHistory, type StageBuilderHistory } from 'src/components/stage-builder/stageBuilderHistory';
 import { builtInStageBuilderPrefabs, prefabInsertionOffset, type StageBuilderPrefab } from 'src/components/stage-builder/stageBuilderPrefabs';
 import { hasFloorGeometry, placeObjectsOnFloor } from 'src/components/stage-builder/stageBuilderFloorPlacement';
 import { EditorTopBar } from 'src/components/stage-builder/EditorTopBar';
 import { EditorLeftPanel } from 'src/components/stage-builder/EditorLeftPanel';
-import { restoreBlankStageFavourites, useLibraryShortlists } from 'src/components/stage-builder/stageBuilderRecentItems';
+import { restoreBlankStageFavourites, useLibraryShortlists, type LibraryItem } from 'src/components/stage-builder/stageBuilderRecentItems';
 import { StageLineToolbar } from 'src/components/stage-builder/StageLineToolbar';
 import { EditorViewportToolRail, EditorViewportSnapControls } from 'src/components/stage-builder/EditorViewportToolRail';
 import { EditorViewportCameraGizmo } from 'src/components/stage-builder/EditorViewportCameraGizmo';
@@ -76,6 +76,12 @@ function userScope(user: ReturnType<typeof useAuth>['user']): string {
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value));
 }
+
+type PendingPlacement = {
+  objects: EditorStageObject[];
+  title: string;
+  item?: LibraryItem;
+};
 
 function emptyEditorStage(): EditorStage {
   const now = new Date().toISOString();
@@ -440,7 +446,9 @@ const StageBuilderPage = () => {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
-  const [builderMode, setBuilderMode] = useState<StageBuilderMode>('edit');
+  const [placement, setPlacement] = useState<PendingPlacement | null>(null);
+  const [placementValid, setPlacementValid] = useState<boolean | null>(null);
+  const builderMode = placement ? 'place' : 'edit';
   const [lineOperation, setLineOperation] = useState<LineOperation>({ mode: 'select' });
   const [objectPreview, setObjectPreview] = useState<EditorStageObject | null>(null);
   useEffect(() => { setLineOperation(current => reconcileLineOperation(current, stage.objects)); }, [stage.objects]);
@@ -909,7 +917,7 @@ const StageBuilderPage = () => {
   const requestCameraView = (view: StageBuilderCameraView) => {
     if (view === 'camera') {
       const activeCamera = stage.objects.find((o) => o.kind === 'camera' && !o.hidden);
-      if (activeCamera) setLookThroughCameraId(activeCamera.id);
+      if (activeCamera) { setPlacement(null); setLookThroughCameraId(activeCamera.id); }
     } else {
       setLookThroughCameraId(null);
       setCameraViewRequest((current) => ({ view, nonce: (current?.nonce || 0) + 1 }));
@@ -917,6 +925,7 @@ const StageBuilderPage = () => {
   };
   const requestLookThroughCamera = (object: EditorStageObject) => {
     if (object.kind !== 'camera' || object.hidden) return;
+    setPlacement(null);
     setLookThroughCameraId(object.id);
   };
   const lookThroughCamera = lookThroughCameraId ? stage.objects.find((item) => item.id === lookThroughCameraId && item.kind === 'camera' && !item.hidden) : null;
@@ -967,7 +976,7 @@ const StageBuilderPage = () => {
     setSelectedIds([]);
     setSelectedGroupId(null);
     setInspectorTab('empty');
-    setBuilderMode('edit');
+    setPlacement(null);
     setLineOperation({ mode: 'select' });
     setObjectPreview(null);
     setAppearancePreview(null);
@@ -1105,6 +1114,7 @@ const StageBuilderPage = () => {
   const releaseDeparture = useStageBuilderDeparture(dirty, confirmIfDirty);
 
   const handleSelectionChange = (ids: string[]) => {
+    setPlacement(null);
     setLineOperation({ mode: 'select' });
     const existing = ids.filter((id) => stage.objects.some((object) => object.id === id));
     setSelectedGroupId(null);
@@ -1114,13 +1124,13 @@ const StageBuilderPage = () => {
   };
 
   const handleSelect = (id: string | null) => {
+    setPlacement(null);
     setLineOperation({ mode: 'select' });
     setSelectedGroupId(null);
     setSelectedId(id);
     setSelectedIds(id ? [id] : []);
     if (id) {
       setInspectorTab('object');
-      setBuilderMode('edit');
     } else {
       // Empty-click deselect: keep deliberately-opened tabs (Validation, Settings)
       // sticky, but dismiss viewport-coupled tabs (object/stage/empty).
@@ -1129,16 +1139,17 @@ const StageBuilderPage = () => {
   };
 
   const handleSelectGroup = (id: string | null) => {
+    setPlacement(null);
     setLineOperation({ mode: 'select' });
     const group = id ? stage.metadata.groups.find((item) => item.id === id) : null;
     setSelectedGroupId(group ? group.id : null);
     setSelectedId(null);
     setSelectedIds([]);
     setInspectorTab('empty');
-    if (group) setBuilderMode('edit');
   };
 
   const handleOpenStageSettings = () => {
+    setPlacement(null);
     setLineOperation({ mode: 'select' });
     setObjectPreview(null);
     setSelectedId(null);
@@ -1240,17 +1251,46 @@ const StageBuilderPage = () => {
   };
   const duplicateSelected = () => selectedGroup ? duplicateGroup(selectedGroup.id) : duplicateObjects(selectedIds.length ? selectedIds : (selectedId ? [selectedId] : []));
 
+  const beginPlacement = (next: PendingPlacement) => {
+    setLookThroughCameraId(null);
+    setLineOperation({ mode: 'select' });
+    setObjectPreview(null);
+    setPlacementValid(null);
+    setPlacement(next);
+    if (!desktopPanels) setLeftPanelVisible(false);
+  };
+
+  const placeAt = (position: Vec3) => {
+    if (!placement || !placementFitsStage(placement.objects, position, stage.floor.dimensions)) return;
+    const { item, title } = placement;
+    const placed = placement.objects.map(object => translateObject(object, position));
+    const ids = placed.map(object => object.id);
+    const kind = placed[0].kind;
+    commitStage(current => {
+      if (item?.type === 'prefab') {
+        const now = new Date().toISOString();
+        const group = { id: placed[0].groupId!, name: title, objectIds: ids, createdAt: now, updatedAt: now };
+        return { ...current, objects: [...current.objects, ...placed], metadata: { ...current.metadata, groups: [...current.metadata.groups, group] } };
+      }
+      const existing = kind === 'fossbot' || kind === 'camera' ? current.objects.filter(object => object.kind !== kind) : current.objects;
+      return { ...current, objects: [...existing, ...placed] };
+    }, { selectIds: ids, message: `${title} placed.` });
+    if (item) rememberRecentItem(item);
+    setPlacement(null);
+  };
+
   const addObject = (kind: StageSemanticKind) => {
     if (kind === 'line') {
       handleSelect(null);
-      setBuilderMode('edit');
+      setLookThroughCameraId(null);
+      if (!desktopPanels) setLeftPanelVisible(false);
       setLineOperation({ mode: 'edit', pathId: null });
       setMessage('Click the floor to add points. Drag squares to move them or diamonds to adjust rounding. Escape finishes editing.');
       rememberRecentItem({ type: 'object', id: kind });
       return;
     }
     if (kind === 'floor') {
-      setInspectorTab('stage');
+      handleOpenStageSettings();
       setMessage('Floor settings are edited in the Stage inspector.');
       return;
     }
@@ -1258,18 +1298,16 @@ const StageBuilderPage = () => {
     const object = createCatalogObject(kind, id, [0, 0, 0]);
     if (!object) return;
     const labelParent = kind === 'label' && canAttachLabelTo(selectedObject) ? selectedObject : null;
-    const nextObject = labelParent && object.kind === 'text'
-      ? { ...object, name: `${labelParent.name} label`, position: 'position' in labelParent ? labelParent.position : object.position, onFloor: false, parentId: labelParent.id, attachment: defaultLabelAttachment(labelParent) } as EditorStageObject
-      : object;
-    commitStage((current) => ({
-      ...current,
-      objects: nextObject.kind === 'fossbot'
-        ? [...current.objects.filter((item) => item.kind !== 'fossbot'), nextObject]
-        : nextObject.kind === 'camera'
-          ? [...current.objects.filter((item) => item.kind !== 'camera'), nextObject]
-          : [...current.objects, nextObject],
-    }), { selectIds: [id], message: labelParent ? `Label attached to ${labelParent.name}.` : `${displayObjectType(nextObject)} added at floor center.` });
-    rememberRecentItem({ type: 'object', id: kind });
+    const item: LibraryItem = { type: 'object', id: kind };
+    if (labelParent && object.kind === 'text') {
+      setPlacement(null);
+      const label = { ...object, name: `${labelParent.name} label`, position: 'position' in labelParent ? labelParent.position : object.position, onFloor: false, parentId: labelParent.id, attachment: defaultLabelAttachment(labelParent) };
+      commitStage(current => ({ ...current, objects: [...current.objects, label] }), { selectIds: [id], message: `Label attached to ${labelParent.name}.` });
+      rememberRecentItem(item);
+      return;
+    }
+    const [x, , z] = objectPosition(object);
+    beginPlacement({ objects: [translateObject(object, [-x, 0, -z])], title: displayObjectType(object), item });
   };
 
   const appendLinePoint = (point: [number, number]) => {
@@ -1283,7 +1321,7 @@ const StageBuilderPage = () => {
     setLineOperation({ mode: 'edit', pathId: next.id, pointIndex: insertion?.pointIndex ?? 0 });
   };
   const changeLineOperation = (operation: LineOperation) => {
-    setBuilderMode('edit');
+    setPlacement(null);
     setLineOperation(operation);
     setObjectPreview(null);
     setAppearancePreview(null);
@@ -1300,13 +1338,7 @@ const StageBuilderPage = () => {
       const copy = translateObject(cloneStage(template), delta) as EditorStageObject;
       return { ...copy, id: makeLocalStageId(), groupId, prefabSourceId: prefab.id } as EditorStageObject;
     });
-    const now = new Date().toISOString();
-    commitStage((current) => ({
-      ...current,
-      objects: [...current.objects, ...copies],
-      metadata: { ...current.metadata, groups: [...current.metadata.groups, { id: groupId, name: prefab.title, objectIds: copies.map((object) => object.id), createdAt: now, updatedAt: now }] },
-    }), { selectIds: copies.map((object) => object.id), message: `${prefab.title} prefab added at floor center.` });
-    rememberRecentItem({ type: 'prefab', id: prefab.id });
+    beginPlacement({ objects: copies, title: prefab.title, item: { type: 'prefab', id: prefab.id } });
   };
 
   const handleStageChange = (next: EditorStage) => commitStage(() => next);
@@ -1362,10 +1394,8 @@ const StageBuilderPage = () => {
         immovable: true,
         collision: 'auto',
       };
-      commitStage((current) => ({ ...current, objects: [...current.objects, object] }), {
-        selectIds: [id],
-        message: `${file.name} imported and fit to 0.5 m. Imported objects could have been made in another scale, so the next step is figuring out the correct scale for the object.`,
-      });
+      beginPlacement({ objects: [object], title: object.name });
+      setMessage(`${file.name} imported and fit to 0.5 m. Check its scale after placement.`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Custom object import failed.');
     } finally {
@@ -1781,6 +1811,7 @@ const StageBuilderPage = () => {
   };
 
   const handleOpenSettings = () => {
+    setPlacement(null);
     setLineOperation({ mode: 'select' });
     setObjectPreview(null);
     setSelectedId(null);
@@ -1791,6 +1822,7 @@ const StageBuilderPage = () => {
   };
 
   const handleOpenPreviewSettings = () => {
+    setPlacement(null);
     setLineOperation({ mode: 'select' });
     setObjectPreview(null);
     setSelectedId(null);
@@ -1801,6 +1833,7 @@ const StageBuilderPage = () => {
   };
 
   const restoreHistoryStage = (restored: EditorStage) => {
+    setPlacement(null);
     const operation = reconcileLineOperation(lineOperation, restored.objects);
     const editingId = operation.mode === 'select' ? null : operation.pathId;
     setStage(normalizeCameraMetadata(restored));
@@ -1955,18 +1988,20 @@ const StageBuilderPage = () => {
   };
 
   useEffect(() => {
-    if (savedPreviewOpen || !prefs.keyboardShortcutsEnabled || deletingStage) return undefined;
+    if (savedPreviewOpen || deletingStage) return undefined;
     const onKey = (event: KeyboardEvent) => {
       if (isTypingTarget(event.target)) return;
       const key = event.key.toLowerCase();
+      if (key === 'escape' && placement) { setPlacement(null); return; }
+      if (!prefs.keyboardShortcutsEnabled) return;
       const ctrl = event.ctrlKey || event.metaKey;
       if (ctrl && key === 'z' && !event.shiftKey) { event.preventDefault(); undo(); return; }
       if (ctrl && (key === 'y' || (event.shiftKey && key === 'z'))) { event.preventDefault(); redo(); return; }
       if (ctrl && key === 'd') { event.preventDefault(); duplicateSelected(); return; }
       if (event.key === 'Delete' || event.key === 'Backspace') { event.preventDefault(); deleteSelected(); return; }
-      if (key === 'w') { setBuilderMode('edit'); setLineOperation({ mode: 'select' }); setTransformMode('translate'); }
-      if (key === 'e') { setBuilderMode('edit'); setLineOperation({ mode: 'select' }); setTransformMode('rotate'); }
-      if (key === 'r') { setBuilderMode('edit'); setLineOperation({ mode: 'select' }); setTransformMode('scale'); }
+      if (key === 'w') { setPlacement(null); setLineOperation({ mode: 'select' }); setTransformMode('translate'); }
+      if (key === 'e') { setPlacement(null); setLineOperation({ mode: 'select' }); setTransformMode('rotate'); }
+      if (key === 'r') { setPlacement(null); setLineOperation({ mode: 'select' }); setTransformMode('scale'); }
       if (key === 'f') setFocusRequestNonce((value) => value + 1);
       if (key === 'g') groupSelected();
       if (key === 'escape') {
@@ -1977,7 +2012,7 @@ const StageBuilderPage = () => {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [savedPreviewOpen, prefs.keyboardShortcutsEnabled, deletingStage, stage, selectedId, selectedIds, selectedGroupId, snapSettings, historyVersion, lookThroughCameraId, lineOperation]);
+  }, [savedPreviewOpen, prefs.keyboardShortcutsEnabled, placement, deletingStage, stage, selectedId, selectedIds, selectedGroupId, snapSettings, historyVersion, lookThroughCameraId, lineOperation]);
 
   const leftPanel = (
     <EditorLeftPanel
@@ -1990,6 +2025,7 @@ const StageBuilderPage = () => {
       selectedGroupId={selectedGroupId}
       prefabs={prefabs}
       recentItems={recentLibraryItems}
+      placingItem={placement?.item}
       favouriteItems={favouriteItems}
       onToggleFavourite={toggleFavourite}
       onAddKind={addObject}
@@ -2180,6 +2216,9 @@ const StageBuilderPage = () => {
             selectedGroupId={selectedGroupId}
             transformMode={transformMode}
             builderMode={builderMode}
+            placementObjects={placement?.objects}
+            onPlaceAt={placeAt}
+            onPlacementValidityChange={setPlacementValid}
             stageDimensions={activeStage.floor.dimensions}
             floorColor={activeStage.floor.color}
             skybox={activeStage.metadata.skybox}
@@ -2230,7 +2269,7 @@ const StageBuilderPage = () => {
               canRedo={canRedo(historyRef.current)}
               lineOperation={lineOperation.mode}
               onFinishLine={() => changeLineOperation({ mode: 'select' })}
-              onTransformModeChange={(mode) => { setBuilderMode('edit'); setLineOperation({ mode: 'select' }); setTransformMode(mode); }}
+              onTransformModeChange={(mode) => { setPlacement(null); setLineOperation({ mode: 'select' }); setTransformMode(mode); }}
               onSensorHelpersToggle={() => setSensorHelpersVisible((visible) => !visible)}
               onCollisionWireToggle={() => setCollisionWireVisible((visible) => !visible)}
               onPlaceOnFloor={placeSelectionOnFloor}
@@ -2245,7 +2284,15 @@ const StageBuilderPage = () => {
             <EditorViewportCameraGizmo currentView={lookThroughCameraId && lookThroughCamera ? 'camera' : (cameraViewRequest?.view || 'perspective')} hasActiveCamera={hasVisibleStageCamera(activeStage)} onCameraViewChange={requestCameraView} />
           </Box>
           <Box sx={{ position: 'absolute', top: 64, left: 64, right: 64, zIndex: 5, display: 'flex', justifyContent: 'center', pointerEvents: 'none', '& > *': { pointerEvents: 'auto' } }}>
-            {!livePreviewStage && <StageLineToolbar line={selectedCount === 1 && selectedObject?.kind === 'line' ? selectedObject : undefined} operation={lineOperation} onChange={changeLineOperation} />}
+            {placement && <Paper elevation={0} aria-label="Object placement" component="section" sx={{ p: 0.5, border: 1, borderColor: 'divider' }}>
+              <Stack direction="row" flexWrap="wrap" alignItems="center" justifyContent="center" gap={0.5}>
+                <Typography role="status" variant="body2" sx={{ px: 0.5, overflowWrap: 'anywhere' }}>
+                  {placementValid === false ? 'Move inside the stage boundary.' : `Click the floor to place ${placement.title}.`}
+                </Typography>
+                <Button size="small" color="error" sx={{ bgcolor: 'error.light' }} autoFocus onClick={() => setPlacement(null)}>Cancel</Button>
+              </Stack>
+            </Paper>}
+            {!placement && !livePreviewStage && <StageLineToolbar line={selectedCount === 1 && selectedObject?.kind === 'line' ? selectedObject : undefined} operation={lineOperation} onChange={changeLineOperation} />}
           </Box>
           <Box sx={{ position: 'absolute', bottom: 12, left: '50%', transform: 'translateX(-50%)', zIndex: 5 }}>
             <EditorViewportSnapControls movement={stageSnap.defaultSnapPreset} rotation={stageSnap.defaultRotationSnapPreset} lastMovement={stageSnap.lastMovementSnapPreset} onChange={setPref} />

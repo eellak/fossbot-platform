@@ -116,6 +116,7 @@ function LibraryTile({ label, detail, active, tone, previewKind, prefab, favouri
       <Tooltip describeChild title={detail ? `${label}: ${detail}` : label} placement="right" disableHoverListener={!detail}>
         <ButtonBase
           aria-label={label}
+          aria-current={active || undefined}
           onClick={onClick}
           sx={{
             ...libraryTileSx(editorColors),

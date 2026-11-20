@@ -27,7 +27,7 @@ import type { StageBuilderControlScheme, StageBuilderLockMode, StageBuilderStyle
 import type { StageBuilderSnapSettings } from './stageBuilderSnapping';
 import { commitObjectTransform, getSnapSettings, snapAngle, snapConstrainedPosition, snapDimensions, snapPosition, type TransformOperation } from './stageBuilderSnapping';
 import type { StageBuilderValidationResult } from './stageBuilderValidation';
-import { cloneStage, objectBounds, stageHalfExtents, cameraLookDirection } from './stageBuilderGeometry';
+import { cloneStage, placementFitsStage, cameraLookDirection } from './stageBuilderGeometry';
 import { getEditorColors, getEditorTones } from './stageBuilderEditorTheme';
 import { normalizeStageBuilderSkybox } from './stageBuilderSkybox';
 import { CUSTOM_OBJECT_MIN_SCALE } from './stageBuilderCustomObjects';
@@ -37,13 +37,6 @@ import { createStageBuilderRenderScheduler } from './stageBuilderRenderScheduler
 export type StageBuilderTransformMode = 'select' | 'translate' | 'rotate' | 'scale';
 export type StageBuilderCameraView = 'perspective' | 'top' | 'bottom' | 'front' | 'back' | 'left' | 'right' | 'camera';
 export type StageBuilderCameraViewRequest = { view: StageBuilderCameraView; nonce: number };
-
-
-export type StageBuilderPlacementStatus = {
-  valid: boolean;
-  reason: string;
-  position?: Vec3;
-};
 
 export interface StageBuilderSceneProps {
   keyboardEnabled?: boolean;
@@ -58,7 +51,7 @@ export interface StageBuilderSceneProps {
   selectedGroupId?: string | null;
   transformMode: StageBuilderTransformMode;
   builderMode?: StageBuilderMode;
-  placementObject?: EditorStageObject | null;
+  placementObjects?: EditorStageObject[];
   stageDimensions?: [number, number];
   floorColor?: string;
   skybox?: StageBuilderSkyboxSettings;
@@ -81,7 +74,7 @@ export interface StageBuilderSceneProps {
   onObjectChange: (object: EditorStageObject) => void;
   onObjectsChange?: (objects: EditorStageObject[]) => void;
   onPlaceAt?: (position: Vec3) => void;
-  onPlacementStatusChange?: (status: StageBuilderPlacementStatus | null) => void;
+  onPlacementValidityChange?: (valid: boolean | null) => void;
   onLockedSelectionAttempt?: () => void;
 }
 
@@ -1831,7 +1824,7 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
   selectedGroupId = null,
   transformMode,
   builderMode = 'edit',
-  placementObject = null,
+  placementObjects,
   stageDimensions = [10, 10],
   floorColor = '#f7f7f7',
   skybox,
@@ -1854,7 +1847,7 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
   onObjectChange,
   onObjectsChange,
   onPlaceAt,
-  onPlacementStatusChange,
+  onPlacementValidityChange,
   onLockedSelectionAttempt,
   keyboardEnabled = true,
   lineOperation = { mode: 'select' }, onLineOperationChange, onAppendLinePoint, onLinePreview,
@@ -1871,7 +1864,7 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
   const groupPivotRef = useRef<THREE.Group | null>(null);
   const objectMapRef = useRef<Map<string, MeshRecord>>(new Map());
   const visualKeysRef = useRef<Map<string, string>>(new Map());
-  const ghostRef = useRef<MeshRecord | null>(null);
+  const ghostRef = useRef<THREE.Group | null>(null);
   const floorMeshRef = useRef<THREE.Mesh | null>(null);
   const gridGroupRef = useRef<THREE.Group | null>(null);
   const gridMaterialsRef = useRef<LineMaterial[]>([]);
@@ -1892,7 +1885,7 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
   const selectedIdsRef = useRef(selectedIds);
   const selectedGroupRef = useRef(selectedGroupId);
   const builderModeRef = useRef(builderMode);
-  const placementObjectRef = useRef(placementObject);
+  const placementObjectsRef = useRef(placementObjects);
   const stageDimensionsRef = useRef(stageDimensions);
   const resolveAssetUrl = useMemo(() => createStageAssetResolver({ stageAssetBaseUrl }), [stageAssetBaseUrl]);
   const floorColorRef = useRef(floorColor);
@@ -1912,14 +1905,13 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
   const onObjectChangeRef = useRef(onObjectChange);
   const onObjectsChangeRef = useRef(onObjectsChange);
   const onPlaceAtRef = useRef(onPlaceAt);
-  const onPlacementStatusChangeRef = useRef(onPlacementStatusChange);
+  const onPlacementValidityChangeRef = useRef(onPlacementValidityChange);
   const onLockedSelectionAttemptRef = useRef(onLockedSelectionAttempt);
   const wasDraggingRef = useRef(false);
   const spaceHeldRef = useRef(false);
   const axisLockRef = useRef<AxisLock>(null);
   const shiftHeldRef = useRef(false);
   const altHeldRef = useRef(false);
-  const placementStatusRef = useRef<string>('');
   const friendlyDragRef = useRef<FriendlyDragState | null>(null);
   const groupTransformRef = useRef<GroupTransformState | null>(null);
   const transformStartRef = useRef<{ operation: TransformOperation; object: EditorStageObject | null; matrix: THREE.Matrix4 | null; scale: THREE.Vector3 | null } | null>(null);
@@ -1947,7 +1939,7 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
   useEffect(() => { selectedIdsRef.current = selectedIds; }, [selectedIds]);
   useEffect(() => { selectedGroupRef.current = selectedGroupId; }, [selectedGroupId]);
   useEffect(() => { builderModeRef.current = builderMode; }, [builderMode]);
-  useEffect(() => { placementObjectRef.current = placementObject; }, [placementObject]);
+  useEffect(() => { placementObjectsRef.current = placementObjects; }, [placementObjects]);
   useEffect(() => { stageDimensionsRef.current = stageDimensions; }, [stageDimensions]);
   useEffect(() => { floorColorRef.current = floorColor; }, [floorColor]);
   useEffect(() => { skyboxRef.current = skybox; }, [skybox]);
@@ -1964,7 +1956,7 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
   useEffect(() => { onObjectChangeRef.current = onObjectChange; }, [onObjectChange]);
   useEffect(() => { onObjectsChangeRef.current = onObjectsChange; }, [onObjectsChange]);
   useEffect(() => { onPlaceAtRef.current = onPlaceAt; }, [onPlaceAt]);
-  useEffect(() => { onPlacementStatusChangeRef.current = onPlacementStatusChange; }, [onPlacementStatusChange]);
+  useEffect(() => { onPlacementValidityChangeRef.current = onPlacementValidityChange; }, [onPlacementValidityChange]);
   useEffect(() => { onLockedSelectionAttemptRef.current = onLockedSelectionAttempt; }, [onLockedSelectionAttempt]);
 
   const groupMemberObjects = (groupId: string): EditorStageObject[] => {
@@ -2248,7 +2240,7 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
     sceneHandle.scene.add(transform as unknown as THREE.Object3D);
     transformRef.current = transform;
 
-    const updatePointer = (event: MouseEvent) => {
+    const updatePointer = (event: Pick<MouseEvent, 'clientX' | 'clientY'>) => {
       const rect = sceneHandle.renderer.domElement.getBoundingClientRect();
       tmpPointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
       tmpPointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
@@ -2454,60 +2446,44 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
       rotationLabel.textContent = `${Math.round(rotation.applied * 1800 / Math.PI) / 10}°`;
     };
 
-    const placementObjectAt = (position: Vec3): EditorStageObject | null => {
-      const template = placementObjectRef.current;
-      if (!template) return null;
-      if (template.kind === 'line') {
-        const centerX = template.points.reduce((sum, point) => sum + point[0], 0) / template.points.length;
-        const centerZ = template.points.reduce((sum, point) => sum + point[1], 0) / template.points.length;
-        return { ...template, points: template.points.map(([x, z]) => [x + position[0] - centerX, z + position[2] - centerZ]) };
-      }
-      if ('position' in template) return { ...template, position: [position[0], template.position[1], position[2]] } as EditorStageObject;
-      return template;
+    type PlacementPointer = { clientX: number; clientY: number; shiftKey: boolean; altKey: boolean };
+    let placementPointer: PlacementPointer | null = null;
+    let placementClick: PointerEvent | null = null;
+    const clearPlacementPointer = () => {
+      placementPointer = null;
+      placementClick = null;
+      if (ghostRef.current?.visible) invalidateScene();
     };
 
-    const updatePlacementStatus = (event?: PointerEvent): StageBuilderPlacementStatus | null => {
-      if (builderModeRef.current !== 'place' || !placementObjectRef.current) {
-        if (placementStatusRef.current) {
-          placementStatusRef.current = '';
-          onPlacementStatusChangeRef.current?.(null);
+    const trackPlacementPointer = ({ clientX, clientY, shiftKey, altKey }: PointerEvent) => {
+      placementPointer = { clientX, clientY, shiftKey, altKey };
+      invalidateScene();
+    };
+
+    const updatePlacementPreview = (event: PlacementPointer | null): Vec3 | null => {
+      const ghost = ghostRef.current;
+      const templates = placementObjectsRef.current;
+      if (!ghost || !templates) return null;
+      if (event) updatePointer(event);
+      ghost.visible = !!event && Math.abs(tmpPointer.x) <= 1 && Math.abs(tmpPointer.y) <= 1
+        && !!raycaster.ray.intersectPlane(floorPlane, floorHit);
+      if (!ghost.visible) {
+        if (ghost.userData.valid !== undefined) {
+          delete ghost.userData.valid;
+          onPlacementValidityChangeRef.current?.(null);
         }
         return null;
       }
-      if (event) updatePointer(event);
-      if (!raycaster.ray.intersectPlane(floorPlane, floorHit)) return null;
-      const snap = getSnapSettings(snapSettingsRef.current.preset, snapSettingsRef.current.rotationPreset, { shiftKey: event?.shiftKey, altKey: event?.altKey });
+      const snap = getSnapSettings(snapSettingsRef.current.preset, snapSettingsRef.current.rotationPreset, event ?? {});
       const position = snapPosition([floorHit.x, 0, floorHit.z], snap);
-      const preview = placementObjectAt(position);
-      const fakeStage = { floor: { dimensions: stageDimensionsRef.current } } as any;
-      const bounds = preview ? objectBounds(preview) : null;
-      const half = stageHalfExtents(fakeStage);
-      const valid = !!bounds && bounds.minX >= -half.x && bounds.maxX <= half.x && bounds.minZ >= -half.z && bounds.maxZ <= half.z;
-      const status: StageBuilderPlacementStatus = { valid, reason: valid ? 'Ready to place' : 'Outside stage boundary', position };
-      const key = `${status.valid}:${status.reason}:${status.position?.join(',')}`;
-      if (key !== placementStatusRef.current) {
-        placementStatusRef.current = key;
-        onPlacementStatusChangeRef.current?.(status);
+      ghost.position.fromArray(position);
+      const valid = placementFitsStage(templates, position, stageDimensionsRef.current);
+      if (ghost.userData.valid !== valid) {
+        ghost.userData.valid = valid;
+        ghost.children.forEach(root => tintGhost(root, valid, styleColorsRef.current));
+        onPlacementValidityChangeRef.current?.(valid);
       }
-      const ghost = ghostRef.current;
-      if (ghost && preview) {
-        tintGhost(ghost.root, valid, styleColorsRef.current);
-        if (preview.kind === 'line') {
-          const scene = sceneRef.current?.scene;
-          if (scene) {
-            scene.remove(ghost.root);
-            disposeObject(ghost.root);
-            const nextGhost = makeObjectRoot(preview, { ghost: true, ghostValid: valid }, { colors: styleColorsRef.current, onVisualReady: () => invalidateScene(true) });
-            ghostRef.current = nextGhost;
-            scene.add(nextGhost.root);
-          }
-        } else if ('position' in preview) {
-          ghost.root.position.set(preview.position[0], preview.position[1], preview.position[2]);
-          if (preview.kind === 'base') ghost.root.position.y = 0.006;
-        }
-      }
-      invalidateScene();
-      return status;
+      return valid ? position : null;
     };
 
     const updateMarqueeElement = (event: PointerEvent) => {
@@ -2652,15 +2628,16 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
     let lastDrawingClick = -Infinity;
     const handlePointerDown = (event: PointerEvent) => {
       clearDrawingPreview();
+      placementClick = null;
       if (event.button !== 0) return;
       if (lineActionsRef.current.lineOperation.mode === 'edit') lastDrawingClick = performance.now();
       updatePointer(event);
       if (lookThroughCameraIdRef.current) return;
       if (spaceHeldRef.current || builderModeRef.current === 'navigate' || builderModeRef.current === 'test') return;
 
-      if (builderModeRef.current === 'place' && placementObjectRef.current) {
-        const status = updatePlacementStatus(event);
-        if (status?.valid && status.position) onPlaceAtRef.current?.(status.position);
+      if (builderModeRef.current === 'place') {
+        if (event.isPrimary) placementClick = event;
+        trackPlacementPointer(event);
         return;
       }
 
@@ -2771,6 +2748,18 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
     };
 
     const handlePointerMove = (event: PointerEvent) => {
+      if (builderModeRef.current === 'place') {
+        if (event.target !== sceneHandle.renderer.domElement) {
+          clearPlacementPointer();
+          return;
+        }
+        if (placementClick && (event.pointerId !== placementClick.pointerId
+          || Math.hypot(event.clientX - placementClick.clientX, event.clientY - placementClick.clientY) >= 5)) {
+          placementClick = null;
+        }
+        trackPlacementPointer(event);
+        return;
+      }
       updatePointer(event);
       const lineDrag = lineDragRef.current;
       if (lineDrag && lineDrag.kind !== 'keyboard') {
@@ -2834,10 +2823,6 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
         closeHint.style.color = styleColorsRef.current.textStrong;
         invalidateScene();
       } else clearCloseHint();
-      if (builderModeRef.current === 'place') {
-        updatePlacementStatus(event);
-        return;
-      }
 
       if (marqueeRef.current) {
         updateMarqueeElement(event);
@@ -2880,6 +2865,16 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
     };
 
     const handlePointerUp = (event: PointerEvent) => {
+      const down = placementClick;
+      placementClick = null;
+      if (builderModeRef.current === 'place') {
+        if (down?.pointerId === event.pointerId && event.button === 0 && event.target === sceneHandle.renderer.domElement
+          && Math.hypot(event.clientX - down.clientX, event.clientY - down.clientY) < 5) {
+          const position = updatePlacementPreview(event);
+          if (position) onPlaceAtRef.current?.(position);
+        }
+        return;
+      }
       const lineDrag = lineDragRef.current;
       if (lineDrag && lineDrag.kind !== 'keyboard') {
         if (event.button !== 0) return;
@@ -2923,9 +2918,17 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
       }
     };
 
+    const updatePreviewModifiers = (event: KeyboardEvent) => {
+      const pointer = builderModeRef.current === 'place' ? placementPointer : drawingPointer;
+      if (!pointer) return;
+      pointer.shiftKey = event.shiftKey;
+      pointer.altKey = event.altKey;
+      invalidateScene();
+    };
+
     const handleKeyDown = (event: KeyboardEvent) => {
       if (!keyboardEnabledRef.current) return;
-      if (drawingPointer) { drawingPointer.shiftKey = event.shiftKey; drawingPointer.altKey = event.altKey; invalidateScene(); }
+      updatePreviewModifiers(event);
       if (event.key === 'Escape') clearDrawingPreview();
       if (event.key === 'Escape' && lineDragRef.current) {
         event.preventDefault(); event.stopImmediatePropagation();
@@ -2955,7 +2958,7 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
         invalidateScene(true);
         return;
       }
-      if (event.code === 'Space') spaceHeldRef.current = true;
+      if (event.code === 'Space') { spaceHeldRef.current = true; placementClick = null; }
       if (event.key === 'Shift' && !shiftHeldRef.current) {
         shiftHeldRef.current = true;
         applyGizmoSnap();
@@ -2970,7 +2973,7 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
     };
     const handleKeyUp = (event: KeyboardEvent) => {
       if (!keyboardEnabledRef.current) return;
-      if (drawingPointer) { drawingPointer.shiftKey = event.shiftKey; drawingPointer.altKey = event.altKey; invalidateScene(); }
+      updatePreviewModifiers(event);
       if (event.code === 'Space') spaceHeldRef.current = false;
       if (event.key === 'Shift' && shiftHeldRef.current) {
         shiftHeldRef.current = false;
@@ -2988,6 +2991,8 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
     sceneHandle.renderer.domElement.addEventListener('dblclick', handleDoubleClick);
     sceneHandle.renderer.domElement.addEventListener('pointerleave', clearCloseHint);
     sceneHandle.renderer.domElement.addEventListener('pointerleave', clearDrawingPreview);
+    sceneHandle.renderer.domElement.addEventListener('pointerleave', clearPlacementPointer);
+    sceneHandle.renderer.domElement.addEventListener('pointercancel', clearPlacementPointer);
     window.addEventListener('pointermove', handlePointerMove);
     window.addEventListener('pointerup', handlePointerUp);
     window.addEventListener('keydown', handleKeyDown, true);
@@ -2995,6 +3000,7 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
 
     const frame = () => {
       updateDrawingPreview();
+      updatePlacementPreview(placementPointer);
       const operation = lineActionsRef.current.lineOperation;
       if (operation.mode !== 'edit' || operation.pathId !== closeTarget?.pathId || lineDragRef.current) clearCloseHint();
       const selectedLine = objectsRef.current.find((line): line is EditorLineObject => line.kind === 'line' && line.id === selectedRef.current
@@ -3111,7 +3117,6 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
       const animatedGroupId = selectedGroupRef.current;
       if (animatedGroupId) groupMemberObjects(animatedGroupId).forEach((object) => animatedObjectIds.add(object.id));
       for (const record of objectMapRef.current.values()) applyRobotSpawnSelectionState(record.root, animatedObjectIds.has(record.objectId));
-      if (ghostRef.current) applyRobotSpawnSelectionState(ghostRef.current.root, false);
 
       const helper = selectionHelperRef.current;
       const selectedRoot = selectedRef.current ? objectMapRef.current.get(selectedRef.current)?.root : null;
@@ -3162,6 +3167,8 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
       sceneHandle.renderer.domElement.removeEventListener('dblclick', handleDoubleClick);
       sceneHandle.renderer.domElement.removeEventListener('pointerleave', clearCloseHint);
       sceneHandle.renderer.domElement.removeEventListener('pointerleave', clearDrawingPreview);
+      sceneHandle.renderer.domElement.removeEventListener('pointerleave', clearPlacementPointer);
+      sceneHandle.renderer.domElement.removeEventListener('pointercancel', clearPlacementPointer);
       drawingPreview.removeFromParent();
       disposeObject(drawingPreview);
       closeHint.remove();
@@ -3178,7 +3185,6 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
       transform.dispose();
       for (const record of objectMapRef.current.values()) disposeObject(record.root);
       objectMapRef.current.clear();
-      if (ghostRef.current) disposeObject(ghostRef.current.root);
       if (marqueeElementRef.current) {
         marqueeElementRef.current.remove();
         marqueeElementRef.current = null;
@@ -3317,19 +3323,28 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
 
   useEffect(() => {
     const scene = sceneRef.current?.scene;
-    if (!scene) return;
-    if (ghostRef.current) {
-      scene.remove(ghostRef.current.root);
-      disposeObject(ghostRef.current.root);
+    if (!scene || !placementObjects || builderMode !== 'place') return;
+    const ghost = new THREE.Group();
+    ghost.visible = false;
+    for (const object of placementObjects) {
+      const { root } = makeObjectRoot(object, { ghost: true }, {
+        colors: styleColorsRef.current,
+        resolveAssetUrl,
+        onVisualReady: () => {
+          if (ghost.visible) tintGhost(root, ghost.userData.valid, styleColorsRef.current);
+          invalidateScene();
+        },
+      });
+      ghost.add(root);
+    }
+    ghostRef.current = ghost;
+    scene.add(ghost);
+    return () => {
+      ghost.removeFromParent();
+      ghost.children.forEach(disposeObject);
       ghostRef.current = null;
-    }
-    if (placementObject && builderMode === 'place') {
-      const ghost = makeObjectRoot(placementObject, { ghost: true, ghostValid: true }, { colors: styleColorsRef.current, resolveAssetUrl, onVisualReady: () => invalidateScene(true) });
-      ghostRef.current = ghost;
-      scene.add(ghost.root);
-    }
-    if (!placementObject || builderMode !== 'place') onPlacementStatusChange?.(null);
-  }, [placementObject, builderMode, onPlacementStatusChange, resolveAssetUrl, invalidateScene]);
+    };
+  }, [placementObjects, builderMode, resolveAssetUrl, styleVariant, invalidateScene]);
 
   useEffect(() => {
     syncTransformAttachment();
@@ -3442,7 +3457,7 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
     selectedGroupId,
     transformMode,
     builderMode,
-    placementObject,
+    placementObjects,
     floorColor,
     skybox,
     gridVisible,
@@ -3481,7 +3496,7 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
       selection: selectionHelper?.visible,
       groupSelection: groupSelectionHelper?.visible,
       friendly: friendlyHandles?.root.visible,
-      ghost: ghost?.root.visible,
+      ghost: ghost?.visible,
     };
     const camera = sceneHandle.camera;
     const previousCamera = {
@@ -3498,7 +3513,7 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
     if (selectionHelper) selectionHelper.visible = false;
     if (groupSelectionHelper) groupSelectionHelper.visible = false;
     if (friendlyHandles) friendlyHandles.root.visible = false;
-    if (ghost) ghost.root.visible = false;
+    if (ghost) ghost.visible = false;
 
     camera.up.set(0, 1, 0);
     applyStageBuilderCameraView(sceneHandle, 'perspective', stageDimensionsRef.current);
@@ -3558,7 +3573,7 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
     if (selectionHelper) selectionHelper.visible = previousVisibility.selection ?? true;
     if (groupSelectionHelper) groupSelectionHelper.visible = previousVisibility.groupSelection ?? true;
     if (friendlyHandles) friendlyHandles.root.visible = previousVisibility.friendly ?? true;
-    if (ghost) ghost.root.visible = previousVisibility.ghost ?? true;
+    if (ghost) ghost.visible = previousVisibility.ghost ?? true;
     renderScene(sceneHandle);
 
     return dataUrl;

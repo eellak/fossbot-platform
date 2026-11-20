@@ -68,7 +68,7 @@ Route wiring lives in `front-end/src/routes/Router.tsx`.
 
 - `EditorTopBar.tsx` — Back, File/Edit/Add/View/Help menus, dirty state, validation chip, Export JSON, Run Test.
 - `EditorLeftPanel.tsx` — two-tab left rail: `Library` and `Scene`.
-- `StageObjectLibrary.tsx` — grouped add list plus built-in prefabs; current behavior adds at floor center.
+- `StageObjectLibrary.tsx` — library of objects and built-in prefabs for placement in the viewport.
 - `StageSceneHierarchy.tsx` — object tree, selection, inline rename, hide/show, lock, duplicate/delete, group/ungroup.
 - `EditorViewportToolRail.tsx` — Select/Move/Rotate/Scale, snap toggle, focus, undo/redo/delete.
 - `StageBuilderScene.tsx` — Three.js viewport, floor/grid/bounds, object rendering, picking, hover/selection helpers, transform controls, snapping, focus selected, hidden-object filtering.
@@ -98,9 +98,10 @@ Route wiring lives in `front-end/src/routes/Router.tsx`.
 `StageBuilderPage.tsx` is the single state owner.
 
 ```text
-TopBar / Library / Prefab click
+Library object or prefab click
   -> StageBuilderPage.addObject/addPrefab
-  -> stageBuilderCatalog.createCatalogObject or stageBuilderPrefabs
+  -> prepare the object or prefab for preview
+  -> floor click or tap
   -> commitStage(...)
   -> StageBuilderScene + SceneHierarchy + Inspector receive new props
 
@@ -178,7 +179,7 @@ The builder imports and round-trips geometry/model objects as OBJ, STL, or GLB c
 
 - JSON export is the save action for this implementation stage.
 - Browser recovery drafts are only unsaved-work recovery, not project storage.
-- Adding from the Library/Add menu creates objects at the floor center and selects them.
+- Choose an object, prefab or imported model to preview it under the pointer. Click or tap the floor to place and select it in one undo step. Placement follows movement snapping and requires the full item to fit inside the floor. Escape or Cancel discards the preview. Labels added to a selected compatible object still attach directly.
 - The Prefabs section includes four single-object floor material patches: tile, carpet, rough mat, and dirt with small rocks. Each patch exports a material code and traction setting; the simulator generates its low ridges or rocks from the patch size and position. The floor material code appears in sensor CSV recordings only while the robot is fully inside a patch.
 - A new robot spawn replaces any existing robot spawn.
 - A new camera replaces any existing camera; multiple visible cameras are supported only through import/duplication and produce a validation warning.
@@ -186,7 +187,6 @@ The builder imports and round-trips geometry/model objects as OBJ, STL, or GLB c
 - Audio `file` sources resolve under the simulator public asset base (for example `sounds/start.mp3` → `/simulator/sounds/start.mp3` in the Stage Builder test route); absolute URLs and `data:`/`blob:` sources pass through.
 - Grouping is metadata-level only; groups do not act as transform containers yet.
 - Built-in prefabs are surfaced; the local prefab repository helper exists but is not primary UI.
-- `StageBuilderScene` supports friendly handles and place-mode ghosts, but the current page passes `controlScheme="legacyGizmo"` and uses center-add rather than click-to-place.
 - Run Test writes a recovery draft for dirty stages without prompting, opens a separate route in a new tab when possible, and falls back to same-tab navigation when popups are blocked.
 - Validation blocks Run Test on active `error` results. Warnings can be overridden when marked overridable.
 
@@ -301,7 +301,7 @@ Select a physical object, multiple objects or a group, then use **Place on floor
 
 Boxes, cylinders, spheres, wedges and imported models supply physical bounds. Other selected group members move with them. Locked members block the whole action. Hidden physical members remain part of the calculation. Imported geometry must finish loading successfully. Collision wires and picking proxies are excluded. A stage or selection change during measurement cancels the pending result.
 
-Prefab insertion centres the composition horizontally and retains every authored height, including elevated decks and floor markers. Existing saved stages are not repositioned automatically. Use Place on floor explicitly to correct an existing elevated or buried selection.
+Prefab insertion centres the composition horizontally at the chosen floor point and retains every authored height, including elevated decks and floor markers. Existing saved stages are not repositioned automatically. Use Place on floor explicitly to correct an existing elevated or buried selection.
 
 
 While editing a line, a dashed canvas preview shows the same evaluated geometry that the next floor click will create, including head/tail extensions and reconnection after interior or closed-path insertion. A square marks the snapped new point. Hovering existing objects/handles, dragging, navigation, leaving the canvas and exiting edit mode hide it. Preview geometry stays outside the stage model, history and saved records.

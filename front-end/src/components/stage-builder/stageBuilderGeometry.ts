@@ -31,7 +31,9 @@ export function cloneStage<T>(value: T): T {
   return value;
 }
 
-export function stageHalfExtents(stage: Pick<EditorStage, 'floor'>): { x: number; z: number } {
+type StageDimensions = { floor: { dimensions: [number, number] } };
+
+export function stageHalfExtents(stage: StageDimensions): { x: number; z: number } {
   const [w, d] = stage.floor?.dimensions || DEFAULT_STAGE_SIZE;
   return { x: Math.max(0.1, w / 2), z: Math.max(0.1, d / 2) };
 }
@@ -338,9 +340,16 @@ export function requiresWallEnclosure(...values: string[]): boolean {
     || (text.includes('wall') && (text.includes('room') || text.includes('building')) && (text.includes('four') || text.includes('4') || text.includes('sides')));
 }
 
-export function boundsOutsideStage(bounds: StageObjectBounds, stage: Pick<EditorStage, 'floor'>): boolean {
+export function boundsOutsideStage(bounds: StageObjectBounds, stage: StageDimensions): boolean {
   const half = stageHalfExtents(stage);
   return bounds.minX < -half.x || bounds.maxX > half.x || bounds.minZ < -half.z || bounds.maxZ > half.z;
+}
+
+export function placementFitsStage(objects: EditorStageObject[], position: Vec3, dimensions: [number, number]): boolean {
+  return objects.length > 0 && objects.every(object => {
+    const bounds = objectBounds(translateObject(object, position));
+    return !!bounds && !boundsOutsideStage(bounds, { floor: { dimensions } });
+  });
 }
 
 export function selectedCentroid(objects: EditorStageObject[]): Vec3 {

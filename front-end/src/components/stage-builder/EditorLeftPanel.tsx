@@ -15,6 +15,7 @@ export interface EditorLeftPanelProps extends StageSceneHierarchyProps {
   onTabChange: (tab: 'library' | 'scene') => void;
   prefabs: StageBuilderPrefab[];
   recentItems: LibraryItem[];
+  placingItem?: LibraryItem;
   favouriteItems: LibraryItem[];
   onToggleFavourite: (item: LibraryItem) => void;
   onAddKind: (kind: StageSemanticKind) => void;
@@ -60,7 +61,10 @@ export function EditorLeftPanel(props: EditorLeftPanelProps) {
       <Divider sx={{ borderColor: editorColors.border }} />
       <Box sx={{ flex: 1, overflow: 'auto', p: 1 }}>
         {tab === 'library' ? (
-          <StageObjectLibrary prefabs={props.prefabs} recentItems={props.recentItems} favouriteItems={props.favouriteItems} onToggleFavourite={props.onToggleFavourite} onAddKind={props.onAddKind} onAddPrefab={props.onAddPrefab} onImportObject={props.onImportObject} />
+          <StageObjectLibrary
+            activeKind={props.placingItem?.type === 'object' ? props.placingItem.id : null}
+            activePrefabId={props.placingItem?.type === 'prefab' ? props.placingItem.id : null}
+            prefabs={props.prefabs} recentItems={props.recentItems} favouriteItems={props.favouriteItems} onToggleFavourite={props.onToggleFavourite} onAddKind={props.onAddKind} onAddPrefab={props.onAddPrefab} onImportObject={props.onImportObject} />
         ) : (
           <StageSceneHierarchy {...props} />
         )}
