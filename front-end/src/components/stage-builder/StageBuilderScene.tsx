@@ -33,6 +33,7 @@ import { normalizeStageBuilderSkybox } from './stageBuilderSkybox';
 import { CUSTOM_OBJECT_MIN_SCALE } from './stageBuilderCustomObjects';
 import { lowestGeometryPoint } from './stageBuilderFloorPlacement';
 import { createStageBuilderRenderScheduler } from './stageBuilderRenderScheduler';
+import { listenForViewportMultiSelect, movableSelectionMembers } from './stageBuilderSelection';
 
 export type StageBuilderTransformMode = 'select' | 'translate' | 'rotate' | 'scale';
 export type StageBuilderCameraView = 'perspective' | 'top' | 'bottom' | 'front' | 'back' | 'left' | 'right' | 'camera';
@@ -91,7 +92,6 @@ export type MeshRecord = {
 };
 
 type GroupTransformState = {
-  groupId: string;
   pivotStartInverse: THREE.Matrix4;
   rootStartMatrices: Map<string, THREE.Matrix4>;
   rootStartScales: Map<string, THREE.Vector3>;
@@ -1723,35 +1723,26 @@ function validationSeverityMap(results: StageBuilderValidationResult[]): Map<str
   return severities;
 }
 
-type CornerBoundsHelper = THREE.LineSegments<THREE.BufferGeometry, THREE.LineBasicMaterial>;
-
 function cornerLengthForSpan(span: number): number {
   if (span <= 0) return 0;
   return Math.min(Math.max(span * 0.16, 0.06), 0.45, span * 0.5);
 }
 
-function makeCornerBoundsHelper(colorValue: string): CornerBoundsHelper {
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(48 * 3), 3));
-  geometry.setDrawRange(0, 48);
-  const material = new THREE.LineBasicMaterial({
-    color: color(colorValue),
-    transparent: true,
-    opacity: 0.9,
-    depthTest: false,
-    depthWrite: false,
-    toneMapped: false,
-  });
-  const helper = new THREE.LineSegments(geometry, material) as CornerBoundsHelper;
-  helper.visible = false;
-  helper.frustumCulled = false;
-  helper.renderOrder = 999;
-  return helper;
+function makeCornerBoundsHelper(rimMaterial: LineMaterial, strokeMaterial: LineMaterial): LineSegments2 {
+  const geometry = new LineSegmentsGeometry();
+  geometry.setPositions(new Float32Array(24 * 6));
+  const rim = new LineSegments2(geometry, rimMaterial);
+  const stroke = new LineSegments2(geometry, strokeMaterial);
+  rim.renderOrder = 998;
+  stroke.renderOrder = 999;
+  rim.frustumCulled = stroke.frustumCulled = false;
+  rim.visible = false;
+  rim.add(stroke);
+  return rim;
 }
 
-function updateCornerBoundsHelper(helper: CornerBoundsHelper, box: THREE.Box3): void {
-  const position = helper.geometry.getAttribute('position') as THREE.BufferAttribute;
-  const array = position.array as Float32Array;
+function updateCornerBoundsHelper(helper: LineSegments2, box: THREE.Box3): void {
+  const { instanceStart, instanceEnd } = helper.geometry.attributes;
   const min = box.min;
   const max = box.max;
   const lengths = [
@@ -1760,14 +1751,12 @@ function updateCornerBoundsHelper(helper: CornerBoundsHelper, box: THREE.Box3): 
     cornerLengthForSpan(max.z - min.z),
   ];
 
-  let offset = 0;
+  let segment = 0;
   const emitCorner = (x: number, y: number, z: number, dx: number, dy: number, dz: number) => {
-    array[offset++] = x; array[offset++] = y; array[offset++] = z;
-    array[offset++] = x + dx * lengths[0]; array[offset++] = y; array[offset++] = z;
-    array[offset++] = x; array[offset++] = y; array[offset++] = z;
-    array[offset++] = x; array[offset++] = y + dy * lengths[1]; array[offset++] = z;
-    array[offset++] = x; array[offset++] = y; array[offset++] = z;
-    array[offset++] = x; array[offset++] = y; array[offset++] = z + dz * lengths[2];
+    for (let i = 0; i < 3; i++) instanceStart.setXYZ(segment + i, x, y, z);
+    instanceEnd.setXYZ(segment++, x + dx * lengths[0], y, z);
+    instanceEnd.setXYZ(segment++, x, y + dy * lengths[1], z);
+    instanceEnd.setXYZ(segment++, x, y, z + dz * lengths[2]);
   };
 
   emitCorner(min.x, min.y, min.z, 1, 1, 1);
@@ -1779,7 +1768,8 @@ function updateCornerBoundsHelper(helper: CornerBoundsHelper, box: THREE.Box3): 
   emitCorner(min.x, max.y, max.z, 1, -1, -1);
   emitCorner(max.x, max.y, max.z, -1, -1, -1);
 
-  position.needsUpdate = true;
+  instanceStart.needsUpdate = true;
+  instanceEnd.needsUpdate = true;
 }
 
 function applyStageBuilderCameraView(sceneHandle: SceneHandle, view: StageBuilderCameraView, dimensions: [number, number]): void {
@@ -1858,8 +1848,8 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
   const sceneRef = useRef<SceneHandle | null>(null);
   const requestRenderRef = useRef<() => void>(() => undefined);
   const transformRef = useRef<TransformControls | null>(null);
-  const selectionHelperRef = useRef<CornerBoundsHelper | null>(null);
-  const groupSelectionHelperRef = useRef<CornerBoundsHelper | null>(null);
+  const selectionHelperRef = useRef<THREE.Group | null>(null);
+  const groupSelectionHelperRef = useRef<LineSegments2 | null>(null);
   const friendlyHandlesRef = useRef<FriendlyHandleRecord | null>(null);
   const groupPivotRef = useRef<THREE.Group | null>(null);
   const objectMapRef = useRef<Map<string, MeshRecord>>(new Map());
@@ -1966,19 +1956,21 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
     return group.objectIds.map((id) => objectById.get(id)).filter((object): object is EditorStageObject => !!object);
   };
 
-  const groupBoxFor = (groupId: string): THREE.Box3 | null => {
+  const transformMembers = () => {
+    if (selectedGroupRef.current) return groupMemberObjects(selectedGroupRef.current);
+    if (transformModeRef.current !== 'translate' || selectedIdsRef.current.length < 2) return null;
+    return movableSelectionMembers(objectsRef.current, selectedIdsRef.current);
+  };
+
+  const boundsForMembers = (members: EditorStageObject[]): THREE.Box3 | null => {
     const box = new THREE.Box3();
-    let hasBox = false;
-    for (const object of groupMemberObjects(groupId)) {
+    for (const object of members) {
       const root = objectMapRef.current.get(object.id)?.root;
       if (!root) continue;
       root.updateMatrixWorld(true);
-      const next = editorSelectionBounds(root);
-      if (!hasBox) box.copy(next);
-      else box.union(next);
-      hasBox = true;
+      box.union(editorSelectionBounds(root));
     }
-    return hasBox ? box : null;
+    return box.isEmpty() ? null : box;
   };
 
   const updateAttachedLabelVisuals = (parentIds?: Set<string>) => {
@@ -1998,17 +1990,6 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
     const next = objectsRef.current.find((item) => item.id === nextId);
     const current = objectsRef.current.find((item) => item.id === currentId);
     return (next?.kind === 'text' && !!next.attachment?.parentId) || next?.parentId === currentId || current?.parentId === nextId;
-  };
-
-  const updateGroupPivotFromBounds = (groupId: string): boolean => {
-    const pivot = groupPivotRef.current;
-    const box = groupBoxFor(groupId);
-    if (!pivot || !box) return false;
-    pivot.position.copy(box.getCenter(new THREE.Vector3()));
-    pivot.rotation.set(0, 0, 0);
-    pivot.scale.set(1, 1, 1);
-    pivot.updateMatrixWorld(true);
-    return true;
   };
 
   const configureTransformControls = () => {
@@ -2034,15 +2015,24 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
   const syncTransformAttachment = () => {
     const transform = transformRef.current;
     if (!transform) return;
+    transform.setMode(transformModeRef.current === 'select' ? 'translate' : transformModeRef.current);
     configureTransformControls();
     transform.detach();
     if (lookThroughCameraIdRef.current) return;
     if (builderModeRef.current !== 'edit' || controlSchemeRef.current !== 'legacyGizmo') return;
     if (transformModeRef.current === 'select' || lineActionsRef.current.lineOperation.mode !== 'select') return;
 
-    const groupId = selectedGroupRef.current;
-    if (groupId && updateGroupPivotFromBounds(groupId) && groupPivotRef.current) {
-      transform.attach(groupPivotRef.current);
+    const members = transformMembers();
+    if (members) {
+      const pivot = groupPivotRef.current;
+      const box = boundsForMembers(members);
+      if (!pivot || !box) return;
+      box.getCenter(pivot.position);
+      pivot.rotation.set(0, 0, 0);
+      pivot.scale.setScalar(1);
+      pivot.updateMatrixWorld(true);
+      if (!selectedGroupRef.current && members.some(object => object.kind === 'base')) transform.showY = false;
+      transform.attach(pivot);
       return;
     }
 
@@ -2052,11 +2042,10 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
   };
 
   const beginGroupTransform = () => {
-    const groupId = selectedGroupRef.current;
     const pivot = groupPivotRef.current;
-    if (!groupId || !pivot) return;
-    const members = groupMemberObjects(groupId);
-    if (!members.length) return;
+    if (!pivot || transformRef.current?.object !== pivot) return;
+    const members = transformMembers();
+    if (!members?.length) return;
 
     pivot.updateMatrixWorld(true);
     const rootStartMatrices = new Map<string, THREE.Matrix4>();
@@ -2071,7 +2060,6 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
       rootStartScales.set(object.id, root.scale.clone());
     }
     groupTransformRef.current = {
-      groupId,
       pivotStartInverse: pivot.matrixWorld.clone().invert(),
       rootStartMatrices,
       rootStartScales,
@@ -2172,11 +2160,15 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
     sceneHandle.scene.add(boundary);
     boundaryRef.current = boundary;
 
-    const selectionHelper = makeCornerBoundsHelper(styleColorsRef.current.selectionHelper);
+    const selectionHelper = new THREE.Group();
     sceneHandle.scene.add(selectionHelper);
     selectionHelperRef.current = selectionHelper;
 
-    const groupSelectionHelper = makeCornerBoundsHelper(styleColorsRef.current.selectionHelper);
+    // Draw in the transparent pass so the opaque brackets stay visible over the floor and glass.
+    const selectionRim = new LineMaterial({ linewidth: 4, transparent: true, depthTest: false, depthWrite: false, toneMapped: false });
+    const selectionStroke = selectionRim.clone();
+    selectionStroke.linewidth = 2;
+    const groupSelectionHelper = makeCornerBoundsHelper(selectionRim, selectionStroke);
     sceneHandle.scene.add(groupSelectionHelper);
     groupSelectionHelperRef.current = groupSelectionHelper;
 
@@ -2199,6 +2191,16 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
     containerRef.current?.appendChild(marqueeEl);
     marqueeElementRef.current = marqueeEl;
 
+    // Listen after OrbitControls to preserve pan, and before TransformControls to pick through its gizmo.
+    const stopMultiSelect = listenForViewportMultiSelect(sceneHandle.renderer.domElement,
+      () => builderModeRef.current === 'edit' && lineActionsRef.current.lineOperation.mode === 'select'
+        && !spaceHeldRef.current && !lookThroughCameraIdRef.current,
+      event => {
+        updatePointer(event);
+        const id = pickScene(event)[0]?.object.userData.stageObjectId;
+        if (id) toggleObjectSelection(id);
+      },
+    );
     const transform = new TransformControls(sceneHandle.camera, sceneHandle.renderer.domElement);
     transform.setMode(transformMode === 'select' ? 'translate' : transformMode);
     transform.setSpace(transformSpaceRef.current);
@@ -2504,6 +2506,16 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
       element.style.height = `${height}px`;
     };
 
+    const changeMultiSelection = (ids: string[]) => {
+      if (onSelectionChangeRef.current) onSelectionChangeRef.current(ids);
+      else onSelectRef.current(ids[ids.length - 1] || null);
+    };
+
+    const toggleObjectSelection = (id: string) => {
+      const current = selectedIdsRef.current;
+      changeMultiSelection(current.includes(id) ? current.filter(selected => selected !== id) : [...current, id]);
+    };
+
     const finishMarquee = () => {
       const marquee = marqueeRef.current;
       if (!marquee) return;
@@ -2526,8 +2538,7 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
       }
       if (selected.length) {
         const next = Array.from(new Set([...selectedIdsRef.current, ...selected]));
-        onSelectionChangeRef.current?.(next);
-        onSelectRef.current(next[next.length - 1] || null);
+        changeMultiSelection(next);
       }
     };
 
@@ -2707,13 +2718,9 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
           return;
         }
         if (event.shiftKey) {
-          const current = selectedIdsRef.current.length ? selectedIdsRef.current : (currentId ? [currentId] : []);
-          const next = current.includes(nextId) ? current.filter((id) => id !== nextId) : [...current, nextId];
-          onSelectionChangeRef.current?.(next);
-          onSelectRef.current(next[next.length - 1] || null);
+          toggleObjectSelection(nextId);
         } else {
           onSelectRef.current(nextId);
-          onSelectionChangeRef.current?.([nextId]);
         }
         return;
       }
@@ -2898,7 +2905,6 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
       emptyClickRef.current = null;
       if (emptyDown && Math.hypot(event.clientX - emptyDown.x, event.clientY - emptyDown.y) < 5) {
         onSelectRef.current(null);
-        onSelectionChangeRef.current?.([]);
       }
     };
 
@@ -3003,7 +3009,7 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
       updatePlacementPreview(placementPointer);
       const operation = lineActionsRef.current.lineOperation;
       if (operation.mode !== 'edit' || operation.pathId !== closeTarget?.pathId || lineDragRef.current) clearCloseHint();
-      const selectedLine = objectsRef.current.find((line): line is EditorLineObject => line.kind === 'line' && line.id === selectedRef.current
+      const selectedLine = selectedIdsRef.current.length > 1 ? undefined : objectsRef.current.find((line): line is EditorLineObject => line.kind === 'line' && line.id === selectedRef.current
         && !line.locked && !!objectMapRef.current.get(line.id)?.root.visible && builderModeRef.current === 'edit' && !lookThroughCameraIdRef.current);
       for (const [key, control] of lineTransformControls) {
         if (control.id !== selectedLine?.id) {
@@ -3118,23 +3124,35 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
       if (animatedGroupId) groupMemberObjects(animatedGroupId).forEach((object) => animatedObjectIds.add(object.id));
       for (const record of objectMapRef.current.values()) applyRobotSpawnSelectionState(record.root, animatedObjectIds.has(record.objectId));
 
-      const helper = selectionHelperRef.current;
       const selectedRoot = selectedRef.current ? objectMapRef.current.get(selectedRef.current)?.root : null;
-      if (helper && selectedRoot) {
-        selectedRoot.updateMatrixWorld(true);
-        const selectedBox = editorSelectionBounds(selectedRoot);
-        if (!selectedBox.isEmpty()) {
-          updateCornerBoundsHelper(helper, selectedBox);
-          helper.visible = true;
-        } else {
-          helper.visible = false;
+      const canvas = sceneHandle.renderer.domElement;
+      selectionRim.resolution.set(canvas.clientWidth || 1, canvas.clientHeight || 1);
+      selectionStroke.resolution.copy(selectionRim.resolution);
+      selectionRim.color.set(styleColorsRef.current.panel);
+      selectionStroke.color.set(styleColorsRef.current.selectionHelper);
+      let outlineCount = 0;
+      for (const id of selectedIdsRef.current) {
+        const root = objectMapRef.current.get(id)?.root;
+        if (!root?.visible) continue;
+        const box = editorSelectionBounds(root);
+        if (box.isEmpty()) continue;
+        let outline = selectionHelper.children[outlineCount] as LineSegments2;
+        if (!outline) {
+          outline = makeCornerBoundsHelper(selectionRim, selectionStroke);
+          selectionHelper.add(outline);
         }
-      } else if (helper) {
-        helper.visible = false;
+        updateCornerBoundsHelper(outline, box);
+        outline.visible = true;
+        outlineCount++;
+      }
+      while (selectionHelper.children.length > outlineCount) {
+        const outline = selectionHelper.children[selectionHelper.children.length - 1] as LineSegments2;
+        selectionHelper.remove(outline);
+        outline.geometry.dispose();
       }
       const groupHelper = groupSelectionHelperRef.current;
       const selectedGroupId = selectedGroupRef.current;
-      const groupBox = selectedGroupId ? groupBoxFor(selectedGroupId) : null;
+      const groupBox = selectedGroupId ? boundsForMembers(groupMemberObjects(selectedGroupId)) : null;
       if (groupHelper && groupBox) {
         updateCornerBoundsHelper(groupHelper, groupBox);
         groupHelper.visible = true;
@@ -3162,6 +3180,7 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
       requestRenderRef.current = () => undefined;
       scheduler.cancel();
       sceneHandle.controls.removeEventListener('change', handleControlsChange);
+      stopMultiSelect();
       sceneHandle.renderer.domElement.removeEventListener('pointerdown', handlePointerDown);
       sceneHandle.renderer.domElement.removeEventListener('pointercancel', cancelLineTransform);
       sceneHandle.renderer.domElement.removeEventListener('dblclick', handleDoubleClick);
@@ -3189,10 +3208,10 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
         marqueeElementRef.current.remove();
         marqueeElementRef.current = null;
       }
-      selectionHelper.geometry.dispose();
-      (selectionHelper.material as THREE.Material).dispose();
+      for (const outline of selectionHelper.children) (outline as LineSegments2).geometry.dispose();
       groupSelectionHelper.geometry.dispose();
-      (groupSelectionHelper.material as THREE.Material).dispose();
+      selectionRim.dispose();
+      selectionStroke.dispose();
       if (friendlyHandlesRef.current) {
         sceneHandle.scene.remove(friendlyHandlesRef.current.root);
         disposeObject(friendlyHandlesRef.current.root);
@@ -3348,13 +3367,7 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
 
   useEffect(() => {
     syncTransformAttachment();
-  }, [objects, groups, selectedId, selectedGroupId, controlScheme, builderMode, transformMode, lineOperation]);
-
-  useEffect(() => {
-    transformModeRef.current = transformMode;
-    transformRef.current?.setMode(transformMode === 'select' ? 'translate' : transformMode);
-    configureTransformControls();
-  }, [transformMode]);
+  }, [objects, groups, selectedId, selectedIds, selectedGroupId, controlScheme, builderMode, transformMode, lineOperation]);
 
   useEffect(() => {
     transformRef.current?.setSpace(transformSpace);

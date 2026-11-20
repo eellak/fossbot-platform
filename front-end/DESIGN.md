@@ -194,6 +194,8 @@ Stage Builder's object library uses compact tiles with previews beside wrapping 
 
 The Stage Builder object library and scene hierarchy use filled Classic glyphs for semantic objects. Each glyph inherits the foreground colour of its tile or row.
 
+In the Stage Builder viewport, mark each selected object with opaque corner brackets and a contrasting rim. Keep their thickness constant on screen as the camera zooms.
+
 ## Do's and Don'ts
 
 ### Do

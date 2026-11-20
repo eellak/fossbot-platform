@@ -563,7 +563,7 @@ const StageBuilderPage = () => {
   const localStageHasChanges = savedLocalFingerprint === null ? dirty : currentFingerprint !== savedLocalFingerprint;
   const gridVisible = stage.metadata.gridVisible ?? true;
   const gridSize = stage.metadata.gridSize ?? 0.5;
-  const selectedStatus = selectedGroup ? selectedGroup.name : selectedObject ? selectedObject.name : selectedCount ? `${selectedCount} objects` : inspectorTab === 'stage' ? 'Stage' : 'None';
+  const selectedStatus = selectedGroup?.name || (selectedCount > 1 ? `${selectedCount} objects` : selectedObject?.name || (inspectorTab === 'stage' ? 'Stage' : 'None'));
   const selectedTone = selectedGroup ? editorColors.accentText : selectedObject ? editorColors.warning : inspectorTab === 'stage' ? editorColors.accentText : editorColors.text;
   const providerLabel = remoteStage
     ? `GitHub: ${remoteStage.repoOwner}/${remoteStage.repoName}`
