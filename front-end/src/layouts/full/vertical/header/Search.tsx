@@ -11,6 +11,7 @@ import {
   ListItemText,
   Typography,
   TextField,
+  Tooltip,
   ListItemButton,
 } from '@mui/material';
 
@@ -54,43 +55,45 @@ const Search = () => {
 
   return (
     <>
-      <IconButton
-        aria-label="show 4 new mails"
-        color="inherit"
-        aria-controls="search-menu"
-        aria-haspopup="true"
-        onClick={() => setShowDrawer2(true)}
-        size="large"
-      >
-        <IconSearch size="16" />
-      </IconButton>
+      <Tooltip title={t('appHeader.searchPages')}>
+        <IconButton
+          aria-label={t('appHeader.searchPages')}
+          aria-controls={showDrawer2 ? 'page-search-dialog' : undefined}
+          aria-haspopup="dialog"
+          onClick={() => setShowDrawer2(true)}
+          color="inherit"
+          sx={{ width: 44, height: 44, borderRadius: 1 }}
+        >
+          <IconSearch size={20} aria-hidden="true" />
+        </IconButton>
+      </Tooltip>
       <Dialog
         open={showDrawer2}
         onClose={() => setShowDrawer2(false)}
         fullWidth
         maxWidth={'sm'}
-        aria-labelledby="alert-dialog-title"
-        aria-describedby="alert-dialog-description"
-        PaperProps={{ sx: { position: 'fixed', top: 30, m: 0 } }}
+        aria-labelledby="page-search-title"
+        PaperProps={{ id: 'page-search-dialog', sx: { position: 'fixed', top: 30, m: 0 } }}
       >
         <DialogContent className="testdialog">
           <Stack direction="row" spacing={2} alignItems="center">
             <TextField
               id="tb-search"
-              placeholder="Search here"
+              autoFocus
+              placeholder={t('appHeader.searchPages')}
               fullWidth
               onChange={(e) => setSerach(e.target.value)}
-              inputProps={{ 'aria-label': 'Search here' }}
+              inputProps={{ 'aria-label': t('appHeader.searchPages') }}
             />
-            <IconButton size="small" onClick={handleDrawerClose2}>
+            <IconButton size="small" aria-label={t('appHeader.closeSearch')} onClick={handleDrawerClose2}>
               <IconX size="18" />
             </IconButton>
           </Stack>
         </DialogContent>
         <Divider />
         <Box p={2} sx={{ maxHeight: '60vh', overflow: 'auto' }}>
-          <Typography variant="h5" p={1}>
-            Quick Page Links
+          <Typography id="page-search-title" variant="h5" p={1}>
+            {t('appHeader.searchPages')}
           </Typography>
           <Box>
             <List component="nav">
@@ -98,7 +101,7 @@ const Search = () => {
                 return (
                   <Box key={menu.title ? menu.id : menu.subheader}>
                     {menu.title && !menu.children ? (
-                      <ListItemButton sx={{ py: 0.5, px: 1 }} to={menu?.href} component={Link}>
+                      <ListItemButton sx={{ py: 0.5, px: 1 }} to={menu?.href} component={Link} onClick={handleDrawerClose2}>
                         <ListItemText
                           primary={menu.title}
                           secondary={menu?.href}
@@ -115,7 +118,7 @@ const Search = () => {
                             <ListItemButton
                               sx={{ py: 0.5, px: 1 }}
                               to={child.href}
-                              component={Link}
+                              component={Link} onClick={handleDrawerClose2}
                               key={child.title ? child.id : menu.subheader}
                             >
                               <ListItemText

@@ -337,6 +337,12 @@
   },
   "english": "Αγγλικά (UK)",
   "greek": "Ελληνικά (GR)",
+  "appHeader": {
+    "expandNavigation": "Ανάπτυξη πλοήγησης",
+    "collapseNavigation": "Σύμπτυξη πλοήγησης",
+    "searchPages": "Αναζήτηση σελίδων",
+    "closeSearch": "Κλείσιμο αναζήτησης"
+  },
   "languageSelector": "Αλλαγή γλώσσας",
   "login": "Σύνδεση",
   "register": "Εγγραφή",

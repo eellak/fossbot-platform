@@ -66,7 +66,7 @@ Route wiring lives in `front-end/src/routes/Router.tsx`.
 
 ### Editor UI components
 
-- `EditorTopBar.tsx` — Back, File/Edit/Add/View/Help menus, dirty state, validation chip, Export JSON, Run Test.
+- `EditorTopBar.tsx` — Stage name and save status, Stage settings, save and sharing actions, validation, test settings, Run test, and the More editor actions menu.
 - `EditorLeftPanel.tsx` — two-tab left rail: `Library` and `Scene`.
 - `StageObjectLibrary.tsx` — library of objects and built-in prefabs for placement in the viewport.
 - `StageSceneHierarchy.tsx` — object tree, selection, inline rename, hide/show, lock, duplicate/delete, group/ungroup.

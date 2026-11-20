@@ -1,6 +1,5 @@
 import React, { useMemo } from 'react';
-import Notifications from 'src/layouts/full/vertical/header/Notification';
-import Cart from 'src/layouts/full/vertical/header/Cart';
+import { Link } from 'react-router-dom';
 import UserMenu from 'src/components/user-menu/UserMenu';
 import Search from 'src/layouts/full/vertical/header/Search';
 import Language from 'src/layouts/full/vertical/header/Language';
@@ -17,9 +16,8 @@ import {
   Theme,
 } from '@mui/material';
 
-import { useSelector, useDispatch } from 'src/store/Store';
-import { toggleMobileSidebar } from 'src/store/customizer/CustomizerSlice';
-import { IconMenu2 } from '@tabler/icons-react';
+import { useSelector } from 'src/store/Store';
+import SidebarToggle from 'src/layouts/full/vertical/header/SidebarToggle';
 import { AppState } from 'src/store/Store';
 
 const Header = () => {
@@ -27,7 +25,6 @@ const Header = () => {
 
   // drawer
   const customizer = useSelector((state: AppState) => state.customizer);
-  const dispatch = useDispatch();
 
   const AppBarStyled = useMemo(
     () => styled(AppBar)(({ theme }) => ({
@@ -53,29 +50,17 @@ const Header = () => {
           maxWidth: customizer.isLayout === 'boxed' ? 'lg' : '100%!important',
         }}
       >
-        <Box sx={{ width: lgDown ? '45px' : 'auto', overflow: 'hidden' }}>
-          <Logo />
-        </Box>
-        {/* ------------------------------------------- */}
-        {/* Toggle Button Sidebar */}
-        {/* ------------------------------------------- */}
         {lgDown ? (
-          <IconButton
-            color="inherit"
-            aria-label="menu"
-            onClick={() => dispatch(toggleMobileSidebar())}
-          >
-            <IconMenu2 />
-          </IconButton>
-        ) : (
-          ''
-        )}
-        {/* ------------------------------------------- */}
-        {/* Search Dropdown */}
-        {/* ------------------------------------------- */}
+          <>
+            <SidebarToggle />
+            <IconButton component={Link} to="/" sx={{ width: 44, height: 44, borderRadius: 1 }}>
+              <Box component="img" src="/fossbot-favicon.png" width={24} height={24} alt="FOSSBot" />
+            </IconButton>
+          </>
+        ) : <Logo />}
         <Search />
         <Box flexGrow={1} />
-        <Stack spacing={1} direction="row" alignItems="center">
+        <Stack spacing={{ xs: 0.5, sm: 1 }} direction="row" alignItems="center">
           <Language />
           <UserMenu />
         </Stack>

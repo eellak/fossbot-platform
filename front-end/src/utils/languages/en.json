@@ -337,6 +337,12 @@
   },
   "english": "English (UK)",
   "greek": "Greek (GR)",
+  "appHeader": {
+    "expandNavigation": "Expand navigation",
+    "collapseNavigation": "Collapse navigation",
+    "searchPages": "Search pages",
+    "closeSearch": "Close search"
+  },
   "languageSelector": "Change language",
   "login": "Login",
   "register": "Register",
