@@ -178,7 +178,7 @@ function KindDetails({ kind, settings, onChange, onReset }: { kind: StageSemanti
         <Box sx={{ width: 12, height: 12, borderRadius: 0.5, bgcolor: categoryTone.accent, boxShadow: `0 0 0 2px ${categoryTone.surface}` }} />
         <Box sx={{ minWidth: 0, flex: 1 }}>
           <Typography variant="subtitle2" sx={{ ...editorType.panelTitle, lineHeight: 1.2 }}>{libraryLabel(kind)}</Typography>
-          <Typography variant="caption" sx={{ ...editorType.caption, color: editorColors.textSubtle }}>Physical artwork updates in the library. Semantic symbols and the accepted robot SVG remain fixed.</Typography>
+          <Typography variant="caption" sx={{ ...editorType.caption, color: editorColors.textSubtle }}>These settings apply to physical object previews.</Typography>
         </Box>
         <Tooltip title="Reset this kind to defaults">
           <IconButton size="small" onClick={onReset} aria-label="Reset to defaults">

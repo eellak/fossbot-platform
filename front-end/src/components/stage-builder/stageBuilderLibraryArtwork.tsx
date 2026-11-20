@@ -1,6 +1,6 @@
 import React from 'react';
+import Box from '@mui/material/Box';
 import type { StageSemanticKind } from './types';
-import { useEditorTheme } from './stageBuilderEditorTheme';
 
 const artwork: Partial<Record<StageSemanticKind, string>> = {
   robotSpawn: 'robot_spawn',
@@ -23,7 +23,14 @@ export function hasSemanticArtwork(kind?: StageSemanticKind): boolean {
 }
 
 export function StageSemanticArtwork({ kind, width, height }: { kind: StageSemanticKind; width: number; height: number }) {
-  const { variant } = useEditorTheme();
-  const mode = variant === 'studio' ? 'dark' : 'light';
-  return <img src={`${process.env.PUBLIC_URL || ''}/stage-builder/icons/${mode}/${artwork[kind]}-${mode}.svg`} width={width} height={height} alt="" draggable={false} style={{ display: 'block', objectFit: 'contain' }} />;
+  const mask = `url("${process.env.PUBLIC_URL || ''}/stage-builder/icons/classic/${artwork[kind]}.svg") center / contain no-repeat`;
+  return (
+    <Box component="span" aria-hidden="true"
+      style={{ width, height, mask, WebkitMask: mask }}
+      sx={{
+        display: 'block', bgcolor: 'currentColor',
+        '@media (forced-colors: active)': { bgcolor: 'CanvasText', forcedColorAdjust: 'none' },
+      }}
+    />
+  );
 }
