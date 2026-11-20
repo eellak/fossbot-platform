@@ -1,12 +1,11 @@
 import React, { useId, useRef, useState } from 'react';
-import { Box, Button, ButtonBase, Collapse, IconButton, InputAdornment, Stack, TextField, Tooltip, Typography, useMediaQuery } from '@mui/material';
+import { Box, Button, ButtonBase, Collapse, IconButton, Stack, Tooltip, Typography, useMediaQuery } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import { amber } from '@mui/material/colors';
 import type { StageSemanticKind } from './types';
 import { catalogItem } from './stageBuilderCatalog';
 import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
-import SearchIcon from '@mui/icons-material/Search';
-import CloseIcon from '@mui/icons-material/Close';
+import { StagePanelSearch } from './StagePanelSearch';
 import FlagOutlinedIcon from '@mui/icons-material/FlagOutlined';
 import RouteIcon from '@mui/icons-material/Route';
 import ViewInArOutlinedIcon from '@mui/icons-material/ViewInArOutlined';
@@ -18,8 +17,7 @@ import StarBorderIcon from '@mui/icons-material/StarBorder';
 import HistoryIcon from '@mui/icons-material/History';
 import type { StageBuilderPrefab } from './stageBuilderPrefabs';
 import { useEditorTheme, type EditorTone } from './stageBuilderEditorTheme';
-import { PreviewImage } from './PreviewImage';
-import { hasSemanticArtwork } from './stageBuilderLibraryArtwork';
+import { PanelThumbnail, PreviewImage } from './PreviewImage';
 import { MAX_RECENT_LIBRARY_ITEMS, sameLibraryItem, type LibraryItem } from './stageBuilderRecentItems';
 
 export type StageBuilderLibraryGroup = {
@@ -109,7 +107,6 @@ interface LibraryTileProps {
 
 function LibraryTile({ label, detail, active, tone, previewKind, prefab, favourite, onToggleFavourite, onClick }: LibraryTileProps) {
   const { colors: editorColors, type: editorType } = useEditorTheme();
-  const previewSize = previewKind !== 'prefab' && hasSemanticArtwork(previewKind) ? 24 : 40;
   const starAction = favourite ? `Remove ${label} from favourites` : `Add ${label} to favourites`;
   return (
     <Box sx={{
@@ -127,7 +124,7 @@ function LibraryTile({ label, detail, active, tone, previewKind, prefab, favouri
           }}
         >
           <Box className="library-preview" sx={{ width: 28, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', '& > *': { flexShrink: 0 } }}>
-            <PreviewImage kind={previewKind === 'prefab' ? undefined : previewKind} prefab={prefab} width={previewSize} height={previewSize} />
+            <PanelThumbnail kind={previewKind === 'prefab' ? undefined : previewKind} prefab={prefab} />
           </Box>
           <Typography variant="body2" sx={{ ...editorType.body, minWidth: 0, overflowWrap: 'anywhere', color: 'inherit', fontSize: '0.875rem', fontWeight: 600, lineHeight: 1.2 }}>
             {label}
@@ -203,7 +200,6 @@ export function StageObjectLibrary({
   const { colors: editorColors, tones: editorTones, type: editorType } = useEditorTheme();
   const addKind = onAddKind || onSelectKind;
   const addPrefab = onAddPrefab || onSelectPrefab;
-  const searchInputRef = useRef<HTMLInputElement>(null);
   const favouritesHeader = useRef<HTMLButtonElement>(null);
   const [query, setQuery] = useState('');
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({ structures: true, recent: true });
@@ -256,29 +252,7 @@ export function StageObjectLibrary({
   return (
     <Stack spacing={1} sx={{ color: editorColors.text, containerType: 'inline-size' }}>
       <Box sx={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: 1 }}>
-        <TextField
-          fullWidth
-          size="small"
-          value={query}
-          inputRef={searchInputRef}
-          placeholder="Search objects…"
-          onChange={event => changeQuery(event.target.value)}
-          onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); changeQuery(''); } }}
-          inputProps={{ 'aria-label': 'Search objects' }}
-          InputProps={{
-            startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" sx={{ color: editorColors.textMuted }} /></InputAdornment>,
-            endAdornment: query ? <InputAdornment position="end"><IconButton aria-label="Clear search" onClick={() => { changeQuery(''); searchInputRef.current?.focus(); }} edge="end" sx={{ width: 44, height: 44 }}><CloseIcon fontSize="small" /></IconButton></InputAdornment> : undefined,
-          }}
-          sx={{
-            '& .MuiInputBase-root': { minHeight: 44, bgcolor: editorColors.panel },
-            '& input': { minWidth: 0, pl: 0.5, pr: 1 },
-            '& input::placeholder': { color: editorColors.textMuted, opacity: 1 },
-            '@container (max-width: 255px)': {
-              '& .MuiInputAdornment-positionStart': { display: 'none' },
-              '& .MuiInputBase-root': { pl: 1 },
-            },
-          }}
-        />
+        <StagePanelSearch label="Search objects" placeholder="Search objects…" query={query} onChange={changeQuery} />
         <Tooltip describeChild title="Import an OBJ, STL or GLB model">
           <Button size="small" variant="outlined" aria-label="Import OBJ/STL/GLB model" onClick={onImportObject} sx={{ minHeight: 44, px: 0.75 }}>
             Import…

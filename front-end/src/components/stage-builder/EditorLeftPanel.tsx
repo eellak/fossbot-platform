@@ -1,22 +1,18 @@
 import React from 'react';
 import { Box, Divider, IconButton, Tab, Tabs, Tooltip } from '@mui/material';
 import KeyboardDoubleArrowLeftIcon from '@mui/icons-material/KeyboardDoubleArrowLeft';
-import type { EditorStage, EditorStageObject, StageHierarchyRow, StageSemanticKind } from './types';
+import type { StageSemanticKind } from './types';
 import type { StageBuilderPrefab } from './stageBuilderPrefabs';
 import { PreviewAssetBaseContext } from './PreviewImage';
 import { StageObjectLibrary } from './StageObjectLibrary';
 import type { LibraryItem } from './stageBuilderRecentItems';
-import { StageSceneHierarchy, type HierarchyDropTarget } from './StageSceneHierarchy';
+import { StageSceneHierarchy, type StageSceneHierarchyProps } from './StageSceneHierarchy';
 import { useEditorTheme } from './stageBuilderEditorTheme';
 
-export interface EditorLeftPanelProps {
-  stage: EditorStage;
+export interface EditorLeftPanelProps extends StageSceneHierarchyProps {
   stageAssetBaseUrl?: string | null;
   tab: 'library' | 'scene';
   onTabChange: (tab: 'library' | 'scene') => void;
-  selectedId: string | null;
-  selectedIds: string[];
-  selectedGroupId: string | null;
   prefabs: StageBuilderPrefab[];
   recentItems: LibraryItem[];
   favouriteItems: LibraryItem[];
@@ -24,16 +20,6 @@ export interface EditorLeftPanelProps {
   onAddKind: (kind: StageSemanticKind) => void;
   onAddPrefab: (prefab: StageBuilderPrefab) => void;
   onImportObject: () => void;
-  onSelectObject: (id: string | null) => void;
-  onSelectGroup: (id: string | null) => void;
-  onSelectionChange: (ids: string[]) => void;
-  onObjectChange: (object: EditorStageObject) => void;
-  onDuplicateObjects: (ids: string[]) => void;
-  onDuplicateGroup: (id: string) => void;
-  onDeleteObjects: (ids: string[]) => void;
-  onHierarchyDrop: (source: StageHierarchyRow, target: HierarchyDropTarget) => void;
-  onGroupRename: (groupId: string, name: string) => void;
-  onPatchObjects: (ids: string[], patch: Partial<EditorStageObject>) => void;
   onTogglePanel: () => void;
 }
 
@@ -76,22 +62,7 @@ export function EditorLeftPanel(props: EditorLeftPanelProps) {
         {tab === 'library' ? (
           <StageObjectLibrary prefabs={props.prefabs} recentItems={props.recentItems} favouriteItems={props.favouriteItems} onToggleFavourite={props.onToggleFavourite} onAddKind={props.onAddKind} onAddPrefab={props.onAddPrefab} onImportObject={props.onImportObject} />
         ) : (
-          <StageSceneHierarchy
-            stage={props.stage}
-            selectedId={props.selectedId}
-            selectedIds={props.selectedIds}
-            selectedGroupId={props.selectedGroupId}
-            onSelectObject={props.onSelectObject}
-            onSelectGroup={props.onSelectGroup}
-            onSelectionChange={props.onSelectionChange}
-            onObjectChange={props.onObjectChange}
-            onDuplicateObjects={props.onDuplicateObjects}
-            onDuplicateGroup={props.onDuplicateGroup}
-            onDeleteObjects={props.onDeleteObjects}
-            onHierarchyDrop={props.onHierarchyDrop}
-            onGroupRename={props.onGroupRename}
-            onPatchObjects={props.onPatchObjects}
-          />
+          <StageSceneHierarchy {...props} />
         )}
       </Box>
     </Box></PreviewAssetBaseContext.Provider>

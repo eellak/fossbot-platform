@@ -1,9 +1,11 @@
-import type { EditorStage, EditorStageObject, StageHierarchyRow } from './types';
+import type { EditorStage, EditorStageObject, StageHierarchyFolder, StageHierarchyRow } from './types';
 import { cloneStage, translateObject } from './stageBuilderGeometry';
 import { makeLocalStageId } from './localStages';
 
-export type HierarchyDrop = StageHierarchyRow & { position: 'before' | 'after' | 'inside' };
-const rowKey = (row: StageHierarchyRow) => `${row.kind}:${row.id}`;
+export type HierarchyDrop = (StageHierarchyRow & { position: 'before' | 'after' | 'inside' }) | { kind: 'root'; position: 'inside' };
+export const rowKey = (row: StageHierarchyRow) => `${row.kind}:${row.id}`;
+const objectRow = (id: string): StageHierarchyRow => ({ kind: 'object', id });
+const folderRow = (id: string): StageHierarchyRow => ({ kind: 'folder', id });
 export const hierarchyParentId = (object: EditorStageObject): string | undefined => object.parentId || (object.kind === 'text' ? object.attachment?.parentId : undefined);
 
 function orderedIds(saved: string[] | undefined, live: string[]): string[] {
@@ -29,16 +31,123 @@ export function normalizeStageHierarchy(stage: EditorStage): EditorStage {
     const row: StageHierarchyRow = group ? { kind: 'group', id: group } : { kind: 'object', id: object.id };
     if (!emitted.has(rowKey(row))) { live.push(row); emitted.add(rowKey(row)); }
   }
-  const liveByKey = new Map(live.map(row => [rowKey(row), row]));
-  const hierarchyOrder = orderedIds(stage.metadata.hierarchyOrder?.map(rowKey), live.map(rowKey)).map(key => liveByKey.get(key)!);
-  const attachedOrder: Record<string, string[]> = {};
+  // Folder membership overrides only the displayed parent. Legacy groups and attachments keep their own membership.
+  const folderById = new Map<string, StageHierarchyFolder>();
+  const savedFolders = Array.isArray(stage.metadata.folders) ? stage.metadata.folders : [];
+  for (const folder of savedFolders) {
+    if (folder && typeof folder.id === 'string' && folder.id && typeof folder.name === 'string' && !folderById.has(folder.id)) {
+      folderById.set(folder.id, folder);
+    }
+  }
+  const available = new Set([
+    ...live.map(rowKey),
+    ...stage.objects.map(object => rowKey(objectRow(object.id))),
+    ...Array.from(folderById.keys(), id => rowKey(folderRow(id))),
+  ]);
+  const owners = new Map<string, string>();
+  const folders = Array.from(folderById.values(), folder => {
+    const children: StageHierarchyRow[] = [];
+    for (const row of Array.isArray(folder.children) ? folder.children : []) {
+      if (!row || typeof row.id !== 'string' || !available.has(rowKey(row)) || owners.has(rowKey(row))) continue;
+      if (row.kind === 'folder' && hasFolderAncestor(folder.id, row.id, owners)) continue;
+      owners.set(rowKey(row), folder.id);
+      children.push({ kind: row.kind, id: row.id });
+    }
+    return { id: folder.id, name: folder.name, children };
+  });
+  const roots = [...live, ...folders.map(folder => folderRow(folder.id))].filter(row => !owners.has(rowKey(row)));
+  const liveByKey = new Map(roots.map(row => [rowKey(row), row]));
+  const savedOrder = Array.isArray(stage.metadata.hierarchyOrder) ? stage.metadata.hierarchyOrder.filter(Boolean).map(rowKey) : [];
+  const hierarchyOrder = orderedIds(savedOrder, roots.map(rowKey)).map(key => liveByKey.get(key)!);
+  const attachedOrder: Record<string, string[]> = Object.create(null);
   for (const object of stage.objects) {
     const parent = parentOf(object);
     if (parent) (attachedOrder[parent] ||= []).push(object.id);
   }
   for (const parent of Object.keys(attachedOrder)) attachedOrder[parent] = orderedIds(stage.metadata.attachedOrder?.[parent], attachedOrder[parent]);
-  if (JSON.stringify({ groups, hierarchyOrder, attachedOrder }) === JSON.stringify({ groups: stage.metadata.groups, hierarchyOrder: stage.metadata.hierarchyOrder, attachedOrder: stage.metadata.attachedOrder })) return stage;
-  return { ...stage, metadata: { ...stage.metadata, groups, hierarchyOrder, attachedOrder } };
+  const previous = stage.metadata;
+  const nextFolders = folders.length ? folders : undefined;
+  if (JSON.stringify([groups, hierarchyOrder, attachedOrder, nextFolders]) ===
+      JSON.stringify([previous.groups, previous.hierarchyOrder, previous.attachedOrder, previous.folders])) return stage;
+  return { ...stage, metadata: { ...previous, groups, hierarchyOrder, attachedOrder, folders: nextFolders } };
+}
+
+function hasFolderAncestor(id: string, ancestor: string, owners: Map<string, string>) {
+  let current: string | undefined = id;
+  while (current) {
+    if (current === ancestor) return true;
+    current = owners.get(rowKey(folderRow(current)));
+  }
+  return false;
+}
+
+export function folderOwners(folders: StageHierarchyFolder[]) {
+  const owners = new Map<string, string>();
+  for (const folder of folders) for (const child of folder.children) owners.set(rowKey(child), folder.id);
+  return owners;
+}
+
+/** Move displayed rows without changing the stage objects or their runtime order. */
+export function placeHierarchyRows(stage: EditorStage, rows: StageHierarchyRow[], folderId: string | null, anchor?: StageHierarchyRow, after = false): EditorStage {
+  const normalized = normalizeStageHierarchy(stage);
+  const folders = normalized.metadata.folders || [];
+  const destination = folders.find(folder => folder.id === folderId);
+  if (folderId !== null && !destination) return stage;
+  const keys = new Set(rows.map(rowKey));
+  const owners = folderOwners(folders);
+  if (!rows.length || (anchor && keys.has(rowKey(anchor)))) return stage;
+  if (destination && rows.some(row => row.kind === 'folder' && hasFolderAncestor(destination.id, row.id, owners))) return stage;
+  const insert = (items: StageHierarchyRow[]) => {
+    const remaining = items.filter(row => !keys.has(rowKey(row)));
+    const index = anchor ? remaining.findIndex(row => rowKey(row) === rowKey(anchor)) : -1;
+    remaining.splice(index < 0 ? remaining.length : index + Number(after), 0, ...rows);
+    return remaining;
+  };
+  const nextFolders = folders.map(folder => ({
+    ...folder,
+    children: folder.id === folderId ? insert(folder.children) : folder.children.filter(row => !keys.has(rowKey(row))),
+  }));
+  const hierarchyOrder = destination ? normalized.metadata.hierarchyOrder : insert(normalized.metadata.hierarchyOrder!);
+  const next = normalizeStageHierarchy({ ...normalized, metadata: { ...normalized.metadata, folders: nextFolders, hierarchyOrder } });
+  const unchanged = JSON.stringify([next.metadata.hierarchyOrder, next.metadata.folders]) ===
+    JSON.stringify([normalized.metadata.hierarchyOrder, normalized.metadata.folders]);
+  return unchanged ? stage : next;
+}
+
+export function createHierarchyFolder(stage: EditorStage, id: string, rows: StageHierarchyRow[] = []): EditorStage {
+  const normalized = normalizeStageHierarchy(stage);
+  const folders = normalized.metadata.folders || [];
+  const names = new Set(folders.map(folder => folder.name));
+  const name = names.has('New folder') ? numberedCopyName('New folder', names) : 'New folder';
+  const owners = folderOwners(folders);
+  const parent = rows.length ? owners.get(rowKey(rows[0])) : undefined;
+  const destination = rows.every(row => owners.get(rowKey(row)) === parent) ? parent : undefined;
+  const selected = new Set(rows.map(rowKey));
+  const replaceSelection = (siblings: StageHierarchyRow[], owner?: string) => {
+    const remaining = siblings.filter(row => !selected.has(rowKey(row)));
+    if (owner === destination) {
+      const index = siblings.findIndex(row => selected.has(rowKey(row)));
+      remaining.splice(index < 0 ? remaining.length : index, 0, folderRow(id));
+    }
+    return remaining;
+  };
+  const nextFolders = folders.map(folder => ({ ...folder, children: replaceSelection(folder.children, folder.id) }));
+  nextFolders.push({ id, name, children: rows });
+  return normalizeStageHierarchy({ ...normalized, metadata: { ...normalized.metadata,
+    folders: nextFolders, hierarchyOrder: replaceSelection(normalized.metadata.hierarchyOrder!),
+  } });
+}
+
+export function deleteHierarchyFolder(stage: EditorStage, id: string): EditorStage {
+  const normalized = normalizeStageHierarchy(stage);
+  const folders = normalized.metadata.folders || [];
+  const folder = folders.find(item => item.id === id);
+  if (!folder) return stage;
+  const promote = (rows: StageHierarchyRow[]) => rows.flatMap(row => row.kind === 'folder' && row.id === id ? folder.children : [row]);
+  return normalizeStageHierarchy({ ...normalized, metadata: { ...normalized.metadata,
+    folders: folders.filter(item => item.id !== id).map(item => ({ ...item, children: promote(item.children) })),
+    hierarchyOrder: promote(normalized.metadata.hierarchyOrder!),
+  } });
 }
 
 export function numberedCopyName(name: string, used: Set<string>): string {
@@ -57,9 +166,20 @@ function reorder<T>(items: T[], source: T, target: T, after: boolean): T[] {
   return next;
 }
 
-export function moveHierarchyRow(stage: EditorStage, source: StageHierarchyRow, target: HierarchyDrop): EditorStage {
-  if (rowKey(source) === rowKey(target)) return stage;
+export function moveHierarchyRow(stage: EditorStage, source: StageHierarchyRow, target: HierarchyDrop, selectedIds: string[] = []): EditorStage {
+  if (target.kind !== 'root' && rowKey(source) === rowKey(target)) return stage;
   const normalized = normalizeStageHierarchy(stage);
+  const folders = normalized.metadata.folders || [];
+  const owners = folderOwners(folders);
+  const moving = source.kind === 'object' && selectedIds.includes(source.id) ? selectedIds.map(objectRow) : [source];
+  if (target.kind === 'root') return placeHierarchyRows(stage, moving, null);
+  if (target.kind === 'folder' && target.position === 'inside') return placeHierarchyRows(stage, moving, target.id);
+  const targetFolder = owners.get(rowKey(target));
+  if (source.kind === 'folder' || target.kind === 'folder' || targetFolder || owners.has(rowKey(source))) {
+    if (target.position === 'inside') return stage;
+    if (!targetFolder && !normalized.metadata.hierarchyOrder!.some(row => rowKey(row) === rowKey(target))) return stage;
+    return placeHierarchyRows(stage, moving, targetFolder ?? null, target, target.position === 'after');
+  }
   const objectById = new Map(stage.objects.map(object => [object.id, object]));
   const groups = normalized.metadata.groups;
   const memberGroup = (id: string) => groups.find(group => group.objectIds.includes(id));
@@ -165,8 +285,12 @@ export function copyHierarchySelection(stage: EditorStage, source: { groupId: st
     if (idMap.has(parent)) attachedOrder[idMap.get(parent)!] = children.filter(id => idMap.has(id)).map(id => idMap.get(id)!);
     else attachedOrder[parent] = children.flatMap(id => idMap.has(id) ? [id, idMap.get(id)!] : [id]);
   }
+  const folders = normalized.metadata.folders?.map(folder => ({ ...folder, children: folder.children.flatMap(row => {
+    const copyId = row.kind === 'object' ? idMap.get(row.id) : row.kind === 'group' && group?.id === row.id ? groupId : null;
+    return copyId ? [row, { kind: row.kind, id: copyId }] : [row];
+  }) }));
   return {
-    stage: normalizeStageHierarchy({ ...normalized, objects: [...stage.objects, ...copies], metadata: { ...normalized.metadata, groups: nextGroups, hierarchyOrder: order, attachedOrder } }),
+    stage: normalizeStageHierarchy({ ...normalized, objects: [...stage.objects, ...copies], metadata: { ...normalized.metadata, groups: nextGroups, hierarchyOrder: order, attachedOrder, folders } }),
     selectedIds: selected.map(id => idMap.get(id)!).filter(Boolean), groupId,
   };
 }

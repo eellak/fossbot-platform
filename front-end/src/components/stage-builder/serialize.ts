@@ -627,6 +627,7 @@ export function configToEditorStage(record: LocalStageRecord): EditorStage {
       defaultRotationSnapPreset: editor.defaultRotationSnapPreset,
       lastMovementSnapPreset: editor.lastMovementSnapPreset,
       hierarchyOrder: editor.hierarchyOrder,
+      folders: editor.folders,
       attachedOrder: editor.attachedOrder,
       lockCamera: editor.lockCamera,
       skybox: normalizeStageBuilderSkybox(editor.skybox),

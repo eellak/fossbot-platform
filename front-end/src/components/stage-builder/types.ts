@@ -314,7 +314,8 @@ export type StageBuilderGroup = {
 };
 
 export type StageValidationOverrideMap = Record<string, boolean>;
-export type StageHierarchyRow = { kind: 'object' | 'group'; id: string };
+export type StageHierarchyRow = { kind: 'object' | 'group' | 'folder'; id: string };
+export type StageHierarchyFolder = { id: string; name: string; children: StageHierarchyRow[] };
 
 export type StageBuilderMetadata = {
   version: 2 | 3;
@@ -326,6 +327,7 @@ export type StageBuilderMetadata = {
   defaultRotationSnapPreset?: 'off' | '15' | '30' | '45';
   lastMovementSnapPreset?: 'precise' | 'fine' | 'medium' | 'coarse';
   hierarchyOrder?: StageHierarchyRow[];
+  folders?: StageHierarchyFolder[];
   attachedOrder?: Record<string, string[]>;
   lockCamera?: boolean;
   skybox?: StageBuilderSkyboxSettings;

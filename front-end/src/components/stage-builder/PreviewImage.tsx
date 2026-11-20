@@ -26,6 +26,12 @@ function semanticKind(object?: EditorStageObject): StageSemanticKind | undefined
   return object.semanticKind || ({ fossbot: 'robotSpawn', line: 'line', text: 'label', arrow: 'directionArrow', light: 'light', camera: 'camera', audio: 'audio' } as Partial<Record<EditorStageObject['kind'], StageSemanticKind>>)[object.kind];
 }
 
+/** Rendered shapes include padding around the mesh. Semantic icons fill their image. */
+export function PanelThumbnail(props: Pick<PreviewImageProps, 'kind' | 'object' | 'prefab'>) {
+  const size = hasSemanticArtwork(props.kind || semanticKind(props.object)) ? 24 : 40;
+  return <PreviewImage {...props} width={size} height={size} />;
+}
+
 export function PreviewImage({ kind, object, prefab, width = 44, height = 33, alt = '', scale = 1 }: PreviewImageProps) {
   const { colors } = useEditorTheme();
   const stageAssetBaseUrl = useContext(PreviewAssetBaseContext);

@@ -4,7 +4,7 @@ import { useStageBuilderDeparture } from 'src/components/stage-builder/useStageB
 import { sharpLineCorners } from 'src/simulator/stages/lineGeometryCore';
 import { insertDrawnLinePoint, reconcileLineOperation, type LineOperation } from 'src/components/stage-builder/stageBuilderLineEditing';
 import type { EditorLineObject } from 'src/components/stage-builder/types';
-import { copyHierarchySelection, moveHierarchyRow, normalizeStageHierarchy } from 'src/components/stage-builder/stageBuilderHierarchy';
+import { copyHierarchySelection, createHierarchyFolder, deleteHierarchyFolder, moveHierarchyRow, normalizeStageHierarchy, placeHierarchyRows, type HierarchyDrop } from 'src/components/stage-builder/stageBuilderHierarchy';
 import type { StageHierarchyRow } from 'src/components/stage-builder/types';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
@@ -37,7 +37,6 @@ import { hasFloorGeometry, placeObjectsOnFloor } from 'src/components/stage-buil
 import { EditorTopBar } from 'src/components/stage-builder/EditorTopBar';
 import { EditorLeftPanel } from 'src/components/stage-builder/EditorLeftPanel';
 import { restoreBlankStageFavourites, useLibraryShortlists } from 'src/components/stage-builder/stageBuilderRecentItems';
-import type { HierarchyDropTarget } from 'src/components/stage-builder/StageSceneHierarchy';
 import { StageLineToolbar } from 'src/components/stage-builder/StageLineToolbar';
 import { EditorViewportToolRail, EditorViewportSnapControls } from 'src/components/stage-builder/EditorViewportToolRail';
 import { EditorViewportCameraGizmo } from 'src/components/stage-builder/EditorViewportCameraGizmo';
@@ -1481,7 +1480,7 @@ const StageBuilderPage = () => {
       // save was in flight.
       invalidateLocalStages();
       setMessage(`Saved to your account: ${saved.title} · v${saved.revision}`);
-      if (openLocalStageOpen) setLocalStages(await listLocalStages(token));
+      if (openLocalStageOpen) void refreshLocalStageList();
       return true;
     } catch (error) {
       if (error instanceof LocalStageRequestError && error.code === 'revision_conflict') {
@@ -1843,11 +1842,11 @@ const StageBuilderPage = () => {
     }, { selectGroupId: groupId, message: 'Grouped selected objects.' });
   };
 
-  const handleHierarchyDrop = (source: StageHierarchyRow, target: HierarchyDropTarget) => {
-    if (source.kind === target.type && source.id === target.id) return;
+  const handleHierarchyDrop = (source: StageHierarchyRow, target: HierarchyDrop, movingIds?: string[]) => {
+    if (target.kind !== 'root' && source.kind === target.kind && source.id === target.id) return;
     commitStage((current) => {
       const moving = source.kind === 'object' ? current.objects.find(object => object.id === source.id) : null;
-      const parent = target.type === 'object' ? current.objects.find(object => object.id === target.id) : null;
+      const parent = target.kind === 'object' ? current.objects.find(object => object.id === target.id) : null;
       if (moving?.kind === 'text' && target.position === 'inside' && parent && canAttachLabelTo(parent)) {
         return {
           ...current,
@@ -1855,10 +1854,13 @@ const StageBuilderPage = () => {
             ...moving, parentId: parent.id, groupId: undefined, onFloor: false,
             attachment: moving.attachment?.parentId === parent.id ? moving.attachment : defaultLabelAttachment(parent),
           } as EditorStageObject : object),
-          metadata: { ...current.metadata, groups: current.metadata.groups.map(group => ({ ...group, objectIds: group.objectIds.filter(id => id !== moving.id) })) },
+          metadata: { ...current.metadata,
+            groups: current.metadata.groups.map(group => ({ ...group, objectIds: group.objectIds.filter(id => id !== moving.id) })),
+            folders: current.metadata.folders?.map(folder => ({ ...folder, children: folder.children.filter(row => row.kind !== 'object' || row.id !== moving.id) })),
+          },
         };
       }
-      return moveHierarchyRow(current, source, { kind: target.type, id: target.id, position: target.position });
+      return moveHierarchyRow(current, source, target, movingIds);
     });
   };
 
@@ -2001,6 +2003,16 @@ const StageBuilderPage = () => {
       onDuplicateGroup={duplicateGroup}
       onDeleteObjects={deleteObjects}
       onHierarchyDrop={handleHierarchyDrop}
+      onCreateFolder={rows => {
+        const id = makeLocalStageId();
+        commitStage(current => createHierarchyFolder(current, id, rows));
+        return id;
+      }}
+      onRenameFolder={(id, name) => commitStage(current => ({ ...current, metadata: { ...current.metadata,
+        folders: current.metadata.folders?.map(folder => folder.id === id ? { ...folder, name } : folder),
+      } }))}
+      onDeleteFolder={id => commitStage(current => deleteHierarchyFolder(current, id))}
+      onRemoveFromFolder={rows => commitStage(current => placeHierarchyRows(current, rows, null))}
       onGroupRename={renameGroup}
       onPatchObjects={patchObjects}
       onTogglePanel={toggleLeftPanel}
