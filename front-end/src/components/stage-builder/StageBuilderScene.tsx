@@ -868,7 +868,7 @@ function makeAudioRangeRing(range: number, colorValue: THREE.Color, options: Obj
 
 function robotSpawnAccent(options: ObjectVisualOptions, colors: ReturnType<typeof getEditorColors>): string {
   if (options.ghostValid === false) return colors.friendlyHandleInvalid;
-  return validationTint(options.validationSeverity, colors) || colors.friendlyMarquee;
+  return validationTint(options.validationSeverity, colors) || '#bcbcbc';
 }
 
 function robotSpawnOpacity(options: ObjectVisualOptions, opacity: number): number {
@@ -876,26 +876,12 @@ function robotSpawnOpacity(options: ObjectVisualOptions, opacity: number): numbe
   return Math.min(opacity, Math.max(0.16, opacity * 0.74));
 }
 
-type RobotSpawnMaterialRole = 'body' | 'accent' | 'glow' | 'soft' | 'wheel' | 'rim';
+type RobotSpawnMaterialRole = 'accent' | 'glow' | 'rim';
 
 function tagRobotSpawnMaterial<T extends THREE.Material>(material: T, role: RobotSpawnMaterialRole): T {
   material.userData.robotSpawnRole = role;
   material.userData.robotSpawnBaseOpacity = material.opacity;
   return material;
-}
-
-function robotSpawnStandardMaterial(colorValue: string, opacity: number, role: RobotSpawnMaterialRole): THREE.MeshStandardMaterial {
-  const mat = new THREE.MeshStandardMaterial({
-    color: color(colorValue),
-    transparent: true,
-    opacity,
-    depthWrite: false,
-    roughness: 0.42,
-    metalness: 0.05,
-    emissive: color(colorValue),
-    emissiveIntensity: role === 'wheel' ? 0.04 : role === 'body' ? 0.08 : 0.16,
-  });
-  return tagRobotSpawnMaterial(mat, role);
 }
 
 function robotSpawnBasicMaterial(colorValue: string, opacity: number, role: RobotSpawnMaterialRole, side: THREE.Side = THREE.FrontSide): THREE.MeshBasicMaterial {
@@ -980,28 +966,13 @@ function makeSensorHelpersVisual(colors: ReturnType<typeof getEditorColors>): TH
 }
 
 function applyRobotSpawnTint(root: THREE.Object3D, accentValue: string, colors: ReturnType<typeof getEditorColors>): void {
-  root.userData.robotSpawnAccent = accentValue;
   const accent = color(accentValue);
-  const body = color(colors.robot);
-  const soft = color(colors.accentText);
-  const wheel = color(colors.accent);
-  const rim = color(accentValue === colors.friendlyHandleInvalid ? colors.dangerSurface : accentValue === colors.warning ? `${colors.warning}33` : `${colors.accent}26`);
-  const wheelGlow = color(colors.accent);
-  const bodyGlow = color(colors.accentText);
-  root.traverse((child) => {
-    const material = (child as THREE.Mesh).material as THREE.Material | THREE.Material[] | undefined;
-    const materials = Array.isArray(material) ? material : material ? [material] : [];
-    for (const mat of materials) {
-      const role = mat.userData.robotSpawnRole as RobotSpawnMaterialRole | undefined;
-      if (!role) continue;
-      const next = role === 'body' ? body : role === 'soft' ? soft : role === 'wheel' ? wheel : role === 'rim' ? rim : accent;
-      const maybe = mat as THREE.MeshBasicMaterial | THREE.MeshStandardMaterial | THREE.LineBasicMaterial | THREE.SpriteMaterial;
-      if ('color' in maybe && maybe.color) maybe.color.copy(next);
-      const standard = mat as THREE.MeshStandardMaterial;
-      if (standard.emissive) standard.emissive.copy(role === 'wheel' ? wheelGlow : role === 'body' ? bodyGlow : role === 'rim' ? rim : accent);
-      mat.needsUpdate = true;
-    }
-  });
+  const rim = accentValue === colors.friendlyHandleInvalid || accentValue === colors.warning ? accent : color('#ffffff');
+  for (const child of root.children) {
+    const mat = (child as THREE.Mesh).material as THREE.MeshBasicMaterial | undefined;
+    const role = mat?.userData?.robotSpawnRole;
+    if (mat && role) mat.color.copy(role === 'rim' ? rim : accent);
+  }
 }
 
 function applyRobotSpawnSelectionState(root: THREE.Object3D, active: boolean): void {
@@ -1047,84 +1018,70 @@ function applyRobotSpawnSelectionState(root: THREE.Object3D, active: boolean): v
 
 let robotSpawnModelTemplatePromise: Promise<THREE.Group> | null = null;
 
-export function loadRobotSpawnModelTemplate(): Promise<THREE.Group> {
+function loadRobotSpawnModelTemplate(): Promise<THREE.Group> {
   if (!robotSpawnModelTemplatePromise) {
-    robotSpawnModelTemplatePromise = loadRobotV2()
-      .then((robot) => robot.root)
-      .catch((error) => {
-        robotSpawnModelTemplatePromise = null;
-        throw error;
-      });
+    robotSpawnModelTemplatePromise = loadRobotV2(undefined, '/simulator/models/robots/v2').then((robot) => {
+      robot.aiCameraTop.removeFromParent();
+      robot.root.getObjectByName('v2_internal_board')?.removeFromParent();
+      robot.root.getObjectByName('v2_pen_holder')?.removeFromParent();
+
+      // Keep the top plate's size and position, with a smooth face in place of the stud grid.
+      const top = robot.legoTop;
+      const bounds = new THREE.Box3().setFromBufferAttribute(top.geometry.getAttribute('position') as THREE.BufferAttribute);
+      const size = bounds.getSize(new THREE.Vector3());
+      const centre = bounds.getCenter(new THREE.Vector3());
+      top.geometry.dispose();
+      top.geometry = new THREE.CylinderGeometry(size.x / 2, size.x / 2, size.z, 48)
+        .rotateX(Math.PI / 2).translate(centre.x, centre.y, centre.z);
+      return robot.root;
+    }).catch((error) => {
+      robotSpawnModelTemplatePromise = null;
+      throw error;
+    });
   }
   return robotSpawnModelTemplatePromise;
 }
 
-function cloneOwnedMeshResources(root: THREE.Object3D): void {
-  root.traverse((child) => {
-    const mesh = child as THREE.Mesh;
-    if (!(mesh as any).isMesh) return;
-    if (mesh.geometry) mesh.geometry = mesh.geometry.clone();
-    const material = mesh.material as THREE.Material | THREE.Material[] | undefined;
-    if (Array.isArray(material)) mesh.material = material.map((item) => item.clone());
-    else if (material) mesh.material = material.clone();
-  });
-}
-
-function robotSpawnRoleForPart(part: THREE.Object3D, modelRoot: THREE.Object3D): 'body' | 'accent' | 'soft' | 'wheel' {
-  const names: string[] = [];
-  let cursor: THREE.Object3D | null = part;
-  while (cursor && cursor !== modelRoot) {
-    names.push(cursor.name.toLowerCase());
-    cursor = cursor.parent;
-  }
-  const label = names.join(' ');
-  if (label.includes('wheel')) return 'wheel';
-  if (label.includes('eye') || label.includes('lego') || label.includes('pen_holder')) return 'soft';
-  if (label.includes('fender') || label.includes('b3_p_f')) return 'accent';
-  return 'body';
-}
-
-function styleRobotSpawnModel(modelRoot: THREE.Object3D, options: ObjectVisualOptions, accentValue: string, colors: ReturnType<typeof getEditorColors>): void {
-  modelRoot.traverse((child) => {
-    const mesh = child as THREE.Mesh;
-    if (!(mesh as any).isMesh) return;
-    mesh.castShadow = false;
-    mesh.receiveShadow = false;
-    const role = robotSpawnRoleForPart(child, modelRoot);
-    const material = mesh.material as THREE.Material | THREE.Material[] | undefined;
-    const materials = Array.isArray(material) ? material : material ? [material] : [];
-    for (const mat of materials) {
-      tagRobotSpawnMaterial(mat, role);
+function attachRobotSpawnModel(host: THREE.Group, pickables: THREE.Object3D[], opacity: number, onVisualReady?: () => void): void {
+  host.userData.stageBuilderVisualReady = loadRobotSpawnModelTemplate().then((template) => {
+    if (host.userData.stageBuilderDisposed) return false;
+    const model = template.clone(true);
+    const translucent = (source: THREE.Material) => {
+      const mat = source.clone() as THREE.MeshStandardMaterial | THREE.MeshPhongMaterial;
+      const { r, g, b } = mat.color;
+      const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      mat.color.setScalar(THREE.MathUtils.lerp(0.16, 1, luminance));
       mat.transparent = true;
-      mat.opacity = robotSpawnOpacity(options, role === 'soft' ? 0.5 : role === 'accent' ? 0.46 : role === 'wheel' ? 0.5 : 0.36);
-      mat.userData.robotSpawnBaseOpacity = mat.opacity;
+      mat.opacity = opacity;
       mat.depthWrite = false;
-      const standard = mat as THREE.MeshStandardMaterial;
-      if ('roughness' in standard) standard.roughness = 0.5;
-      if (standard.emissive) standard.emissiveIntensity = role === 'body' ? 0.08 : 0.14;
-      mat.needsUpdate = true;
-    }
-  });
-  applyRobotSpawnTint(modelRoot, accentValue, colors);
-}
+      return mat;
+    };
+    model.traverse((child) => {
+      const mesh = child as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      mesh.geometry = mesh.geometry.clone();
+      mesh.material = Array.isArray(mesh.material) ? mesh.material.map(translucent) : translucent(mesh.material);
+      mesh.castShadow = mesh.receiveShadow = false;
+      mesh.renderOrder = 7;
+      pickables.push(mesh);
+    });
+    if (host.userData.stageObjectId) setObjectUserData(model, host.userData.stageObjectId);
 
-function styleRobotSpawnRim(modelRoot: THREE.Object3D, options: ObjectVisualOptions, accentValue: string, colors: ReturnType<typeof getEditorColors>): void {
-  const rimColor = accentValue === colors.friendlyHandleInvalid ? colors.dangerSurface : accentValue === colors.warning ? `${colors.warning}33` : `${colors.accent}26`;
-  modelRoot.scale.setScalar(1.045);
-  modelRoot.traverse((child) => {
-    const mesh = child as THREE.Mesh;
-    if (!(mesh as any).isMesh) return;
-    const material = mesh.material as THREE.Material | THREE.Material[] | undefined;
-    if (Array.isArray(material)) material.forEach((item) => item.dispose());
-    else material?.dispose();
-    mesh.material = robotSpawnBasicMaterial(rimColor, robotSpawnOpacity(options, 0.34), 'rim', THREE.BackSide);
-    mesh.renderOrder = 5;
-  });
-}
-
-function collectMeshPickables(root: THREE.Object3D, pickables: THREE.Object3D[]): void {
-  root.traverse((child) => {
-    if ((child as THREE.Mesh).isMesh) pickables.push(child);
+    // Draw the nearest shell depth first so transparency reveals the stage through a single surface.
+    const depth = model.clone(true);
+    const depthMaterial = new THREE.MeshBasicMaterial({ transparent: true, colorWrite: false, depthWrite: true });
+    depth.traverse((child) => {
+      const mesh = child as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      mesh.material = depthMaterial;
+      mesh.renderOrder = 6;
+    });
+    host.add(depth, model);
+    onVisualReady?.();
+    return true;
+  }).catch((error) => {
+    console.warn('[stage-builder] failed to load Fossbot spawn model', error);
+    return false;
   });
 }
 
@@ -1140,39 +1097,10 @@ function makeRobotSpawnChevronGeometry(): THREE.ShapeGeometry {
   return new THREE.ShapeGeometry(shape);
 }
 
-function attachRobotSpawnModel(host: THREE.Group, pickables: THREE.Object3D[], options: ObjectVisualOptions, accentValue: string, colors: ReturnType<typeof getEditorColors>, onVisualReady?: () => void): void {
-  loadRobotSpawnModelTemplate()
-    .then((template) => {
-      if (host.userData.stageBuilderDisposed) return;
-      const model = template.clone(true);
-      model.name = 'robot_spawn_fossbot_model';
-      cloneOwnedMeshResources(model);
-      const activeAccent = typeof host.userData.robotSpawnAccent === 'string' ? host.userData.robotSpawnAccent : accentValue;
-      styleRobotSpawnModel(model, options, activeAccent, colors);
-      const rim = model.clone(true);
-      rim.name = 'robot_spawn_fossbot_rim';
-      cloneOwnedMeshResources(rim);
-      styleRobotSpawnRim(rim, options, activeAccent, colors);
-      const stageObjectId = host.userData.stageObjectId;
-      if (typeof stageObjectId === 'string') {
-        setObjectUserData(model, stageObjectId);
-        setObjectUserData(rim, stageObjectId);
-      }
-      host.add(rim, model);
-      collectMeshPickables(rim, pickables);
-      collectMeshPickables(model, pickables);
-      onVisualReady?.();
-    })
-    .catch((error) => console.warn('[stage-builder] failed to load Fossbot spawn model', error));
-}
-
-function makeRobotSpawnVisual(object: Extract<EditorStageObject, { kind: 'fossbot' }>, options: ObjectVisualOptions = {}, context: { colors?: ReturnType<typeof getEditorColors>; onVisualReady?: () => void } = {}): { root: THREE.Group; pickables: THREE.Object3D[] } {
-  const colors = context.colors ?? getEditorColors('studio');
+function makeRobotSpawnVisual(object: Extract<EditorStageObject, { kind: 'fossbot' }>, options: ObjectVisualOptions, colors: ReturnType<typeof getEditorColors>, onVisualReady?: () => void): { root: THREE.Group; pickables: THREE.Object3D[] } {
   const group = new THREE.Group();
-  const pickables: THREE.Object3D[] = [];
   const accent = robotSpawnAccent(options, colors);
   group.userData.stageBuilderVisualKind = 'robotSpawn';
-  group.userData.robotSpawnAccent = accent;
 
   const field = new THREE.Mesh(
     new THREE.CircleGeometry(0.42, 48),
@@ -1194,7 +1122,7 @@ function makeRobotSpawnVisual(object: Extract<EditorStageObject, { kind: 'fossbo
 
   const outerHalo = new THREE.Mesh(
     new THREE.TorusGeometry(0.265, 0.004, 8, 96),
-    robotSpawnBasicMaterial(`${colors.accent}26`, robotSpawnOpacity(options, 0.86), 'rim'),
+    robotSpawnBasicMaterial('#ffffff', robotSpawnOpacity(options, 0.86), 'rim'),
   );
   outerHalo.rotation.x = Math.PI / 2;
   outerHalo.position.y = 0.024;
@@ -1203,17 +1131,17 @@ function makeRobotSpawnVisual(object: Extract<EditorStageObject, { kind: 'fossbo
 
   const directionArrow = new THREE.Mesh(
     makeRobotSpawnChevronGeometry(),
-    robotSpawnBasicMaterial(`${colors.accent}26`, robotSpawnOpacity(options, 0.84), 'rim', THREE.DoubleSide),
+    robotSpawnBasicMaterial('#ffffff', robotSpawnOpacity(options, 0.84), 'rim', THREE.DoubleSide),
   );
   directionArrow.rotation.x = -Math.PI / 2;
   directionArrow.position.y = 0.026;
   directionArrow.renderOrder = 5;
   directionArrow.userData.robotSpawnAnimationRole = 'directionArrow';
 
-  group.add(field, halo, outerHalo, directionArrow);
+  const pickables: THREE.Object3D[] = [field, halo, outerHalo, directionArrow];
+  group.add(...pickables);
   if (options.sensorHelpersVisible) group.add(makeSensorHelpersVisual(colors));
-  pickables.push(halo, outerHalo, directionArrow);
-  attachRobotSpawnModel(group, pickables, options, accent, colors, context.onVisualReady);
+  attachRobotSpawnModel(group, pickables, robotSpawnOpacity(options, 0.56), onVisualReady);
   group.position.set(...object.position);
   group.rotation.y = object.rotationY;
   applyRobotSpawnTint(group, accent, colors);
@@ -1474,7 +1402,7 @@ export function makeObjectRoot(object: EditorStageObject, options: ObjectVisualO
     root = group;
     group.position.set(...object.position);
   } else {
-    const spawn = makeRobotSpawnVisual(object, options, { colors, onVisualReady: context.onVisualReady });
+    const spawn = makeRobotSpawnVisual(object, options, colors, context.onVisualReady);
     root = spawn.root;
     pickables = spawn.pickables;
   }
@@ -1687,7 +1615,7 @@ function makeFriendlyHandles(styleVariant: StageBuilderStyleVariant): FriendlyHa
 
 function tintGhost(root: THREE.Object3D, valid: boolean, colors: ReturnType<typeof getEditorColors>): void {
   if (root.userData.stageBuilderVisualKind === 'robotSpawn') {
-    applyRobotSpawnTint(root, valid ? colors.friendlyMarquee : colors.friendlyHandleInvalid, colors);
+    applyRobotSpawnTint(root, robotSpawnAccent({ ghostValid: valid }, colors), colors);
     return;
   }
   const next = new THREE.Color(valid ? colors.friendlyHandleValid : colors.friendlyHandleInvalid);

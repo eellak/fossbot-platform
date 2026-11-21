@@ -1,4 +1,4 @@
-import { getObjectPreview, getPrefabPreview, invalidatePreviewCache } from './stageBuilderPreviews';
+import { getKindPreview, getObjectPreview, getPrefabPreview, invalidatePreviewCache } from './stageBuilderPreviews';
 import type { EditorStageObject } from './types';
 declare const test: any, expect: any;
 declare global { const jest: any; }
@@ -30,10 +30,10 @@ jest.mock('./StageBuilderScene', () => ({
     const THREE = jest.requireActual('three');
     const root = new THREE.Group(); root.name = object.id;
     root.add(new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial()));
-    if (object.kind === 'model') root.userData.stageBuilderVisualReady = new Promise(resolve => { mockReady = resolve; });
+    if (object.kind === 'model' || object.kind === 'fossbot') root.userData.stageBuilderVisualReady = new Promise(resolve => { mockReady = resolve; });
     return { root };
   },
-  disposeObject: jest.fn(), loadRobotSpawnModelTemplate: () => Promise.resolve(),
+  disposeObject: jest.fn(),
 }));
 
 test('model previews wait for actual geometry, distinguish assets of the same kind and expose load failure', async () => {
@@ -57,4 +57,15 @@ test('prefab artwork includes its composition and excludes hidden ancestors with
   await getPrefabPreview({ id: 'bridge', title: 'Bridge', description: '', createdAt: '', updatedAt: '', objects });
   expect(mockRenders.at(-1)).toEqual(['deck', 'left', 'right']);
   expect(Math.max(...mockFrameExtents)).toBeLessThan(1);
+});
+
+test('the spawn thumbnail waits for the robot shell before rendering the marker', async () => {
+  invalidatePreviewCache();
+  mockRenders.length = 0;
+  const preview = getKindPreview('robotSpawn');
+  await Promise.resolve();
+  expect(mockRenders).toHaveLength(0);
+  mockReady(true);
+  await expect(preview).resolves.toMatch(/^data:image/);
+  expect(mockRenders).toHaveLength(1);
 });

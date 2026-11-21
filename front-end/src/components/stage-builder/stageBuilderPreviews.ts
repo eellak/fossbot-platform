@@ -7,7 +7,7 @@ import { objectVisualKey } from './stageBuilderVisualKey';
 import type { EditorStageObject, StageSemanticKind } from './types';
 import { editorTones, type EditorTone } from './stageBuilderEditorTheme';
 import { createCatalogObject } from './stageBuilderCatalog';
-import { makeObjectRoot, disposeObject, loadRobotSpawnModelTemplate } from './StageBuilderScene';
+import { makeObjectRoot, disposeObject } from './StageBuilderScene';
 import { DEFAULT_PREVIEW_SETTINGS, getKindSettings, subscribePreviewSettings, type PreviewSettings } from './stageBuilderPreviewSettings';
 
 const PREVIEW_ASPECT_RATIO = 4 / 3;
@@ -70,9 +70,6 @@ let keyLight: THREE.DirectionalLight | null = null;
 let fillLight: THREE.DirectionalLight | null = null;
 let rendererWidth = 0;
 let rendererHeight = 0;
-
-let robotModelReady: Promise<void> | null = null;
-let robotModelInFlight: Promise<void> | null = null;
 
 const kindCache = new Map<StageSemanticKind, string>();
 const objectCache = new Map<string, { key: string; url: string }>();
@@ -143,22 +140,6 @@ function ensureRenderer(width: number, height: number): { renderer: THREE.WebGLR
   return { renderer: renderer!, camera: camera!, scene: sharedScene! };
 }
 
-function ensureRobotModel(): Promise<void> {
-  if (robotModelReady) return robotModelReady;
-  if (!robotModelInFlight) {
-    robotModelInFlight = loadRobotSpawnModelTemplate()
-      .then(() => {
-        robotModelReady = Promise.resolve();
-        return undefined;
-      })
-      .catch((error) => {
-        robotModelInFlight = null;
-        throw error;
-      });
-  }
-  return robotModelInFlight;
-}
-
 function categoryForKind(kind: StageSemanticKind): EditorTone {
   return CATEGORY_BY_KIND[kind] ?? editorTones.structures;
 }
@@ -201,14 +182,13 @@ function addOutline(root: THREE.Object3D, settings: PreviewSettings): void {
   if (!settings.outline.enabled || settings.outline.thickness <= 0) return;
   const outlineColor = new THREE.Color(settings.outline.color);
   const candidates: THREE.Mesh[] = [];
-  root.traverse((child) => {
+  const collect = (child: THREE.Object3D) => {
+    if (child.userData.stageBuilderVisualKind === 'robotSpawn' || child.userData.previewOutline) return;
     const mesh = child as THREE.Mesh;
-    if (!(mesh as { isMesh?: boolean }).isMesh) return;
-    if (mesh.userData.previewOutline) return;
-    if (mesh.userData.stageBuilderVisualKind === 'robotSpawn') return; // already has a rim
-    if (!mesh.geometry) return;
-    candidates.push(mesh);
-  });
+    if (mesh.isMesh && mesh.geometry) candidates.push(mesh);
+    child.children.forEach(collect);
+  };
+  collect(root);
 
   for (const mesh of candidates) {
     mesh.updateWorldMatrix(true, false);
@@ -346,12 +326,9 @@ export function getKindPreview(kind: StageSemanticKind): string | Promise<string
   return scheduleRender(`kind:${kind}`, async () => {
     const object = defaultObjectForKind(kind);
     if (!object) return '';
-    if (kind === 'robotSpawn') {
-      await ensureRobotModel();
-    }
     const settings = getKindSettings(kind);
     const previewObject = previewObjectFor(object, kind, settings);
-    const { root } = makeObjectRoot(previewObject);
+    const root = await readyObjectRoot(previewObject);
     const dataUrl = renderGroup(root, settings);
     kindCache.set(kind, dataUrl);
     return dataUrl;
@@ -359,7 +336,6 @@ export function getKindPreview(kind: StageSemanticKind): string | Promise<string
 }
 
 async function readyObjectRoot(object: EditorStageObject, objects?: EditorStageObject[]): Promise<THREE.Object3D> {
-  if (object.kind === 'fossbot') await ensureRobotModel();
   const { root } = makeObjectRoot(object, {}, { objects });
   if (root.userData.stageBuilderVisualReady && !await root.userData.stageBuilderVisualReady) {
     disposeObject(root);
