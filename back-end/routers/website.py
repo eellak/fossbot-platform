@@ -404,8 +404,10 @@ def read_media(media_id:int,db: Session=Depends(get_db)):
 
 
 def public_entry(e, row):
-    if e.deleted_at: raise HTTPException(404, 'Published page not found')
-    return {'key':e.key,'kind':e.kind,**copy.deepcopy(row.published),'publishedAt':row.published_at}
+    if not e or e.deleted_at:
+        raise HTTPException(404, 'Published page not found')
+    published = copy.deepcopy(row.published) if isinstance(row.published, dict) else {}
+    return {'key': e.key, 'kind': e.kind, **published, 'publishedAt': row.published_at}
 
 
 @router.get('/public/locales')
@@ -419,7 +421,11 @@ def public_index(locale:str='en',db: Session=Depends(get_db)):
 
 
 def post_thumbnail(sections):
+    if not isinstance(sections, list):
+        return None
     for section in sections:
+        if not isinstance(section, dict):
+            continue
         candidates=[section.get('image')]
         cards=section.get('cards')
         values=section.get('values')
@@ -431,6 +437,8 @@ def post_thumbnail(sections):
 
 
 def post_excerpt(published):
+    if not isinstance(published, dict):
+        return ''
     text=published.get('description') or ''
     if not text.strip():
         def rich_text(node):
@@ -438,6 +446,8 @@ def post_excerpt(published):
             if node.get('type')=='text': return node.get('text','')
             return ' '.join(rich_text(child) for child in node.get('content',[]) if isinstance(child,dict))
         for section in published.get('sections',[]):
+            if not isinstance(section, dict):
+                continue
             text=section.get('text') or rich_text(section.get('content'))
             if text.strip(): break
     text=' '.join(text.split())
@@ -448,26 +458,43 @@ def post_excerpt(published):
 def latest_posts(locale:str='en',db:Session=Depends(get_db)):
     rows=db.query(WebsiteEntry,WebsiteTranslation).join(WebsiteTranslation).filter(
         WebsiteEntry.kind=='post',WebsiteEntry.deleted_at.is_(None),
-        WebsiteTranslation.locale==locale,WebsiteTranslation.published_slug.isnot(None)
+        WebsiteTranslation.locale==locale,WebsiteTranslation.published_slug.isnot(None),
+        WebsiteTranslation.published.isnot(None)
     ).order_by(WebsiteTranslation.published_at.desc(),WebsiteEntry.id.desc()).limit(10).all()
-    return [dict(key=e.key,kind='post',locale=row.locale,title=row.published['title'],
-                 description=post_excerpt(row.published),slug=row.published_slug,publishedAt=row.published_at.isoformat()+'Z' if row.published_at else None,
-                 thumbnail=post_thumbnail(row.published.get('sections',[]))) for e,row in rows]
+    posts = []
+    for e, row in rows:
+        published = row.published if isinstance(row.published, dict) else {}
+        title = published.get('title') or getattr(row, 'title', '') or ''
+        posts.append(dict(
+            key=e.key,
+            kind='post',
+            locale=row.locale,
+            title=title,
+            description=post_excerpt(published),
+            slug=row.published_slug,
+            publishedAt=row.published_at.isoformat()+'Z' if row.published_at else None,
+            thumbnail=post_thumbnail(published.get('sections', []))
+        ))
+    return posts
 
 
 @router.get('/public/home/{locale}')
 def public_home(locale:str,db: Session=Depends(get_db)):
-    e= db.query(WebsiteEntry).filter_by(key='home').first()
-    t=db.query(WebsiteTranslation).filter_by(entry_id=e.id,locale=locale).first() if e else None
+    e = db.query(WebsiteEntry).filter(WebsiteEntry.key == 'home', WebsiteEntry.deleted_at.is_(None)).first()
+    t = db.query(WebsiteTranslation).filter_by(entry_id=e.id,locale=locale).first() if e else None
     if not t or not t.published: raise HTTPException(404,'No published homepage in this language')
     return public_entry(e,t)
 
 
 @router.get('/public/resolve/{locale}/{slug}')
 def resolve_public(locale:str,slug:str,db: Session=Depends(get_db)):
-    row=db.query(WebsiteTranslation).filter_by(locale=locale,published_slug=slug).first()
-    if not row or not row.published: raise HTTPException(404,'Published page not found')
-    return public_entry(db.get(WebsiteEntry,row.entry_id),row)
+    row = db.query(WebsiteTranslation).filter_by(locale=locale, published_slug=slug).first()
+    if not row or not row.published:
+        raise HTTPException(404, 'Published page not found')
+    entry = db.get(WebsiteEntry, row.entry_id)
+    if not entry or entry.deleted_at:
+        raise HTTPException(404, 'Published page not found')
+    return public_entry(entry, row)
 
 
 @router.get('/public/{key}/{locale}')

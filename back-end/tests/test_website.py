@@ -522,3 +522,51 @@ def test_missing_legacy_card_ids_match_existing_layout_ids(cms_client):
     fr=document('fr','equipe');fr['sections']=[{'type':'people','cards':[{'title':'Alice FR','text':'Professeur'}]}]
     saved=client.put(f'/website/entries/{key}/fr',json=fr).json()
     assert saved['sections'][0]['cards'][0]=={'id':'person','title':'Alice FR','text':'Professeur'}
+
+
+def test_resolve_public_rejects_deleted_entry_and_latest_posts_handles_missing_title(db):
+    import datetime
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from database.database import User, WebsiteEntry, WebsiteTranslation
+    from models.models import UserRole
+    from routers import website
+
+    admin = User(username="cms_admin", firstname="CMS", lastname="Admin", email="cms@example.test", hashed_password="unused", role=UserRole.ADMIN, activated=True)
+    db.add(admin)
+
+    # 1. Post with published snapshot missing title
+    e = WebsiteEntry(key="post-safe-1", kind="post")
+    db.add(e)
+    db.commit()
+    t = WebsiteTranslation(entry_id=e.id, locale="en", slug="post-safe-1", title="Fallback Post Title", published_slug="post-safe-1", published={"sections": []}, published_at=datetime.datetime.utcnow())
+    db.add(t)
+    db.commit()
+
+    # 2. Deleted page entry
+    e_del = WebsiteEntry(key="page-trashed", kind="page", deleted_at=datetime.datetime.utcnow())
+    db.add(e_del)
+    db.commit()
+    t_del = WebsiteTranslation(entry_id=e_del.id, locale="en", slug="page-trashed", title="Trashed Page", published_slug="page-trashed", published={"title": "Trashed Page"}, published_at=datetime.datetime.utcnow())
+    db.add(t_del)
+    db.commit()
+
+    app = FastAPI()
+    app.include_router(website.router)
+    def override_db():
+        yield db
+    app.dependency_overrides[website.get_db] = override_db
+    app.dependency_overrides[website.get_current_user] = lambda: admin
+
+    client = TestClient(app)
+    # latest_posts should safely return fallback title without KeyError
+    res = client.get('/website/public/posts/latest')
+    assert res.status_code == 200
+    matched = [p for p in res.json() if p['key'] == 'post-safe-1']
+    assert len(matched) == 1
+    assert matched[0]['title'] == 'Fallback Post Title'
+
+    # resolve_public on trashed entry must return 404 rather than leaking content or raising 500
+    res_del = client.get('/website/public/resolve/en/page-trashed')
+    assert res_del.status_code == 404
+
