@@ -3,6 +3,7 @@ import * as THREE from 'three'
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js'
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
+import { ModelConvexHull } from './modelConvexHull.js'
 
 /**
  * Collider result from a stage builder. Contains only Rapier ColliderDescs
@@ -307,7 +308,7 @@ function makeTrimeshCollider(root: THREE.Object3D): RAPIER.ColliderDesc | undefi
   return RAPIER.ColliderDesc.trimesh(new Float32Array(vertices), new Uint32Array(indices))
 }
 
-function makeConvexHullCollider(root: THREE.Object3D): RAPIER.ColliderDesc | undefined {
+function makeConvexHullCollider(root: THREE.Object3D, name: string): RAPIER.ColliderDesc | undefined {
   root.updateMatrixWorld(true)
   const vertices: number[] = []
   const vertex = new THREE.Vector3()
@@ -319,7 +320,7 @@ function makeConvexHullCollider(root: THREE.Object3D): RAPIER.ColliderDesc | und
     }
   }
   if (vertices.length === 0) return undefined
-  return RAPIER.ColliderDesc.convexHull(new Float32Array(vertices)) ?? undefined
+  return new RAPIER.ColliderDesc(new ModelConvexHull(new Float32Array(vertices), name))
 }
 
 function debugEdgesFromObject(root: THREE.Object3D, name: string): THREE.LineSegments | undefined {
@@ -409,7 +410,7 @@ async function loadCompoundConvex(
     partRoot.add(partMesh)
     partRoot.updateMatrixWorld(true)
 
-    const collider = makeConvexHullCollider(partRoot)
+    const collider = makeConvexHullCollider(partRoot, entry.name ?? 'model')
     if (collider) colliders.push(collider)
 
     const dbg = debugEdgesFromObject(partRoot, `collider_${entry.name ?? 'model'}_coacd_${debugMeshes.length}`)
@@ -447,7 +448,7 @@ export async function buildModelCollider(
       colliderRoot.quaternion.identity()
       colliderRoot.scale.copy(visualRoot.scale)
     }
-    const collider = makeConvexHullCollider(colliderRoot)
+    const collider = makeConvexHullCollider(colliderRoot, entry.name ?? 'model')
     const debugMesh = debugEdgesFromObject(colliderRoot, `collider_${entry.name ?? 'model'}_convex`)
     return { colliders: collider ? [collider] : [], debugMeshes: debugMesh ? [debugMesh] : [] }
   }
