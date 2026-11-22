@@ -162,12 +162,16 @@ def local_stage_payload(stage: Any, *, include_record: bool = True) -> dict[str,
 
 def local_publication_entry(publication: Any, submission: Any = None) -> dict[str, Any]:
     """Build a public entry from the stable channel and its immutable release."""
-    owner = publication.owner
+    owner = getattr(publication, "owner", None)
+    owner_username = owner.username if owner and getattr(owner, "username", None) else "community"
     release = submission or getattr(publication, "current_submission", None) or publication
     provenance = release.provenance_snapshot
     revision = f"local-r{release.stage_revision}-{release.checksum[:12]}"
     github_username = provenance.get("repoOwner") if provenance and provenance.get("sourceType") in {"github_marketplace", "github_stage"} else None
     release_id = getattr(release, "id", None) if release is not publication else None
+    stage = getattr(publication, "stage", None)
+    stage_slug = getattr(stage, "slug", None) if stage else None
+    repo_name = getattr(release, "slug_snapshot", None) if release_id else (stage_slug or getattr(publication, "title", None) or "stage")
     record_url = (
         f"{public_backend_url()}/api/local-marketplace/releases/{release_id}/record"
         if release_id else f"{public_backend_url()}/api/local-marketplace/publications/{publication.id}/record"
@@ -186,8 +190,8 @@ def local_publication_entry(publication: Any, submission: Any = None) -> dict[st
         "localPublicationId": publication.id,
         "localReleaseId": release_id,
         "localStageId": publication.stage_id,
-        "repoOwner": owner.username,
-        "repoName": release.slug_snapshot if release_id else publication.stage.slug,
+        "repoOwner": owner_username,
+        "repoName": repo_name,
         "repoUrl": None,
         "recordUrl": record_url,
         "defaultBranch": "local",
@@ -197,7 +201,7 @@ def local_publication_entry(publication: Any, submission: Any = None) -> dict[st
         "tags": release.tags or [],
         "previewPath": None,
         "previewUrl": preview_url,
-        "author": {"platformUsername": owner.username, "githubUsername": github_username},
+        "author": {"platformUsername": owner_username, "githubUsername": github_username},
         "forkedFrom": provenance,
         "provenance": provenance,
         "badges": {"verified": False, "validation": "unvalidated", "github": provenance_has_github(provenance)},

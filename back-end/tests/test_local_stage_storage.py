@@ -17,6 +17,7 @@ from utils.local_stage_storage import (
     LocalStageValidationError,
     copy_provenance,
     decode_preview,
+    local_publication_entry,
     normalize_local_stage_slug,
     provenance_has_github,
     validate_local_stage_record,
@@ -389,6 +390,98 @@ class LocalPublicationLifecycleTests(unittest.TestCase):
         response = asyncio.run(get_local_stage_preview(created["id"], self.owner, self.db))
         self.assertEqual(response.body, png)
         self.assertEqual(response.media_type, "image/png")
+
+    def test_local_publication_entry_handles_unlinked_owner_and_stage(self):
+        import datetime
+        pub = SimpleNamespace(
+            id=42,
+            stage_id=10,
+            stage=None,
+            owner=None,
+            current_submission=None,
+            stage_revision=1,
+            checksum="abc123456789def",
+            provenance_snapshot=None,
+            preview_image=None,
+            reviewed_at=None,
+            published_at=datetime.datetime.utcnow(),
+            title="Legacy Unlinked Stage",
+            description="A test stage",
+            tags=["demo"],
+            sharing_license="CC0-1.0",
+            record_bytes=100,
+        )
+        entry = local_publication_entry(pub)
+        self.assertEqual(entry["repoOwner"], "community")
+        self.assertEqual(entry["repoName"], "Legacy Unlinked Stage")
+        self.assertEqual(entry["author"]["platformUsername"], "community")
+
+    def test_copy_marketplace_stage_handles_unlinked_owner_and_stage(self):
+        from routers.local_stages import copy_marketplace_stage, MarketplaceStageCopyRequest
+        pending = asyncio.run(publish_local_stage(self.stage.id, self.request(), self.owner, self.db))
+        self.approve(pending["submission"]["id"])
+        pub = self.db.query(LocalMarketplacePublication).one()
+
+        copy_req = MarketplaceStageCopyRequest(sourceType="local", localPublicationId=pub.id)
+        self.db.expunge(pub)
+        pub.owner = None
+        pub.stage = None
+        pub.current_submission = None
+        orig_query = self.db.query
+
+        def fake_query(model, *args, **kwargs):
+            q = orig_query(model, *args, **kwargs)
+            if model is LocalMarketplacePublication:
+                q.first = lambda: pub
+            return q
+
+        with patch.object(self.db, "query", side_effect=fake_query):
+            copied = asyncio.run(copy_marketplace_stage(copy_req, self.owner, self.db))
+            self.assertEqual(copied["provenance"]["ownerUsername"], "community")
+            self.assertTrue(copied["title"].startswith("First"))
+
+    def test_create_marketplace_report_safe_dict_lookup(self):
+        from routers.marketplace import create_marketplace_report, MarketplaceReportRequest
+        from database.database import MarketplaceReport, MarketplaceRoleAssignment
+        self.db.add(MarketplaceRoleAssignment(user_id=self.reviewer.id, role="moderator"))
+        self.db.commit()
+
+        req = MarketplaceReportRequest(
+            repoOwner="test-owner",
+            repoName="fossbot-test",
+            sourceType="github",
+            category="spam",
+            explanation="This is spam stage.",
+        )
+        with patch("routers.marketplace.published_marketplace_entry", return_value={"title": "No Commit Stage"}):
+            res = asyncio.run(create_marketplace_report(req, self.owner, self.db))
+            self.assertIn("id", res)
+            report = self.db.get(MarketplaceReport, res["id"])
+            self.assertEqual(report.repo_owner, "test-owner")
+            self.assertEqual(report.repo_name, "fossbot-test")
+            self.assertEqual(report.commit_sha, "unknown")
+
+    def test_marketplace_stage_status_handles_connection_and_scope_http_errors(self):
+        from routers.marketplace import marketplace_stage_status
+        mock_provider = SimpleNamespace()
+        mock_provider.read_json_file = lambda *args, **kwargs: ({"commitSha": "abc"}, None)
+        mock_provider.list_pull_requests = lambda *args, **kwargs: []
+
+        with patch("routers.marketplace.get_provider", return_value=mock_provider), \
+             patch("routers.marketplace.create_github_app_jwt", return_value="test_jwt"), \
+             patch("routers.marketplace.marketplace_installation_token", return_value=("token", {})), \
+             patch("routers.marketplace.require_stage_repo_token", side_effect=HTTPException(status_code=401, detail="not_connected")):
+            res = asyncio.run(marketplace_stage_status("owner", "fossbot-stage", self.owner, self.db))
+            self.assertEqual(res["lifecycle"]["state"], "source_unavailable")
+            self.assertEqual(res["lifecycle"]["sourceCommitSha"], None)
+
+        with patch("routers.marketplace.get_provider", return_value=mock_provider), \
+             patch("routers.marketplace.create_github_app_jwt", return_value="test_jwt"), \
+             patch("routers.marketplace.marketplace_installation_token", return_value=("token", {})), \
+             patch("routers.marketplace.require_stage_repo_token", side_effect=HTTPException(status_code=409, detail="no_installation")):
+            res = asyncio.run(marketplace_stage_status("owner", "fossbot-stage", self.owner, self.db))
+            self.assertEqual(res["lifecycle"]["state"], "source_unavailable")
+            self.assertEqual(res["lifecycle"]["sourceCommitSha"], None)
 
 
 if __name__ == "__main__":

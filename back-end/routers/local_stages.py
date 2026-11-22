@@ -277,8 +277,8 @@ async def local_stage_storage(current_user: User = Depends(get_current_user), db
     stages = db.query(LocalStage).filter(LocalStage.user_id == current_user.id).all()
     publications = db.query(LocalMarketplacePublication).filter(LocalMarketplacePublication.owner_user_id == current_user.id).all()
     submissions = db.query(LocalMarketplaceSubmission).filter(LocalMarketplaceSubmission.owner_user_id == current_user.id).all()
-    editable_json_bytes = sum(stage.record_bytes for stage in stages)
-    published_json_bytes = sum(submission.record_bytes for submission in submissions) + sum(publication.record_bytes for publication in publications if not publication.current_submission_id)
+    editable_json_bytes = sum(stage.record_bytes or 0 for stage in stages)
+    published_json_bytes = sum(submission.record_bytes or 0 for submission in submissions) + sum(publication.record_bytes or 0 for publication in publications if not publication.current_submission_id)
     preview_bytes = sum(len(stage.preview_image or b"") for stage in stages) + sum(len(submission.preview_image or b"") for submission in submissions) + sum(len(publication.preview_image or b"") for publication in publications if not publication.current_submission_id)
     provenance_bytes = sum(len(json.dumps(stage.provenance, ensure_ascii=False, separators=(",", ":")).encode("utf-8")) for stage in stages if stage.provenance)
     provenance_bytes += sum(len(json.dumps(submission.provenance_snapshot, ensure_ascii=False, separators=(",", ":")).encode("utf-8")) for submission in submissions if submission.provenance_snapshot)
@@ -475,18 +475,20 @@ async def copy_marketplace_stage(request: MarketplaceStageCopyRequest, current_u
                 if not release:
                     raise stage_error(404, "marketplace_stage_not_found", "The requested immutable local release was not found.")
             source = release or publication
+            owner_username = publication.owner.username if publication.owner and getattr(publication.owner, "username", None) else "community"
             provenance = copy_provenance({
                 "sourceType": "local_marketplace",
                 "publicationId": publication.id,
                 "releaseId": release.id if release else None,
                 "stageId": publication.stage_id,
-                "ownerUsername": publication.owner.username,
+                "ownerUsername": owner_username,
                 "revision": source.stage_revision,
                 "checksum": source.checksum,
                 "title": source.title,
                 "sharingLicense": source.sharing_license,
             }, source.provenance_snapshot)
-            stage = _create_stage(db, current_user, source.record_snapshot, title=source.title, description=source.description, slug=request.slug or (source.slug_snapshot if release else publication.stage.slug), provenance=provenance)
+            stage_slug = getattr(source, "slug_snapshot", None) if release else (getattr(publication.stage, "slug", None) if publication.stage else getattr(publication, "title", None))
+            stage = _create_stage(db, current_user, source.record_snapshot, title=source.title, description=source.description, slug=request.slug or stage_slug or "stage", provenance=provenance)
             return local_stage_payload(stage)
 
         if not request.repoOwner or not request.repoName:

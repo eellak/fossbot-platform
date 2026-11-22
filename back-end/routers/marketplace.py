@@ -759,11 +759,11 @@ async def create_marketplace_report(request: MarketplaceReportRequest, current_u
     else:
         entry = published_marketplace_entry(request.repoOwner, request.repoName)
     report = MarketplaceReport(
-        repo_owner=entry["repoOwner"],
-        repo_name=entry["repoName"],
+        repo_owner=entry.get("repoOwner") or request.repoOwner or "unknown",
+        repo_name=entry.get("repoName") or request.repoName or "stage",
         source_type=request.sourceType,
         local_publication_id=entry.get("localPublicationId"),
-        commit_sha=entry["commitSha"],
+        commit_sha=entry.get("commitSha") or "unknown",
         category=request.category,
         explanation=request.explanation.strip(),
         reporter_contact=(request.reporterContact or "").strip() or None,
@@ -865,8 +865,8 @@ async def verification_queue(current_user: User = Depends(get_current_user), db:
                 continue
             try:
                 entry = current_marketplace_entry(provider, marketplace_token, item.repo_owner, item.repo_name)
-            except GitHubApiError as error:
-                if error.status_code == 404:
+            except (GitHubApiError, HTTPException) as error:
+                if getattr(error, "status_code", None) == 404:
                     continue
                 raise
             if entry.get("commitSha") != item.commit_sha:
@@ -1056,7 +1056,7 @@ async def marketplace_stage_status(owner: str, repo_name: str, current_user: Use
             default_branch = stage_repo.get("default_branch") or "main"
             raw_base_url = github_raw_base_url(owner, repo_name, default_branch)
         except HTTPException as error:
-            if error.status_code not in (403, 404):
+            if error.status_code not in (401, 403, 404, 409):
                 raise
             source_status = {"state": "unavailable", "sourceCommitSha": None, "checkedAt": utc_now_iso()}
         except (ValueError, json.JSONDecodeError):
@@ -1090,10 +1090,14 @@ async def my_marketplace_stages(current_user: User = Depends(get_current_user), 
             if marketplace_entry_belongs_to(entry, connection.provider_account_login)
         ]
         marketplace_token, _ = marketplace_installation_token(provider, create_github_app_jwt())
-        entries = [
-            current_marketplace_entry(provider, marketplace_token, entry["repoOwner"], entry["repoName"])
-            for entry in indexed_entries
-        ]
+        entries = []
+        for entry in indexed_entries:
+            try:
+                entries.append(current_marketplace_entry(provider, marketplace_token, entry["repoOwner"], entry["repoName"]))
+            except (GitHubApiError, HTTPException) as error:
+                if getattr(error, "status_code", None) == 404:
+                    continue
+                raise
         pulls = provider.list_pull_requests(marketplace_token, marketplace_owner(), marketplace_repo(), state="all")
         verification_requests = {
             (item.repo_owner, item.repo_name, item.commit_sha): item
