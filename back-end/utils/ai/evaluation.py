@@ -7,6 +7,11 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
+from pydantic import ValidationError
+
+from utils.ai.schemas import PythonEditsSuggestion
+from utils.ai.suggestions import SuggestionError, apply_python_edits
+
 
 CORPUS_VERSION = "1"
 RESULT_VERSION = "1"
@@ -124,16 +129,25 @@ def automated_checks(case: dict[str, Any], sample: dict[str, Any]) -> list[dict[
             payload = _json_output(output, case["id"])
             ast.parse(str(payload.get("replacement") or ""))
             passed = payload.get("type") == "python_replace"
+        elif output_type == "python_edits":
+            payload = _json_output(output, case["id"])
+            suggestion = PythonEditsSuggestion.model_validate(payload)
+            source = str((case.get("context") or {}).get("source") or "")
+            ast.parse(apply_python_edits(source, suggestion.edits))
+            passed = suggestion.type == "python_edits"
         elif output_type == "blockly_replace":
             payload = _json_output(output, case["id"])
             passed = payload.get("type") == "blockly_replace" and ET.fromstring(str(payload.get("xml") or "")).tag.split("}")[-1] == "xml"
         elif output_type in {"lesson_operations", "stage_operations"}:
             payload = _json_output(output, case["id"])
             passed = payload.get("type") == output_type and bool(payload.get("operations"))
-        else:
+        elif output_type == "text":
             passed = True
+        else:
+            checks.append({"check": "output_structure", "passed": False, "detail": f"unsupported output_type: {output_type}"})
+            return checks
         checks.append({"check": "output_structure", "passed": passed, "detail": output_type})
-    except (EvaluationError, SyntaxError, ET.ParseError) as error:
+    except (EvaluationError, SuggestionError, ValidationError, SyntaxError, ET.ParseError) as error:
         checks.append({"check": "output_structure", "passed": False, "detail": str(error)})
     return checks
 

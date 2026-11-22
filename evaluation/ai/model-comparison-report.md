@@ -2,7 +2,7 @@
 
 ## Result status
 
-The deterministic `fossbot-test` baseline passes all 14 automated transport/shape contracts. It is a development provider, not an educational model, so it has no human quality score and must never be used to claim model quality.
+The deterministic `fossbot-test` baseline passes all 15 automated transport/shape contracts. It is a development provider, not an educational model, so it has no human quality score and must never be used to claim model quality.
 
 The three browser models and hosted cloud candidate are **not run** in this repository handoff. Their exact identifiers, required measurements, and execution checklist are preserved so a maintainer can run the comparison with explicit model-download consent and provider credentials. No latency, quality, cost, RAM/VRAM, or recommendation value has been fabricated.
 
@@ -13,7 +13,7 @@ The three browser models and hosted cloud candidate are **not run** in this repo
 | `Qwen2.5-3B-Instruct-q4f16_1-MLC` | WebLLM/browser | Manual handoff | Not run |
 | `gpt-5-mini-2025-08-07` | OpenAI/hosted | Manual handoff | Not run |
 | `gemini-2.5-flash` | Gemini/hosted, optional cross-check | Manual handoff | Not run |
-| `fossbot-test` | Hosted test-only | Automated | 14/14 structural contracts |
+| `fossbot-test` | Hosted test-only | Automated | 15/15 structural contracts |
 
 ## Reproducibility
 
