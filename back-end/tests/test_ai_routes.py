@@ -14,6 +14,7 @@ from database.database import (
     ClassGroup,
     ClassMembership,
     Course,
+    GuestInstanceSettings,
     Lesson,
 )
 from models.models import UserRole
@@ -439,8 +440,9 @@ def test_provider_removal_cleans_up_references(db, users):
     settings = AIInstanceSettings(id=1, enabled=True, default_provider_id=provider.id, registry_version="1", updated_by_id=admin.id)
     explicit_rule = AIPolicyRule(scope_type="instance", scope_key="*", capability="code.explain", effect="allow", provider_ids=[provider.id], runtimes=["hosted"], created_by_id=admin.id, updated_by_id=admin.id)
     shared_rule = AIPolicyRule(scope_type="instance", scope_key="*", capability="code.suggest_changes", effect="allow", provider_ids=[provider.id, other.id], runtimes=["hosted"], created_by_id=admin.id, updated_by_id=admin.id)
+    guest_settings = GuestInstanceSettings(id=1, ai_provider_ids=[provider.id, other.id], updated_by_id=admin.id)
     event = AIUsageEvent(user_id=admin.id, provider_id=provider.id, capability="code.explain", provider_name="Deterministic hosted", model="test-model", runtime="hosted", request_id="req-delete-1", started_at=datetime.datetime.utcnow(), outcome="completed", policy_version="1")
-    db.add_all([settings, explicit_rule, shared_rule, event])
+    db.add_all([settings, explicit_rule, shared_rule, guest_settings, event])
     db.commit()
     with client_for(db, tutor) as client:
         assert client.delete(f"/api/admin/ai/providers/{provider.id}").status_code == 403
@@ -450,6 +452,7 @@ def test_provider_removal_cleans_up_references(db, users):
     db.expire_all()
     assert db.query(AIProviderConfig).filter(AIProviderConfig.id == provider.id).first() is None
     assert db.query(AIInstanceSettings).filter(AIInstanceSettings.id == 1).one().default_provider_id is None
+    assert db.query(GuestInstanceSettings).filter(GuestInstanceSettings.id == 1).one().ai_provider_ids == [other.id]
     # An allow rule left with no providers is dropped; one with a remaining provider keeps it.
     assert db.query(AIPolicyRule).filter(AIPolicyRule.capability == "code.explain").first() is None
     assert db.query(AIPolicyRule).filter(AIPolicyRule.capability == "code.suggest_changes").one().provider_ids == [other.id]
@@ -1043,3 +1046,76 @@ def test_disconnect_closes_upstream_and_records_cancellation(db, users, monkeypa
     assert state["closed"] is True
     usage = db.query(AIUsageEvent).filter(AIUsageEvent.provider_id == provider.id).one()
     assert usage.outcome == "cancelled"
+
+
+def test_test_provider_handles_runtime_and_value_errors(db, users, monkeypatch):
+    _, _, _, admin = users
+    provider = seed_provider(db, admin)
+
+    def raise_runtime_error(*args, **kwargs):
+        raise RuntimeError("Decryption key corrupted")
+
+    def raise_value_error(*args, **kwargs):
+        raise ValueError("Invalid provider options")
+
+    with client_for(db, admin) as client:
+        monkeypatch.setattr(ai_admin, "decrypt_ai_secret", raise_runtime_error)
+        response = client.post(f"/api/admin/ai/providers/{provider.id}/test")
+        assert response.status_code == 422
+        assert response.json()["detail"]["code"] == "invalid_provider_config"
+        assert response.json()["detail"]["retryable"] is False
+
+        monkeypatch.setattr(ai_admin, "decrypt_ai_secret", lambda secret: "decrypted")
+        monkeypatch.setattr(ai_admin, "hosted_provider", raise_value_error)
+        response2 = client.post(f"/api/admin/ai/providers/{provider.id}/test")
+        assert response2.status_code == 422
+        assert response2.json()["detail"]["code"] == "invalid_provider_config"
+        assert response2.json()["detail"]["retryable"] is False
+
+
+def test_local_usage_reporting_supports_user_local_runtime(db, users):
+    student, admin = users[2], users[3]
+    provider = AIProviderConfig(
+        name="User local model",
+        provider_type="openai_compatible",
+        runtime="user_local",
+        enabled=True,
+        model="custom-local",
+        settings={"version": "1"},
+        created_by_id=admin.id,
+        updated_by_id=admin.id,
+    )
+    db.add(provider)
+    db.commit()
+    db.refresh(provider)
+    settings = AIInstanceSettings(id=1, enabled=True, report_local_usage=True, registry_version="1", updated_by_id=admin.id)
+    db.add_all([
+        settings,
+        AIPolicyRule(
+            scope_type="role",
+            scope_key=student.role.value,
+            capability="code.explain",
+            effect="allow",
+            provider_ids=[provider.id],
+            runtimes=["user_local"],
+            created_by_id=admin.id,
+            updated_by_id=admin.id,
+        ),
+    ])
+    db.commit()
+    report = {
+        "providerId": provider.id,
+        "capability": "code.explain",
+        "requestId": "user_local_1234567890",
+        "startedAt": datetime.datetime.utcnow().isoformat() + "Z",
+        "outcome": "completed",
+        "inputTokens": 15,
+        "outputTokens": 8,
+        "estimated": False,
+    }
+    with client_for(db, student) as client:
+        assert client.post("/api/ai/usage", json=report).status_code == 204
+    usage = db.query(AIUsageEvent).filter(AIUsageEvent.request_id == report["requestId"]).one()
+    assert usage.runtime == "user_local"
+    assert usage.prompt_version == "fossbot-user_local-v1"
+

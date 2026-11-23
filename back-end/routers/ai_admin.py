@@ -10,6 +10,7 @@ from database.database import (
     AIProviderConfig,
     AIUsageEvent,
     ClassGroup,
+    GuestInstanceSettings,
     User,
 )
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
@@ -439,11 +440,15 @@ async def test_provider(provider_id: int, current_user: User = Depends(get_curre
             settings=provider.settings or {},
         )
         result = await adapter.health(provider.model)
-    except ProviderError as error:
-        raise HTTPException(status_code=error.status_code, detail={
-            "code": error.code,
-            "message": error.safe_message,
-            "retryable": error.retryable,
+    except (ProviderError, RuntimeError, ValueError) as error:
+        message = error.safe_message if isinstance(error, ProviderError) else "The AI provider is not configured correctly."
+        code = error.code if isinstance(error, ProviderError) else "invalid_provider_config"
+        status_code = error.status_code if isinstance(error, ProviderError) else 422
+        retryable = error.retryable if isinstance(error, ProviderError) else False
+        raise HTTPException(status_code=status_code, detail={
+            "code": code,
+            "message": message,
+            "retryable": retryable,
         }) from error
     return {**result, "providerId": provider.id, "provider": provider.name, "runtime": provider.runtime}
 
@@ -473,6 +478,9 @@ def remove_provider(provider_id: int, current_user: User = Depends(get_current_u
             db.delete(rule)
         else:
             rule.provider_ids = remaining
+    guest_settings = db.query(GuestInstanceSettings).filter(GuestInstanceSettings.id == 1).first()
+    if guest_settings is not None and guest_settings.ai_provider_ids and provider_id in guest_settings.ai_provider_ids:
+        guest_settings.ai_provider_ids = [item for item in guest_settings.ai_provider_ids if item != provider_id]
     db.delete(provider)
     db.commit()
     return Response(status_code=204)

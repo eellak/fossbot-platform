@@ -309,7 +309,7 @@ def active_group_state(db: Session, user_id: int) -> tuple[list[int], list[int]]
 
 def resolve_for_user(db: Session, user: User, capability: str):
     settings = db.query(AIInstanceSettings).filter(AIInstanceSettings.id == 1).first()
-    providers = db.query(AIProviderConfig).filter(AIProviderConfig.runtime != "user_local").order_by(AIProviderConfig.id).all()
+    providers = db.query(AIProviderConfig).order_by(AIProviderConfig.id).all()
     rules = db.query(AIPolicyRule).filter(AIPolicyRule.capability == capability).all()
     role = getattr(user.role, "value", user.role)
     group_ids: list[int] = []
@@ -380,7 +380,7 @@ def read_ai_access(
     allowed_provider_ids = {provider_id for decision in decisions for provider_id in decision["providerIds"]}
     providers = (
         db.query(AIProviderConfig)
-        .filter(AIProviderConfig.enabled.is_(True), AIProviderConfig.id.in_(allowed_provider_ids), AIProviderConfig.runtime != "user_local")
+        .filter(AIProviderConfig.enabled.is_(True), AIProviderConfig.id.in_(allowed_provider_ids))
         .order_by(AIProviderConfig.id)
         .all()
     )
@@ -456,7 +456,7 @@ def report_local_usage(
     provider = db.query(AIProviderConfig).filter(
         AIProviderConfig.id == payload.provider_id,
         AIProviderConfig.enabled.is_(True),
-        AIProviderConfig.runtime == "browser",
+        AIProviderConfig.runtime.in_(["browser", "user_local"]),
     ).first()
     if provider is None:
         raise HTTPException(status_code=422, detail="A browser or user-local provider is required")
@@ -475,7 +475,7 @@ def report_local_usage(
         started_at=started_at,
         outcome=payload.outcome,
         policy_version=decision.policy_version,
-        prompt_version="fossbot-browser-v1",
+        prompt_version=f"fossbot-{provider.runtime}-v1",
         input_tokens=payload.input_tokens,
         output_tokens=payload.output_tokens,
     )
@@ -693,7 +693,7 @@ async def stream_assistance(
                     suggestion, normalizations = parse_suggestion_with_normalizations(
                         response_text,
                         payload.capability,
-                        str(context.payload["supplied"][fingerprint_key]),
+                        str(context.payload["supplied"].get(fingerprint_key, "")),
                         {**context.payload["supplied"], "request_question": payload.question},
                     )
                 except SuggestionError as error:
