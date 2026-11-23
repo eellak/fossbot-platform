@@ -123,10 +123,14 @@ docker compose -f docker-compose-dev.yml up -d --build
 
 Open:
 
-- Platform: [http://localhost:3101](http://localhost:3101)
-- API documentation: [http://localhost:8101/docs](http://localhost:8101/docs)
+- Platform: [http://localhost:3000](http://localhost:3000)
+- API documentation: [http://localhost:8000/docs](http://localhost:8000/docs)
 
-For SSH or IDE port forwarding, forward port `3101` for the frontend and `8101` for its API requests.
+For SSH or IDE port forwarding, forward port `3000` for the frontend and `8000` for its API requests.
+
+Set `DEV_FRONTEND_PORT` and `DEV_BACKEND_PORT` in the repository-root `.env` to change the published ports. The localhost URLs follow those ports automatically. For a custom hostname or reverse proxy, set `REACT_APP_BACKEND_URL`, `FRONTEND_URL`, `GITHUB_APP_CALLBACK_URL`, and `GITHUB_APP_SETUP_URL` as needed.
+
+Both services bind to `127.0.0.1` by default. For LAN access, set `DEV_BIND_ADDRESS` to the host's LAN address. The frontend uses the page's hostname for a loopback API URL, keeping the configured backend port.
 
 The default development account is `admin` with password `admin`. These credentials are intended only for a local development environment.
 

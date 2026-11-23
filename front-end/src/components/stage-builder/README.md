@@ -19,10 +19,13 @@ frontend dependencies. Follow startup with
 `docker compose -f docker-compose-stage-editor.yml logs -f`.
 No image build, backend, database or login is needed. Stop it with
 `docker compose -f docker-compose-stage-editor.yml down`.
-Set `STAGE_EDITOR_PORT=3101` before the Compose command if port 3100 is occupied.
+Set `STAGE_EDITOR_PORT` in the repository-root `.env` to change the published
+port. The editor binds to `127.0.0.1` by default and uses `DEV_BIND_ADDRESS`
+if set in the same file.
 
 Without Docker, run `npm ci` once in `front-end`, then
-`npm run dev:stage-editor`. This uses the existing CRACO development server and
+`npm run dev:stage-editor`. Set `PORT` or `BROWSER` in the command environment
+to override the defaults of `3100` and `none`. This uses the existing CRACO development server and
 React Fast Refresh. Editor, shared component and simulator source changes
 recompile automatically. Simulator assets are served directly from `sim/public`
 with `front-end/public` as a fallback, so no asset-copy step is needed.
