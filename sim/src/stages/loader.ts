@@ -13,6 +13,7 @@ import { log } from '../util/log'
 import { syncObjectToBody } from '../physics/mesh-sync'
 import type { ChallengeMarker } from '../missions/types'
 import { challengeForEntry } from '../missions/stageChallengeCore.js'
+import type { RuntimeLabelAttachment } from './labelAttachment'
 import { surfaceDetails } from './surfaceDetails'
 
 interface StageDynamicObject {
@@ -168,6 +169,7 @@ export async function loadStageEntries(
 ): Promise<StageHandle> {
   validateStageFormat(entries)
   const objects: THREE.Object3D[] = []
+  const labelParents = new Map<string, THREE.Object3D>()
   const spawnPosition = DEFAULT_SPAWN.clone()
   const spawnOrientation = DEFAULT_ORIENT.clone()
   const modelLoads: Promise<void>[] = []
@@ -236,6 +238,7 @@ export async function loadStageEntries(
     }
     const type = entry.type as string
     const addVisual = (object: THREE.Object3D) => {
+      if (typeof entry.id === 'string') labelParents.set(entry.id, object)
       if (['cube', 'cylinder', 'sphere', 'wedge', 'model'].includes(type)) {
         object.userData.cameraVisionLabel = String(entry.visionLabel || entry.name || type)
       }
@@ -377,20 +380,7 @@ export async function loadStageEntries(
       }
       case 'text': {
         const vis = buildTextVisual(entry as any)
-        const attachment = (vis.object.userData as { labelAttachment?: { parentName: string; face: 'front' | 'back' | 'left' | 'right' | 'top' | 'bottom'; offset: [number, number]; rotation: number } }).labelAttachment
-        if (attachment) {
-          const parent = objects.find((obj) => obj.name === attachment.parentName)
-          if (parent) {
-            applyAttachedLabelTransform(vis.object, attachment, parent)
-            parent.add(vis.object)
-            vis.object.userData.labelParentName = attachment.parentName
-          } else {
-            console.warn(`[stage] attached label parent "${attachment.parentName}" not found; adding label to scene root`)
-            addVisual(vis.object)
-          }
-        } else {
-          addVisual(vis.object)
-        }
+        addVisual(vis.object)
         objects.push(vis.object)
         break
       }
@@ -422,6 +412,18 @@ export async function loadStageEntries(
   }
 
   await Promise.all(modelLoads)
+  for (const mesh of objects) {
+    const attachment = mesh.userData.labelAttachment as RuntimeLabelAttachment | undefined
+    if (!attachment) continue
+    const parent = attachment.parentId ? labelParents.get(attachment.parentId) : objects.find(object => object.name === attachment.parentName)
+    if (parent && !parent.userData.labelAttachment) {
+      applyAttachedLabelTransform(mesh, attachment, parent)
+      parent.add(mesh)
+      mesh.userData.labelParentName = attachment.parentName
+    } else {
+      console.warn(`[stage] attached label parent "${attachment.parentName}" not found`)
+    }
+  }
   stageAudio = createStageAudioRuntime(audioEntries, scene, {
     camera: opts.camera,
     gestureTarget: opts.gestureTarget,

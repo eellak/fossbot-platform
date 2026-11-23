@@ -17,7 +17,7 @@ import { approvedThemeOptions } from 'src/theme/ApprovedTheme';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from 'src/authentication/AuthProvider';
-import type { EditorStage, EditorStageObject, StageLabelAttachment, StageSemanticKind, Vec3 } from 'src/components/stage-builder/types';
+import type { EditorStage, EditorStageObject, StageSemanticKind, Vec3 } from 'src/components/stage-builder/types';
 import { downloadStageJson, downloadStageSource, makeLocalStageId, stageRecordFromImportedJson } from 'src/components/stage-builder/localStages';
 import { StageBuilderScene, type StageBuilderCameraView, type StageBuilderSceneHandle, type StageBuilderTransformMode } from 'src/components/stage-builder/StageBuilderScene';
 import { configToEditorStage, createDemoEditorStage, DEFAULT_STAGE_FLOOR, DEFAULT_STAGE_METADATA, editorStageToRecord } from 'src/components/stage-builder/serialize';
@@ -30,9 +30,11 @@ import {
 import { createCatalogObject, displayObjectType } from 'src/components/stage-builder/stageBuilderCatalog';
 import { getSnapSettings, setStageSnapping, stageSnapMetadata } from 'src/components/stage-builder/stageBuilderSnapping';
 import { blockingValidationResults, validateStageBuilderStage } from 'src/components/stage-builder/stageBuilderValidation';
-import { cloneStage, objectPosition, placementFitsStage, translateObject } from 'src/components/stage-builder/stageBuilderGeometry';
+import { cloneStage, objectPosition, translateObject } from 'src/components/stage-builder/stageBuilderGeometry';
 import { canRedo, canUndo, createStageBuilderHistory, pushStageHistory, redoStageHistory, undoStageHistory, type StageBuilderHistory } from 'src/components/stage-builder/stageBuilderHistory';
 import { builtInStageBuilderPrefabs, prefabInsertionOffset, type StageBuilderPrefab } from 'src/components/stage-builder/stageBuilderPrefabs';
+import { StageBuilderNumberField } from 'src/components/stage-builder/StageBuilderNumberField';
+import { canAttachLabelTo, defaultLabelAttachment, labelWidth, resizeLabel } from 'src/components/stage-builder/stageBuilderLabelPlacement';
 import { hasFloorGeometry, placeObjectsOnFloor } from 'src/components/stage-builder/stageBuilderFloorPlacement';
 import { EditorTopBar } from 'src/components/stage-builder/EditorTopBar';
 import { EditorLeftPanel } from 'src/components/stage-builder/EditorLeftPanel';
@@ -246,20 +248,6 @@ function measureImportedModel(file: File, format: 'obj' | 'stl' | 'glb'): Promis
   });
 }
 
-function canAttachLabelTo(object: EditorStageObject | null | undefined): object is Extract<EditorStageObject, { kind: 'base' | 'cube' | 'cylinder' }> {
-  return !!object && (object.kind === 'base' || object.kind === 'cube' || object.kind === 'cylinder');
-}
-
-function defaultLabelAttachment(parent: EditorStageObject): StageLabelAttachment {
-  return {
-    parentId: parent.id,
-    face: parent.kind === 'base' ? 'top' : 'front',
-    offset: [0, 0],
-    rotation: 0,
-    billboard: false,
-  };
-}
-
 function normalizeCameraMetadata(stage: EditorStage): EditorStage {
   if (!stage.metadata.lockCamera || hasVisibleStageCamera(stage)) return stage;
   return { ...stage, metadata: { ...stage.metadata, lockCamera: false } };
@@ -307,7 +295,7 @@ function ShortcutHint() {
   const shortcuts = [
     ['W', 'move'],
     ['E', 'rotate'],
-    ['R', 'scale'],
+    ['R', 'resize'],
     ['F', 'focus'],
     ['Del', 'remove'],
   ] as const;
@@ -449,6 +437,12 @@ const StageBuilderPage = () => {
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
   const [placement, setPlacement] = useState<PendingPlacement | null>(null);
   const [placementValid, setPlacementValid] = useState<boolean | null>(null);
+  const placingLabel = placement?.item?.type === 'object' && placement.objects[0]?.kind === 'text' ? placement.objects[0] : null;
+  const setPlacementLabelWidth = (width: number) => {
+    if (placement && placingLabel && Number.isFinite(width) && width > 0) {
+      setPlacement({ ...placement, objects: [resizeLabel(placingLabel, width)] });
+    }
+  };
   const builderMode = placement ? 'place' : 'edit';
   const [lineOperation, setLineOperation] = useState<LineOperation>({ mode: 'select' });
   const [objectPreview, setObjectPreview] = useState<EditorStageObject | null>(null);
@@ -1262,10 +1256,9 @@ const StageBuilderPage = () => {
     if (!desktopPanels) setLeftPanelVisible(false);
   };
 
-  const placeAt = (position: Vec3) => {
-    if (!placement || !placementFitsStage(placement.objects, position, stage.floor.dimensions)) return;
+  const placeObjects = (placed: EditorStageObject[]) => {
+    if (!placement) return;
     const { item, title } = placement;
-    const placed = placement.objects.map(object => translateObject(object, position));
     const ids = placed.map(object => object.id);
     const kind = placed[0].kind;
     commitStage(current => {
@@ -1299,15 +1292,7 @@ const StageBuilderPage = () => {
     const id = makeLocalStageId();
     const object = createCatalogObject(kind, id, [0, 0, 0]);
     if (!object) return;
-    const labelParent = kind === 'label' && canAttachLabelTo(selectedObject) ? selectedObject : null;
     const item: LibraryItem = { type: 'object', id: kind };
-    if (labelParent && object.kind === 'text') {
-      setPlacement(null);
-      const label = { ...object, name: `${labelParent.name} label`, position: 'position' in labelParent ? labelParent.position : object.position, onFloor: false, parentId: labelParent.id, attachment: defaultLabelAttachment(labelParent) };
-      commitStage(current => ({ ...current, objects: [...current.objects, label] }), { selectIds: [id], message: `Label attached to ${labelParent.name}.` });
-      rememberRecentItem(item);
-      return;
-    }
     const [x, , z] = objectPosition(object);
     beginPlacement({ objects: [translateObject(object, [-x, 0, -z])], title: displayObjectType(object), item });
   };
@@ -1997,6 +1982,11 @@ const StageBuilderPage = () => {
       if (key === 'escape' && placement) { setPlacement(null); return; }
       if (!prefs.keyboardShortcutsEnabled) return;
       const ctrl = event.ctrlKey || event.metaKey;
+      if (placingLabel && !ctrl && !event.altKey && (key === '[' || key === ']')) {
+        event.preventDefault();
+        setPlacementLabelWidth(Math.max(0.05, labelWidth(placingLabel) + (key === ']' ? 0.05 : -0.05)));
+        return;
+      }
       if (ctrl && key === 'z' && !event.shiftKey) { event.preventDefault(); undo(); return; }
       if (ctrl && (key === 'y' || (event.shiftKey && key === 'z'))) { event.preventDefault(); redo(); return; }
       if (ctrl && key === 'd') { event.preventDefault(); duplicateSelected(); return; }
@@ -2220,7 +2210,7 @@ const StageBuilderPage = () => {
             transformMode={transformMode}
             builderMode={builderMode}
             placementObjects={placement?.objects}
-            onPlaceAt={placeAt}
+            onPlaceObjects={placeObjects}
             onPlacementValidityChange={setPlacementValid}
             stageDimensions={activeStage.floor.dimensions}
             floorColor={activeStage.floor.color}
@@ -2246,7 +2236,7 @@ const StageBuilderPage = () => {
             lineOperation={lineOperation}
             onLineOperationChange={changeLineOperation}
             onAppendLinePoint={appendLinePoint}
-            onLinePreview={setObjectPreview}
+            onObjectPreview={setObjectPreview}
             onLockedSelectionAttempt={() => setMessage('Selection is locked to the current object. Change Selection behavior in Settings to select through objects.')}
           />
           {livePreviewStage && (
@@ -2290,8 +2280,14 @@ const StageBuilderPage = () => {
             {placement && <Paper elevation={0} aria-label="Object placement" component="section" sx={{ p: 0.5, border: 1, borderColor: 'divider' }}>
               <Stack direction="row" flexWrap="wrap" alignItems="center" justifyContent="center" gap={0.5}>
                 <Typography role="status" variant="body2" sx={{ px: 0.5, overflowWrap: 'anywhere' }}>
-                  {placementValid === false ? 'Move inside the stage boundary.' : `Click the floor to place ${placement.title}.`}
+                  {placementValid === false ? 'Move inside the stage boundary.' : placingLabel
+                    ? 'Click an object face to attach the label, or click the floor.'
+                    : `Click the floor to place ${placement.title}.`}
                 </Typography>
+                {placingLabel && <StageBuilderNumberField size="small" label="Width (m)" displayPrecision={3} value={labelWidth(placingLabel)}
+                  inputProps={{ min: 0.05, step: 0.05, 'aria-label': 'Label width in metres' }}
+                  title={prefs.keyboardShortcutsEnabled ? 'Press [ or ] over the stage to resize' : undefined} sx={{ width: 96 }}
+                  onChange={event => setPlacementLabelWidth(Number(event.target.value))} />}
                 <Button size="small" color="error" sx={{ bgcolor: 'error.light' }} autoFocus onClick={() => setPlacement(null)}>Cancel</Button>
               </Stack>
             </Paper>}
@@ -2359,7 +2355,7 @@ const StageBuilderPage = () => {
 
       <Box sx={{ height: 28, pl: 1, pr: 1.25, overflowX: 'auto', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 2, bgcolor: editorColors.topbar, color: editorColors.keycapInk, borderTop: `1px solid ${editorColors.divider}` }}>
         <Stack direction="row" spacing={1.75} alignItems="baseline" sx={{ minWidth: 0, flexShrink: 0 }}>
-          <StatusItem label="Mode" value={lineOperation.mode === 'edit' ? 'Editing line' : builderMode === 'edit' ? transformMode : builderMode} tone={editorColors.accentText} />
+          <StatusItem label="Mode" value={lineOperation.mode === 'edit' ? 'Editing line' : builderMode === 'edit' ? (transformMode === 'scale' ? 'resize' : transformMode) : builderMode} tone={editorColors.accentText} />
           <StatusItem label="Selected" value={selectedStatus} tone={selectedTone} />
           <StatusItem label="Grid" value={gridVisible ? `${gridSize} m` : 'Hidden'} tone={editorColors.text} />
           {githubEnabled && <StatusItem label="GitHub" value={providerStatusValue} tone={providerStatusTone} />}

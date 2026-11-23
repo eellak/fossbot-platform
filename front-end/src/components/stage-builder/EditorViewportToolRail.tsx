@@ -92,7 +92,7 @@ export function EditorViewportToolRail({
         <Stack spacing={0.5} alignItems="center">
           <Tooltip disableInteractive title="Move"><ToggleButton aria-label="Move" size="small" value="translate" selected={lineOperation === 'select' && transformMode === 'translate'} onClick={() => onTransformModeChange('translate')} sx={toolButtonSx}><OpenWithIcon fontSize="small" /></ToggleButton></Tooltip>
           <Tooltip disableInteractive title="Rotate"><ToggleButton aria-label="Rotate" size="small" value="rotate" selected={lineOperation === 'select' && transformMode === 'rotate'} onClick={() => onTransformModeChange('rotate')} sx={toolButtonSx}><RotateRightIcon fontSize="small" /></ToggleButton></Tooltip>
-          <Tooltip disableInteractive title="Scale"><ToggleButton aria-label="Scale" size="small" value="scale" selected={lineOperation === 'select' && transformMode === 'scale'} onClick={() => onTransformModeChange('scale')} sx={toolButtonSx}><AspectRatioIcon fontSize="small" /></ToggleButton></Tooltip>
+          <Tooltip disableInteractive title="Resize (R) · Drag the highlighted part"><ToggleButton aria-label="Resize" size="small" value="scale" selected={lineOperation === 'select' && transformMode === 'scale'} onClick={() => onTransformModeChange('scale')} sx={toolButtonSx}><AspectRatioIcon fontSize="small" /></ToggleButton></Tooltip>
         </Stack>
         <Divider flexItem sx={{ borderColor: editorColors.border }} />
         <Tooltip disableInteractive title={`${sensorHelpersVisible ? 'Hide' : 'Show'} sensor helpers`}>

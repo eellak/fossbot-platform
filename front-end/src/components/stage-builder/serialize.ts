@@ -169,6 +169,7 @@ export function editorStageToConfig(stage: EditorStage): StageJsonEntry[] {
     if (object.kind === 'base') {
       entries.push({
         type: 'base',
+        id: object.id,
         dimensions: object.dimensions,
         material: { color: object.color },
         position: [object.position[0], object.position[2]],
@@ -183,6 +184,7 @@ export function editorStageToConfig(stage: EditorStage): StageJsonEntry[] {
         : object.orientation || [0, object.rotationY, 0] as [number, number, number];
       entries.push({
         type: 'cube',
+        id: object.id,
         dimensions: object.dimensions,
         material: { color: object.color },
         position: object.position,
@@ -199,6 +201,7 @@ export function editorStageToConfig(stage: EditorStage): StageJsonEntry[] {
     } else if (object.kind === 'cylinder') {
       entries.push({
         type: 'cylinder',
+        id: object.id,
         dimensions: object.dimensions,
         material: { color: object.color },
         position: object.position,
@@ -258,9 +261,13 @@ export function editorStageToConfig(stage: EditorStage): StageJsonEntry[] {
         color: object.color,
         scale: object.scale,
         onFloor: object.onFloor,
+        orientation: object.orientation,
         attachment: object.attachment,
         attach: object.attachment && parent ? {
           parentName: parent.name || parent.id,
+          parentId: parent.id,
+          cylinderAngle: object.attachment.cylinderAngle,
+          surface: object.attachment.surface,
           face: object.attachment.face,
           offset: object.attachment.offset,
           rotation: object.attachment.rotation,
@@ -271,6 +278,7 @@ export function editorStageToConfig(stage: EditorStage): StageJsonEntry[] {
     } else if (object.kind === 'model') {
       entries.push({
         type: 'model',
+        id: object.id,
         filename: object.filename,
         format: object.format,
         position: object.position,
@@ -406,7 +414,7 @@ function configEntryToEditorObject(entry: StageJsonEntry, index: number): Editor
       challenge: challengeFromEntry(entry, semanticKind, index),
       name: cylinder.name || (semanticKind === 'obstacle' ? 'cone obstacle' : 'cylinder'),
       position: cylinder.position,
-      dimensions: [cylinder.dimensions[0], cylinder.dimensions[1], cylinder.dimensions[2], cylinder.dimensions[3] || 32],
+      dimensions: [cylinder.dimensions[0], cylinder.dimensions[1], cylinder.dimensions[2], cylinder.dimensions[3] || 16],
       color: String(cylinder.material?.color || 'orange'),
       mass: cylinder.mass || 0,
       immovable: cylinder.immovable ?? (cylinder.mass || 0) <= 0,
@@ -491,6 +499,7 @@ function configEntryToEditorObject(entry: StageJsonEntry, index: number): Editor
       color: String(text.color || 'black'),
       scale: text.scale || 0.75,
       onFloor: text.onFloor ?? true,
+      orientation: text.orientation,
       parentId: text.attachment?.parentId,
       attachment: text.attachment,
       style: text.style,
@@ -612,6 +621,30 @@ function floorFromConfig(config: StageJsonEntry[]): EditorStageFloorSettings {
   };
 }
 
+function objectsFromConfig(entries: StageJsonEntry[]): EditorStageObject[] {
+  const objects = entries.map(configEntryToEditorObject);
+  const parentsById = new Map<string, EditorStageObject>();
+  const parentsByName = new Map<string, EditorStageObject>();
+  entries.forEach((entry, index) => {
+    if (entry.type !== 'base' && entry.type !== 'cube' && entry.type !== 'cylinder' && entry.type !== 'model') return;
+    const parent = objects[index]!;
+    if (typeof entry.id === 'string') parentsById.set(entry.id, parent);
+    if (entry.name && !parentsByName.has(entry.name)) parentsByName.set(entry.name, parent);
+  });
+  entries.forEach((entry, index) => {
+    const label = objects[index];
+    if (entry.type !== 'text' || !entry.attach || label?.kind !== 'text') return;
+    const { parentId, parentName, ...surface } = entry.attach;
+    const parent = parentId ? parentsById.get(parentId) : parentsByName.get(parentName);
+    if (parent) {
+      label.parentId = parent.id;
+      label.attachment = { ...label.attachment, ...surface, parentId: parent.id };
+      label.onFloor = false;
+    }
+  });
+  return objects.filter((object): object is EditorStageObject => !!object);
+}
+
 export function configToEditorStage(record: LocalStageRecord): EditorStage {
   record = upgradeStageRecord(record).record;
   const editor = record.editor;
@@ -636,7 +669,7 @@ export function configToEditorStage(record: LocalStageRecord): EditorStage {
   };
   const objects = Array.isArray(editor?.objects)
     ? cloneStage(editor.objects)
-    : record.config.map(configEntryToEditorObject).filter((object): object is EditorStageObject => !!object);
+    : objectsFromConfig(record.config);
 
   return normalizeStageHierarchy({
     id: record.id,

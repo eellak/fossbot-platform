@@ -163,6 +163,7 @@ export function commitObjectTransform(start: EditorStageObject, proposed: Editor
     next.position = operation.mode === 'translate' && operation.space === 'world'
       ? snapConstrainedPosition(next.position, proposed.position, operation.axes, 0) : proposed.position;
   }
+  if (operation.mode === 'rotate' && next.kind === 'text' && proposed.kind === 'text') next.onFloor = proposed.onFloor;
   const fields = operation.mode === 'rotate' ? ['rotationY', 'orientation', 'rampAngle', 'pitch']
     : operation.mode === 'scale' ? ['dimensions', 'scale'] : [];
   for (const key of fields) {

@@ -1,3 +1,4 @@
+import { Box3, Euler, Matrix4, Vector3 } from 'three';
 import type { EditorStage, EditorStageObject, Vec3 } from './types';
 import { validateLineGeometry } from '../../simulator/stages/lineGeometryCore';
 
@@ -208,7 +209,14 @@ export function objectBounds(object: EditorStageObject): StageObjectBounds | nul
     const decorWidth = Math.max(0.05, object.style?.backgroundSize?.[0] ?? object.scale);
     const decorDepth = Math.max(0.03, object.style?.backgroundSize?.[1] ?? object.scale * 0.3125);
     const width = hasDecor ? Math.max(textWidth, decorWidth) : textWidth;
-    const depth = object.onFloor ? (hasDecor ? Math.max(textDepth, decorDepth) : textDepth) : 0.08;
+    const height = hasDecor ? Math.max(textDepth, decorDepth) : textDepth;
+    if (object.orientation && !object.attachment) {
+      const plane = new Box3(new Vector3(-width / 2, -height / 2, 0), new Vector3(width / 2, height / 2, 0));
+      const pose = new Matrix4().makeRotationFromEuler(new Euler(...object.orientation)).setPosition(...object.position);
+      const { min, max } = plane.applyMatrix4(pose);
+      return { objectId: object.id, minX: min.x, maxX: max.x, minY: min.y, maxY: max.y, minZ: min.z, maxZ: max.z, solid: false, soft: true };
+    }
+    const depth = object.onFloor ? height : 0.08;
     return {
       objectId: object.id,
       minX: object.position[0] - width / 2,

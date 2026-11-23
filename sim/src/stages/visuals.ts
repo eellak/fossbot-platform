@@ -1,3 +1,5 @@
+import { makeArrowGeometry, makeWedgeGeometry } from './primitiveGeometry'
+import { applyLabelLocalTransform, freeLabelOrientation, labelFaceFrame, modelLabelFrame, type LabelAttachment, type LabelFace, type RuntimeLabelAttachment } from './labelAttachment'
 import * as THREE from 'three'
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js'
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js'
@@ -212,6 +214,7 @@ interface TextEntry {
   color?: string | number
   scale?: number
   onFloor?: boolean
+  orientation?: [number, number, number]
   name?: string
   style?: {
     backgroundVisible?: boolean
@@ -223,12 +226,7 @@ interface TextEntry {
     borderWidth?: number
     fontSize?: number
   }
-  attach?: {
-    parentName: string
-    face: 'front' | 'back' | 'left' | 'right' | 'top' | 'bottom'
-    offset: [number, number]
-    rotation: number
-  }
+  attach?: RuntimeLabelAttachment
 }
 
 interface LightEntry {
@@ -429,43 +427,6 @@ export function buildCylinderVisual(entry: CylinderEntry): VisualBuilt {
   return { object: mesh, dynamicBody: dynamicBodyFor(entry) }
 }
 
-function makeWedgeGeometry(width: number, height: number, depth: number): THREE.BufferGeometry {
-  const w = width / 2
-  const h = height / 2
-  const d = depth / 2
-  const vertices = new Float32Array([
-    -w, -h, -d,  w, -h, -d,  -w, -h, d,  w, -h, d,  -w, h, d,  w, h, d,
-  ])
-  const indices = [0, 3, 1, 0, 2, 3, 2, 5, 3, 2, 4, 5, 0, 1, 5, 0, 5, 4, 0, 4, 2, 1, 3, 5]
-  const geometry = new THREE.BufferGeometry()
-  geometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3))
-  geometry.setIndex(indices)
-  geometry.computeVertexNormals()
-  return geometry
-}
-
-function makeArrowGeometry(width: number, depth: number, thickness: number): THREE.BufferGeometry {
-  const w = width / 2
-  const d = depth / 2
-  const t = Math.max(0.002, thickness)
-  const neckX = width * 0.14
-  const shaftD = depth * 0.42
-  const points = [
-    new THREE.Vector2(-w, -shaftD / 2),
-    new THREE.Vector2(neckX, -shaftD / 2),
-    new THREE.Vector2(neckX, -d),
-    new THREE.Vector2(w, 0),
-    new THREE.Vector2(neckX, d),
-    new THREE.Vector2(neckX, shaftD / 2),
-    new THREE.Vector2(-w, shaftD / 2),
-  ]
-  const geometry = new THREE.ExtrudeGeometry(new THREE.Shape(points), { depth: t, bevelEnabled: false })
-  geometry.translate(0, 0, -t / 2)
-  geometry.rotateX(-Math.PI / 2)
-  geometry.computeVertexNormals()
-  return geometry
-}
-
 export function buildSphereVisual(entry: SphereEntry): VisualBuilt {
   const [diameter] = entry.dimensions
   const geom = new THREE.SphereGeometry(diameter / 2, 32, 20)
@@ -528,26 +489,6 @@ export async function buildModelVisual(entry: ModelEntry): Promise<VisualBuilt> 
   return { object: root, dynamicBody: dynamicBodyFor(entry) }
 }
 
-type LabelFace = 'front' | 'back' | 'left' | 'right' | 'top' | 'bottom'
-
-interface LabelAttachment {
-  parentName: string
-  face: LabelFace
-  offset: [number, number]
-  rotation: number
-}
-
-function faceFrame(face: LabelFace): { normal: THREE.Vector3; u: THREE.Vector3; v: THREE.Vector3 } {
-  if (face === 'back') return { normal: new THREE.Vector3(0, 0, -1), u: new THREE.Vector3(-1, 0, 0), v: new THREE.Vector3(0, 1, 0) }
-  if (face === 'left') return { normal: new THREE.Vector3(-1, 0, 0), u: new THREE.Vector3(0, 0, 1), v: new THREE.Vector3(0, 1, 0) }
-  if (face === 'right') return { normal: new THREE.Vector3(1, 0, 0), u: new THREE.Vector3(0, 0, -1), v: new THREE.Vector3(0, 1, 0) }
-  if (face === 'top') return { normal: new THREE.Vector3(0, 1, 0), u: new THREE.Vector3(1, 0, 0), v: new THREE.Vector3(0, 0, -1) }
-  if (face === 'bottom') return { normal: new THREE.Vector3(0, -1, 0), u: new THREE.Vector3(1, 0, 0), v: new THREE.Vector3(0, 0, 1) }
-  return { normal: new THREE.Vector3(0, 0, 1), u: new THREE.Vector3(1, 0, 0), v: new THREE.Vector3(0, 1, 0) }
-}
-
-const labelDefaultNormal = new THREE.Vector3(0, 0, 1)
-const labelSurfaceLift = 0.001
 const labelCanvasSize = [512, 160] as const
 const labelHeightRatio = labelCanvasSize[1] / labelCanvasSize[0]
 
@@ -572,20 +513,6 @@ function parentHalfExtent(parent: THREE.Object3D, face: LabelFace): number {
   if (face === 'left' || face === 'right') return size.x / 2
   if (face === 'top' || face === 'bottom') return size.y / 2
   return size.z / 2
-}
-
-function labelLocalPosition(attachment: LabelAttachment, parent: THREE.Object3D): THREE.Vector3 {
-  const frame = faceFrame(attachment.face)
-  const half = parentHalfExtent(parent, attachment.face)
-  return frame.normal.clone().multiplyScalar(half + labelSurfaceLift)
-    .add(frame.u.clone().multiplyScalar(attachment.offset[0]))
-    .add(frame.v.clone().multiplyScalar(attachment.offset[1]))
-}
-
-function labelFaceQuaternion(attachment: LabelAttachment): THREE.Quaternion {
-  const frame = faceFrame(attachment.face)
-  const faceQ = new THREE.Quaternion().setFromUnitVectors(labelDefaultNormal, frame.normal)
-  return faceQ.multiply(new THREE.Quaternion().setFromAxisAngle(labelDefaultNormal, attachment.rotation))
 }
 
 export function buildTextVisual(entry: TextEntry): VisualBuilt {
@@ -654,21 +581,25 @@ export function buildTextVisual(entry: TextEntry): VisualBuilt {
     return { object: mesh, dynamicBody: undefined }
   }
 
-  if (entry.onFloor) {
-    geometry.rotateX(-Math.PI / 2)
-    mesh.position.fromArray(entry.position)
-    return { object: mesh }
-  }
-
-  // Free label in world space: face +Z like a decal (no camera billboard).
-  mesh.quaternion.setFromUnitVectors(labelDefaultNormal, new THREE.Vector3(0, 0, 1))
+  mesh.rotation.set(...freeLabelOrientation(entry))
   mesh.position.fromArray(entry.position)
   return { object: mesh }
 }
 
 export function applyAttachedLabelTransform(mesh: THREE.Object3D, attachment: LabelAttachment, parent: THREE.Object3D): void {
-  mesh.position.copy(labelLocalPosition(attachment, parent))
-  mesh.quaternion.copy(labelFaceQuaternion(attachment))
+  if (attachment.surface) {
+    const scale = parent.scale.x
+    applyLabelLocalTransform(mesh, attachment, modelLabelFrame(attachment.surface, scale))
+    // Model vertices use the asset's native units. Labels and inspector offsets use metres.
+    mesh.position.divideScalar(scale)
+    mesh.scale.setScalar(1 / scale)
+    return
+  }
+  const geometry = (parent as THREE.Mesh).geometry as THREE.CylinderGeometry | undefined
+  const cylinder = geometry?.type === 'CylinderGeometry' ? geometry.parameters : undefined
+  const frame = labelFaceFrame(attachment.face, parentHalfExtent(parent, attachment.face), attachment.cylinderAngle,
+    cylinder ? [cylinder.radiusTop, cylinder.radiusBottom, cylinder.height, cylinder.radialSegments] : undefined)
+  applyLabelLocalTransform(mesh, attachment, frame)
 }
 
 export function buildLightVisual(entry: LightEntry): VisualBuilt {

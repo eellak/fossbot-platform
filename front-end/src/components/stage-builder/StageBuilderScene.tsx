@@ -1,8 +1,11 @@
 import React, { useEffect, useImperativeHandle, useMemo, useRef } from 'react';
+import { flushSync } from 'react-dom';
 import { renderToStaticMarkup } from 'react-dom/server';
 import OpenWithIcon from '@mui/icons-material/OpenWith';
 import RotateRightIcon from '@mui/icons-material/RotateRight';
 import { evaluateLineGeometry, MAX_LINE_SEGMENTS } from '../../simulator/stages/lineGeometryCore';
+import { applyLabelLocalTransform, freeLabelOrientation } from '../../simulator/stages/labelAttachment';
+import { makeArrowGeometry, makeWedgeGeometry } from '../../simulator/stages/primitiveGeometry';
 import { buildLineVisual } from '../../simulator/stages/visuals';
 import { rotateLine, lineRotationCenter, translateLine, previewLineInsertion, canCloseLine, closeLine, adjustLineCorner, moveLinePoint, setLineCorner, type LineOperation } from './stageBuilderLineEditing';
 import type { EditorLineObject } from './types';
@@ -21,16 +24,19 @@ import { loadRobotV2 } from 'src/simulator/robot/v2';
 import { SENSOR_LAYOUT } from 'src/simulator/sensors/layout';
 import { createStageAssetResolver } from 'src/simulator/stages/assets';
 import { surfaceDetails } from 'src/simulator/stages/surfaceDetails';
+import { faceDragDirection, faceGeometry, highlightResizeFace, isResizableShape, pickResizeFace } from './stageBuilderFaceResize';
+import { StageResizeHandles, type ResizeControl } from './StageResizeHandles';
 import { objectVisualKey } from './stageBuilderVisualKey';
-import type { EditorStageObject, StageBuilderGroup, StageBuilderMode, StageBuilderSkyboxSettings, StageBuilderTransformSpace, StageLabelAttachment, StageLabelFace, StageTextStyle, Vec3 } from './types';
+import type { EditorStageObject, StageBuilderGroup, StageBuilderMode, StageBuilderSkyboxSettings, StageBuilderTransformSpace, StageLabelAttachment, StageTextStyle, Vec3 } from './types';
 import type { StageBuilderControlScheme, StageBuilderLockMode, StageBuilderStyleVariant } from './stageBuilderPreferences';
 import type { StageBuilderSnapSettings } from './stageBuilderSnapping';
 import { commitObjectTransform, getSnapSettings, snapAngle, snapConstrainedPosition, snapDimensions, snapPosition, type TransformOperation } from './stageBuilderSnapping';
 import type { StageBuilderValidationResult } from './stageBuilderValidation';
-import { cloneStage, placementFitsStage, cameraLookDirection } from './stageBuilderGeometry';
+import { cloneStage, placementFitsStage, cameraLookDirection, translateObject } from './stageBuilderGeometry';
 import { getEditorColors, getEditorTones } from './stageBuilderEditorTheme';
 import { normalizeStageBuilderSkybox } from './stageBuilderSkybox';
 import { CUSTOM_OBJECT_MIN_SCALE } from './stageBuilderCustomObjects';
+import { applyAttachedLabelTransform, freeLabelRotation, transformAttachedLabel, attachmentAtHit, attachmentAtModelHit, canAttachLabelTo, parentLabelFrame } from './stageBuilderLabelPlacement';
 import { lowestGeometryPoint } from './stageBuilderFloorPlacement';
 import { createStageBuilderRenderScheduler } from './stageBuilderRenderScheduler';
 import { listenForViewportMultiSelect, movableSelectionMembers } from './stageBuilderSelection';
@@ -44,6 +50,7 @@ export interface StageBuilderSceneProps {
   lineOperation?: LineOperation;
   onLineOperationChange?: (operation: LineOperation) => void;
   onAppendLinePoint?: (point: [number, number]) => void;
+  onObjectPreview?: (object: EditorStageObject | null) => void;
   onLinePreview?: (line: EditorLineObject | null) => void;
   objects: EditorStageObject[];
   groups?: StageBuilderGroup[];
@@ -74,7 +81,7 @@ export interface StageBuilderSceneProps {
   onSelectionChange?: (ids: string[]) => void;
   onObjectChange: (object: EditorStageObject) => void;
   onObjectsChange?: (objects: EditorStageObject[]) => void;
-  onPlaceAt?: (position: Vec3) => void;
+  onPlaceObjects?: (objects: EditorStageObject[]) => void;
   onPlacementValidityChange?: (valid: boolean | null) => void;
   onLockedSelectionAttempt?: () => void;
 }
@@ -86,6 +93,7 @@ export type StageBuilderSceneHandle = {
 };
 
 export type MeshRecord = {
+  labelSurfaces?: THREE.Object3D[];
   objectId: string;
   root: THREE.Object3D;
   pickables: THREE.Object3D[];
@@ -402,12 +410,14 @@ function makeImportedModelPickProxy(root: THREE.Object3D, objectId: string): THR
   const box = new THREE.Box3().setFromObject(root);
   if (box.isEmpty()) return null;
   const size = box.getSize(new THREE.Vector3());
+  const padding = Math.max(size.x, size.y, size.z) * 0.0001;
   const center = box.getCenter(new THREE.Vector3());
   const proxy = new THREE.Mesh(
-    new THREE.BoxGeometry(Math.max(0.01, size.x), Math.max(0.01, size.y), Math.max(0.01, size.z)),
+    new THREE.BoxGeometry(size.x || padding, size.y || padding, size.z || padding),
     new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false }),
   );
   proxy.position.copy(center);
+  proxy.userData.resizeBounds = box;
   proxy.name = 'custom object pick proxy';
   proxy.userData.stageBuilderHelper = true;
   setObjectUserData(proxy, objectId);
@@ -436,49 +446,6 @@ function applyImportedModelMaterial(root: THREE.Object3D, object: Extract<Editor
 
 function collisionWireMaterial(colors: ReturnType<typeof getEditorColors>): THREE.MeshBasicMaterial {
   return new THREE.MeshBasicMaterial({ color: colors.warning, wireframe: true, transparent: true, opacity: 0.9, depthTest: false, depthWrite: false });
-}
-
-function makeWedgeGeometry(width: number, height: number, depth: number): THREE.BufferGeometry {
-  const w = width / 2;
-  const h = height / 2;
-  const d = depth / 2;
-  const vertices = new Float32Array([
-    -w, -h, -d,  w, -h, -d,  -w, -h, d,  w, -h, d,  -w, h, d,  w, h, d,
-  ]);
-  const indices = [
-    0, 3, 1, 0, 2, 3,
-    2, 5, 3, 2, 4, 5,
-    0, 1, 5, 0, 5, 4,
-    0, 4, 2,
-    1, 3, 5,
-  ];
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
-  geometry.setIndex(indices);
-  geometry.computeVertexNormals();
-  return geometry;
-}
-
-function makeArrowGeometry(width: number, depth: number, thickness: number): THREE.BufferGeometry {
-  const w = width / 2;
-  const d = depth / 2;
-  const t = Math.max(0.002, thickness);
-  const neckX = width * 0.14;
-  const shaftD = depth * 0.42;
-  const points = [
-    new THREE.Vector2(-w, -shaftD / 2),
-    new THREE.Vector2(neckX, -shaftD / 2),
-    new THREE.Vector2(neckX, -d),
-    new THREE.Vector2(w, 0),
-    new THREE.Vector2(neckX, d),
-    new THREE.Vector2(neckX, shaftD / 2),
-    new THREE.Vector2(-w, shaftD / 2),
-  ];
-  const geometry = new THREE.ExtrudeGeometry(new THREE.Shape(points), { depth: t, bevelEnabled: false });
-  geometry.translate(0, 0, -t / 2);
-  geometry.rotateX(-Math.PI / 2);
-  geometry.computeVertexNormals();
-  return geometry;
 }
 
 function addCollisionWireVisual(root: THREE.Object3D, object: EditorStageObject, colors: ReturnType<typeof getEditorColors>): void {
@@ -549,7 +516,7 @@ function makeCollisionEdgesLocal(root: THREE.Object3D, anchor: THREE.Object3D, c
   return line;
 }
 
-function makeImportedModelRoot(object: Extract<EditorStageObject, { kind: 'model' }>, options: ObjectVisualOptions, colors: ReturnType<typeof getEditorColors>, pickables: THREE.Object3D[], resolveAssetUrl?: (url: string) => string, onVisualReady?: () => void): THREE.Group {
+function makeImportedModelRoot(object: Extract<EditorStageObject, { kind: 'model' }>, options: ObjectVisualOptions, colors: ReturnType<typeof getEditorColors>, pickables: THREE.Object3D[], labelSurfaces: THREE.Object3D[], resolveAssetUrl?: (url: string) => string, onVisualReady?: () => void): THREE.Group {
   const group = new THREE.Group();
   applyImportedModelTransform(group, object);
 
@@ -585,6 +552,7 @@ function makeImportedModelRoot(object: Extract<EditorStageObject, { kind: 'model
     if (!options.ghost) setObjectUserData(loaded, object.id);
     const pickProxy = makeImportedModelPickProxy(loaded, object.id);
     if (pickProxy) pickables.push(pickProxy);
+    loaded.traverseVisible(child => { if ((child as THREE.Mesh).isMesh) labelSurfaces.push(child); });
     group.add(loaded);
     if (pickProxy) group.add(pickProxy);
 
@@ -664,10 +632,7 @@ function applyObjectVisualTransform(root: THREE.Object3D, object: EditorStageObj
       else root.rotation.set(0, object.rotationY, 0);
       return;
     case 'text':
-      // Attached labels are never reused (their pose follows the parent); unattached
-      // labels bake scale into geometry, so only position and floor rotation move.
-      if (object.attachment?.parentId) return;
-      root.rotation.set(object.onFloor ? -Math.PI / 2 : 0, 0, 0);
+      root.rotation.set(...freeLabelOrientation(object));
       root.position.set(...object.position);
       return;
     default:
@@ -758,81 +723,29 @@ function makeLabelPlane(object: Extract<EditorStageObject, { kind: 'text' }>, op
   const texture = new THREE.CanvasTexture(makeTextCanvas(object.text, object.color, object.style, size, textSize, decorSize));
   const [width, height] = size;
   const mesh = new THREE.Mesh(new THREE.PlaneGeometry(width, height), labelPlaneMaterial(texture, options));
+  mesh.userData.isStageLabel = true;
   mesh.renderOrder = 4;
   return mesh;
 }
 
-const labelDefaultNormal = new THREE.Vector3(0, 0, 1);
-const labelSurfaceLift = 0.001;
-
-function faceFrame(face: StageLabelFace): { normal: THREE.Vector3; u: THREE.Vector3; v: THREE.Vector3 } {
-  if (face === 'back') return { normal: new THREE.Vector3(0, 0, -1), u: new THREE.Vector3(-1, 0, 0), v: new THREE.Vector3(0, 1, 0) };
-  if (face === 'left') return { normal: new THREE.Vector3(-1, 0, 0), u: new THREE.Vector3(0, 0, 1), v: new THREE.Vector3(0, 1, 0) };
-  if (face === 'right') return { normal: new THREE.Vector3(1, 0, 0), u: new THREE.Vector3(0, 0, -1), v: new THREE.Vector3(0, 1, 0) };
-  if (face === 'top') return { normal: new THREE.Vector3(0, 1, 0), u: new THREE.Vector3(1, 0, 0), v: new THREE.Vector3(0, 0, -1) };
-  if (face === 'bottom') return { normal: new THREE.Vector3(0, -1, 0), u: new THREE.Vector3(1, 0, 0), v: new THREE.Vector3(0, 0, 1) };
-  return { normal: new THREE.Vector3(0, 0, 1), u: new THREE.Vector3(1, 0, 0), v: new THREE.Vector3(0, 1, 0) };
-}
-
-function parentHalfExtent(parent: EditorStageObject, face: StageLabelFace): number {
-  if (parent.kind === 'cube') {
-    if (face === 'left' || face === 'right') return Math.abs(parent.dimensions[0]) / 2;
-    if (face === 'top' || face === 'bottom') return Math.abs(parent.dimensions[1]) / 2;
-    return Math.abs(parent.dimensions[2]) / 2;
-  }
-  if (parent.kind === 'cylinder') {
-    if (face === 'top' || face === 'bottom') return Math.abs(parent.dimensions[2]) / 2;
-    return Math.max(Math.abs(parent.dimensions[0]), Math.abs(parent.dimensions[1]));
-  }
-  if (parent.kind === 'base') return 0.012;
-  return 0;
-}
-
-function parentPosition(parent: EditorStageObject): THREE.Vector3 {
-  if (parent.kind === 'base') return new THREE.Vector3(parent.position[0], 0.006, parent.position[2]);
-  if ('position' in parent) return new THREE.Vector3(...parent.position);
-  return new THREE.Vector3();
-}
-
-function parentQuaternion(parent: EditorStageObject): THREE.Quaternion {
-  if (parent.kind === 'cube') {
-    const orientation = parent.orientation || [0, parent.rotationY, 0];
-    return new THREE.Quaternion().setFromEuler(new THREE.Euler(orientation[0], orientation[1], orientation[2]));
-  }
-  return new THREE.Quaternion();
-}
-
-function labelLocalPosition(attachment: StageLabelAttachment, parent: EditorStageObject): THREE.Vector3 {
-  const frame = faceFrame(attachment.face);
-  return frame.normal.clone().multiplyScalar(parentHalfExtent(parent, attachment.face) + labelSurfaceLift)
-    .add(frame.u.clone().multiplyScalar(attachment.offset[0]))
-    .add(frame.v.clone().multiplyScalar(attachment.offset[1]));
-}
-
-function labelFaceQuaternion(attachment: StageLabelAttachment): THREE.Quaternion {
-  const frame = faceFrame(attachment.face);
-  const faceQ = new THREE.Quaternion().setFromUnitVectors(labelDefaultNormal, frame.normal);
-  return faceQ.multiply(new THREE.Quaternion().setFromAxisAngle(labelDefaultNormal, attachment.rotation));
-}
-
-function applyAttachedLabelTransform(mesh: THREE.Mesh, attachment: StageLabelAttachment, parent: EditorStageObject): void {
-  const parentQ = parentQuaternion(parent);
-  mesh.position.copy(parentPosition(parent).add(labelLocalPosition(attachment, parent).applyQuaternion(parentQ)));
-  mesh.quaternion.copy(parentQ.multiply(labelFaceQuaternion(attachment)));
-}
-
 function applyAttachedLabelTransformFromRoot(mesh: THREE.Object3D, attachment: StageLabelAttachment, parent: EditorStageObject, parentRoot: THREE.Object3D): void {
   if (parent.kind === 'base') {
-    applyAttachedLabelTransform(mesh as THREE.Mesh, attachment, parent);
+    applyAttachedLabelTransform(mesh, attachment, parent);
     mesh.position.x = parentRoot.position.x + attachment.offset[0];
     mesh.position.z = parentRoot.position.z - attachment.offset[1];
     return;
   }
+  if (parent.kind === 'model' && attachment.surface) {
+    applyAttachedLabelTransform(mesh, attachment, { ...parent, position: parentRoot.position.toArray() as Vec3,
+      orientation: [parentRoot.rotation.x, parentRoot.rotation.y, parentRoot.rotation.z], scale: parentRoot.scale.x });
+    return;
+  }
   parentRoot.updateMatrixWorld(true);
-  mesh.position.copy(labelLocalPosition(attachment, parent).applyMatrix4(parentRoot.matrixWorld));
+  applyLabelLocalTransform(mesh, attachment, parentLabelFrame(parent, attachment));
+  mesh.position.applyMatrix4(parentRoot.matrixWorld);
   const parentQ = new THREE.Quaternion();
   parentRoot.getWorldQuaternion(parentQ);
-  mesh.quaternion.copy(parentQ.multiply(labelFaceQuaternion(attachment)));
+  mesh.quaternion.premultiply(parentQ);
 }
 
 function makeAttachedLabelRoot(object: Extract<EditorStageObject, { kind: 'text' }>, parent: EditorStageObject, options: ObjectVisualOptions): { root: THREE.Mesh; pickables: THREE.Object3D[] } {
@@ -1151,6 +1064,7 @@ function makeRobotSpawnVisual(object: Extract<EditorStageObject, { kind: 'fossbo
 export function makeObjectRoot(object: EditorStageObject, options: ObjectVisualOptions = {}, context: { objects?: EditorStageObject[]; colors?: ReturnType<typeof getEditorColors>; resolveAssetUrl?: (url: string) => string; onVisualReady?: () => void } = {}): MeshRecord {
   const colors = context.colors ?? getEditorColors('studio');
   let pickables: THREE.Object3D[] = [];
+  let labelSurfaces: THREE.Object3D[] | undefined;
   let root: THREE.Object3D;
 
   if (object.kind === 'cube') {
@@ -1180,7 +1094,7 @@ export function makeObjectRoot(object: EditorStageObject, options: ObjectVisualO
     pickables.push(mesh);
   } else if (object.kind === 'cylinder') {
     const mesh = new THREE.Mesh(
-      new THREE.CylinderGeometry(object.dimensions[0], object.dimensions[1], object.dimensions[2], object.dimensions[3] || 24),
+      new THREE.CylinderGeometry(object.dimensions[0], object.dimensions[1], object.dimensions[2], object.dimensions[3] || 16),
       standardMaterial(object.color, options, 1, colors),
     );
     mesh.position.set(...object.position);
@@ -1270,7 +1184,8 @@ export function makeObjectRoot(object: EditorStageObject, options: ObjectVisualO
     }
     root = group;
   } else if (object.kind === 'model') {
-    root = makeImportedModelRoot(object, options, colors, pickables, context.resolveAssetUrl, context.onVisualReady);
+    labelSurfaces = [];
+    root = makeImportedModelRoot(object, options, colors, pickables, labelSurfaces, context.resolveAssetUrl, context.onVisualReady);
   } else if (object.kind === 'text') {
     const parent = object.attachment?.parentId ? context.objects?.find((item) => item.id === object.attachment?.parentId) : null;
     if (object.attachment && parent) {
@@ -1279,8 +1194,7 @@ export function makeObjectRoot(object: EditorStageObject, options: ObjectVisualO
       pickables = label.pickables;
     } else {
       const mesh = makeLabelPlane(object, options);
-      if (object.onFloor) mesh.rotation.x = -Math.PI / 2;
-      mesh.position.set(...object.position);
+      applyObjectVisualTransform(mesh, object);
       root = mesh;
       pickables.push(mesh);
     }
@@ -1410,7 +1324,7 @@ export function makeObjectRoot(object: EditorStageObject, options: ObjectVisualO
   if (options.collisionWireVisible) addCollisionWireVisual(root, object, colors);
   root.name = object.name;
   if (!options.ghost) setObjectUserData(root, object.id);
-  return { objectId: object.id, root, pickables };
+  return { objectId: object.id, root, pickables, labelSurfaces };
 }
 
 export function disposeObject(root: THREE.Object3D): void {
@@ -1425,7 +1339,7 @@ export function disposeObject(root: THREE.Object3D): void {
 }
 
 function canTransform(object: EditorStageObject | undefined): boolean {
-  return !!object && !object.locked && object.kind !== 'line' && !(object.kind === 'text' && object.attachment?.parentId);
+  return !!object && !object.locked && object.kind !== 'line';
 }
 
 function physicalScale(value: number): number {
@@ -1522,6 +1436,7 @@ function objectFromRootTransform(object: EditorStageObject, root: THREE.Object3D
     return {
       ...object,
       position: snapPosition([root.position.x, root.position.y, root.position.z], snap),
+      ...freeLabelRotation(object, [root.rotation.x, root.rotation.y, root.rotation.z]),
       scale: Math.max(0.05, object.scale * scaleFactor),
     };
   }
@@ -1764,16 +1679,24 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
   onSelectionChange,
   onObjectChange,
   onObjectsChange,
-  onPlaceAt,
+  onPlaceObjects,
   onPlacementValidityChange,
   onLockedSelectionAttempt,
   keyboardEnabled = true,
-  lineOperation = { mode: 'select' }, onLineOperationChange, onAppendLinePoint, onLinePreview,
+  lineOperation = { mode: 'select' }, onLineOperationChange, onAppendLinePoint, onObjectPreview, onLinePreview = onObjectPreview,
 }: StageBuilderSceneProps, ref) {
   const keyboardEnabledRef = useRef(keyboardEnabled);
   keyboardEnabledRef.current = keyboardEnabled;
   const containerRef = useRef<HTMLDivElement | null>(null);
   const sceneRef = useRef<SceneHandle | null>(null);
+  const resizeHandlesRef = useRef<ResizeControl>(null);
+  const resizeHintRef = useRef<HTMLSpanElement>(null);
+  const resizeMode = transformMode === 'scale' && builderMode === 'edit' && lineOperation.mode === 'select'
+    && !selectedGroupId && selectedIds.length <= 1 && !lookThroughCameraId && !!onObjectPreview && keyboardEnabled;
+  const pickFacesRef = useRef(false);
+  pickFacesRef.current = resizeMode && controlScheme === 'legacyGizmo';
+  const resizeObject = resizeMode && selectedIds.length === 1
+    ? objects.find(object => object.id === selectedId && !object.hidden && !object.locked) : undefined;
   const requestRenderRef = useRef<() => void>(() => undefined);
   const transformRef = useRef<TransformControls | null>(null);
   const selectionHelperRef = useRef<THREE.Group | null>(null);
@@ -1822,7 +1745,7 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
   const onSelectionChangeRef = useRef(onSelectionChange);
   const onObjectChangeRef = useRef(onObjectChange);
   const onObjectsChangeRef = useRef(onObjectsChange);
-  const onPlaceAtRef = useRef(onPlaceAt);
+  const onPlaceObjectsRef = useRef(onPlaceObjects);
   const onPlacementValidityChangeRef = useRef(onPlacementValidityChange);
   const onLockedSelectionAttemptRef = useRef(onLockedSelectionAttempt);
   const wasDraggingRef = useRef(false);
@@ -1873,7 +1796,7 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
   useEffect(() => { onSelectionChangeRef.current = onSelectionChange; }, [onSelectionChange]);
   useEffect(() => { onObjectChangeRef.current = onObjectChange; }, [onObjectChange]);
   useEffect(() => { onObjectsChangeRef.current = onObjectsChange; }, [onObjectsChange]);
-  useEffect(() => { onPlaceAtRef.current = onPlaceAt; }, [onPlaceAt]);
+  useEffect(() => { onPlaceObjectsRef.current = onPlaceObjects; }, [onPlaceObjects]);
   useEffect(() => { onPlacementValidityChangeRef.current = onPlacementValidityChange; }, [onPlacementValidityChange]);
   useEffect(() => { onLockedSelectionAttemptRef.current = onLockedSelectionAttempt; }, [onLockedSelectionAttempt]);
 
@@ -1932,6 +1855,15 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
     }
     transform.enabled = true;
     const selected = objectsRef.current.find((item) => item.id === selectedRef.current);
+    if (selected?.kind === 'text' && selected.attachment && !selectedGroupRef.current && selectedIdsRef.current.length <= 1) {
+      // Local X and Y lie on the label. Its local Z is the surface normal.
+      const move = transformModeRef.current === 'translate';
+      transform.showX = move;
+      transform.showY = move;
+      transform.showZ = transformModeRef.current === 'rotate';
+      transform.setSpace('local');
+      return;
+    }
     const cameraRotate = selected?.kind === 'camera' && transformModeRef.current === 'rotate';
     const yawOnly = (selected?.kind === 'fossbot' || selected?.kind === 'light') && transformModeRef.current === 'rotate';
     transform.showX = cameraRotate || !yawOnly;
@@ -1946,8 +1878,10 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
     transform.setMode(transformModeRef.current === 'select' ? 'translate' : transformModeRef.current);
     configureTransformControls();
     transform.detach();
-    if (lookThroughCameraIdRef.current) return;
-    if (builderModeRef.current !== 'edit' || controlSchemeRef.current !== 'legacyGizmo') return;
+    if (lookThroughCameraIdRef.current || resizeHandlesRef.current) return;
+    if (builderModeRef.current !== 'edit') return;
+    const selected = objectsRef.current.find(item => item.id === selectedRef.current);
+    if (controlSchemeRef.current !== 'legacyGizmo' && (selected?.kind !== 'text' || selectedGroupRef.current || selectedIdsRef.current.length > 1)) return;
     if (transformModeRef.current === 'select' || lineActionsRef.current.lineOperation.mode !== 'select') return;
 
     const members = transformMembers();
@@ -1964,7 +1898,6 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
       return;
     }
 
-    const selected = objectsRef.current.find((item) => item.id === selectedRef.current);
     const root = selected ? objectMapRef.current.get(selected.id)?.root : null;
     if (root && canTransform(selected)) transform.attach(root);
   };
@@ -2041,6 +1974,11 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
     const selected = start?.object;
     const root = selected ? objectMapRef.current.get(selected.id)?.root : null;
     if (!selected || !root || selected.kind === 'line') return;
+    if (selected.kind === 'text' && selected.attachment && start && start.operation.mode !== 'scale') {
+      const parent = objectsRef.current.find(object => object.id === selected.attachment!.parentId);
+      if (parent) onObjectChangeRef.current(transformAttachedLabel(selected, parent, root, start.operation.mode));
+      return;
+    }
     const next = objectFromRootTransform(selected, root, getSnapSettings('off', 'off'), start?.scale || undefined);
     if (next && start) onObjectChangeRef.current(commitObjectTransform(selected, next, start.operation));
   };
@@ -2089,8 +2027,18 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
     boundaryRef.current = boundary;
 
     const selectionHelper = new THREE.Group();
-    sceneHandle.scene.add(selectionHelper);
-    selectionHelperRef.current = selectionHelper;
+    const selectionOverlay = new THREE.Group();
+    sceneHandle.renderer.localClippingEnabled = true;
+    const faceHighlight = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial({
+      clippingPlanes: [new THREE.Plane()],
+      transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
+      side: THREE.DoubleSide, toneMapped: false,
+    }));
+    faceHighlight.renderOrder = 997;
+    faceHighlight.visible = false;
+    selectionOverlay.add(selectionHelper, faceHighlight);
+    sceneHandle.scene.add(selectionOverlay);
+    selectionHelperRef.current = selectionOverlay;
 
     // Draw in the transparent pass so the opaque brackets stay visible over the floor and glass.
     const selectionRim = new LineMaterial({ linewidth: 4, transparent: true, depthTest: false, depthWrite: false, toneMapped: false });
@@ -2390,30 +2338,57 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
       invalidateScene();
     };
 
-    const updatePlacementPreview = (event: PlacementPointer | null): Vec3 | null => {
+    const updatePlacementPreview = (event: PlacementPointer | null, commit = false) => {
       const ghost = ghostRef.current;
       const templates = placementObjectsRef.current;
-      if (!ghost || !templates) return null;
+      if (!ghost || !templates) return;
       if (event) updatePointer(event);
-      ghost.visible = !!event && Math.abs(tmpPointer.x) <= 1 && Math.abs(tmpPointer.y) <= 1
-        && !!raycaster.ray.intersectPlane(floorPlane, floorHit);
+      const inCanvas = !!event && Math.abs(tmpPointer.x) <= 1 && Math.abs(tmpPointer.y) <= 1;
+      const floorPoint = inCanvas && raycaster.ray.intersectPlane(floorPlane, floorHit);
+      const label = templates.length === 1 && templates[0].kind === 'text' && !templates[0].prefabSourceId ? templates[0] : null;
+      let attached: typeof label = null;
+      if (inCanvas && label) {
+        const pickables = Array.from(objectMapRef.current.values()).filter(record => record.root.visible).flatMap(record => record.labelSurfaces ?? record.pickables);
+        const hit = raycaster.intersectObjects(pickables, false)[0];
+        const parent = hit && objectsRef.current.find(object => object.id === hit.object.userData.stageObjectId);
+        if (hit?.face && (parent?.kind === 'model' || canAttachLabelTo(parent)) && (!floorPoint || hit.distance <= raycaster.ray.origin.distanceTo(floorPoint))) {
+          const attachment = parent.kind === 'model'
+            ? attachmentAtModelHit(parent, objectMapRef.current.get(parent.id)!.root, hit)
+            : attachmentAtHit(parent, hit);
+          applyAttachedLabelTransform(ghost.children[0], attachment, parent);
+          attached = { ...label, name: `${parent.name} label`, position: ghost.children[0].position.toArray() as Vec3, onFloor: false, parentId: parent.id, attachment };
+        }
+      }
+      ghost.visible = !!attached || !!floorPoint;
       if (!ghost.visible) {
         if (ghost.userData.valid !== undefined) {
           delete ghost.userData.valid;
           onPlacementValidityChangeRef.current?.(null);
         }
-        return null;
+        return;
       }
-      const snap = getSnapSettings(snapSettingsRef.current.preset, snapSettingsRef.current.rotationPreset, event ?? {});
-      const position = snapPosition([floorHit.x, 0, floorHit.z], snap);
-      ghost.position.fromArray(position);
-      const valid = placementFitsStage(templates, position, stageDimensionsRef.current);
+      let valid: boolean;
+      if (attached) {
+        ghost.position.set(0, 0, 0);
+        const bounds = new THREE.Box3().setFromObject(ghost);
+        const [width, depth] = stageDimensionsRef.current;
+        valid = bounds.min.x >= -width / 2 && bounds.max.x <= width / 2 && bounds.min.z >= -depth / 2 && bounds.max.z <= depth / 2;
+      } else {
+        if (label) applyObjectVisualTransform(ghost.children[0], label);
+        const snap = getSnapSettings(snapSettingsRef.current.preset, snapSettingsRef.current.rotationPreset, event ?? {});
+        const position = snapPosition([floorHit.x, 0, floorHit.z], snap);
+        ghost.position.fromArray(position);
+        valid = placementFitsStage(templates, position, stageDimensionsRef.current);
+      }
       if (ghost.userData.valid !== valid) {
         ghost.userData.valid = valid;
         ghost.children.forEach(root => tintGhost(root, valid, styleColorsRef.current));
         onPlacementValidityChangeRef.current?.(valid);
       }
-      return valid ? position : null;
+      if (commit && valid) {
+        const position = ghost.position.toArray() as Vec3;
+        onPlaceObjectsRef.current?.(attached ? [attached] : templates.map(object => translateObject(object, position)));
+      }
     };
 
     const updateMarqueeElement = (event: PointerEvent) => {
@@ -2474,7 +2449,13 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
       const lines = objectsRef.current.filter((object): object is EditorLineObject => object.kind === 'line');
       const lineIds = new Set(lines.map(line => line.id));
       const pickables = Array.from(objectMapRef.current.values()).filter(record => !lineIds.has(record.objectId)).flatMap((record) => record.pickables);
-      const hits: (THREE.Intersection & { linePointIndex?: number })[] = raycaster.intersectObjects(pickables, true);
+      const candidates = raycaster.intersectObjects(pickables, true);
+      // A model's selection box can sit in front of a visible label on a sloping face.
+      const hits: (THREE.Intersection & { linePointIndex?: number })[] = candidates.some(hit => hit.object.userData.isStageLabel)
+        ? candidates.flatMap(hit => {
+          const modelSurfaces = objectMapRef.current.get(hit.object.userData.stageObjectId)?.labelSurfaces;
+          return modelSurfaces?.length ? raycaster.intersectObjects(modelSurfaces, false) : [hit];
+        }) : candidates;
       const rect = sceneHandle.renderer.domElement.getBoundingClientRect();
       for (const line of lines) {
         const root = objectMapRef.current.get(line.id)?.root;
@@ -2484,6 +2465,36 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
       }
       hits.sort((a, b) => a.distance - b.distance);
       return hits;
+    };
+
+    let facePointer: PointerEvent | null = null;
+    const clearFacePointer = () => {
+      if (facePointer) { facePointer = null; invalidateScene(); }
+    };
+    const pickResizeSurface = (event: PointerEvent) => {
+      updatePointer(event);
+      const hit = pickScene(event).find(item => !item.object.userData.stageBuilderHelper || item.object.userData.resizeBounds);
+      const object = hit && objectsRef.current.find(item => item.id === hit.object.userData.stageObjectId);
+      if (!hit || !isResizableShape(object) || object.locked) return;
+      if (selectedRef.current && selectedRef.current !== object.id && lockModeRef.current === 'ignore') return;
+      const floorHit = raycaster.intersectObject(floor)[0];
+      if (floorHit && floorHit.distance + 0.001 < hit.distance) return;
+      const target = pickResizeFace(object, hit, sceneHandle.camera, sceneHandle.renderer.domElement.clientHeight, event.pointerType === 'touch');
+      if (target) return { object, hit, target };
+    };
+    const pressResizeFace = (event: PointerEvent) => {
+      if (!pickFacesRef.current || !event.isPrimary || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || spaceHeldRef.current) return;
+      if (isTransformControlHandleActive(transformRef.current)) return;
+      const surface = pickResizeSurface(event);
+      if (!surface) return;
+      if (surface.object.id !== selectedRef.current) {
+        // Mount the picked object's controls before transferring this pointer to them.
+        flushSync(() => onSelectRef.current(surface.object.id));
+      }
+      if (resizeHandlesRef.current?.pressFace(event, surface.target, surface.hit.point)) {
+        event.stopImmediatePropagation();
+        invalidateScene();
+      }
     };
 
     const closeHint = document.createElement('div');
@@ -2591,14 +2602,14 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
 
       // TransformControls receives this pointerdown first; if it claimed a gizmo
       // handle, scene picking must not select objects behind the active gizmo.
-      if (controlSchemeRef.current === 'legacyGizmo' && isTransformControlHandleActive(transformRef.current)) {
+      if (isTransformControlHandleActive(transformRef.current)) {
         event.preventDefault();
         return;
       }
 
       const selected = objectsRef.current.find((item) => item.id === selectedRef.current);
       const selectedRoot = selected ? objectMapRef.current.get(selected.id)?.root : null;
-      if (lineActionsRef.current.lineOperation.mode === 'select' && controlSchemeRef.current === 'friendly' && selectedRoot && canTransform(selected)) {
+      if (lineActionsRef.current.lineOperation.mode === 'select' && controlSchemeRef.current === 'friendly' && !resizeHandlesRef.current && selectedRoot && selected?.kind !== 'text' && canTransform(selected)) {
         const handleHit = raycaster.intersectObjects(friendlyHandlesRef.current?.pickables || [], true)[0];
         const kind = handleHit?.object.userData.friendlyHandle as FriendlyHandleKind | undefined;
         if (kind && raycaster.ray.intersectPlane(floorPlane, floorHit)) {
@@ -2683,6 +2694,10 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
     };
 
     const handlePointerMove = (event: PointerEvent) => {
+      if (pickFacesRef.current && !event.buttons && event.target === sceneHandle.renderer.domElement && !spaceHeldRef.current) {
+        facePointer = event;
+        invalidateScene();
+      } else clearFacePointer();
       if (builderModeRef.current === 'place') {
         if (event.target !== sceneHandle.renderer.domElement) {
           clearPlacementPointer();
@@ -2805,8 +2820,7 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
       if (builderModeRef.current === 'place') {
         if (down?.pointerId === event.pointerId && event.button === 0 && event.target === sceneHandle.renderer.domElement
           && Math.hypot(event.clientX - down.clientX, event.clientY - down.clientY) < 5) {
-          const position = updatePlacementPreview(event);
-          if (position) onPlaceAtRef.current?.(position);
+          updatePlacementPreview(event, true);
         }
         return;
       }
@@ -2920,6 +2934,8 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
       if (['x', 'y', 'z'].includes(event.key.toLowerCase())) axisLockRef.current = null;
     };
 
+    sceneHandle.renderer.domElement.addEventListener('pointerdown', pressResizeFace, true);
+    sceneHandle.renderer.domElement.addEventListener('pointerleave', clearFacePointer);
     sceneHandle.renderer.domElement.addEventListener('pointerdown', handlePointerDown);
     sceneHandle.renderer.domElement.addEventListener('pointercancel', cancelLineTransform);
     sceneHandle.renderer.domElement.addEventListener('dblclick', handleDoubleClick);
@@ -3058,17 +3074,28 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
       selectionStroke.resolution.copy(selectionRim.resolution);
       selectionRim.color.set(styleColorsRef.current.panel);
       selectionStroke.color.set(styleColorsRef.current.selectionHelper);
+      const selectedObject = objectsRef.current.find(item => item.id === selectedRef.current);
+      const selectionMesh = selectedIdsRef.current.length === 1 && isResizableShape(selectedObject)
+        ? objectMapRef.current.get(selectedObject.id)?.pickables[0] as THREE.Mesh | undefined : undefined;
+      if (selectionMesh) {
+        if (!selectionMesh.geometry.boundingBox) selectionMesh.geometry.computeBoundingBox();
+        selectionMesh.updateWorldMatrix(true, false);
+      }
       let outlineCount = 0;
       for (const id of selectedIdsRef.current) {
         const root = objectMapRef.current.get(id)?.root;
         if (!root?.visible) continue;
-        const box = editorSelectionBounds(root);
+        const box = selectionMesh?.geometry.boundingBox || editorSelectionBounds(root);
         if (box.isEmpty()) continue;
         let outline = selectionHelper.children[outlineCount] as LineSegments2;
         if (!outline) {
           outline = makeCornerBoundsHelper(selectionRim, selectionStroke);
           selectionHelper.add(outline);
         }
+        outline.matrixAutoUpdate = false;
+        if (selectionMesh) outline.matrix.copy(selectionMesh.matrixWorld);
+        else outline.matrix.identity();
+        outline.matrixWorldNeedsUpdate = true;
         updateCornerBoundsHelper(outline, box);
         outline.visible = true;
         outlineCount++;
@@ -3088,13 +3115,38 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
         groupHelper.visible = false;
       }
       const handles = friendlyHandlesRef.current?.root;
-      const selectedObject = objectsRef.current.find((item) => item.id === selectedRef.current);
-      if (handles && selectedRoot && builderModeRef.current === 'edit' && lineActionsRef.current.lineOperation.mode === 'select' && controlSchemeRef.current === 'friendly' && canTransform(selectedObject)) {
+      if (handles && selectedRoot && !resizeHandlesRef.current && builderModeRef.current === 'edit' && lineActionsRef.current.lineOperation.mode === 'select' && controlSchemeRef.current === 'friendly' && selectedObject?.kind !== 'text' && canTransform(selectedObject)) {
         handles.visible = true;
         handles.position.copy(selectedRoot.position);
         handles.position.y = 0.01;
       } else if (handles) {
         handles.visible = false;
+      }
+      sceneHandle.camera.updateMatrixWorld();
+      faceHighlight.visible = false;
+      const surface = pickFacesRef.current && facePointer ? pickResizeSurface(facePointer) : undefined;
+      if (surface) canvas.dataset.resizeAxis = faceDragDirection(surface.object, surface.target, sceneHandle.camera, canvas.clientHeight).axis;
+      else delete canvas.dataset.resizeAxis;
+      if (resizeHandlesRef.current) {
+        const occluders = selectedObject?.kind === 'text' ? Array.from(objectMapRef.current.values())
+          .filter(record => record.objectId !== selectedRef.current && record.root.visible)
+          .flatMap(record => record.labelSurfaces ?? record.pickables) : [];
+        resizeHandlesRef.current.update(occluders, faceHighlight, surface?.object.id === selectedRef.current ? surface?.target : undefined);
+      }
+      const hint = resizeHintRef.current;
+      if (hint) hint.hidden = true;
+      if (surface && surface.object.id !== selectedRef.current) {
+        if (hint && facePointer) {
+          const { dimension, length } = faceGeometry(surface.object, surface.target);
+          hint.textContent = (canvas.dataset.resizeAxis === 'x' ? '↔ ' : '↕ ') + dimension + ' ' + Number(length.toFixed(3)) + ' m';
+          const rect = canvas.getBoundingClientRect();
+          hint.style.left = Math.min(Math.max(75, facePointer.clientX - rect.left), rect.width - 75) + 'px';
+          hint.style.top = Math.max(32, facePointer.clientY - rect.top) + 'px';
+          hint.hidden = false;
+        }
+        highlightResizeFace(faceHighlight, surface.hit.object as THREE.Mesh, surface.object, surface.target);
+        faceHighlight.material.color.set(styleColorsRef.current.accent);
+        faceHighlight.material.opacity = 0.32;
       }
       renderScene(sceneHandle);
     };
@@ -3109,6 +3161,8 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
       scheduler.cancel();
       sceneHandle.controls.removeEventListener('change', handleControlsChange);
       stopMultiSelect();
+      sceneHandle.renderer.domElement.removeEventListener('pointerdown', pressResizeFace, true);
+      sceneHandle.renderer.domElement.removeEventListener('pointerleave', clearFacePointer);
       sceneHandle.renderer.domElement.removeEventListener('pointerdown', handlePointerDown);
       sceneHandle.renderer.domElement.removeEventListener('pointercancel', cancelLineTransform);
       sceneHandle.renderer.domElement.removeEventListener('dblclick', handleDoubleClick);
@@ -3136,6 +3190,7 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
         marqueeElementRef.current.remove();
         marqueeElementRef.current = null;
       }
+      faceHighlight.material.dispose(); // Its geometry belongs to the picked object.
       for (const outline of selectionHelper.children) (outline as LineSegments2).geometry.dispose();
       groupSelectionHelper.geometry.dispose();
       selectionRim.dispose();
@@ -3298,7 +3353,7 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
   }, [objects, groups, selectedId, selectedIds, selectedGroupId, controlScheme, builderMode, transformMode, lineOperation]);
 
   useEffect(() => {
-    transformRef.current?.setSpace(transformSpace);
+    configureTransformControls();
   }, [transformSpace]);
 
   useEffect(() => {
@@ -3537,5 +3592,13 @@ export const StageBuilderScene = React.forwardRef<StageBuilderSceneHandle, Stage
     },
   }), [captureStagePreview, resolveAssetUrl]);
 
-  return <div ref={containerRef} style={{ width: '100%', height: '100%', minHeight: 420, position: 'relative' }} />;
+  return <div ref={containerRef} style={{ width: '100%', height: '100%', minHeight: 420, position: 'relative' }}>
+    {resizeMode && <span hidden aria-hidden="true" ref={resizeHintRef} className="stage-resize-hint"
+      style={{ backgroundColor: getEditorColors(styleVariant).panel, color: getEditorColors(styleVariant).textStrong }} />}
+    {(resizeObject?.kind === 'text' || (controlScheme === 'legacyGizmo' && isResizableShape(resizeObject))) && onObjectPreview &&
+      <StageResizeHandles key={resizeObject.id} ref={resizeHandlesRef} object={resizeObject} scene={sceneRef}
+        getRecord={() => objectMapRef.current.get(resizeObject.id)}
+        snap={snapSettings || getSnapSettings('medium', '15')} colors={getEditorColors(styleVariant)}
+        onPreview={onObjectPreview} onChange={onObjectChange} requestFrame={invalidateScene} />}
+  </div>;
 });

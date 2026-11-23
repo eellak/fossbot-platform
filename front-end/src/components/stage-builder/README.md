@@ -70,7 +70,7 @@ Route wiring lives in `front-end/src/routes/Router.tsx`.
 - `EditorLeftPanel.tsx` — two-tab left rail: `Library` and `Scene`.
 - `StageObjectLibrary.tsx` — library of objects and built-in prefabs for placement in the viewport.
 - `StageSceneHierarchy.tsx` — object tree, selection, inline rename, hide/show, lock, duplicate/delete, group/ungroup.
-- `EditorViewportToolRail.tsx` — Select/Move/Rotate/Scale, snap toggle, focus, undo/redo/delete.
+- `EditorViewportToolRail.tsx` — Select/Move/Rotate/Resize, snap toggle, focus, undo/redo/delete.
 - `StageBuilderScene.tsx` — Three.js viewport, floor/grid/bounds, object rendering, picking, hover/selection helpers, transform controls, snapping, focus selected, hidden-object filtering.
 - `EditorRightInspector.tsx` — chooses Object, Stage, Validation, or Settings context.
 - `StageInspector.tsx` — object inspector sections: Entity, Transform, Appearance, Collision, Rigidbody, Light, Camera, Audio, Advanced.
@@ -101,7 +101,7 @@ Route wiring lives in `front-end/src/routes/Router.tsx`.
 Library object or prefab click
   -> StageBuilderPage.addObject/addPrefab
   -> prepare the object or prefab for preview
-  -> floor click or tap
+  -> click or tap the floor, or an object face for a label
   -> commitStage(...)
   -> StageBuilderScene + SceneHierarchy + Inspector receive new props
 
@@ -179,7 +179,8 @@ The builder imports and round-trips geometry/model objects as OBJ, STL, or GLB c
 
 - JSON export is the save action for this implementation stage.
 - Browser recovery drafts are only unsaved-work recovery, not project storage.
-- Choose an object, prefab or imported model to preview it under the pointer. Click or tap the floor to place and select it in one undo step. Placement follows movement snapping and requires the full item to fit inside the floor. Escape or Cancel discards the preview. Labels added to a selected compatible object still attach directly.
+- Press **R** and point at an unlocked object. A highlight, measurement and horizontal or vertical arrow show what dragging will change. Drag a box face or a floor marker edge to move it. Drag a cylinder or cone cap for height and its rim or curved side for diameter. Cones keep their taper. Pull a ball’s silhouette to change its diameter. A ball sitting on the floor stays there. On a wedge, pull a side for width, the tall end for depth or the slope to raise the ridge. Pull an arrow’s tip or tail for length or a wing for width. Drag a side of an imported model’s selection box to scale it proportionally. The opposite side anchors the drag. Looking straight at a face, drag up to grow it. Tab to a side and use the indicated arrow keys for a precise step. Escape cancels the preview. Undo restores size and position together.
+- Choose an object, prefab or imported model to preview it under the pointer. Click or tap the floor to place and select it in one undo step. Placement follows movement snapping and requires the full item to fit inside the floor. Escape or Cancel discards the preview. For a label, point at a box, cylinder, floor marker or imported OBJ, STL or GLB to preview the attachment. On a custom model, the label follows the visible mesh surface. Set Width (m) before placing, or press `[` and `]` while pointing. Click or tap to attach. To resize a placed label around the same point, select **Resize** and drag either edge handle, or focus a handle and use the arrow keys. The text and background resize together. Use Move to slide an attached label along its surface and Rotate to turn it in place. Free labels can move and rotate on all three axes.
 - The Prefabs section includes four single-object floor material patches: tile, carpet, rough mat, and dirt with small rocks. Each patch exports a material code and traction setting; the simulator generates its low ridges or rocks from the patch size and position. The floor material code appears in sensor CSV recordings only while the robot is fully inside a patch.
 - A new robot spawn replaces any existing robot spawn.
 - A new camera replaces any existing camera; multiple visible cameras are supported only through import/duplication and produce a validation warning.

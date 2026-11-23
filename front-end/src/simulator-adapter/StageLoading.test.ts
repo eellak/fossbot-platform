@@ -10,7 +10,21 @@ declare const it: any;
 declare const expect: any;
 declare const jest: any;
 
-jest.mock('../simulator/stages/visuals', () => ({ buildModelVisual: require('jest-mock').fn() }));
+jest.mock('../simulator/stages/visuals', () => ({
+  buildModelVisual: require('jest-mock').fn(),
+  buildBaseVisual: (entry: { name: string }) => {
+    const object = new (require('three').Object3D)();
+    object.name = entry.name;
+    return { object };
+  },
+  buildTextVisual: (entry: { name: string; attach: unknown }) => {
+    const object = new (require('three').Object3D)();
+    object.name = entry.name;
+    object.userData.labelAttachment = entry.attach;
+    return { object };
+  },
+  applyAttachedLabelTransform: require('jest-mock').fn(),
+}));
 jest.mock('../simulator/stages/colliders', () => ({ buildModelCollider: require('jest-mock').fn() }));
 jest.mock('../simulator/stages/skybox', () => ({ applyStageSkybox: require('jest-mock').fn() }));
 jest.mock('../simulator/stages/audio', () => ({
@@ -24,6 +38,20 @@ function deferred<T>() {
 }
 
 beforeAll(async () => { await RAPIER.init(); });
+
+it('attaches to the picked object when names repeat and the label loads first', async () => {
+  const world = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
+  const scene = new THREE.Scene();
+  const stage = await loadStageEntries('labels', [
+    { type: 'text', name: 'Label', attach: { parentId: 'second', parentName: 'Tile', face: 'top', offset: [0, 0], rotation: 0 } },
+    { type: 'base', id: 'first', name: 'Tile' },
+    { type: 'base', id: 'second', name: 'Tile' },
+  ], scene, world);
+  const tiles = scene.children.filter(child => child.name === 'Tile');
+  expect(scene.getObjectByName('Label')?.parent).toBe(tiles[1]);
+  stage.dispose();
+  world.free();
+});
 
 describe('cancelled asynchronous stage loads', () => {
   for (const failureAt of ['visual', 'collider', 'physics']) {

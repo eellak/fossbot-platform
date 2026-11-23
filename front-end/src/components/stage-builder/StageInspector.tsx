@@ -1,13 +1,16 @@
 import { StageLineControls, type LineEditorActions } from './StageLineControls';
 import React from 'react';
+import { Object3D } from 'three';
+import { freeLabelOrientation } from '../../simulator/stages/labelAttachment';
 import {
   Accordion, AccordionDetails, AccordionSummary, Alert, Box, Button, Checkbox, FormControlLabel,
   MenuItem, Popover, Stack, Switch, TextField, Typography,
 } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { Sketch } from '@uiw/react-color';
-import type { EditorCameraObject, EditorStageObject, StageAudioSourceType, StageLabelFace, StageLightSubtype, StageModelCollisionMode, StageSemanticKind, Vec2, Vec3 } from './types';
+import type { EditorCameraObject, EditorStageObject, StageAudioSourceType, StageLabelAttachment, StageLabelFace, StageLightSubtype, StageModelCollisionMode, StageSemanticKind, Vec2, Vec3 } from './types';
 import { displayObjectType, STAGE_OBJECT_CATALOG } from './stageBuilderCatalog';
+import { applyAttachedLabelTransform, canAttachLabelTo, defaultLabelAttachment, freeLabelRotation } from './stageBuilderLabelPlacement';
 import { useEditorTheme } from './stageBuilderEditorTheme';
 import { StageBuilderNumberField } from './StageBuilderNumberField';
 import { CUSTOM_OBJECT_FIT_PRESETS, CUSTOM_OBJECT_MIN_SCALE, CUSTOM_OBJECT_SCALE_STEP } from './stageBuilderCustomObjects';
@@ -43,14 +46,6 @@ function deg(rad: number): number {
 
 function rad(degValue: number): number {
   return degValue * Math.PI / 180;
-}
-
-function isLabelAttachTarget(object: EditorStageObject): boolean {
-  return object.kind === 'base' || object.kind === 'cube' || object.kind === 'cylinder';
-}
-
-function defaultLabelFace(parent?: EditorStageObject | null): StageLabelFace {
-  return parent?.kind === 'base' ? 'top' : 'front';
 }
 
 function labelStyle(object: Extract<EditorStageObject, { kind: 'text' }>) {
@@ -334,6 +329,19 @@ export function StageInspector({ object, selectedCount = object ? 1 : 0, advance
                 : role === 'targetZone' ? 'target_zone'
                   : null;
 
+  const changeAttachment = (attachment?: StageLabelAttachment) => {
+    if (object.kind !== 'text') return;
+    const source = attachment ?? object.attachment;
+    const parent = source && objects.find(item => item.id === source.parentId);
+    const next = { ...object, parentId: attachment?.parentId, attachment, onFloor: false };
+    if (parent && source) {
+      const pose = new Object3D();
+      applyAttachedLabelTransform(pose, source, parent);
+      next.position = pose.position.toArray() as Vec3;
+      if (!attachment) next.orientation = [pose.rotation.x, pose.rotation.y, pose.rotation.z];
+    }
+    onChange(next);
+  };
   const setRotationY = (degrees: number) => {
     const rotationY = rad(degrees);
     if (object.kind === 'cube' || object.kind === 'wedge' || object.kind === 'arrow' || object.kind === 'model') {
@@ -408,12 +416,39 @@ export function StageInspector({ object, selectedCount = object ? 1 : 0, advance
           </FieldRow>
         )}
 
-        {object.kind !== 'base' && 'position' in object && (
+        {object.kind === 'text' && object.attachment && (
+          <>
+            <FieldRow label="Surface position">
+              <InlineFields>
+                <StageBuilderNumberField label="U" {...commonNumberProps} disabled={locked} value={object.attachment.offset[0]} onChange={(event) => changeAttachment({ ...object.attachment!, offset: [num(event.target.value, object.attachment!.offset[0]), object.attachment!.offset[1]] })} />
+                <StageBuilderNumberField label="V" {...commonNumberProps} disabled={locked} value={object.attachment.offset[1]} onChange={(event) => changeAttachment({ ...object.attachment!, offset: [object.attachment!.offset[0], num(event.target.value, object.attachment!.offset[1])] })} />
+              </InlineFields>
+            </FieldRow>
+            <FieldRow label="Rotation">
+              <StageBuilderNumberField {...commonNumberProps} disabled={locked} value={deg(object.attachment.rotation)} inputProps={{ step: 1, 'aria-label': 'Attached label rotation' }} onChange={(event) => changeAttachment({ ...object.attachment!, rotation: rad(num(event.target.value, deg(object.attachment!.rotation))) })} />
+            </FieldRow>
+          </>
+        )}
+
+        {object.kind !== 'base' && 'position' in object && !(object.kind === 'text' && object.attachment) && (
           <FieldRow label="Position">
             <InlineFields>
               <StageBuilderNumberField axis="X" {...commonNumberProps} disabled={locked} value={object.position[0]} onChange={(event) => set({ position: updateVec3(object.position, 0, event.target.value) } as Partial<EditorStageObject>)} />
               <StageBuilderNumberField axis="Y" {...commonNumberProps} disabled={locked} value={object.position[1]} onChange={(event) => set({ position: updateVec3(object.position, 1, event.target.value) } as Partial<EditorStageObject>)} />
               <StageBuilderNumberField axis="Z" {...commonNumberProps} disabled={locked} value={object.position[2]} onChange={(event) => set({ position: updateVec3(object.position, 2, event.target.value) } as Partial<EditorStageObject>)} />
+            </InlineFields>
+          </FieldRow>
+        )}
+
+        {object.kind === 'text' && !object.attachment && (
+          <FieldRow label="Rotation">
+            <InlineFields>
+              {(['X', 'Y', 'Z'] as const).map((axis, index) => {
+                const orientation = freeLabelOrientation(object);
+                return <StageBuilderNumberField key={axis} axis={axis} {...commonNumberProps} disabled={locked} value={deg(orientation[index])}
+                  inputProps={{ step: 1, 'aria-label': `Label rotation ${axis}` }}
+                  onChange={event => onChange({ ...object, ...freeLabelRotation(object, updateVec3(orientation, index, rad(num(event.target.value, deg(orientation[index]))))) })} />;
+              })}
             </InlineFields>
           </FieldRow>
         )}
@@ -533,7 +568,7 @@ export function StageInspector({ object, selectedCount = object ? 1 : 0, advance
             </FieldRow>
             {!object.attachment?.parentId && (
               <FieldRow label="Placement">
-                <FormControlLabel control={<Checkbox checked={object.onFloor} disabled={locked} onChange={(event) => onChange({ ...object, onFloor: event.target.checked, position: [object.position[0], event.target.checked ? 0.02 : Math.max(0.3, object.position[1]), object.position[2]] })} />} label="Place on floor" />
+                <FormControlLabel control={<Checkbox checked={object.onFloor} disabled={locked} onChange={(event) => onChange({ ...object, onFloor: event.target.checked, orientation: undefined, position: [object.position[0], event.target.checked ? 0.02 : Math.max(0.3, object.position[1]), object.position[2]] })} />} label="Place on floor" />
               </FieldRow>
             )}
           </>
@@ -611,29 +646,23 @@ export function StageInspector({ object, selectedCount = object ? 1 : 0, advance
               inputProps={{ 'aria-label': 'Attached label parent' }}
               onChange={(event) => {
                 const parentId = event.target.value;
+                if (parentId === object.attachment?.parentId) return;
                 const parent = objects.find((item) => item.id === parentId);
-                onChange({
-                  ...object,
-                  parentId: parentId || undefined,
-                  onFloor: parentId ? false : object.onFloor,
-                  attachment: parentId && parent ? {
-                    parentId,
-                    face: object.attachment?.face || defaultLabelFace(parent),
-                    offset: object.attachment?.offset || [0, 0],
-                    rotation: object.attachment?.rotation || 0,
-                    billboard: false,
-                  } : undefined,
-                });
+                const attachment = parent && defaultLabelAttachment(parent);
+                if (attachment && object.attachment) {
+                  const { face, offset, rotation } = object.attachment;
+                  changeAttachment({ ...attachment, face, offset, rotation });
+                } else changeAttachment(attachment);
               }}
             >
               <MenuItem value="">None — free label</MenuItem>
-              {objects.filter((item) => item.id !== object.id && isLabelAttachTarget(item)).map((item) => <MenuItem key={item.id} value={item.id}>{item.name}</MenuItem>)}
+              {objects.filter((item) => item.id !== object.id && (canAttachLabelTo(item) || item.id === object.attachment?.parentId)).map((item) => <MenuItem key={item.id} value={item.id}>{item.name}</MenuItem>)}
             </TextField>
           </FieldRow>
           {object.attachment?.parentId ? (
             <>
-              <FieldRow label="Face">
-                <TextField {...commonFieldProps} select disabled={locked} value={object.attachment.face} inputProps={{ 'aria-label': 'Attached label face' }} onChange={(event) => onChange({ ...object, attachment: { ...object.attachment!, face: event.target.value as StageLabelFace } })}>
+              {object.attachment.surface ? <FieldRow label="Face"><Typography variant="body2">Picked model surface</Typography></FieldRow> : <FieldRow label="Face">
+                <TextField {...commonFieldProps} select disabled={locked} value={object.attachment.face} inputProps={{ 'aria-label': 'Attached label face' }} onChange={(event) => changeAttachment({ ...object.attachment!, face: event.target.value as StageLabelFace, cylinderAngle: undefined })}>
                   <MenuItem value="front">Front</MenuItem>
                   <MenuItem value="back">Back</MenuItem>
                   <MenuItem value="left">Left</MenuItem>
@@ -641,17 +670,8 @@ export function StageInspector({ object, selectedCount = object ? 1 : 0, advance
                   <MenuItem value="top">Top</MenuItem>
                   <MenuItem value="bottom">Bottom</MenuItem>
                 </TextField>
-              </FieldRow>
-              <FieldRow label="Offset">
-                <InlineFields>
-                  <StageBuilderNumberField label="U" {...commonNumberProps} disabled={locked} value={object.attachment.offset[0]} onChange={(event) => onChange({ ...object, attachment: { ...object.attachment!, offset: [num(event.target.value, object.attachment!.offset[0]), object.attachment!.offset[1]] } })} />
-                  <StageBuilderNumberField label="V" {...commonNumberProps} disabled={locked} value={object.attachment.offset[1]} onChange={(event) => onChange({ ...object, attachment: { ...object.attachment!, offset: [object.attachment!.offset[0], num(event.target.value, object.attachment!.offset[1])] } })} />
-                </InlineFields>
-              </FieldRow>
-              <FieldRow label="Rotation">
-                <StageBuilderNumberField {...commonNumberProps} disabled={locked} value={deg(object.attachment.rotation)} inputProps={{ step: 1, 'aria-label': 'Attached label rotation' }} onChange={(event) => onChange({ ...object, attachment: { ...object.attachment!, rotation: rad(num(event.target.value, deg(object.attachment!.rotation))) } })} />
-              </FieldRow>
-              <FullRow><Alert severity="info">Attached labels are fixed in the parent object's local space. They do not follow the editor camera.</Alert></FullRow>
+              </FieldRow>}
+              <FullRow><Alert severity="info">Move slides the label along this surface. Rotate turns it around the surface normal.</Alert></FullRow>
             </>
           ) : (
             <FullRow><Typography variant="caption" sx={editorType.caption}>Choose a parent object to pin this label to a face or surface.</Typography></FullRow>
