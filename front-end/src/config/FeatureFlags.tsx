@@ -3,19 +3,21 @@ import { useAuth } from 'src/authentication/AuthProvider';
 import { UserRole } from 'src/authentication/AuthInterfaces';
 
 interface FeatureFlags {
+  githubStages: boolean;
   marketplace: boolean;
   ready: boolean;
 }
 
-const defaultFlags: FeatureFlags = { marketplace: false, ready: false };
+const defaultFlags: FeatureFlags = { githubStages: false, marketplace: false, ready: false };
 const FeatureFlagsContext = createContext<FeatureFlags>(defaultFlags);
 
 export function FeatureFlagsProvider({ children }: { children: ReactNode }) {
-  const { user, token, isGuest, guestSettings, authStatus } = useAuth();
+  const { user, guest, isGuest, guestSettings, authStatus } = useAuth();
   const hasBetaAccess = isGuest
     ? guestSettings.allowed_views.includes('stages')
     : user?.beta_tester || user?.role === UserRole.ADMIN;
   const flags = {
+    githubStages: authStatus === 'authenticated' && (isGuest ? guest : user)?.github_stages_enabled === true,
     marketplace: Boolean(hasBetaAccess),
     ready: authStatus !== 'loading',
   };

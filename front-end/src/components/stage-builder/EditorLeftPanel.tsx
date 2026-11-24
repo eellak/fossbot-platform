@@ -1,36 +1,32 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Box, Divider, IconButton, Tab, Tabs, Tooltip } from '@mui/material';
 import KeyboardDoubleArrowLeftIcon from '@mui/icons-material/KeyboardDoubleArrowLeft';
-import type { EditorStage, EditorStageObject, StageSemanticKind } from './types';
+import type { StageSemanticKind } from './types';
 import type { StageBuilderPrefab } from './stageBuilderPrefabs';
+import { PreviewAssetBaseContext } from './PreviewImage';
 import { StageObjectLibrary } from './StageObjectLibrary';
-import { StageSceneHierarchy, type HierarchyDropTarget } from './StageSceneHierarchy';
+import type { LibraryItem } from './stageBuilderRecentItems';
+import { StageSceneHierarchy, type StageSceneHierarchyProps } from './StageSceneHierarchy';
 import { useEditorTheme } from './stageBuilderEditorTheme';
 
-export interface EditorLeftPanelProps {
-  stage: EditorStage;
-  selectedId: string | null;
-  selectedIds: string[];
-  selectedGroupId: string | null;
+export interface EditorLeftPanelProps extends StageSceneHierarchyProps {
+  stageAssetBaseUrl?: string | null;
+  tab: 'library' | 'scene';
+  onTabChange: (tab: 'library' | 'scene') => void;
   prefabs: StageBuilderPrefab[];
+  recentItems: LibraryItem[];
+  placingItem?: LibraryItem;
+  favouriteItems: LibraryItem[];
+  onToggleFavourite: (item: LibraryItem) => void;
   onAddKind: (kind: StageSemanticKind) => void;
   onAddPrefab: (prefab: StageBuilderPrefab) => void;
   onImportObject: () => void;
-  onSelectObject: (id: string | null) => void;
-  onSelectGroup: (id: string | null) => void;
-  onSelectionChange: (ids: string[]) => void;
-  onObjectChange: (object: EditorStageObject) => void;
-  onDuplicateObjects: (ids: string[]) => void;
-  onDeleteObjects: (ids: string[]) => void;
-  onHierarchyDrop: (draggedId: string, target: HierarchyDropTarget) => void;
-  onGroupRename: (groupId: string, name: string) => void;
-  onPatchObjects: (ids: string[], patch: Partial<EditorStageObject>) => void;
   onTogglePanel: () => void;
 }
 
 export function EditorLeftPanel(props: EditorLeftPanelProps) {
   const { colors: editorColors, panelSx, tabsSx } = useEditorTheme();
-  const [tab, setTab] = useState<'library' | 'scene'>('library');
+  const { tab, onTabChange } = props;
 
   const panelToggleButtonSx = {
     width: 28,
@@ -43,46 +39,36 @@ export function EditorLeftPanel(props: EditorLeftPanelProps) {
   } as const;
 
   return (
-    <Box sx={{ ...panelSx, borderRight: `1px solid ${editorColors.border}` }}>
+    <PreviewAssetBaseContext.Provider value={props.stageAssetBaseUrl || null}><Box sx={{ ...panelSx, borderRight: `1px solid ${editorColors.border}` }}>
       <Box sx={{ display: 'flex', alignItems: 'center', bgcolor: editorColors.panelInset }}>
-        <Tabs
-          value={tab}
-          onChange={(_, value) => setTab(value)}
-          variant="fullWidth"
-          TabIndicatorProps={{ sx: { bgcolor: editorColors.accent, height: 2 } }}
-          sx={{ ...(tabsSx as Record<string, unknown>), flex: 1, minWidth: 0 }}
-        >
-          <Tab value="library" label="Library" />
-          <Tab value="scene" label="Scene" />
-        </Tabs>
         <Tooltip title="Hide Library panel" placement="right">
           <IconButton size="small" aria-label="Hide Library panel" onClick={props.onTogglePanel} sx={panelToggleButtonSx}>
             <KeyboardDoubleArrowLeftIcon fontSize="small" />
           </IconButton>
         </Tooltip>
+        <Tabs
+          value={tab}
+          onChange={(_, value) => onTabChange(value)}
+          variant="fullWidth"
+          TabIndicatorProps={{ sx: { bgcolor: editorColors.accent, height: 2 } }}
+          sx={{ ...(tabsSx as Record<string, unknown>), flex: 1, minWidth: 0 }}
+        >
+          <Tab value="library" label="Library" />
+          <Tab value="scene" label="Hierarchy" />
+        </Tabs>
+
       </Box>
       <Divider sx={{ borderColor: editorColors.border }} />
       <Box sx={{ flex: 1, overflow: 'auto', p: 1 }}>
         {tab === 'library' ? (
-          <StageObjectLibrary prefabs={props.prefabs} onAddKind={props.onAddKind} onAddPrefab={props.onAddPrefab} onImportObject={props.onImportObject} />
+          <StageObjectLibrary
+            activeKind={props.placingItem?.type === 'object' ? props.placingItem.id : null}
+            activePrefabId={props.placingItem?.type === 'prefab' ? props.placingItem.id : null}
+            prefabs={props.prefabs} recentItems={props.recentItems} favouriteItems={props.favouriteItems} onToggleFavourite={props.onToggleFavourite} onAddKind={props.onAddKind} onAddPrefab={props.onAddPrefab} onImportObject={props.onImportObject} />
         ) : (
-          <StageSceneHierarchy
-            stage={props.stage}
-            selectedId={props.selectedId}
-            selectedIds={props.selectedIds}
-            selectedGroupId={props.selectedGroupId}
-            onSelectObject={props.onSelectObject}
-            onSelectGroup={props.onSelectGroup}
-            onSelectionChange={props.onSelectionChange}
-            onObjectChange={props.onObjectChange}
-            onDuplicateObjects={props.onDuplicateObjects}
-            onDeleteObjects={props.onDeleteObjects}
-            onHierarchyDrop={props.onHierarchyDrop}
-            onGroupRename={props.onGroupRename}
-            onPatchObjects={props.onPatchObjects}
-          />
+          <StageSceneHierarchy {...props} />
         )}
       </Box>
-    </Box>
+    </Box></PreviewAssetBaseContext.Provider>
   );
 }

@@ -25,7 +25,7 @@ const TRANSFORM_FIELDS_BY_KIND: Record<string, ReadonlySet<string>> = {
   wedge: new Set(['position', 'rotationY', 'orientation']),
   arrow: new Set(['position', 'rotationY', 'orientation']),
   model: new Set(['position', 'rotationY', 'orientation', 'scale']),
-  text: new Set(['position', 'onFloor']),
+  text: new Set(['position', 'onFloor', 'orientation']),
   light: new Set(['position', 'rotationY']),
   camera: new Set(['position', 'rotationY', 'pitch']),
   audio: new Set(['position']),

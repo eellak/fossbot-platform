@@ -1,18 +1,6 @@
-/**
- * Stage Builder preview settings — temporary authoring tool.
- *
- * Lets a developer tune per-kind preview appearance (size, zoom, padding,
- * rotation, outline, color) from inside the editor. The settings are in-memory
- * only; once the previews are dialed in, the developer exports the rendered
- * PNGs + a settings spec via the "Export PNGs" / "Copy spec" buttons in
- * `PreviewSettingsPanel`, commits the PNGs under `front-end/public/previews/`
- * (or similar), and replaces this module + `stageBuilderPreviews.ts` with a
- * thin static-asset loader.
- *
- * Keep the surface area small so the eventual swap is cheap: this module owns
- * the store + apply logic; nothing else should depend on settings internals.
- */
+// In-memory artwork tuning shared by the library and preview authoring panel.
 
+import { getEditorColors } from './stageBuilderEditorTheme';
 import React, { useEffect, useState } from 'react';
 import type { StageSemanticKind } from './types';
 
@@ -20,9 +8,7 @@ export type PreviewSettings = {
   /** Render size of the PNG, in pixels. Independent of display size. */
   width: number;
   height: number;
-  /** Display size of the PNG in the library tile, in pixels. Independent of
-   * the render size — controls how big the image looks in the UI, not how
-   * sharp the underlying PNG is. */
+  /** Display size for developer preview/export tools. Library tiles use CSS sizing. */
   displaySize: {
     width: number;
     height: number;
@@ -44,15 +30,14 @@ export type PreviewSettings = {
 };
 
 export const DEFAULT_PREVIEW_SETTINGS: PreviewSettings = {
-  width: 192,
-  height: 192,
-  // Square thumbnails match the library tile footprint and keep primitives
-  // large/readable by default.
-  displaySize: { width: 52, height: 52 },
+  width: 240,
+  height: 180,
+  // Match the 4:3 library cards and their image area.
+  displaySize: { width: 96, height: 72 },
   zoom: 1,
   padding: 1.08,
   rotation: [0, 0, 0],
-  outline: { enabled: true, color: '#ffffff', thickness: 0.06 },
+  outline: { enabled: true, color: getEditorColors('fossbot').textStrong, thickness: 0.04 },
   objectColorOverride: null,
 };
 
@@ -60,6 +45,7 @@ const KIND_KEYS: readonly StageSemanticKind[] = [
   'line', 'baseTile',
   'wall', 'block', 'ramp', 'platform', 'cylinder', 'obstacle', 'sphere',
   'robotSpawn',
+  'collectible', 'pushObject', 'targetZone', 'customObject',
   'target', 'checkpoint', 'dangerZone', 'sensorZone', 'directionArrow',
   'label',
   'light',
@@ -160,28 +146,6 @@ export function buildSettingsSpec(background: string, fov: number): PreviewSetti
     defaults: { ...DEFAULT_PREVIEW_SETTINGS, outline: { ...DEFAULT_PREVIEW_SETTINGS.outline } },
     kinds,
   };
-}
-
-/**
- * Live-measured size of the library tile's image area (the Box that wraps
- * each lightweight preview icon). Populated by `LibraryTile` via ResizeObserver and
- * read by the settings panel's "Fit to tile" action so the fit adapts to
- * the actual rendered tile size rather than a hardcoded constant.
- */
-let libraryPreviewAreaSize: { width: number; height: number } | null = null;
-
-export function getLibraryPreviewAreaSize(): { width: number; height: number } | null {
-  return libraryPreviewAreaSize;
-}
-
-export function setLibraryPreviewAreaSize(size: { width: number; height: number } | null): void {
-  // Cheap identity check: the ResizeObserver fires on every layout tick, and
-  // the store only needs to know when the size actually changes.
-  if (size && libraryPreviewAreaSize && size.width === libraryPreviewAreaSize.width && size.height === libraryPreviewAreaSize.height) {
-    return;
-  }
-  libraryPreviewAreaSize = size;
-  notify();
 }
 
 /**

@@ -14,6 +14,7 @@ export interface GuestAdminSettings extends GuestSettings {
 
 export interface GuestSession {
     is_guest: true;
+    github_stages_enabled?: boolean;
     alias: string;
     created_at: string;
     expires_at: string;
@@ -141,6 +142,7 @@ export interface FirebaseTokenData {
 
 export interface User {
     id: number;
+    github_stages_enabled?: boolean;
     username: string;
     firstname: string;
     lastname: string;

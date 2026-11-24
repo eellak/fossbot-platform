@@ -88,8 +88,14 @@ export function localStageDetailRows(stage: LocalStage): StageDetailRow[] {
   const dimensions = config.find((entry) => entry?.type === 'floor')?.dimensions;
   const objectCount = config.filter((entry) => entry?.type !== 'floor' && entry?.type !== 'skybox').length;
   const provenance = stage.provenance as { sourceType?: string; repoOwner?: string; repoName?: string } | null | undefined;
+  const sourceLabels: Record<string, string> = {
+    github_stage: 'Stage repository',
+    github_marketplace: 'Stage library',
+    local_marketplace: 'Local stage library',
+    local_stage: 'Local stage',
+  };
   const provenanceLabel = provenance?.sourceType
-    ? [provenance.sourceType, provenance.repoOwner && provenance.repoName ? `${provenance.repoOwner}/${provenance.repoName}` : undefined].filter(Boolean).join(' · ')
+    ? [sourceLabels[provenance.sourceType] || provenance.sourceType, provenance.repoOwner && provenance.repoName ? `${provenance.repoOwner}/${provenance.repoName}` : undefined].filter(Boolean).join(' · ')
     : 'Created in Stage Builder';
   const publication = stage.submission?.status === 'pending'
     ? `Awaiting review · v${stage.submission.stageRevision}`

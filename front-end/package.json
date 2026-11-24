@@ -6,6 +6,7 @@
   "scripts": {
     "start": "craco start",
     "dev": "craco start",
+    "dev:stage-editor": "PORT=${PORT:-3100} BROWSER=${BROWSER:-none} craco start --config craco.stage-editor.config.cjs",
     "build": "craco build",
     "test": "craco test --watchAll=false",
     "format": "prettier --write './**/*.{js,jsx,ts,tsx,css,md,json}' --config ./.prettierrc"

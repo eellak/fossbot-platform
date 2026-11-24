@@ -1,0 +1,15 @@
+[
+  {"name":"legacy sharp", "valid":true, "runnable":true, "line":{"points":[[0,0],[1,0],[1,1]]}},
+  {"name":"automatic corner", "valid":true, "runnable":true, "line":{"curveVersion":1,"points":[[0,0],[1,0],[1,1]],"corners":[null,{"mode":"rounded","sizing":"auto"},null]}},
+  {"name":"manual corner", "valid":true, "runnable":true, "line":{"curveVersion":1,"points":[[0,0],[1,0],[1,1]],"corners":[null,{"mode":"rounded","sizing":"manual","trim":0.8},null],"width":0.02,"y":0.001}},
+  {"name":"lone editable point", "valid":true, "runnable":false, "line":{"curveVersion":1,"points":[[0,0]],"corners":[null]}},
+  {"name":"future version", "valid":false, "runnable":false, "line":{"curveVersion":99,"points":[[0,0],[1,0]],"corners":[null,null]}},
+  {"name":"missing corner intent", "valid":false, "runnable":false, "line":{"curveVersion":1,"points":[[0,0],[1,0],[1,1]]}},
+  {"name":"misaligned corners", "valid":false, "runnable":false, "line":{"curveVersion":1,"points":[[0,0],[1,0],[1,1]],"corners":[null,null]}},
+  {"name":"invalid endpoint", "valid":false, "runnable":false, "line":{"curveVersion":1,"points":[[0,0],[1,0]],"corners":[{"mode":"sharp"},null]}},
+  {"name":"invalid manual trim", "valid":false, "runnable":false, "line":{"curveVersion":1,"points":[[0,0],[1,0],[1,1]],"corners":[null,{"mode":"rounded","sizing":"manual","trim":0},null]}},
+  {"name":"invalid width", "valid":false, "runnable":false, "line":{"points":[[0,0],[1,0]],"width":0}},
+  {"name":"invalid coordinate", "valid":false, "runnable":false, "line":{"points":[[0,0],["1",0]]}},
+  {"name":"duplicate point", "valid":true, "runnable":false, "line":{"points":[[0,0],[0,0]]}},
+  {"name":"rounded reversal", "valid":true, "runnable":false, "line":{"curveVersion":1,"points":[[0,0],[1,0],[0,0]],"corners":[null,{"mode":"rounded","sizing":"auto"},null]}}
+]

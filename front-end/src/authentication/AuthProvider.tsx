@@ -509,7 +509,7 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
 
       if (response.status === 200) {
         const user: User = await response.json();
-        setUser(user);
+        setUser((current) => ({ ...current, ...user }));
         return user;
       } else {
         throw new Error('User data update failed');

@@ -1,4 +1,6 @@
+import { Box3, Euler, Matrix4, Vector3 } from 'three';
 import type { EditorStage, EditorStageObject, Vec3 } from './types';
+import { validateLineGeometry } from '../../simulator/stages/lineGeometryCore';
 
 export type StageObjectBounds = {
   objectId: string;
@@ -30,7 +32,9 @@ export function cloneStage<T>(value: T): T {
   return value;
 }
 
-export function stageHalfExtents(stage: Pick<EditorStage, 'floor'>): { x: number; z: number } {
+type StageDimensions = { floor: { dimensions: [number, number] } };
+
+export function stageHalfExtents(stage: StageDimensions): { x: number; z: number } {
   const [w, d] = stage.floor?.dimensions || DEFAULT_STAGE_SIZE;
   return { x: Math.max(0.1, w / 2), z: Math.max(0.1, d / 2) };
 }
@@ -39,14 +43,14 @@ export function objectPosition(object: EditorStageObject): Vec3 {
   if ('position' in object) return object.position;
   if (object.kind === 'line' && object.points.length) {
     const sum = object.points.reduce((acc, point) => [acc[0] + point[0], acc[1] + point[1]] as [number, number], [0, 0]);
-    return [sum[0] / object.points.length, object.y || 0, sum[1] / object.points.length];
+    return [sum[0] / object.points.length, object.y ?? 0.001, sum[1] / object.points.length];
   }
   return [0, 0, 0];
 }
 
 export function translateObject(object: EditorStageObject, delta: Vec3): EditorStageObject {
   if (object.kind === 'line') {
-    return { ...object, points: object.points.map(([x, z]) => [x + delta[0], z + delta[2]]) };
+    return { ...object, points: object.points.map(([x, z]) => [x + delta[0], z + delta[2]]), ...(delta[1] ? { y: (object.y ?? 0.001) + delta[1] } : {}) };
   }
   if ('position' in object) {
     return { ...object, position: [object.position[0] + delta[0], object.position[1] + delta[1], object.position[2] + delta[2]] } as EditorStageObject;
@@ -205,7 +209,14 @@ export function objectBounds(object: EditorStageObject): StageObjectBounds | nul
     const decorWidth = Math.max(0.05, object.style?.backgroundSize?.[0] ?? object.scale);
     const decorDepth = Math.max(0.03, object.style?.backgroundSize?.[1] ?? object.scale * 0.3125);
     const width = hasDecor ? Math.max(textWidth, decorWidth) : textWidth;
-    const depth = object.onFloor ? (hasDecor ? Math.max(textDepth, decorDepth) : textDepth) : 0.08;
+    const height = hasDecor ? Math.max(textDepth, decorDepth) : textDepth;
+    if (object.orientation && !object.attachment) {
+      const plane = new Box3(new Vector3(-width / 2, -height / 2, 0), new Vector3(width / 2, height / 2, 0));
+      const pose = new Matrix4().makeRotationFromEuler(new Euler(...object.orientation)).setPosition(...object.position);
+      const { min, max } = plane.applyMatrix4(pose);
+      return { objectId: object.id, minX: min.x, maxX: max.x, minY: min.y, maxY: max.y, minZ: min.z, maxZ: max.z, solid: false, soft: true };
+    }
+    const depth = object.onFloor ? height : 0.08;
     return {
       objectId: object.id,
       minX: object.position[0] - width / 2,
@@ -337,9 +348,16 @@ export function requiresWallEnclosure(...values: string[]): boolean {
     || (text.includes('wall') && (text.includes('room') || text.includes('building')) && (text.includes('four') || text.includes('4') || text.includes('sides')));
 }
 
-export function boundsOutsideStage(bounds: StageObjectBounds, stage: Pick<EditorStage, 'floor'>): boolean {
+export function boundsOutsideStage(bounds: StageObjectBounds, stage: StageDimensions): boolean {
   const half = stageHalfExtents(stage);
   return bounds.minX < -half.x || bounds.maxX > half.x || bounds.minZ < -half.z || bounds.maxZ > half.z;
+}
+
+export function placementFitsStage(objects: EditorStageObject[], position: Vec3, dimensions: [number, number]): boolean {
+  return objects.length > 0 && objects.every(object => {
+    const bounds = objectBounds(translateObject(object, position));
+    return !!bounds && !boundsOutsideStage(bounds, { floor: { dimensions } });
+  });
 }
 
 export function selectedCentroid(objects: EditorStageObject[]): Vec3 {
@@ -356,7 +374,7 @@ export function objectDimensionsAreValid(object: EditorStageObject): boolean {
   if (object.kind === 'sphere') return object.dimensions[0] > 0;
   if (object.kind === 'wedge') return object.dimensions.every((value) => Number.isFinite(value) && value > 0);
   if (object.kind === 'arrow') return object.dimensions.every((value) => Number.isFinite(value) && value > 0);
-  if (object.kind === 'line') return object.points.length >= 2 && object.width > 0;
+  if (object.kind === 'line') return validateLineGeometry(object).length === 0;
   if (object.kind === 'text') return object.scale > 0;
   if (object.kind === 'model') return object.scale > 0 && !!object.filename;
   return true;

@@ -82,6 +82,16 @@ describe('StageSuggestionPreview', () => {
     expect(secondCallback).toHaveBeenLastCalledWith(null);
   });
 
+
+  it('explains curve changes and concrete new warnings without applying the proposal', () => {
+    const callback = jest.fn();
+    const curved = { ...preview, stage: { ...preview.stage!, geometryChanges: ['Route: 3 points, 1 rounded corner (1 manual).'], newIssues: ['Continue drawing or delete this point.'] } };
+    act(() => root?.render(<StageSuggestionPreview preview={curved} onPreviewLiveToggle={callback} />));
+    expect(container.textContent).toContain('1 rounded corner (1 manual)');
+    expect(container.textContent).toContain('Continue drawing or delete this point.');
+    expect(callback).not.toHaveBeenCalled();
+  });
+
   it('labels the model expectation separately from verified checks', () => {
     act(() => root?.render(<StageSuggestionPreview preview={preview} />));
     expect(container.querySelector('[role="img"]')).toBeNull();

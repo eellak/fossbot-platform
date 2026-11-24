@@ -10,7 +10,7 @@ import { createRobotBody, type RobotPhysicsState } from '../physics/robotBody'
 import { ROBOT_COLLIDERS } from '../physics/colliders'
 import { syncMeshFromBody, syncObjectToBody } from '../physics/mesh-sync'
 import { createVehicle, syncVehicleVisual, type VehicleHandle, type VehicleSettings, type VehicleTelemetry } from '../physics/vehicle'
-import { loadStage, loadStageEntries, STAGE_NAMES, DEFAULT_STAGE, type RawStageConfig, type StageHandle, type StageName } from '../stages'
+import { loadStage, loadStageEntries, STAGES, STAGE_NAMES, DEFAULT_STAGE, validateStageFormat, type RawStageConfig, type StageHandle, type StageName } from '../stages'
 import { resolveStageAssetUrl, stageAssetBaseUrlFromStageUrl } from '../stages/assets'
 import { installKeyboard, type KeyboardHandle } from '../util/keyboard'
 import { log } from '../util/log'
@@ -55,10 +55,12 @@ import type { StageCounts } from '../bench/types'
 import type { BenchmarkRunnerHandle } from '../bench/runner'
 import type { AttemptSummary, ChallengeMarker, MissionEvent, MissionEventListener } from '../missions/types'
 import { isMissionIncidentCollision } from '../missions/stageChallengeCore.js'
+import { stageLoadError } from '../stages/stageFormatCore'
 
 function resolveConfig(cfg: Partial<SimEngineConfig> | undefined): Required<SimEngineConfig> {
   const publicAssetBaseUrl = cfg?.publicAssetBaseUrl ?? '/js-simulator'
   return {
+    onStageLoadError: cfg?.onStageLoadError ?? (() => {}),
     publicAssetBaseUrl,
     assetBaseUrl: cfg?.assetBaseUrl ?? `${publicAssetBaseUrl.replace(/\/$/, '')}/models/robots/v2`,
     stageAssetBaseUrl: cfg?.stageAssetBaseUrl,
@@ -120,6 +122,7 @@ type ActiveAttempt = {
 export class SimEngine {
   // ── Config ──
   private readonly config: Required<SimEngineConfig>
+  private requestedStage: { url: string } | { entries: RawStageConfig; name?: string; base?: string } | null = null
 
   // ── Core handles ──
   private sceneHandle: SceneHandle | null = null
@@ -251,6 +254,8 @@ export class SimEngine {
 
   /** Boot the full simulation chain. Safe to call only once. */
   async start(): Promise<void> {
+    try {
+    if (this.config.initialStageConfig) validateStageFormat(this.config.initialStageConfig)
     this.lastFrameTime = performance.now()
 
     this.sceneHandle = initScene(this.container, { gizmo: this.config.devMode })
@@ -354,10 +359,19 @@ export class SimEngine {
     }
 
     await this.initializePhysics()
+    if (!this.cancelled) this.config.onStageLoadError(null)
+    } catch (error) {
+      const failure = stageLoadError(error)
+      this.paused = true
+      this.stopMotion()
+      if (!this.cancelled) this.config.onStageLoadError(failure)
+      throw failure
+    }
   }
 
   /** Cancel the render loop and dispose all resources. */
   stop(): void {
+    if (this.cancelled) return
     this.robotCameraPreview?.dispose()
     this.robotCameraPreview = null
     this.cancelled = true
@@ -377,7 +391,7 @@ export class SimEngine {
     this.debugMenu?.dispose()
     this.currentStage?.dispose()
     this.telemetryOverlay?.dispose()
-    this.splash.dispose()
+    this.splash?.dispose()
     this.movementPresets?.dispose()
     this.positionPresets?.dispose()
     this.benchmarkPanel?.dispose()
@@ -434,7 +448,7 @@ export class SimEngine {
       getTelemetryUpdateInterval: () => this.telemetryUpdateInterval,
       getCurrentStage: () => this.currentStage?.name ?? null,
       getStageNames: () => STAGE_NAMES,
-      swapStage: (next: StageName) => { this.swapStage(next) },
+      swapStage: (next: StageName) => { void this.setStage(next).catch(() => {}) },
       resetRobotToSpawn: () => {
         if (this.currentStage) this.applySpawnPose(this.currentStage)
       },
@@ -717,31 +731,47 @@ export class SimEngine {
   }
 
   async setStage(stageOrUrl: string): Promise<void> {
+    this.requestedStage = { url: stageOrUrl }
     const stage = this.normalizeStageName(stageOrUrl)
     this.stopMotion()
     this.drawLine(false)
+    try {
     if (stage) {
       await this.swapStage(stage)
       return
     }
 
-    try {
       const response = await fetch(stageOrUrl)
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
       const payload = await response.json() as RawStageConfig | { config?: RawStageConfig }
-      const entries = Array.isArray(payload) ? payload : payload.config
-      if (!Array.isArray(entries)) throw new Error('stage JSON must be an array or LocalStageRecord')
+      const entries = validateStageFormat(payload)
       await this.swapStageEntries('remote_stage', entries, stageAssetBaseUrlFromStageUrl(stageOrUrl))
     } catch (error) {
-      console.warn(`[SimEngine] Could not load stage: ${stageOrUrl}`, error)
+      const failure = stageLoadError(error, 'fetch')
+      this.paused = true
+      this.config.onStageLoadError(failure)
+      throw failure
     }
   }
 
   async setStageConfig(entries: RawStageConfig, name = 'custom_stage', stageAssetBaseUrl?: string): Promise<void> {
+    this.requestedStage = { entries, name, base: stageAssetBaseUrl }
     this.stopMotion()
     this.drawLine(false)
-    await this.swapStageEntries(name, entries, stageAssetBaseUrl ?? this.config.stageAssetBaseUrl)
+    try {
+      await this.swapStageEntries(name, entries, stageAssetBaseUrl ?? this.config.stageAssetBaseUrl)
+    } catch (error) {
+      const failure = stageLoadError(error)
+      this.paused = true
+      this.config.onStageLoadError(failure)
+      throw failure
+    }
   }
+
+  get hasStage(): boolean { return !!this.currentStage && !this.cancelled }
+
+  get retryConfig(): Partial<SimEngineConfig> { return { ...this.config } }
+  get lastStageRequest() { return this.requestedStage }
 
   getStageNames(): string[] {
     return [...STAGE_NAMES]
@@ -1108,6 +1138,7 @@ export class SimEngine {
           gestureTarget: this.container,
         })
       } else {
+        this.config.initialStageConfig = STAGES[initialStage]
         this.activeStageAssetBaseUrl = undefined
         this.splash.setStatus(`Loading stage ${initialStage}...`)
         this.currentStage = await loadStage(initialStage, this.sceneHandle!.scene, world, {
@@ -1281,7 +1312,7 @@ export class SimEngine {
         })
         const benchmarkHost = createBenchmarkHost({
           onFrame: (cb) => this.addFrameListener(cb),
-          swapStage: (next) => this.swapStage(next),
+          swapStage: (next) => this.setStage(next),
           resetRobot: () => {
             if (this.currentStage) this.applySpawnPose(this.currentStage)
           },
@@ -1310,7 +1341,7 @@ export class SimEngine {
       // Start RAF loop
       this.tick()
     } catch (err) {
-      console.error('[SimEngine] Init failed:', err)
+      throw stageLoadError(err)
     }
   }
 
@@ -1747,13 +1778,18 @@ export class SimEngine {
     this.sensorSystem?.resetOdometer()
     if (this.config.sensorTelemetryAutoStart) this.sensorTelemetry.startRun()
     this.physicsCrashed = false
+    this.paused = false
+    this.config.onStageLoadError(null)
   }
 
   private async swapStage(next: StageName): Promise<void> {
-    if (!this.currentStage || this.cancelled || !this.sceneHandle || !this.worldHandle) return
+    validateStageFormat(STAGES[next])
+    if (!this.currentStage || this.cancelled || !this.sceneHandle || !this.worldHandle) throw stageLoadError(new Error('The simulator needs to be restarted before loading a stage.'))
     const previousName = this.currentStage.name
     log.world('swap stage', previousName, '→', next)
 
+    this.config.initialStageConfig = STAGES[next]
+    this.config.stageAssetBaseUrl = undefined
     if (!this.prepareStageSwap()) return
     try {
       this.positionStore?.setStage(next)
@@ -1771,6 +1807,8 @@ export class SimEngine {
       }
       this.finishStageSwap(loadedStage)
       if (this.config.devMode) rememberStage(next)
+    } catch (error) {
+      throw stageLoadError(error)
     } finally {
       this.accumulator = 0
       this.swappingStage = false
@@ -1778,9 +1816,12 @@ export class SimEngine {
   }
 
   private async swapStageEntries(name: StageName, entries: RawStageConfig, stageAssetBaseUrl?: string): Promise<void> {
-    if (!this.currentStage || this.cancelled || !this.sceneHandle || !this.worldHandle) return
+    validateStageFormat(entries)
+    if (!this.currentStage || this.cancelled || !this.sceneHandle || !this.worldHandle) throw stageLoadError(new Error('The simulator needs to be restarted before loading a stage.'))
     log.world('swap stage', this.currentStage.name, '→', name)
 
+    this.config.initialStageConfig = entries
+    this.config.stageAssetBaseUrl = stageAssetBaseUrl
     if (!this.prepareStageSwap()) return
     try {
       this.activeStageAssetBaseUrl = stageAssetBaseUrl
@@ -1795,6 +1836,8 @@ export class SimEngine {
         return
       }
       this.finishStageSwap(loadedStage)
+    } catch (error) {
+      throw stageLoadError(error)
     } finally {
       this.accumulator = 0
       this.swappingStage = false

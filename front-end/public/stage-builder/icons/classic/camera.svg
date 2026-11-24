@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 20 20" fill="currentColor" role="img">
+  <title>Camera</title>
+  <path fill-rule="evenodd" d="M3.5 5.5 h2.1 l1 -1.8 c0.3 -0.5 0.8 -0.8 1.4 -0.8 h4 c0.6 0 1.1 0.3 1.4 0.8 l1 1.8 h2.1
+           a2.1 2.1 0 0 1 2.1 2.1 v7.3 a2.1 2.1 0 0 1 -2.1 2.1 h-13 a2.1 2.1 0 0 1 -2.1 -2.1 V7.6
+           a2.1 2.1 0 0 1 2.1 -2.1 z
+           M14.3 10.9 a4.3 4.3 0 1 0 -8.6 0 a4.3 4.3 0 1 0 8.6 0 z"/>
+  <circle cx="10" cy="10.9" r="2.6"/>
+</svg>

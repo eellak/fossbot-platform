@@ -101,16 +101,34 @@ export async function loadLocalStage(token: string, stageId: number): Promise<Lo
   return parseJsonResponse(await fetch(`${backendUrl}/api/local-stages/${stageId}`, { headers: authHeaders(token) }));
 }
 
+async function saveAccountStage(url: string, request: RequestInit): Promise<LocalStage> {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), 30_000);
+  try {
+    const response = await fetch(url, { ...request, signal: controller.signal });
+    const saved = await parseJsonResponse<LocalStage | null>(response);
+    if (!saved?.record) throw new Error('The server returned an incomplete save confirmation. Your edits are still open.');
+    return saved;
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new Error('Save confirmation timed out. Your edits are still open. Check your saved stages before trying again.');
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(timer);
+  }
+}
+
 export async function createLocalStage(token: string, record: LocalStageRecord, previewDataUrl?: string | null): Promise<LocalStage> {
-  return parseJsonResponse(await fetch(`${backendUrl}/api/local-stages`, {
+  return saveAccountStage(`${backendUrl}/api/local-stages`, {
     method: 'POST',
     headers: authHeaders(token),
     body: JSON.stringify({ record, title: record.title, description: record.description, previewDataUrl: previewDataUrl ?? undefined }),
-  }));
+  });
 }
 
 export async function updateLocalStage(token: string, stage: LocalStage, record: LocalStageRecord, previewDataUrl?: string | null): Promise<LocalStage> {
-  return parseJsonResponse(await fetch(`${backendUrl}/api/local-stages/${stage.id}`, {
+  return saveAccountStage(`${backendUrl}/api/local-stages/${stage.id}`, {
     method: 'PUT',
     headers: authHeaders(token),
     body: JSON.stringify({
@@ -121,7 +139,7 @@ export async function updateLocalStage(token: string, stage: LocalStage, record:
       expectedRevision: stage.revision,
       previewDataUrl: previewDataUrl ?? undefined,
     }),
-  }));
+  });
 }
 
 /**

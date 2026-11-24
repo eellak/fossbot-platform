@@ -1,5 +1,7 @@
 import type { EditorCubeObject, EditorStageObject } from './types';
-import { cloneStage } from './stageBuilderGeometry';
+import { sharpLineCorners } from '../../simulator/stages/lineGeometryCore';
+import { cloneStage, selectedCentroid } from './stageBuilderGeometry';
+import type { Vec3 } from './types';
 import floorMaterialsStage from 'src/simulator/stages/data/stage_floor_materials.json';
 
 const STORAGE_PREFIX = 'fossbot.stageBuilder.prefabs.v1';
@@ -13,6 +15,12 @@ export type StageBuilderPrefab = {
   updatedAt: string;
   builtIn?: boolean;
 };
+
+export function prefabInsertionOffset(prefab: StageBuilderPrefab): Vec3 {
+  const center = selectedCentroid(prefab.objects);
+  // Authored heights define floor contact and raised parts within the composition.
+  return [-center[0], 0, -center[2]];
+}
 
 function safeScope(scope?: string | number | null): string {
   return String(scope || 'anonymous').replace(/[^a-zA-Z0-9_.-]/g, '_');
@@ -55,7 +63,7 @@ function cylinder(id: string, name: string, position: [number, number, number], 
 }
 
 function line(id: string, name: string, points: [number, number][], width = 0.03, color = 'black'): EditorStageObject {
-  return { id, kind: 'line', semanticKind: 'line', name, points, width, color };
+  return { id, kind: 'line', semanticKind: 'line', name, points, curveVersion: 1, corners: sharpLineCorners(points), width, color };
 }
 
 function arrow(id: string, name: string, position: [number, number, number], rotationY: number, color = '#111827'): EditorStageObject {

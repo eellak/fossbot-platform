@@ -1,3 +1,4 @@
+import { IconLanguage } from '@tabler/icons-react';
 import React from 'react';
 import { Box, Button, Menu, MenuItem, Typography, Stack } from '@mui/material';
 import { useSelector, useDispatch } from 'src/store/Store';
@@ -18,6 +19,7 @@ const Language = ({website=false}:{website?:boolean}) => {
   const options=[...Languages,...locales.filter(locale=>!['en','el'].includes(locale)).map(locale=>({value:locale,flagname:locale,icon:''}))];
   const currentLang = options.find((_lang) => contentLocale(_lang.value) === contentLocale(customizer.isLanguage)) || {value:customizer.isLanguage,flagname:customizer.isLanguage,icon:''};
   const { i18n, t } = useTranslation();
+  const currentLabel = currentLang.icon ? t(currentLang.flagname) : currentLang.value.toUpperCase();
   const handleClick = (event: React.MouseEvent<HTMLButtonElement>) => {
     setAnchorEl(event.currentTarget);
   };
@@ -32,25 +34,26 @@ const Language = ({website=false}:{website?:boolean}) => {
     <>
       <Button
         id="language-button"
-        aria-label={t('languageSelector')}
+        aria-label={`${t('languageSelector')}, ${currentLabel}`}
         aria-controls={open ? 'language-menu' : undefined}
         aria-expanded={open}
-        aria-haspopup="true"
+        aria-haspopup="menu"
         onClick={handleClick}
         color="inherit"
-        sx={{ minWidth: 0, gap: 1, whiteSpace: 'nowrap' }}
+        sx={{ minWidth: 44, minHeight: 44, px: { xs: 1, sm: 1.5 }, gap: 1, whiteSpace: 'nowrap' }}
       >
-        {currentLang.icon&&<Box
+        {website && currentLang.icon && <Box
           component="img"
           src={currentLang.icon}
           alt=""
           sx={{ width: 20, height: 20, borderRadius: '50%' }}
         />}
-        <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>{currentLang.icon?t(currentLang.flagname):currentLang.value.toUpperCase()}</Box>
+        {!website && <IconLanguage size={20} aria-hidden="true" />}
+        <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>{currentLabel}</Box>
         <Box component="span" sx={{ display: { xs: 'inline', sm: 'none' } }}>{currentLang.value === 'gr' ? 'ΕΛ' : currentLang.value.toUpperCase()}</Box>
       </Button>
       <Menu
-        id="language-menu"
+        MenuListProps={{ id: 'language-menu', 'aria-labelledby': 'language-button' }}
         anchorEl={anchorEl}
         open={open}
         onClose={handleClose}
@@ -74,7 +77,7 @@ const Language = ({website=false}:{website?:boolean}) => {
               {option.icon&&<Box
                 component="img"
                 src={option.icon}
-                alt={option.flagname}
+                alt=""
                 sx={{ width: 20, height: 20, borderRadius: '50%' }}
               />}
               <Typography> {option.icon?t(option.flagname):option.value.toUpperCase()}</Typography>

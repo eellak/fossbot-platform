@@ -4,7 +4,8 @@ import * as dropdownData from './data';
 import { Link } from 'react-router-dom';
 import {
   Box,
-  Menu,
+  Popover,
+  Tooltip,
   Avatar,
   Typography,
   Divider,
@@ -23,6 +24,9 @@ const UserMenu = () => {
   const auth = useAuth();
   const [user, setUser] = useState(auth.user);
   const [anchorEl2, setAnchorEl2] = useState(null);
+
+  const open = Boolean(anchorEl2);
+  const panelTitle = t(auth.isGuest ? 'guest.menuTitle' : 'userProfile');
 
   const handleClick2 = (event: any) => {
     setAnchorEl2(event.currentTarget);
@@ -56,46 +60,31 @@ const UserMenu = () => {
 
   return (
     <Box>
-      <IconButton
-        size="large"
-        aria-label="show 11 new notifications"
-        color="inherit"
-        aria-controls="msgs-menu"
-        aria-haspopup="true"
-        sx={{
-          ...(typeof anchorEl2 === 'object' && {
-            color: 'primary.main',
-          }),
-        }}
-        onClick={handleClick2}
-      >
-        <Avatar
-          src={auth.isGuest ? undefined : user?.image_url}
-          alt={auth.isGuest ? auth.guest?.alias : user?.username}
-          sx={{
-            width: 35,
-            height: 35,
-          }}
-        />
-      </IconButton>
-      {/* ------------------------------------------- */}
-      {/* Message Dropdown */}
-      {/* ------------------------------------------- */}
-      <Menu
-        id="msgs-menu"
+      <Tooltip title={panelTitle}>
+        <IconButton
+          aria-label={panelTitle}
+          aria-controls={open ? 'account-panel' : undefined}
+          aria-haspopup="dialog"
+          aria-expanded={open}
+          color="inherit"
+          sx={{ width: 44, height: 44, borderRadius: 1 }}
+          onClick={handleClick2}
+        >
+          <Avatar src={auth.isGuest ? undefined : user?.image_url} alt="" sx={{ width: 32, height: 32 }} />
+        </IconButton>
+      </Tooltip>
+      <Popover
         anchorEl={anchorEl2}
-        open={Boolean(anchorEl2)}
+        open={open}
         onClose={handleClose2}
         anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
         transformOrigin={{ horizontal: 'right', vertical: 'top' }}
-        sx={{
-          '& .MuiMenu-paper': {
-            width: '360px',
-            p: 4,
-          },
+        PaperProps={{
+          id: 'account-panel', role: 'dialog', 'aria-modal': true, 'aria-labelledby': 'account-panel-title',
+          sx: { width: 360, p: 4 },
         }}
       >
-        <Typography variant="h5">{auth.isGuest ? t('guest.menuTitle') : t('userProfile')}</Typography>
+        <Typography id="account-panel-title" variant="h5">{panelTitle}</Typography>
         <Stack direction="row" py={3} spacing={2} alignItems="center">
           <Avatar src={auth.isGuest ? undefined : user?.image_url} alt={auth.isGuest ? auth.guest?.alias : user?.username} sx={{ width: 95, height: 95 }} />
           <Box>
@@ -127,7 +116,7 @@ const UserMenu = () => {
         {!auth.isGuest && dropdownData.profileMenuPages.map((profile) => (
           <Box key={profile.title}>
             <Box sx={{ py: 2, px: 0 }} className="hover-text-primary">
-              <Link to={profile.href}>
+              <Link to={profile.href} onClick={handleClose2}>
                 <Stack direction="row" spacing={2}>
                   <Box
                     width="45px"
@@ -182,7 +171,7 @@ const UserMenu = () => {
             {dropdownData.adminPages.map((admin) => (
               <Box key={admin.title}>
                 <Box sx={{ py: 2, px: 0 }} className="hover-text-primary">
-                  <Link to={admin.href}>
+                  <Link to={admin.href} onClick={handleClose2}>
                     <Stack direction="row" spacing={2}>
                       <Box
                         width="45px"
@@ -239,7 +228,7 @@ const UserMenu = () => {
             {auth.isGuest ? t('guest.exit') : t('logOut')}
           </Button>
         </Box>
-      </Menu>
+      </Popover>
     </Box>
   );
 };

@@ -2,11 +2,14 @@ import type { CameraVisionMode, CameraVisionSnapshot } from './robot/cameraVisio
 import React, { forwardRef, useEffect, useImperativeHandle, useRef } from 'react'
 import { SimEngine } from './engine/SimEngine'
 import type { SimEngineConfig } from './engine/types'
-import type { RawStageConfig } from './stages'
+import { STAGES, type RawStageConfig } from './stages'
+import { stageLoadError, validateStageFormat, type StageLoadError } from './stages/stageFormatCore'
+import { stageAssetBaseUrlFromStageUrl } from './stages/assets'
 import type { SensorRunSummary, SensorTelemetryListener, SensorTelemetrySnapshot } from './sensors/telemetry'
 import type { AttemptSummary, ChallengeMarker, MissionEventListener } from './missions/types'
 
 export interface FossbotSimulatorHandle {
+  retryStageLoad(): Promise<void>
   moveStep(distance: number): Promise<void>
   rotateStep(angle: number): Promise<void>
   stopMotion(): void
@@ -55,6 +58,7 @@ export interface FossbotSimulatorProps {
   appsessionId?: string
   config?: Partial<SimEngineConfig>
   onMountChange?: (isMounted: boolean) => void
+  onLoadError?: (error: StageLoadError | null) => void
   className?: string
   style?: React.CSSProperties
   initialStageConfig?: RawStageConfig
@@ -62,7 +66,7 @@ export interface FossbotSimulatorProps {
 }
 
 export const FossbotSimulator = forwardRef<FossbotSimulatorHandle, FossbotSimulatorProps>(
-  ({ config, onMountChange, className, style, initialStageConfig, lockCamera }, ref) => {
+  ({ config, onMountChange, onLoadError, className, style, initialStageConfig, lockCamera }, ref) => {
     const containerRef = useRef<HTMLDivElement | null>(null)
     const engineRef = useRef<SimEngine | null>(null)
     const telemetryListenersRef = useRef(new Set<SensorTelemetryListener>())
@@ -70,13 +74,18 @@ export const FossbotSimulator = forwardRef<FossbotSimulatorHandle, FossbotSimula
     const missionListenersRef = useRef(new Set<MissionEventListener>())
     const missionSubscriptionsRef = useRef(new Map<MissionEventListener, () => void>())
 
+    const callbacksRef = useRef({ onMountChange, onLoadError })
+    callbacksRef.current = { onMountChange, onLoadError }
+    const loadActionsRef = useRef<Pick<FossbotSimulatorHandle, 'setStage' | 'setStageConfig' | 'retryStageLoad'> | null>(null)
+
     useImperativeHandle(ref, () => ({
+      retryStageLoad: () => loadActionsRef.current?.retryStageLoad() ?? Promise.reject(new Error('Simulator is not mounted.')),
       moveStep: (distance) => engineRef.current?.moveStep(distance) ?? Promise.resolve(),
       rotateStep: (angle) => engineRef.current?.rotateStep(angle) ?? Promise.resolve(),
       stopMotion: () => engineRef.current?.stopMotion(),
       reset: () => engineRef.current?.reset(),
-      setStage: (stageOrUrl) => engineRef.current?.setStage(stageOrUrl) ?? Promise.resolve(),
-      setStageConfig: (entries, name, stageAssetBaseUrl) => engineRef.current?.setStageConfig(entries, name, stageAssetBaseUrl) ?? Promise.resolve(),
+      setStage: (stageOrUrl) => loadActionsRef.current?.setStage(stageOrUrl) ?? Promise.reject(new Error('Simulator is not mounted.')),
+      setStageConfig: (entries, name, stageAssetBaseUrl) => loadActionsRef.current?.setStageConfig(entries, name, stageAssetBaseUrl) ?? Promise.reject(new Error('Simulator is not mounted.')),
       getStageNames: () => engineRef.current?.getStageNames() ?? [],
       setLightIntensity: (intensity) => engineRef.current?.setLightIntensity(intensity),
       changeCamera: () => engineRef.current?.changeCamera(),
@@ -140,35 +149,112 @@ export const FossbotSimulator = forwardRef<FossbotSimulatorHandle, FossbotSimula
 
     useEffect(() => {
       if (!containerRef.current) return
-
-      const engine = new SimEngine(containerRef.current, { ...config, initialStageConfig, lockCamera })
-      engineRef.current = engine
-      for (const listener of telemetryListenersRef.current) {
-        telemetrySubscriptionsRef.current.get(listener)?.()
-        telemetrySubscriptionsRef.current.set(listener, engine.subscribeSensorTelemetry(listener))
+      let active = true
+      let ready = false
+      let failure: StageLoadError | null = null
+      let pending: Promise<void> = Promise.resolve()
+      type Request = { entries: RawStageConfig; name?: string; base?: string } | { url: string }
+      let lastRequest: Request | null = null
+      const initialConfig = { ...config, initialStageConfig: initialStageConfig ?? config?.initialStageConfig, lockCamera: lockCamera ?? config?.lockCamera }
+      let restartConfig: Partial<SimEngineConfig> = initialConfig
+      const report = (error: StageLoadError | null) => {
+        if (!active) return
+        failure = error
+        if (error && engineRef.current?.lastStageRequest) lastRequest = engineRef.current.lastStageRequest
+        callbacksRef.current.onLoadError?.(error)
+        if (ready !== !error) {
+          ready = !error
+          callbacksRef.current.onMountChange?.(ready)
+        }
       }
-      for (const listener of missionListenersRef.current) {
-        missionSubscriptionsRef.current.get(listener)?.()
-        missionSubscriptionsRef.current.set(listener, engine.subscribeMissionEvents(listener))
+      const markLoading = () => {
+        ready = false
+        callbacksRef.current.onMountChange?.(false)
       }
-      let disposed = false
-
-      engine.start().then(() => {
-        if (!disposed) onMountChange?.(true)
-      })
-
-      return () => {
-        disposed = true
-        onMountChange?.(false)
+      const disposeEngine = () => {
         for (const unsubscribe of telemetrySubscriptionsRef.current.values()) unsubscribe()
         telemetrySubscriptionsRef.current.clear()
         for (const unsubscribe of missionSubscriptionsRef.current.values()) unsubscribe()
         missionSubscriptionsRef.current.clear()
-        engine.stop()
-        if (engineRef.current === engine) engineRef.current = null
+        engineRef.current?.stop()
+        engineRef.current = null
       }
-      // Config is intentionally read once: changing simulator config should
-      // remount the component instead of mutating a live physics world.
+      const startEngine = async (nextConfig: Partial<SimEngineConfig>) => {
+        disposeEngine()
+        if (!active || !containerRef.current) return
+        markLoading()
+        const engine = new SimEngine(containerRef.current, { ...nextConfig, onStageLoadError: report })
+        engineRef.current = engine
+        for (const listener of telemetryListenersRef.current) telemetrySubscriptionsRef.current.set(listener, engine.subscribeSensorTelemetry(listener))
+        for (const listener of missionListenersRef.current) missionSubscriptionsRef.current.set(listener, engine.subscribeMissionEvents(listener))
+        await engine.start()
+        if (active) report(null)
+      }
+      const enqueue = (operation: () => Promise<void>): Promise<void> => {
+        const task = pending.then(async () => {
+          if (!active) return
+          try { await operation() }
+          catch (error) {
+            const loadError = stageLoadError(error)
+            report(loadError)
+            const engine = engineRef.current
+            if (engine && (!engine.hasStage || loadError.phase === 'construction')) {
+              restartConfig = engine.retryConfig
+              disposeEngine()
+            }
+            throw loadError
+          }
+        })
+        pending = task.catch(() => {})
+        return task
+      }
+      const load = async (request: Request) => {
+        lastRequest = request
+        markLoading()
+        const engine = engineRef.current
+        if (engine?.hasStage && failure?.phase !== 'construction') {
+          if ('url' in request) await engine.setStage(request.url)
+          else await engine.setStageConfig(request.entries, request.name, request.base)
+          report(null)
+          return
+        }
+        let entries: RawStageConfig
+        let base: string | undefined
+        if ('url' in request) {
+          if (STAGES[request.url]) entries = validateStageFormat(STAGES[request.url])
+          else {
+            let payload: unknown
+            try {
+              const response = await fetch(request.url)
+              if (!response.ok) throw new Error(`HTTP ${response.status}`)
+              payload = await response.json()
+            } catch (error) { throw stageLoadError(error, 'fetch') }
+            entries = validateStageFormat(payload)
+            base = stageAssetBaseUrlFromStageUrl(request.url)
+          }
+        } else {
+          entries = validateStageFormat(request.entries)
+          base = request.base
+        }
+        await startEngine({ ...(engine?.retryConfig ?? restartConfig), initialStageConfig: entries, stageAssetBaseUrl: base })
+      }
+      loadActionsRef.current = {
+        setStage: url => enqueue(() => load({ url })),
+        setStageConfig: (entries, name, base) => enqueue(() => load({ entries, name, base })),
+        retryStageLoad: () => enqueue(async () => {
+          const engine = engineRef.current
+          if (failure?.phase !== 'construction' && lastRequest) await load(lastRequest)
+          else await startEngine(engine?.retryConfig ?? restartConfig)
+        }),
+      }
+      void enqueue(() => startEngine(initialConfig)).catch(() => {})
+      return () => {
+        active = false
+        loadActionsRef.current = null
+        callbacksRef.current.onMountChange?.(false)
+        disposeEngine()
+      }
+      // Props supply initial configuration. Later loads use the imperative API.
     }, [])
 
     return (

@@ -14,6 +14,7 @@ import { useConfirmDialog } from 'src/components/shared/ConfirmDialog';
 import { useNotifications } from 'src/components/notifications/NotificationProvider';
 import CardDialog, { type StageSelection } from 'src/components/stage-select-popup/CardDialog';
 import { useAuth } from 'src/authentication/AuthProvider';
+import { useFeatureFlags } from 'src/config/FeatureFlags';
 import { listLocalStages, unpublishLocalStage, type LocalStageSummary } from 'src/stages/LocalStagesApi';
 import { getGitHubLoginUrl, getGitHubProviderStatus, type GitHubProviderStatus } from 'src/stages/ProviderAuthApi';
 import type { MyMarketplaceStage } from 'src/stages/MarketplaceApi';
@@ -107,9 +108,10 @@ export default function UserStagesDashboardPanel({ showViewAll = true, appearanc
   const { deleteStage, busy: deletingStage } = useDeleteStage();
   const { notify } = useNotifications();
   const { token, user, isGuest } = useAuth();
+  const { githubStages: githubEnabled } = useFeatureFlags();
   const location = useLocation();
   const navigate = useNavigate();
-  const userKey = stageListUserKey(user);
+  const userKey = githubEnabled ? stageListUserKey(user) : null;
   const [localStages, setLocalStages] = useState<LocalStageSummary[]>([]);
   const [browserStages, setBrowserStages] = useState<LocalStageRecord[]>([]);
   const [githubStages, setGitHubStages] = useState<ProviderStageListItem[]>([]);
@@ -232,7 +234,7 @@ export default function UserStagesDashboardPanel({ showViewAll = true, appearanc
     setError('');
     Promise.allSettled([
       listLocalStages(token),
-      getGitHubProviderStatus(token),
+      userKey ? getGitHubProviderStatus(token) : null,
     ]).then(async ([localResult, statusResult]) => {
       if (!active) return;
       if (localResult.status === 'fulfilled') setLocalStages(localResult.value);
@@ -240,7 +242,7 @@ export default function UserStagesDashboardPanel({ showViewAll = true, appearanc
       if (statusResult.status === 'fulfilled') {
         const status = statusResult.value;
         setProviderStatus(status);
-        if (userKey) {
+        if (userKey && status) {
           if (status.connected && !status.needsReconnect) {
             await Promise.all([refreshMyMarketplaceStages(userKey, token), refreshUserStages(userKey, token)]);
           } else {
@@ -328,7 +330,7 @@ export default function UserStagesDashboardPanel({ showViewAll = true, appearanc
       const current = githubByKey.get(key);
       githubByKey.set(key, { stage: current?.stage || publicationAsStage(publication), publication });
     });
-    githubByKey.forEach(({ stage, publication }, key) => rows.push({
+    if (githubEnabled) githubByKey.forEach(({ stage, publication }, key) => rows.push({
       key: `github:${key}`,
       title: stage.title || stage.repoName,
       description: stage.description,
@@ -342,7 +344,7 @@ export default function UserStagesDashboardPanel({ showViewAll = true, appearanc
       previewUrl: publication?.entry.previewUrl,
     }));
     return rows.sort((left, right) => new Date(right.updatedAt || 0).getTime() - new Date(left.updatedAt || 0).getTime());
-  }, [browserStages, githubStages, isGuest, localStages, publications]);
+  }, [browserStages, githubEnabled, githubStages, isGuest, localStages, publications]);
 
   const previewObjectUrls = useStagePreviews(token, stages.map((stage) => stage.previewUrl));
 
@@ -350,9 +352,9 @@ export default function UserStagesDashboardPanel({ showViewAll = true, appearanc
   const filteredStages = useMemo(() => stages.filter((stage) => {
     const haystack = [stage.title, stage.description, stage.detail, stage.status, stage.notice].filter(Boolean).join(' ').toLowerCase();
     return (!query || haystack.includes(query))
-      && (sourceFilter === 'all' || stage.source === sourceFilter)
+      && (!githubEnabled || sourceFilter === 'all' || stage.source === sourceFilter)
       && (statusFilter === 'all' || stage.statusKey === statusFilter);
-  }), [query, sourceFilter, stages, statusFilter]);
+  }), [githubEnabled, query, sourceFilter, stages, statusFilter]);
 
   const stagesPerPage = pageSize;
   const pageCount = Math.max(1, Math.ceil(filteredStages.length / stagesPerPage));
@@ -411,7 +413,7 @@ export default function UserStagesDashboardPanel({ showViewAll = true, appearanc
     setPage((currentPage) => Math.min(currentPage, pageCount));
   }, [pageCount]);
 
-  const showConnect = !loading && (!providerStatus?.connected || providerStatus.needsReconnect);
+  const showConnect = githubEnabled && !loading && (!providerStatus?.connected || providerStatus.needsReconnect);
   const createStageButton = <Button size="small" variant="contained" startIcon={<AddIcon />} onClick={() => isGuest ? navigate('/stage-builder') : showViewAll ? navigate('/stages?create=1') : setStagePickerOpen(true)}>{isGuest ? t('guest.newStage') : t('dashboardStages.create')}</Button>;
   const connectButton = !isGuest && showConnect ? <Button size="small" variant="outlined" startIcon={connecting ? <CircularProgress size={16} color="inherit" /> : <GitHubIcon />} disabled={connecting} onClick={connectGitHub}>{connecting ? 'Connecting…' : MARKETPLACE_COPY.connectGitHub}</Button> : null;
   const actions = (
@@ -475,7 +477,7 @@ export default function UserStagesDashboardPanel({ showViewAll = true, appearanc
         }}
         sx={{ flex: 1, minWidth: 0 }}
       />}
-      {showFilters && !isGuest && <FormControl size="small" sx={{ minWidth: { xs: '100%', sm: 150 } }}>
+      {showFilters && !isGuest && githubEnabled && <FormControl size="small" sx={{ minWidth: { xs: '100%', sm: 150 } }}>
         <InputLabel id="stages-source-filter-label">Source</InputLabel>
         <Select labelId="stages-source-filter-label" value={sourceFilter} label="Source" onChange={(event) => { setSourceFilter(event.target.value as typeof sourceFilter); setPage(1); }}>
           <MenuItem value="all">All sources</MenuItem>
@@ -554,7 +556,7 @@ export default function UserStagesDashboardPanel({ showViewAll = true, appearanc
         <InfoOutlinedIcon fontSize="small" sx={{ mr: 1 }} />
         Details
       </MenuItem>}
-      {stageMenu?.stage.localStage && <MenuItem
+      {githubEnabled && stageMenu?.stage.localStage && <MenuItem
         component="a"
         href={`${stageMenu.stage.href}&action=github-copy`}
         onClick={() => setStageMenu(null)}

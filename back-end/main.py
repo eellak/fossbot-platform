@@ -64,7 +64,7 @@ from routers.ai_admin import router as ai_admin_router
 from routers.ai_teaching import router as ai_teaching_router
 from routers.website import router as website_router
 from routers.guests import router as guests_router
-from utils.github_app_auth import create_github_app_jwt
+from utils.github_app_auth import create_github_app_jwt, github_stages_configured
 from utils.beta_access import require_beta_access
 from utils.guest_access import Participant, allowed_guest_views, get_participant, guest_settings_row
 from utils.marketplace_schema import marketplace_entry_path
@@ -523,7 +523,7 @@ async def read_users_me(token: str = Depends(oauth2_scheme), db: SessionLocal = 
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=REVOKED_ACCESS_MESSAGE)
     if not user.activated:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=INACTIVE_ACCOUNT_MESSAGE)
-    return user_payload(db, user)
+    return {**user_payload(db, user), "github_stages_enabled": github_stages_configured()}
 
 @app.put("/users/me")
 async def update_user_info(user_update: UpdateUserRequest, current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):

@@ -18,10 +18,11 @@ import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import type { StageSemanticKind } from './types';
 import { PreviewShape, STAGE_BUILDER_LIBRARY_GROUPS, libraryLabel, type StageBuilderLibraryGroup } from './StageObjectLibrary';
 import { useEditorTheme, type EditorTone } from './stageBuilderEditorTheme';
+import { hasSemanticArtwork } from './stageBuilderLibraryArtwork';
 import { PreviewImage } from './PreviewImage';
 import { ColorPickerField } from './StageInspector';
 import {
-  buildSettingsSpec, fitDisplaySizeToTile, getKindSettings, getLibraryPreviewAreaSize, resetAllPreviewSettings, resetKindSettings, setKindSettings, setPreviewAuthoringKind, usePreviewSettingsVersion,
+  buildSettingsSpec, fitDisplaySizeToTile, getKindSettings, resetAllPreviewSettings, resetKindSettings, setKindSettings, setPreviewAuthoringKind, usePreviewSettingsVersion,
   DEFAULT_PREVIEW_SETTINGS, type PreviewSettings,
 } from './stageBuilderPreviewSettings';
 import { getKindPreview, PREVIEW_CONSTANTS } from './stageBuilderPreviews';
@@ -166,8 +167,6 @@ function KindDetails({ kind, settings, onChange, onReset }: { kind: StageSemanti
   const categoryTone = previewToneForKind(kind, useEditorTheme().tones, settings.objectColorOverride);
   const fill = fillPercent(settings);
   const turn = normalizedDegrees(deg(settings.rotation[1]));
-  const areaSize = getLibraryPreviewAreaSize();
-  const fittedTileSize = areaSize ? fitDisplaySizeToTile(areaSize, { width: settings.width, height: settings.height }, 0) : settings.displaySize;
   const livePreviewSize = fitDisplaySizeToTile(LIVE_PREVIEW_BOX, { width: settings.width, height: settings.height }, 0);
   const outlinePreset = outlinePresets.reduce((closest, preset) => (
     Math.abs(preset.thickness - settings.outline.thickness) < Math.abs(closest.thickness - settings.outline.thickness) ? preset : closest
@@ -179,7 +178,7 @@ function KindDetails({ kind, settings, onChange, onReset }: { kind: StageSemanti
         <Box sx={{ width: 12, height: 12, borderRadius: 0.5, bgcolor: categoryTone.accent, boxShadow: `0 0 0 2px ${categoryTone.surface}` }} />
         <Box sx={{ minWidth: 0, flex: 1 }}>
           <Typography variant="subtitle2" sx={{ ...editorType.panelTitle, lineHeight: 1.2 }}>{libraryLabel(kind)}</Typography>
-          <Typography variant="caption" sx={{ ...editorType.caption, color: editorColors.textSubtle }}>The matching library tile swaps to this live preview while selected.</Typography>
+          <Typography variant="caption" sx={{ ...editorType.caption, color: editorColors.textSubtle }}>These settings apply to physical object previews.</Typography>
         </Box>
         <Tooltip title="Reset this kind to defaults">
           <IconButton size="small" onClick={onReset} aria-label="Reset to defaults">
@@ -193,9 +192,9 @@ function KindDetails({ kind, settings, onChange, onReset }: { kind: StageSemanti
       </Box>
 
       <Box sx={{ px: 0.875, py: 0.75, border: `1px solid ${editorColors.border}`, borderRadius: 0.75, bgcolor: `${editorColors.textMuted}0a` }}>
-        <Typography variant="caption" sx={{ ...editorType.caption, color: editorColors.textStrong, fontWeight: 800 }}>Library tile: auto-fit</Typography>
+        <Typography variant="caption" sx={{ ...editorType.caption, color: editorColors.textStrong, fontWeight: 800 }}>Library tile: 4:3</Typography>
         <Typography variant="caption" sx={{ ...editorType.caption, color: editorColors.textSubtle, display: 'block', mt: 0.25 }}>
-          Uses the available image area and keeps the PNG aspect ratio. Current tile image: {Math.round(fittedTileSize.width)}×{Math.round(fittedTileSize.height)}.
+          The image keeps its aspect ratio inside a matching landscape card. Labels have their own space.
         </Typography>
       </Box>
 
@@ -296,7 +295,7 @@ export function PreviewSettingsPanel() {
     return map;
   }, [version]);
 
-  const orderedKinds = useMemo(() => STAGE_BUILDER_LIBRARY_GROUPS.flatMap((group) => group.items.filter((kind) => PLACEABLE_KINDS.has(kind))), []);
+  const orderedKinds = useMemo(() => STAGE_BUILDER_LIBRARY_GROUPS.flatMap((group) => group.items.filter((kind) => PLACEABLE_KINDS.has(kind) && !hasSemanticArtwork(kind))), []);
   const selectedSettings = selectedKind ? settingsByKind.get(selectedKind) || DEFAULT_PREVIEW_SETTINGS : null;
 
   useEffect(() => {
@@ -314,7 +313,7 @@ export function PreviewSettingsPanel() {
         if (url) downloadDataUrl(url, kindFilename(kind));
         await new Promise((resolve) => setTimeout(resolve, 0));
       }
-      setExportStatus(`Downloaded ${orderedKinds.length} PNGs.`);
+      setExportStatus(`Started ${orderedKinds.length} PNG downloads.`);
     } catch (error) {
       setExportStatus(`Export failed: ${(error as Error).message}`);
     } finally {

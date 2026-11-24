@@ -5,7 +5,10 @@ services:
       context: .
       dockerfile: front-end/Dockerfile.dev
     ports:
-      - "3000:3000"
+      - "${DEV_BIND_ADDRESS:-127.0.0.1}:${DEV_FRONTEND_PORT:-3000}:3000"
+    environment:
+      REACT_APP_BACKEND_URL: ${REACT_APP_BACKEND_URL:-http://localhost:${DEV_BACKEND_PORT:-8000}}
+      WDS_SOCKET_PORT: "0" # Use the port in the browser's address bar for live reload.
     volumes:
       - ./front-end:/usr/src/app/front-end
       - ./sim:/usr/src/app/sim
@@ -32,9 +35,9 @@ services:
       - GITHUB_APP_CLIENT_SECRET=${GITHUB_APP_CLIENT_SECRET:-}
       - GITHUB_APP_PRIVATE_KEY_PATH=${GITHUB_APP_PRIVATE_KEY_PATH:-}
       - GITHUB_TOKEN_ENCRYPTION_KEY=${GITHUB_TOKEN_ENCRYPTION_KEY:-}
-      - GITHUB_APP_CALLBACK_URL=${GITHUB_APP_CALLBACK_URL:-http://localhost:8000/auth/github/callback}
-      - GITHUB_APP_SETUP_URL=${GITHUB_APP_SETUP_URL:-http://localhost:8000/auth/github/setup}
-      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:3000}
+      - GITHUB_APP_CALLBACK_URL=${GITHUB_APP_CALLBACK_URL:-http://localhost:${DEV_BACKEND_PORT:-8000}/auth/github/callback}
+      - GITHUB_APP_SETUP_URL=${GITHUB_APP_SETUP_URL:-http://localhost:${DEV_BACKEND_PORT:-8000}/auth/github/setup}
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:${DEV_FRONTEND_PORT:-3000}}
       - FOSSBOT_MARKETPLACE_OWNER=${FOSSBOT_MARKETPLACE_OWNER:-fossbot}
       - FOSSBOT_MARKETPLACE_REPO=${FOSSBOT_MARKETPLACE_REPO:-marketplace}
       - FOSSBOT_MARKETPLACE_BRANCH=${FOSSBOT_MARKETPLACE_BRANCH:-main}
@@ -46,7 +49,7 @@ services:
       - DEV_TEST_USER_PASSWORD=${DEV_TEST_USER_PASSWORD:-dev}
       - AI_ENABLE_TEST_PROVIDER=${AI_ENABLE_TEST_PROVIDER:-true}
     ports:
-      - "8000:8000"
+      - "${DEV_BIND_ADDRESS:-127.0.0.1}:${DEV_BACKEND_PORT:-8000}:8000"
     volumes:
       - ./back-end/test.db:/usr/src/app/back-end/test.db
       - ./back-end/main.py:/usr/src/app/back-end/main.py

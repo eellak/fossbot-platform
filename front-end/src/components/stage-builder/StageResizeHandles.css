@@ -1,0 +1,96 @@
+.stage-resize-handles {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.stage-resize-handles button {
+  position: absolute;
+  left: -100px;
+  top: -100px;
+  width: 28px;
+  height: 28px;
+  transform: translate(-50%, -50%);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.stage-resize-handles button::before {
+  content: '';
+  position: absolute;
+  inset: 50% auto auto 50%;
+  transform: translate(-50%, -50%);
+  width: 11px;
+  height: 11px;
+  box-sizing: border-box;
+  border: 2px solid var(--handle-ink);
+  border-radius: 2px;
+  background: var(--handle-fill);
+}
+
+.stage-resize-handles button:focus-visible { outline: 0; }
+
+.stage-resize-handles button:focus-visible::before {
+  outline: 2px solid var(--handle-active);
+  outline-offset: 2px;
+}
+
+.stage-resize-handles button:is(:hover, :focus-visible, [data-dragging])::before {
+  background: var(--handle-active);
+}
+
+.stage-resize-handles button:is(:focus-visible, [data-dragging]) {
+  z-index: 1;
+}
+
+.stage-resize-hint,
+.stage-resize-handles button:is(:hover, :focus-visible, [data-dragging], [data-active-face])::after {
+  position: absolute;
+  padding: 2px 5px;
+  border-radius: 3px;
+  background: var(--handle-ink);
+  color: var(--handle-fill);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.stage-resize-hint {
+  z-index: 3;
+  transform: translate(-50%, calc(-100% - 9px));
+}
+
+.stage-resize-handles button:is(:hover, :focus-visible, [data-dragging], [data-active-face])::after {
+  content: attr(data-size);
+  bottom: calc(50% + 9px);
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+@media (pointer: coarse) {
+  .stage-resize-handles button { width: 44px; height: 44px; }
+}
+
+canvas[data-resize-axis="x"] { cursor: ew-resize; }
+canvas[data-resize-axis="y"] { cursor: ns-resize; }
+
+/* Face picking belongs to the canvas. The buttons provide keyboard access. */
+.stage-resize-handles[data-faces] button {
+  width: 1px;
+  height: 1px;
+  pointer-events: none;
+}
+
+.stage-resize-handles[data-faces] button::before { display: none; }
+.stage-resize-handles[data-faces] button:not([data-active-face])::after { display: none; }
+
+.stage-resize-handles[data-faces] button[data-active-face]::after {
+  content: attr(data-direction) ' ' attr(data-size);
+}

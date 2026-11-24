@@ -6,6 +6,7 @@ import json
 import os
 import re
 from typing import Any, Optional
+from utils.stage_geometry_contract import validate_stage_geometry_contract
 
 
 MAX_STAGE_RECORD_BYTES = 512 * 1024
@@ -80,6 +81,10 @@ def validate_local_stage_record(record: dict[str, Any]) -> tuple[int, str]:
     config = record.get("config")
     if not isinstance(config, list) or not config:
         raise LocalStageValidationError("Stage record must contain a non-empty config array.")
+    try:
+        validate_stage_geometry_contract(record)
+    except ValueError as error:
+        raise LocalStageValidationError(str(error)) from error
     stl_assets: set[str] = set()
     _validate_local_assets(record, stl_assets)
     encoded = compact_record_bytes(record)

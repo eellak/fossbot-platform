@@ -1,7 +1,5 @@
-import React, { useMemo, useState } from 'react';
-import {
-  Box, IconButton, InputBase, Stack, TextField, Tooltip, Typography,
-} from '@mui/material';
+import React, { useMemo, useRef, useState } from 'react';
+import { Box, Divider, IconButton, InputBase, Menu, MenuItem, Stack, Tooltip, Typography } from '@mui/material';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
 import VisibilityIcon from '@mui/icons-material/Visibility';
@@ -10,14 +8,19 @@ import LockIcon from '@mui/icons-material/Lock';
 import LockOpenIcon from '@mui/icons-material/LockOpen';
 import DeleteIcon from '@mui/icons-material/Delete';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
-import SearchIcon from '@mui/icons-material/Search';
-import type { EditorStage, EditorStageObject, StageBuilderGroup, StageSemanticKind } from './types';
+import FolderOutlinedIcon from '@mui/icons-material/FolderOutlined';
+import FolderOpenOutlinedIcon from '@mui/icons-material/FolderOpenOutlined';
+import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
+import LayersOutlinedIcon from '@mui/icons-material/LayersOutlined';
+import MoreHorizIcon from '@mui/icons-material/MoreHoriz';
+import CheckIcon from '@mui/icons-material/Check';
+import { hiddenEditorObjectIds } from '../../simulator/stages/stageFormatCore';
+import type { EditorStage, EditorStageObject, StageBuilderGroup, StageHierarchyRow } from './types';
+import { folderOwners, normalizeStageHierarchy, rowKey, type HierarchyDrop } from './stageBuilderHierarchy';
 import { displayObjectType } from './stageBuilderCatalog';
-import { PreviewShape, hasStaticPreviewAsset, staticPreviewUrl } from './StageObjectLibrary';
-import { useEditorTheme, type EditorTone } from './stageBuilderEditorTheme';
-
-export type HierarchyDropPosition = 'before' | 'after' | 'inside';
-export type HierarchyDropTarget = { type: 'object' | 'group'; id: string; position: HierarchyDropPosition };
+import { PanelThumbnail } from './PreviewImage';
+import { StagePanelSearch } from './StagePanelSearch';
+import { useEditorTheme } from './stageBuilderEditorTheme';
 
 export interface StageSceneHierarchyProps {
   stage: EditorStage;
@@ -29,759 +32,306 @@ export interface StageSceneHierarchyProps {
   onSelectionChange: (ids: string[]) => void;
   onObjectChange: (object: EditorStageObject) => void;
   onDuplicateObjects: (ids: string[]) => void;
+  onDuplicateGroup: (id: string) => void;
   onDeleteObjects: (ids: string[]) => void;
-  onHierarchyDrop: (draggedId: string, target: HierarchyDropTarget) => void;
+  onHierarchyDrop: (source: StageHierarchyRow, target: HierarchyDrop, selectedIds?: string[]) => void;
   onGroupRename: (groupId: string, name: string) => void;
   onPatchObjects: (ids: string[], patch: Partial<EditorStageObject>) => void;
+  onCreateFolder: (rows: StageHierarchyRow[]) => string;
+  onRenameFolder: (id: string, name: string) => void;
+  onDeleteFolder: (id: string) => void;
+  onRemoveFromFolder: (rows: StageHierarchyRow[]) => void;
 }
 
-const treeLineWidth = 1;
-const treeLineHalf = treeLineWidth / 2;
-const treeBranchWidth = 14;
+type TreeNode = {
+  row: StageHierarchyRow;
+  name: string;
+  object?: EditorStageObject;
+  group?: StageBuilderGroup;
+  children: TreeNode[];
+  count: number;
+};
+
+function hierarchyTree(stage: EditorStage): TreeNode[] {
+  const { folders = [], groups, hierarchyOrder = [], attachedOrder = {} } = stage.metadata;
+  const owners = folderOwners(folders);
+  const nodes = new Map<string, TreeNode>();
+  const add = (row: StageHierarchyRow, name: string, details: Partial<TreeNode> = {}) => {
+    nodes.set(rowKey(row), { row, name, children: [], count: 0, ...details });
+  };
+  for (const object of stage.objects) add({ kind: 'object', id: object.id }, object.name, { object });
+  for (const group of groups) add({ kind: 'group', id: group.id }, group.name, { group });
+  for (const folder of folders) add({ kind: 'folder', id: folder.id }, folder.name);
+  const attached = new Set(Object.values(attachedOrder).flat());
+  const objectRows = (ids: string[]): StageHierarchyRow[] => ids.map(id => ({ kind: 'object', id }));
+  const childrenOf = (rows: StageHierarchyRow[]) => rows.map(row => nodes.get(rowKey(row))!);
+  for (const node of nodes.values()) {
+    if (node.row.kind === 'folder') continue;
+    const ids = node.group ? node.group.objectIds.filter(id => !attached.has(id)) : attachedOrder[node.row.id] || [];
+    node.children = childrenOf(objectRows(ids).filter(row => !owners.has(rowKey(row))));
+  }
+  for (const folder of folders) nodes.get(rowKey({ kind: 'folder', id: folder.id }))!.children = childrenOf(folder.children);
+  const roots = childrenOf(hierarchyOrder);
+  const countObjects = (node: TreeNode): number => {
+    node.count = node.children.reduce((sum, child) => sum + countObjects(child), 0);
+    return node.count + Number(!!node.object);
+  };
+  roots.forEach(countObjects);
+  return roots;
+}
+
+function visibleTree(nodes: TreeNode[], query: string, hidden: Set<string> | null, sortByName: boolean): TreeNode[] {
+  if (!query && !hidden && !sortByName) return nodes;
+  const result: TreeNode[] = [];
+  for (const node of nodes) {
+    const { object } = node;
+    if (object && hidden?.has(object.id)) continue;
+    const label = object ? `${node.name} ${displayObjectType(object)} ${object.kind} ${object.semanticKind || ''}` : node.name;
+    const matches = label.toLowerCase().includes(query);
+    const children = visibleTree(node.children, matches ? '' : query, hidden, sortByName);
+    if (matches || children.length) result.push({ ...node, children });
+  }
+  return sortByName ? result.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true })) : result;
+}
+
 const dragDataType = 'application/x-fossbot-stage-object-id';
+const rootDrop = { kind: 'root', position: 'inside' } as const;
 
-const rowActionSx = (editorColors: ReturnType<typeof useEditorTheme>['colors']) => ({
-  width: 22,
-  height: 22,
-  p: 0,
-  color: editorColors.textMuted,
-  '&:hover': { bgcolor: `${editorColors.textMuted}1a`, color: editorColors.textStrong },
-});
-
-type HierarchyToneKey = 'robot' | 'structures' | 'markers' | 'labels' | 'lighting' | 'camera' | 'audio' | 'groups';
-
-const hierarchyTonesFor = (tones: ReturnType<typeof useEditorTheme>['tones']): Record<HierarchyToneKey, EditorTone> => ({
-  robot: tones.robot,
-  structures: tones.structures,
-  markers: tones.challenge,
-  labels: tones.labels,
-  lighting: tones.lighting,
-  camera: tones.camera,
-  audio: tones.audio,
-  groups: tones.prefab,
-});
-
-type GroupEntry = { group: StageBuilderGroup; objects: EditorStageObject[]; allObjects: EditorStageObject[] };
-type RootItem = { type: 'group'; entry: GroupEntry } | { type: 'object'; object: EditorStageObject };
-
-function sectionFor(object: EditorStageObject): HierarchyToneKey {
-  if (object.groupId || object.prefabSourceId) return 'groups';
-  if (object.kind === 'fossbot' || object.semanticKind === 'robotSpawn') return 'robot';
-  if (object.kind === 'light' || object.semanticKind === 'light') return 'lighting';
-  if (object.kind === 'camera' || object.semanticKind === 'camera') return 'camera';
-  if (object.kind === 'audio' || object.semanticKind === 'audio') return 'audio';
-  if (object.kind === 'text' || object.semanticKind === 'label') return 'labels';
-  if (['target', 'checkpoint', 'dangerZone', 'sensorZone', 'line', 'baseTile'].includes(object.semanticKind || '')) return 'markers';
-  return 'structures';
-}
-
-function previewKindForObject(object: EditorStageObject): StageSemanticKind {
-  if (object.semanticKind) return object.semanticKind;
-  if (object.kind === 'fossbot') return 'robotSpawn';
-  if (object.kind === 'base') return 'baseTile';
-  if (object.kind === 'cube') return 'block';
-  if (object.kind === 'cylinder') return 'cylinder';
-  if (object.kind === 'line') return 'line';
-  if (object.kind === 'text') return 'label';
-  if (object.kind === 'light') return 'light';
-  if (object.kind === 'camera') return 'camera';
-  if (object.kind === 'audio') return 'audio';
-  return 'block';
-}
-
-function toneForObject(object: EditorStageObject, tones: Record<HierarchyToneKey, EditorTone>): EditorTone {
-  return tones[sectionFor(object)];
-}
-
-function stop(event: React.MouseEvent) {
-  event.stopPropagation();
-}
-
-function objectMatches(object: EditorStageObject, query: string): boolean {
-  if (!query) return true;
-  const haystack = `${object.name} ${displayObjectType(object)} ${object.kind} ${object.semanticKind || ''}`.toLowerCase();
-  return haystack.includes(query);
-}
-
-function objectVisible(object: EditorStageObject, query: string, childrenByParent: Map<string, EditorStageObject[]>): boolean {
-  if (objectMatches(object, query)) return true;
-  return (childrenByParent.get(object.id) || []).some((child) => objectVisible(child, query, childrenByParent));
-}
-
-function visibleChildren(object: EditorStageObject, query: string, childrenByParent: Map<string, EditorStageObject[]>): EditorStageObject[] {
-  const children = childrenByParent.get(object.id) || [];
-  if (!query || objectMatches(object, query)) return children;
-  return children.filter((child) => objectVisible(child, query, childrenByParent));
-}
-
-function treeMetrics(depth: number) {
-  const x = 12 + depth * 24;
-  return { lineX: x, contentX: x + treeBranchWidth };
-}
-
-function TreeRowShell({
-  depth,
-  last,
-  ancestorLines = [],
-  branchEndX,
-  childStem = false,
-  children,
-}: {
-  depth: number;
-  last: boolean;
-  ancestorLines?: boolean[];
-  branchEndX?: number;
-  childStem?: boolean;
-  children: React.ReactNode;
+function Action({ label, onClick, children, danger = false }: {
+  label: string; onClick: () => void; children: React.ReactNode; danger?: boolean;
 }) {
-  const { colors: editorColors } = useEditorTheme();
-  const treeLine = editorColors.borderStrong;
-  const { lineX, contentX } = treeMetrics(depth);
-  const lineLeft = `${lineX - treeLineHalf}px`;
-  const lineWidth = `${treeLineWidth}px`;
-  const branchEnd = branchEndX ?? contentX;
-  const currentLineBottom = last ? `calc(50% - ${treeLineHalf}px)` : `-${treeLineHalf}px`;
-
-  return (
-    <Box sx={{ position: 'relative' }}>
-      {ancestorLines.map((showLine, ancestorDepth) => showLine ? (
-        <Box
-          key={ancestorDepth}
-          aria-hidden="true"
-          sx={{
-            position: 'absolute',
-            left: `${treeMetrics(ancestorDepth).lineX - treeLineHalf}px`,
-            top: `-${treeLineHalf}px`,
-            bottom: `-${treeLineHalf}px`,
-            width: lineWidth,
-            bgcolor: treeLine,
-            pointerEvents: 'none',
-          }}
-        />
-      ) : null)}
-      <Box
-        aria-hidden="true"
-        sx={{
-          position: 'absolute',
-          left: lineLeft,
-          top: `-${treeLineHalf}px`,
-          bottom: currentLineBottom,
-          width: lineWidth,
-          bgcolor: treeLine,
-          pointerEvents: 'none',
-        }}
-      />
-      <Box
-        aria-hidden="true"
-        sx={{
-          position: 'absolute',
-          left: lineLeft,
-          top: `calc(50% - ${treeLineHalf}px)`,
-          width: `${Math.max(treeLineWidth, branchEnd - lineX + treeLineWidth)}px`,
-          height: lineWidth,
-          bgcolor: treeLine,
-          pointerEvents: 'none',
-        }}
-      />
-      {childStem && (
-        <Box
-          aria-hidden="true"
-          sx={{
-            position: 'absolute',
-            left: `${treeMetrics(depth + 1).lineX - treeLineHalf}px`,
-            top: `calc(50% - ${treeLineHalf}px)`,
-            bottom: `-${treeLineHalf}px`,
-            width: lineWidth,
-            bgcolor: treeLine,
-            pointerEvents: 'none',
-          }}
-        />
-      )}
-      {children}
-    </Box>
-  );
+  const { colors } = useEditorTheme();
+  return <Tooltip title={label}>
+    <IconButton size="small" aria-label={label} onClick={onClick} sx={{
+      width: 24, height: 24, p: 0, color: danger ? colors.danger : colors.textMuted,
+      '& svg': { fontSize: 16 }, '&:hover': { bgcolor: danger ? colors.dangerSurface : colors.panelRaised },
+    }}>{children}</IconButton>
+  </Tooltip>;
 }
 
-function ObjectPreview({ object }: { object: EditorStageObject }) {
-  const { tones: editorTones } = useEditorTheme();
-  const tone = toneForObject(object, hierarchyTonesFor(editorTones));
-  const kind = previewKindForObject(object);
-  if (object.kind === 'model') {
-    const format = (object.format || 'obj').toUpperCase();
-    return (
-      <Box sx={{ width: 32, height: 32, display: 'grid', placeItems: 'center', overflow: 'hidden', borderRadius: 0.5, bgcolor: 'transparent' }}>
-        <Box sx={{ position: 'relative', width: 26, height: 24 }}>
-          <Box sx={{ position: 'absolute', left: 5, top: 6, width: 14, height: 14, bgcolor: object.color || tone.accent, opacity: 0.72, transform: 'skewY(-18deg)' }} />
-          <Box sx={{ position: 'absolute', right: 0, bottom: 0, px: 0.25, minWidth: 17, height: 10, display: 'grid', placeItems: 'center', borderRadius: 0.25, bgcolor: tone.accent, color: tone.text, fontSize: '0.43rem', fontWeight: 900, lineHeight: 1 }}>{format}</Box>
-        </Box>
-      </Box>
-    );
-  }
-  if (object.kind === 'text') {
-    return (
-      <Box sx={{ width: 32, height: 32, display: 'grid', placeItems: 'center', overflow: 'hidden', borderRadius: 0.5, bgcolor: 'transparent' }}>
-        <Box sx={{ width: 24, height: 18, display: 'grid', placeItems: 'center', border: `1px solid ${tone.accent}`, bgcolor: `${tone.accent}1f`, color: tone.text, fontSize: '0.75rem', fontWeight: 900, lineHeight: 1, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace' }}>T</Box>
-      </Box>
-    );
-  }
-  return (
-    <Box sx={{ width: 32, height: 32, display: 'grid', placeItems: 'center', overflow: 'hidden', borderRadius: 0.5, bgcolor: 'transparent' }}>
-      {hasStaticPreviewAsset(kind) ? (
-        <img
-          src={staticPreviewUrl(kind)}
-          width={30}
-          height={30}
-          alt=""
-          draggable={false}
-          style={{ display: 'block', objectFit: 'contain', userSelect: 'none' }}
-        />
-      ) : (
-        <PreviewShape kind={kind} tone={tone} width={28} height={24} />
-      )}
-    </Box>
-  );
+function RenameField({ name, onFinish }: { name: string; onFinish: (value?: string) => void }) {
+  return <InputBase autoFocus defaultValue={name} inputProps={{ 'aria-label': 'New name' }}
+    onFocus={event => event.target.select()}
+    onBlur={event => onFinish(event.target.value.trim())}
+    onKeyDown={event => {
+      event.stopPropagation();
+      if (event.key !== 'Enter' && event.key !== 'Escape') return;
+      event.preventDefault();
+      const row = event.currentTarget.closest('[data-hierarchy-kind]');
+      if (event.key === 'Enter') (event.target as HTMLInputElement).blur();
+      else onFinish();
+      requestAnimationFrame(() => row?.querySelector<HTMLButtonElement>('button[aria-keyshortcuts]')?.focus());
+    }}
+    sx={{ flex: 1, minWidth: 0, fontSize: '0.875rem', '& input': { p: 0 } }}
+  />;
 }
 
-function GroupPreview({ selected }: { selected: boolean }) {
-  const { colors: editorColors, tones: editorTones } = useEditorTheme();
-  const panelMuted = editorColors.textMuted;
-  const hierarchyTones = hierarchyTonesFor(editorTones);
-  return (
-    <Box sx={{ width: 32, height: 32, display: 'grid', placeItems: 'center', borderRadius: 0.5, bgcolor: 'transparent' }}>
-      <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: selected ? hierarchyTones.groups.accent : panelMuted, opacity: selected ? 0.95 : 0.7 }} />
-    </Box>
-  );
-}
-
-function positionFromPointer(event: React.DragEvent<HTMLDivElement>): HierarchyDropPosition {
-  const rect = event.currentTarget.getBoundingClientRect();
-  const y = (event.clientY - rect.top) / Math.max(1, rect.height);
-  if (y < 0.28) return 'before';
-  if (y > 0.72) return 'after';
-  return 'inside';
-}
-
-function dropSx(active: HierarchyDropPosition | null | undefined, editorColors: ReturnType<typeof useEditorTheme>['colors']) {
-  if (active === 'before') return { boxShadow: `inset 0 2px 0 ${editorColors.accentText}` };
-  if (active === 'after') return { boxShadow: `inset 0 -2px 0 ${editorColors.accentText}` };
-  if (active === 'inside') return { boxShadow: `inset 0 0 0 1px ${editorColors.accent}5c`, bgcolor: `${editorColors.accent}24` };
-  return { boxShadow: 'none' };
-}
-
-function ObjectRow({
-  object,
-  selected,
-  selectedIds,
-  depth,
-  last,
-  ancestorLines = [],
-  draggedObjectId,
-  dropTarget,
-  childrenByParent,
-  normalizedQuery,
-  onSelectObject,
-  onSelectionChange,
-  onObjectChange,
-  onDuplicateObjects,
-  onDeleteObjects,
-  onObjectDragStart,
-  onTargetDragOver,
-  onTargetDragLeave,
-  onTargetDrop,
-  onObjectDragEnd,
-}: {
-  object: EditorStageObject;
-  selected: boolean;
-  selectedIds: string[];
-  depth: number;
-  last: boolean;
-  ancestorLines?: boolean[];
-  draggedObjectId: string | null;
-  dropTarget: HierarchyDropTarget | null;
-  childrenByParent: Map<string, EditorStageObject[]>;
-  normalizedQuery: string;
-  onSelectObject: (id: string | null) => void;
-  onSelectionChange: (ids: string[]) => void;
-  onObjectChange: (object: EditorStageObject) => void;
-  onDuplicateObjects: (ids: string[]) => void;
-  onDeleteObjects: (ids: string[]) => void;
-  onObjectDragStart: (id: string, event: React.DragEvent<HTMLDivElement>) => void;
-  onTargetDragOver: (target: HierarchyDropTarget, event: React.DragEvent<HTMLDivElement>) => void;
-  onTargetDragLeave: (target: HierarchyDropTarget, event: React.DragEvent<HTMLDivElement>) => void;
-  onTargetDrop: (target: HierarchyDropTarget, event: React.DragEvent<HTMLDivElement>) => void;
-  onObjectDragEnd: () => void;
-}) {
-  const { colors: editorColors, type: editorType } = useEditorTheme();
-  const panelText = editorColors.text;
-  const selectedBg = `${editorColors.accent}1a`;
-  const hoverBg = `${editorColors.textMuted}0f`;
-  const [editing, setEditing] = useState(false);
-  const checked = selectedIds.includes(object.id);
-  const rowSelected = selected || checked;
-  const dragging = draggedObjectId === object.id;
-  const activeDrop = dropTarget?.type === 'object' && dropTarget.id === object.id ? dropTarget.position : null;
-  const children = visibleChildren(object, normalizedQuery, childrenByParent);
-  const { contentX } = treeMetrics(depth);
-
-  const select = (event?: React.MouseEvent) => {
-    if (event?.metaKey || event?.ctrlKey || event?.shiftKey) {
-      const next = checked ? selectedIds.filter((id) => id !== object.id) : [...selectedIds, object.id];
-      onSelectionChange(next);
-      return;
-    }
-    onSelectObject(object.id);
-  };
-
-  const targetFor = (event: React.DragEvent<HTMLDivElement>): HierarchyDropTarget => ({ type: 'object', id: object.id, position: positionFromPointer(event) });
-
-  return (
-    <Box>
-      <TreeRowShell depth={depth} last={last} ancestorLines={ancestorLines} childStem={children.length > 0}>
-        <Box
-          draggable={!editing}
-          onClick={select}
-          onDoubleClick={() => setEditing(true)}
-          onDragStart={(event) => onObjectDragStart(object.id, event)}
-          onDragOver={(event) => onTargetDragOver(targetFor(event), event)}
-          onDragLeave={(event) => onTargetDragLeave(targetFor(event), event)}
-          onDrop={(event) => onTargetDrop(targetFor(event), event)}
-          onDragEnd={onObjectDragEnd}
-          sx={{
-            minHeight: 40,
-            ml: `${contentX}px`,
-            mr: 0.5,
-            display: 'grid',
-            gridTemplateColumns: '32px minmax(0, 1fr) auto',
-            alignItems: 'center',
-            gap: 0.75,
-            px: 0.625,
-            color: rowSelected ? editorColors.textStrong : panelText,
-            cursor: dragging ? 'grabbing' : 'grab',
-            opacity: dragging ? 0.45 : object.hidden ? 0.55 : 1,
-            bgcolor: activeDrop === 'inside' ? `${editorColors.accent}24` : rowSelected ? selectedBg : 'transparent',
-            transition: 'background-color 120ms ease, box-shadow 120ms ease, opacity 120ms ease',
-            ...dropSx(activeDrop, editorColors),
-            '&:hover': { bgcolor: activeDrop === 'inside' ? `${editorColors.accent}24` : rowSelected ? selectedBg : hoverBg },
-            '&:hover .scene-row-actions': { display: 'flex' },
-          }}
-        >
-          <ObjectPreview object={object} />
-          <Box minWidth={0}>
-          {editing ? (
-            <TextField
-              autoFocus
-              size="small"
-              variant="standard"
-              value={object.name}
-              onClick={stop}
-              onBlur={() => setEditing(false)}
-              onKeyDown={(event) => { if (event.key === 'Enter' || event.key === 'Escape') setEditing(false); }}
-              onChange={(event) => onObjectChange({ ...object, name: event.target.value } as EditorStageObject)}
-              InputProps={{ sx: { color: panelText, fontSize: '0.8125rem', lineHeight: 1.2 } }}
-              sx={{ width: '100%' }}
-            />
-          ) : (
-            <Tooltip title={displayObjectType(object)} placement="right">
-              <Typography variant="body2" noWrap sx={{ ...editorType.body, fontWeight: rowSelected ? 800 : 600, color: 'inherit' }}>
-                {object.name}
-              </Typography>
-            </Tooltip>
-          )}
-          </Box>
-          <Stack className="scene-row-actions" direction="row" spacing={0} sx={{ display: 'none', flexShrink: 0 }}>
-            <Tooltip title={object.hidden ? 'Show' : 'Hide'}><IconButton size="small" onClick={(event) => { stop(event); onObjectChange({ ...object, hidden: !object.hidden } as EditorStageObject); }} sx={rowActionSx(editorColors)} aria-label={object.hidden ? 'Show object' : 'Hide object'}>{object.hidden ? <VisibilityOffIcon sx={{ width: 15, height: 15 }} /> : <VisibilityIcon sx={{ width: 15, height: 15 }} />}</IconButton></Tooltip>
-            <Tooltip title={object.locked ? 'Unlock' : 'Lock'}><IconButton size="small" onClick={(event) => { stop(event); onObjectChange({ ...object, locked: !object.locked } as EditorStageObject); }} sx={rowActionSx(editorColors)} aria-label={object.locked ? 'Unlock object' : 'Lock object'}>{object.locked ? <LockIcon sx={{ width: 15, height: 15 }} /> : <LockOpenIcon sx={{ width: 15, height: 15 }} />}</IconButton></Tooltip>
-            <Tooltip title="Duplicate"><IconButton size="small" onClick={(event) => { stop(event); onDuplicateObjects([object.id]); }} sx={rowActionSx(editorColors)} aria-label="Duplicate object"><ContentCopyIcon sx={{ width: 15, height: 15 }} /></IconButton></Tooltip>
-            <Tooltip title="Delete"><IconButton size="small" onClick={(event) => { stop(event); onDeleteObjects([object.id]); }} sx={{ ...rowActionSx(editorColors), color: editorColors.danger, '&:hover': { bgcolor: editorColors.dangerSurface, color: editorColors.danger } }} aria-label="Delete object"><DeleteIcon sx={{ width: 15, height: 15 }} /></IconButton></Tooltip>
-          </Stack>
-        </Box>
-      </TreeRowShell>
-      {children.map((child, index) => (
-        <ObjectRow
-          key={child.id}
-          object={child}
-          selected={child.id === selectedIds[selectedIds.length - 1]}
-          selectedIds={selectedIds}
-          depth={depth + 1}
-          last={index === children.length - 1}
-          ancestorLines={[...ancestorLines, !last]}
-          draggedObjectId={draggedObjectId}
-          dropTarget={dropTarget}
-          childrenByParent={childrenByParent}
-          normalizedQuery={normalizedQuery}
-          onSelectObject={onSelectObject}
-          onSelectionChange={onSelectionChange}
-          onObjectChange={onObjectChange}
-          onDuplicateObjects={onDuplicateObjects}
-          onDeleteObjects={onDeleteObjects}
-          onObjectDragStart={onObjectDragStart}
-          onTargetDragOver={onTargetDragOver}
-          onTargetDragLeave={onTargetDragLeave}
-          onTargetDrop={onTargetDrop}
-          onObjectDragEnd={onObjectDragEnd}
-        />
-      ))}
-    </Box>
-  );
-}
-
-function GroupBlock({
-  group,
-  objects,
-  selectedId,
-  selectedIds,
-  selectedGroupId,
-  depth,
-  last,
-  ancestorLines = [],
-  draggedObjectId,
-  dropTarget,
-  childrenByParent,
-  normalizedQuery,
-  onSelectObject,
-  onSelectGroup,
-  onSelectionChange,
-  onObjectChange,
-  onDuplicateObjects,
-  onDeleteObjects,
-  onGroupRename,
-  onPatchObjects,
-  onObjectDragStart,
-  onTargetDragOver,
-  onTargetDragLeave,
-  onTargetDrop,
-  onObjectDragEnd,
-}: {
-  group: StageBuilderGroup;
-  objects: EditorStageObject[];
-  selectedId: string | null;
-  selectedIds: string[];
-  selectedGroupId: string | null;
-  depth: number;
-  last: boolean;
-  ancestorLines?: boolean[];
-  draggedObjectId: string | null;
-  dropTarget: HierarchyDropTarget | null;
-  childrenByParent: Map<string, EditorStageObject[]>;
-  normalizedQuery: string;
-  onSelectObject: (id: string | null) => void;
-  onSelectGroup: (id: string | null) => void;
-  onSelectionChange: (ids: string[]) => void;
-  onObjectChange: (object: EditorStageObject) => void;
-  onDuplicateObjects: (ids: string[]) => void;
-  onDeleteObjects: (ids: string[]) => void;
-  onGroupRename: (groupId: string, name: string) => void;
-  onPatchObjects: (ids: string[], patch: Partial<EditorStageObject>) => void;
-  onObjectDragStart: (id: string, event: React.DragEvent<HTMLDivElement>) => void;
-  onTargetDragOver: (target: HierarchyDropTarget, event: React.DragEvent<HTMLDivElement>) => void;
-  onTargetDragLeave: (target: HierarchyDropTarget, event: React.DragEvent<HTMLDivElement>) => void;
-  onTargetDrop: (target: HierarchyDropTarget, event: React.DragEvent<HTMLDivElement>) => void;
-  onObjectDragEnd: () => void;
-}) {
-  const { colors: editorColors, type: editorType } = useEditorTheme();
-  const panelText = editorColors.text;
-  const panelMuted = editorColors.textMuted;
-  const treeLine = editorColors.borderStrong;
-  const selectedBg = `${editorColors.accent}1a`;
-  const hoverBg = `${editorColors.textMuted}0f`;
-  const [expanded, setExpanded] = useState(true);
-  const [editing, setEditing] = useState(false);
-  const ids = objects.map((object) => object.id);
-  const allHidden = objects.length > 0 && objects.every((object) => object.hidden);
-  const allLocked = objects.length > 0 && objects.every((object) => object.locked);
-  const selected = selectedGroupId === group.id;
-  const activeDrop = dropTarget?.type === 'group' && dropTarget.id === group.id ? dropTarget.position : null;
-  const childLineX = treeMetrics(depth + 1).lineX;
-  const groupContentX = treeMetrics(depth + 1).contentX;
-  const hasExpandedChildren = expanded && objects.length > 0;
-  const targetFor = (event: React.DragEvent<HTMLDivElement>): HierarchyDropTarget => ({ type: 'group', id: group.id, position: positionFromPointer(event) });
-
-  return (
-    <Box>
-      <TreeRowShell depth={depth} last={last} ancestorLines={ancestorLines} branchEndX={childLineX} childStem={hasExpandedChildren}>
-        <IconButton
-          size="small"
-          aria-label={expanded ? 'Collapse group' : 'Expand group'}
-          onClick={(event) => { stop(event); setExpanded((value) => !value); }}
-          sx={{
-            position: 'absolute',
-            left: `${childLineX - 10}px`,
-            top: '50%',
-            zIndex: 1,
-            width: 20,
-            height: 20,
-            p: 0,
-            transform: 'translateY(-50%)',
-            color: panelMuted,
-            bgcolor: editorColors.panel,
-            border: `${treeLineWidth}px solid ${treeLine}`,
-            borderRadius: 0,
-            '&:hover': { bgcolor: editorColors.panelRaised, color: editorColors.textStrong, borderColor: editorColors.accentText },
-          }}
-        >
-          {expanded ? <KeyboardArrowDownIcon sx={{ width: 18, height: 18 }} /> : <KeyboardArrowRightIcon sx={{ width: 18, height: 18 }} />}
-        </IconButton>
-        <Box
-          onClick={() => onSelectGroup(group.id)}
-          onDoubleClick={() => setEditing(true)}
-          onDragOver={(event) => onTargetDragOver(targetFor(event), event)}
-          onDragLeave={(event) => onTargetDragLeave(targetFor(event), event)}
-          onDrop={(event) => onTargetDrop(targetFor(event), event)}
-          sx={{
-            minHeight: 40,
-            ml: `${groupContentX}px`,
-            mr: 0.5,
-            display: 'grid',
-            gridTemplateColumns: '32px minmax(0, 1fr) auto',
-            alignItems: 'center',
-            gap: 0.75,
-            px: 0.625,
-            color: selected ? editorColors.textStrong : panelText,
-            cursor: draggedObjectId ? 'move' : 'default',
-            bgcolor: activeDrop === 'inside' ? `${editorColors.prefab}1f` : selected ? selectedBg : 'transparent',
-            transition: 'background-color 120ms ease, box-shadow 120ms ease',
-            ...dropSx(activeDrop, editorColors),
-            '&:hover': { bgcolor: activeDrop === 'inside' ? `${editorColors.prefab}1f` : selected ? selectedBg : hoverBg },
-            '&:hover .scene-row-actions': { display: 'flex' },
-          }}
-        >
-          <GroupPreview selected={selected} />
-          <Box minWidth={0}>
-            {editing ? (
-              <TextField autoFocus size="small" variant="standard" value={group.name} onClick={stop} onBlur={() => setEditing(false)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === 'Escape') setEditing(false); }} onChange={(event) => onGroupRename(group.id, event.target.value)} InputProps={{ sx: { color: panelText, fontSize: '0.8125rem' } }} sx={{ width: '100%' }} />
-            ) : (
-              <Typography variant="body2" noWrap sx={{ ...editorType.body, fontWeight: selected ? 800 : 650, color: 'inherit' }}>{group.name}</Typography>
-            )}
-          </Box>
-          <Stack className="scene-row-actions" direction="row" spacing={0} sx={{ display: 'none', flexShrink: 0 }}>
-            <Tooltip title={allHidden ? 'Show all' : 'Hide all'}><IconButton size="small" onClick={(event) => { stop(event); onPatchObjects(ids, { hidden: !allHidden } as Partial<EditorStageObject>); }} sx={rowActionSx(editorColors)}>{allHidden ? <VisibilityOffIcon sx={{ width: 15, height: 15 }} /> : <VisibilityIcon sx={{ width: 15, height: 15 }} />}</IconButton></Tooltip>
-            <Tooltip title={allLocked ? 'Unlock all' : 'Lock all'}><IconButton size="small" onClick={(event) => { stop(event); onPatchObjects(ids, { locked: !allLocked } as Partial<EditorStageObject>); }} sx={rowActionSx(editorColors)}>{allLocked ? <LockIcon sx={{ width: 15, height: 15 }} /> : <LockOpenIcon sx={{ width: 15, height: 15 }} />}</IconButton></Tooltip>
-            <Tooltip title="Duplicate group"><IconButton size="small" onClick={(event) => { stop(event); onDuplicateObjects(ids); }} sx={rowActionSx(editorColors)}><ContentCopyIcon sx={{ width: 15, height: 15 }} /></IconButton></Tooltip>
-            <Tooltip title="Delete group"><IconButton size="small" onClick={(event) => { stop(event); onDeleteObjects(ids); }} sx={{ ...rowActionSx(editorColors), color: editorColors.danger, '&:hover': { bgcolor: editorColors.dangerSurface, color: editorColors.danger } }}><DeleteIcon sx={{ width: 15, height: 15 }} /></IconButton></Tooltip>
-          </Stack>
-        </Box>
-      </TreeRowShell>
-      {expanded && objects.map((object, index) => (
-        <ObjectRow
-          key={object.id}
-          object={object}
-          selected={object.id === selectedId}
-          selectedIds={selectedIds}
-          depth={depth + 1}
-          last={index === objects.length - 1}
-          ancestorLines={[...ancestorLines, !last]}
-          draggedObjectId={draggedObjectId}
-          dropTarget={dropTarget}
-          childrenByParent={childrenByParent}
-          normalizedQuery={normalizedQuery}
-          onSelectObject={onSelectObject}
-          onSelectionChange={onSelectionChange}
-          onObjectChange={onObjectChange}
-          onDuplicateObjects={onDuplicateObjects}
-          onDeleteObjects={onDeleteObjects}
-          onObjectDragStart={onObjectDragStart}
-          onTargetDragOver={onTargetDragOver}
-          onTargetDragLeave={onTargetDragLeave}
-          onTargetDrop={onTargetDrop}
-          onObjectDragEnd={onObjectDragEnd}
-        />
-      ))}
-    </Box>
-  );
-}
-
-export function StageSceneHierarchy({
-  stage,
-  selectedId,
-  selectedIds,
-  selectedGroupId,
-  onSelectObject,
-  onSelectGroup,
-  onSelectionChange,
-  onObjectChange,
-  onDuplicateObjects,
-  onDeleteObjects,
-  onHierarchyDrop,
-  onGroupRename,
-  onPatchObjects,
-}: StageSceneHierarchyProps) {
-  const { colors: editorColors, type: editorType } = useEditorTheme();
-  const panelText = editorColors.text;
-  const panelMuted = editorColors.textMuted;
-  const panelLine = editorColors.border;
+export function StageSceneHierarchy(props: StageSceneHierarchyProps) {
+  const { selectedId, selectedIds, selectedGroupId } = props;
+  const stage = useMemo(() => normalizeStageHierarchy(props.stage), [props.stage]);
+  const { colors, type } = useEditorTheme();
   const [query, setQuery] = useState('');
-  const [draggedObjectId, setDraggedObjectId] = useState<string | null>(null);
-  const [dropTarget, setDropTarget] = useState<HierarchyDropTarget | null>(null);
-  const normalizedQuery = query.trim().toLowerCase();
-
-  const { rootItems, objectGroupIds, childrenByParent } = useMemo(() => {
-    const objectById = new Map(stage.objects.map((object) => [object.id, object]));
-    const nextChildrenByParent = new Map<string, EditorStageObject[]>();
-    for (const object of stage.objects) {
-      if (!object.parentId || !objectById.has(object.parentId)) continue;
-      const children = nextChildrenByParent.get(object.parentId) || [];
-      children.push(object);
-      nextChildrenByParent.set(object.parentId, children);
-    }
-    const childIds = new Set(Array.from(nextChildrenByParent.values()).flatMap((children) => children.map((object) => object.id)));
-    const nextObjectGroupIds = new Map<string, string>();
-    const groupEntries = new Map<string, GroupEntry>();
-
-    for (const group of stage.metadata.groups) {
-      const allObjects = group.objectIds
-        .map((objectId) => objectById.get(objectId))
-        .filter((object): object is EditorStageObject => !!object && !childIds.has(object.id));
-      allObjects.forEach((object) => nextObjectGroupIds.set(object.id, group.id));
-      const groupMatches = !normalizedQuery || group.name.toLowerCase().includes(normalizedQuery);
-      const filteredObjects = groupMatches ? allObjects : allObjects.filter((object) => objectVisible(object, normalizedQuery, nextChildrenByParent));
-      if (filteredObjects.length > 0 || (!normalizedQuery && allObjects.length > 0)) groupEntries.set(group.id, { group, objects: filteredObjects, allObjects });
-    }
-
-    const seenGroups = new Set<string>();
-    const items: RootItem[] = [];
-    for (const object of stage.objects) {
-      const groupId = nextObjectGroupIds.get(object.id);
-      if (groupId) {
-        if (seenGroups.has(groupId)) continue;
-        seenGroups.add(groupId);
-        const entry = groupEntries.get(groupId);
-        if (entry) items.push({ type: 'group', entry });
-        continue;
+  const [sortByName, setSortByName] = useState(false);
+  const [visibleOnly, setVisibleOnly] = useState(false);
+  const [viewMenu, setViewMenu] = useState<HTMLElement | null>(null);
+  const pendingFolderRows = useRef<StageHierarchyRow[] | null>(null);
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [editing, setEditing] = useState<string | null>(null);
+  const [dragged, setDragged] = useState<StageHierarchyRow | null>(null);
+  const [drop, setDrop] = useState<HierarchyDrop | null>(null);
+  const search = query.trim().toLowerCase();
+  const tree = useMemo(() => hierarchyTree(stage), [stage]);
+  const owners = useMemo(() => folderOwners(stage.metadata.folders || []), [stage.metadata.folders]);
+  const hidden = useMemo(() => visibleOnly ? hiddenEditorObjectIds(stage.objects) : null, [visibleOnly, stage.objects]);
+  const roots = useMemo(() => visibleTree(tree, search, hidden, sortByName), [tree, search, hidden, sortByName]);
+  const selectedRows: StageHierarchyRow[] = selectedGroupId ? [{ kind: 'group', id: selectedGroupId }]
+    : (selectedIds.length ? selectedIds : selectedId ? [selectedId] : []).map(id => ({ kind: 'object', id }));
+  const filedSelection = selectedRows.filter(row => owners.has(rowKey(row)));
+  const toggle = (key: string) => setCollapsed(current => {
+    const next = new Set(current);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    return next;
+  });
+  const createFolder = (rows: StageHierarchyRow[]) => {
+    const id = props.onCreateFolder(rows);
+    setQuery('');
+    setCollapsed(current => {
+      const next = new Set(current);
+      for (const row of rows) {
+        let parent = owners.get(rowKey(row));
+        while (parent) {
+          const parentKey = rowKey({ kind: 'folder', id: parent });
+          next.delete(parentKey);
+          parent = owners.get(parentKey);
+        }
       }
-      if (childIds.has(object.id)) continue;
-      if (objectVisible(object, normalizedQuery, nextChildrenByParent)) items.push({ type: 'object', object });
-    }
-
-    for (const [groupId, entry] of groupEntries) {
-      if (!seenGroups.has(groupId)) items.push({ type: 'group', entry });
-    }
-
-    return { rootItems: items, objectGroupIds: nextObjectGroupIds, childrenByParent: nextChildrenByParent };
-  }, [stage.metadata.groups, stage.objects, normalizedQuery]);
-
-  const hasItems = rootItems.length > 0;
-
-  const handleObjectDragStart = (id: string, event: React.DragEvent<HTMLDivElement>) => {
-    event.stopPropagation();
-    event.dataTransfer.effectAllowed = 'move';
-    event.dataTransfer.setData(dragDataType, id);
-    event.dataTransfer.setData('text/plain', id);
-    setDraggedObjectId(id);
-    setDropTarget(null);
+      return next;
+    });
+    setEditing(rowKey({ kind: 'folder', id }));
   };
-
-  const handleTargetDragOver = (target: HierarchyDropTarget, event: React.DragEvent<HTMLDivElement>) => {
+  const queueFolder = (rows: StageHierarchyRow[]) => {
+    pendingFolderRows.current = rows;
+    setViewMenu(null);
+  };
+  const endDrag = () => { setDragged(null); setDrop(null); };
+  const dragOver = (event: React.DragEvent, target: HierarchyDrop | null) => {
     event.stopPropagation();
-    if (!draggedObjectId || (target.type === 'object' && draggedObjectId === target.id)) return;
+    if (!dragged || !target) { setDrop(null); return; }
     event.preventDefault();
     event.dataTransfer.dropEffect = 'move';
-    setDropTarget(target);
+    setDrop(target);
   };
-
-  const handleTargetDragLeave = (target: HierarchyDropTarget, event: React.DragEvent<HTMLDivElement>) => {
+  const finishDrop = (event: React.DragEvent, target: HierarchyDrop | null) => {
     event.stopPropagation();
-    if (!dropTarget || dropTarget.type !== target.type || dropTarget.id !== target.id) return;
-    const nextTarget = event.relatedTarget as Node | null;
-    if (nextTarget && event.currentTarget.contains(nextTarget)) return;
-    setDropTarget(null);
-  };
-
-  const handleTargetDrop = (target: HierarchyDropTarget, event: React.DragEvent<HTMLDivElement>) => {
     event.preventDefault();
-    event.stopPropagation();
-    const sourceId = draggedObjectId || event.dataTransfer.getData(dragDataType) || event.dataTransfer.getData('text/plain');
-    setDraggedObjectId(null);
-    setDropTarget(null);
-    if (!sourceId || (target.type === 'object' && sourceId === target.id)) return;
-    onHierarchyDrop(sourceId, target);
+    if (dragged && target) props.onHierarchyDrop(dragged, target, selectedIds);
+    endDrag();
+  };
+  const select = (node: TreeNode, event: React.MouseEvent | React.KeyboardEvent) => {
+    if (node.group) props.onSelectGroup(node.row.id);
+    else if (!node.object) toggle(rowKey(node.row));
+    else if (event.metaKey || event.ctrlKey || event.shiftKey) {
+      props.onSelectionChange(selectedIds.includes(node.row.id) ? selectedIds.filter(id => id !== node.row.id) : [...selectedIds, node.row.id]);
+    } else props.onSelectObject(node.row.id);
   };
 
-  const handleObjectDragEnd = () => {
-    setDraggedObjectId(null);
-    setDropTarget(null);
-  };
-
-  return (
-    <Box sx={{ color: panelText, width: '100%', overflowX: 'hidden' }}>
-      <Box sx={{ minHeight: 40, display: 'flex', alignItems: 'center', gap: 0.75, px: 0.875, bgcolor: editorColors.panel }}>
-        <Box sx={{ minWidth: 0 }}>
-          <Typography variant="subtitle2" sx={{ ...editorType.panelTitle, fontSize: '0.875rem', lineHeight: 1.1 }}>Hierarchy</Typography>
-          <Typography variant="caption" noWrap sx={{ ...editorType.caption, display: 'block' }}>{stage.objects.length} object{stage.objects.length === 1 ? '' : 's'}</Typography>
-        </Box>
-        <Box sx={{ flex: 1 }} />
+  const renderRows = (siblings: TreeNode[], depth = 0): React.ReactNode => siblings.map((node, index) => {
+    const { row, object, group, name } = node;
+    const folder = row.kind === 'folder';
+    const rowHeight = object ? 28 : 36;
+    const key = rowKey(row);
+    const expanded = !!search || !collapsed.has(key);
+    const selected = group ? group.id === selectedGroupId : !!object && (object.id === selectedId || selectedIds.includes(object.id));
+    const activeDrop = drop && drop.kind !== 'root' && rowKey(drop) === key ? drop.position : null;
+    const targetFor = (event: React.DragEvent): HierarchyDrop | null => {
+      if (!dragged || rowKey(dragged) === key) return null;
+      const rect = event.currentTarget.getBoundingClientRect();
+      const y = (event.clientY - rect.top) / Math.max(1, rect.height);
+      const legacyDrop = dragged.kind === 'object' && !owners.has(rowKey(dragged)) && !owners.has(key);
+      if ((folder || legacyDrop) && y >= 0.25 && y <= 0.75) return { ...row, position: 'inside' };
+      return sortByName ? null : { ...row, position: y < 0.5 ? 'before' : 'after' };
+    };
+    const rename = (value?: string) => {
+      setEditing(null);
+      if (!value || value === name) return;
+      if (object) props.onObjectChange({ ...object, name: value });
+      else if (group) props.onGroupRename(row.id, value);
+      else props.onRenameFolder(row.id, value);
+    };
+    const onKey = (event: React.KeyboardEvent) => {
+      if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); select(node, event); }
+      if (event.key === 'F2') { event.preventDefault(); setEditing(key); }
+      if (event.altKey && ['ArrowUp', 'ArrowDown'].includes(event.key)) {
+        event.preventDefault();
+        const up = event.key === 'ArrowUp';
+        const target = siblings[index + (up ? -1 : 1)];
+        if (target && !sortByName) props.onHierarchyDrop(row, { ...target.row, position: up ? 'before' : 'after' });
+      }
+    };
+    const ids = group?.objectIds || [row.id];
+    const members = group ? stage.objects.filter(item => ids.includes(item.id)) : object ? [object] : [];
+    const hidden = members.length > 0 && members.every(item => item.hidden);
+    const locked = members.length > 0 && members.every(item => item.locked);
+    const patch = (change: Partial<EditorStageObject>) => object
+      ? props.onObjectChange({ ...object, ...change } as EditorStageObject) : props.onPatchObjects(ids, change);
+    return <Box component="li" key={key} sx={{ position: 'relative', listStyle: 'none', ...(depth ? {
+      '&::before, &::after': { content: '""', position: 'absolute', left: -8, pointerEvents: 'none' },
+      '&::before': { top: 0, bottom: index === siblings.length - 1 ? 'auto' : 0, height: index === siblings.length - 1 ? rowHeight / 2 : 'auto', borderLeft: `1px solid ${colors.border}` },
+      '&::after': { top: rowHeight / 2, width: 7, borderTop: `1px solid ${colors.border}` },
+    } : {}) }}>
+      <Box draggable={editing !== key} data-hierarchy-kind={row.kind} data-hierarchy-id={row.id}
+        onKeyDown={event => {
+          if (folder && editing !== key && (event.key === 'Delete' || event.key === 'Backspace')) {
+            event.preventDefault();
+            event.stopPropagation();
+            props.onDeleteFolder(row.id);
+          }
+        }}
+        onDragStart={event => {
+          event.stopPropagation();
+          event.dataTransfer.effectAllowed = 'move';
+          event.dataTransfer.setData(dragDataType, JSON.stringify(row));
+          setDragged(row);
+        }}
+        onDragOver={event => dragOver(event, targetFor(event))}
+        onDragLeave={event => { if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget)) setDrop(null); }}
+        onDrop={event => finishDrop(event, targetFor(event))} onDragEnd={endDrag}
+        sx={{ display: 'flex', alignItems: 'center', height: rowHeight, px: 0.25, gap: 0.25, borderRadius: 0.5,
+          bgcolor: activeDrop === 'inside' || selected ? colors.accentSoft : 'transparent',
+          boxShadow: activeDrop === 'before' ? `inset 0 2px ${colors.accent}` : activeDrop === 'after' ? `inset 0 -2px ${colors.accent}` : undefined,
+          '&:hover': { bgcolor: selected || activeDrop === 'inside' ? colors.accentSoft : colors.panelRaised },
+          opacity: dragged && rowKey(dragged) === key ? 0.5 : 1,
+          '&:hover .scene-row-actions, &:focus-within .scene-row-actions': { display: 'flex' },
+          '&:focus-within': { outline: `1px solid ${colors.accent}`, outlineOffset: -1 },
+        }}>
+        {group && <Action label={expanded ? 'Collapse group' : 'Expand group'} onClick={() => toggle(key)}>
+          {expanded ? <KeyboardArrowDownIcon /> : <KeyboardArrowRightIcon />}
+        </Action>}
+        {editing === key ? <RenameField name={name} onFinish={rename} /> : <Box component="button" type="button"
+          aria-label={name} aria-pressed={folder ? undefined : selected} aria-expanded={folder ? expanded : undefined}
+          aria-keyshortcuts="F2 Alt+ArrowUp Alt+ArrowDown" title={object ? displayObjectType(object) : name}
+          onClick={event => select(node, event)} onDoubleClick={() => setEditing(key)} onKeyDown={onKey}
+          sx={{ flex: 1, minWidth: 0, height: '100%', display: 'flex', alignItems: 'center', gap: 0.625, px: 0.25, py: 0,
+            border: 0, bgcolor: 'transparent', textAlign: 'left', font: 'inherit', cursor: 'grab', color: colors.textStrong,
+            opacity: object?.hidden ? 0.55 : 1, '&:focus-visible': { outline: 'none' }, '& svg': { flexShrink: 0 },
+          }}>
+          <Box component="span" sx={{ flexShrink: 0, width: group ? 18 : 44, height: '100%', overflow: 'hidden',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.5, '& > *': { flexShrink: 0 } }}>
+            {folder && (expanded ? <KeyboardArrowDownIcon sx={{ fontSize: 16 }} /> : <KeyboardArrowRightIcon sx={{ fontSize: 16 }} />)}
+            {object ? <PanelThumbnail object={object} /> : group ? <LayersOutlinedIcon sx={{ fontSize: 18 }} />
+              : expanded ? <FolderOpenOutlinedIcon sx={{ fontSize: 18 }} /> : <FolderOutlinedIcon sx={{ fontSize: 18 }} />}
+          </Box>
+          <Typography component="span" noWrap sx={{ ...type.panelTitle, color: 'inherit', fontWeight: object && !selected ? 600 : 700 }}>{name}</Typography>
+          {folder && <Typography component="span" variant="caption" sx={{ ...type.caption, ml: 'auto', px: 0.625,
+            minWidth: 22, textAlign: 'center', lineHeight: '20px', fontWeight: 700, borderRadius: 0.5,
+            border: `1px solid ${colors.border}`, bgcolor: colors.panelInset }} aria-label={`${node.count} ${node.count === 1 ? 'object' : 'objects'}`}>{node.count}</Typography>}
+        </Box>}
+        {editing !== key && <Stack className="scene-row-actions" direction="row" sx={{ display: 'none', flexShrink: 0 }}>
+          {folder ? <>
+            <Action label="Rename folder" onClick={() => setEditing(key)}><EditOutlinedIcon /></Action>
+            <Action label="Delete folder" danger onClick={() => props.onDeleteFolder(row.id)}><DeleteIcon /></Action>
+          </> : <>
+            <Action label={group ? (hidden ? 'Show all' : 'Hide all') : (hidden ? 'Show object' : 'Hide object')} onClick={() => patch({ hidden: !hidden })}>{hidden ? <VisibilityOffIcon /> : <VisibilityIcon />}</Action>
+            <Action label={group ? (locked ? 'Unlock all' : 'Lock all') : (locked ? 'Unlock object' : 'Lock object')} onClick={() => patch({ locked: !locked })}>{locked ? <LockIcon /> : <LockOpenIcon />}</Action>
+            <Action label={group ? 'Duplicate group' : 'Duplicate object'} onClick={() => group ? props.onDuplicateGroup(row.id) : props.onDuplicateObjects(ids)}><ContentCopyIcon /></Action>
+            <Action label={group ? 'Delete group' : 'Delete object'} danger onClick={() => props.onDeleteObjects(ids)}><DeleteIcon /></Action>
+          </>}
+        </Stack>}
       </Box>
+      {expanded && node.children.length > 0 && <Box component="ul" sx={{ m: 0, pl: '16px' }}>{renderRows(node.children, depth + 1)}</Box>}
+    </Box>;
+  });
 
-      <Box sx={{ minHeight: 36, display: 'flex', alignItems: 'center', gap: 0.75, px: 0.875, bgcolor: editorColors.panel, borderTop: `1px solid ${panelLine}`, borderBottom: `1px solid ${panelLine}` }}>
-        <SearchIcon sx={{ width: 18, height: 18, color: panelMuted }} />
-        <InputBase
-          value={query}
-          placeholder="Filter objects"
-          onChange={(event) => setQuery(event.target.value)}
-          sx={{ flex: 1, color: panelText, fontSize: '0.8125rem', '& input::placeholder': { color: panelMuted, opacity: 1 } }}
-          inputProps={{ 'aria-label': 'Search hierarchy' }}
-        />
-      </Box>
-
-      <Stack spacing={0} sx={{ pt: 0, pb: 0.375, minHeight: 80 }}>
-        {rootItems.map((item, index) => item.type === 'group' ? (
-          <GroupBlock
-            key={item.entry.group.id}
-            group={item.entry.group}
-            objects={item.entry.objects}
-            selectedId={selectedId}
-            selectedIds={selectedIds}
-            selectedGroupId={selectedGroupId}
-            depth={0}
-            last={index === rootItems.length - 1}
-            draggedObjectId={draggedObjectId}
-            dropTarget={dropTarget}
-            childrenByParent={childrenByParent}
-            normalizedQuery={normalizedQuery}
-            onSelectObject={onSelectObject}
-            onSelectGroup={onSelectGroup}
-            onSelectionChange={onSelectionChange}
-            onObjectChange={onObjectChange}
-            onDuplicateObjects={onDuplicateObjects}
-            onDeleteObjects={onDeleteObjects}
-            onGroupRename={onGroupRename}
-            onPatchObjects={onPatchObjects}
-            onObjectDragStart={handleObjectDragStart}
-            onTargetDragOver={handleTargetDragOver}
-            onTargetDragLeave={handleTargetDragLeave}
-            onTargetDrop={handleTargetDrop}
-            onObjectDragEnd={handleObjectDragEnd}
-          />
-        ) : (
-          <ObjectRow
-            key={item.object.id}
-            object={{ ...item.object, groupId: objectGroupIds.get(item.object.id) || item.object.groupId }}
-            selected={item.object.id === selectedId}
-            selectedIds={selectedIds}
-            depth={0}
-            last={index === rootItems.length - 1}
-            draggedObjectId={draggedObjectId}
-            dropTarget={dropTarget}
-            childrenByParent={childrenByParent}
-            normalizedQuery={normalizedQuery}
-            onSelectObject={onSelectObject}
-            onSelectionChange={onSelectionChange}
-            onObjectChange={onObjectChange}
-            onDuplicateObjects={onDuplicateObjects}
-            onDeleteObjects={onDeleteObjects}
-            onObjectDragStart={handleObjectDragStart}
-            onTargetDragOver={handleTargetDragOver}
-            onTargetDragLeave={handleTargetDragLeave}
-            onTargetDrop={handleTargetDrop}
-            onObjectDragEnd={handleObjectDragEnd}
-          />
-        ))}
-
-        {!hasItems && (
-          <Typography variant="caption" sx={{ ...editorType.caption, px: 1.25, py: 1 }}>
-            {normalizedQuery ? 'No matching objects.' : 'No objects yet. Add from the Library.'}
-          </Typography>
-        )}
-      </Stack>
+  return <Box sx={{ color: colors.text, minWidth: 0, minHeight: '100%', display: 'flex', flexDirection: 'column', containerType: 'inline-size' }}>
+    <Box sx={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', alignItems: 'center', gap: 1, mb: 1 }}>
+      <StagePanelSearch label="Search hierarchy" placeholder="Filter objects…" query={query} onChange={setQuery} />
+      <Tooltip title="Hierarchy options"><IconButton size="small" aria-label="Hierarchy options" aria-haspopup="menu" aria-expanded={!!viewMenu}
+        onClick={event => setViewMenu(event.currentTarget)} sx={{ width: 44, height: 44, color: sortByName || visibleOnly ? colors.accentText : colors.textMuted }}>
+        <MoreHorizIcon fontSize="small" /></IconButton></Tooltip>
     </Box>
-  );
+    <Menu anchorEl={viewMenu} open={!!viewMenu} onClose={() => setViewMenu(null)} TransitionProps={{ onExited: () => {
+      // Let the menu restore focus before the folder name field takes it.
+      if (pendingFolderRows.current) createFolder(pendingFolderRows.current);
+      pendingFolderRows.current = null;
+    } }}>
+      <MenuItem onClick={() => queueFolder([])}>New folder</MenuItem>
+      {selectedRows.length > 0 && <MenuItem onClick={() => queueFolder(selectedRows)}>New folder from selection</MenuItem>}
+      {filedSelection.length > 0 && <MenuItem onClick={() => { props.onRemoveFromFolder(filedSelection); setViewMenu(null); }}>Remove from folder</MenuItem>}
+      <Divider />
+      {([
+        ['Sort by name', sortByName, () => setSortByName(!sortByName)],
+        ['Show hidden objects', !visibleOnly, () => setVisibleOnly(!visibleOnly)],
+      ] as const).map(([label, checked, change]) => <MenuItem key={label} role="menuitemcheckbox" aria-checked={checked}
+        onClick={() => { change(); setViewMenu(null); }}>
+        <CheckIcon sx={{ fontSize: 16, mr: 1, visibility: checked ? 'visible' : 'hidden' }} />{label}
+      </MenuItem>)}
+    </Menu>
+    <Box component="ul" aria-label="Stage hierarchy" sx={{ m: 0, p: 0 }}>{renderRows(roots)}</Box>
+    {!roots.length && <Typography sx={{ ...type.caption, p: 1 }}>{search || visibleOnly ? 'No matching objects.' : 'No objects yet. Add from the Library.'}</Typography>}
+    {dragged && <Box onDragOver={event => dragOver(event, rootDrop)} onDrop={event => finishDrop(event, rootDrop)} onDragLeave={() => setDrop(null)}
+      sx={{ flex: 1, minHeight: 32, p: 1, borderRadius: 0.5, bgcolor: drop?.kind === 'root' ? colors.accentSoft : 'transparent' }}>
+      <Typography sx={type.caption}>Drop at top level</Typography>
+    </Box>}
+  </Box>;
 }

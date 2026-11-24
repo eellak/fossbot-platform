@@ -7,18 +7,20 @@ import { applyStageSuggestion, previewStageSuggestion, type StageAuthoringTarget
 import type { AssistantSurfaceAdapter } from './AssistantPanel';
 import AssistantPanel from './AssistantPanel';
 import type { StageBuilderValidationResult } from 'src/components/stage-builder/stageBuilderValidation';
+import type { StageMigrationDiagnostic } from 'src/components/stage-builder/stageBuilderMigration';
 import type { EditorStage } from 'src/components/stage-builder/types';
 
 type Props = {
   stage: EditorStage;
   selectedIds: string[];
   validation: StageBuilderValidationResult[];
+  migrationDiagnostics?: StageMigrationDiagnostic[];
   localStageId?: number | null;
   onApply: (stage: EditorStage, target: StageAuthoringTarget) => boolean | void | Promise<boolean | void>;
   onPreviewStageChange?: (stage: EditorStage | null, target: StageAuthoringTarget) => void;
 };
 
-export default function StageAuthoringAssistant({ stage, selectedIds, validation, localStageId, onApply, onPreviewStageChange }: Props) {
+export default function StageAuthoringAssistant({ stage, selectedIds, validation, migrationDiagnostics, localStageId, onApply, onPreviewStageChange }: Props) {
   const { t } = useTranslation();
   const [target, setTarget] = useState<StageAuthoringTarget>('create');
   const handlePreviewStageChange = useCallback((previewStage: EditorStage | null) => {
@@ -26,9 +28,9 @@ export default function StageAuthoringAssistant({ stage, selectedIds, validation
   }, [onPreviewStageChange, target]);
   useEffect(() => {
     if (target === 'selection' && !selectedIds.length) setTarget('stage');
-    if (target === 'validation' && !validation.length) setTarget('stage');
-  }, [selectedIds.length, target, validation.length]);
-  const bounded = useMemo(() => buildStageAssistantContext(stage, target, selectedIds, validation), [selectedIds, stage, target, validation]);
+    if (target === 'validation' && !validation.length && !migrationDiagnostics?.length) setTarget('stage');
+  }, [selectedIds.length, target, validation.length, migrationDiagnostics?.length]);
+  const bounded = useMemo(() => buildStageAssistantContext(stage, target, selectedIds, validation, migrationDiagnostics), [selectedIds, stage, target, validation, migrationDiagnostics]);
   const capability = target === 'create' ? 'stage.create' : 'stage.suggest_changes';
   const adapter: AssistantSurfaceAdapter = {
     surface: 'stage',
@@ -73,7 +75,7 @@ export default function StageAuthoringAssistant({ stage, selectedIds, validation
         <MenuItem value="create">{t('aiAssistant.stage.targets.create')}</MenuItem>
         <MenuItem value="stage">{t('aiAssistant.stage.targets.stage')}</MenuItem>
         {selectedIds.length > 0 && <MenuItem value="selection">{t('aiAssistant.stage.targets.selection', { count: selectedIds.length })}</MenuItem>}
-        {validation.length > 0 && <MenuItem value="validation">{t('aiAssistant.stage.targets.validation', { count: validation.length })}</MenuItem>}
+        {(validation.length > 0 || !!migrationDiagnostics?.length) && <MenuItem value="validation">{t('aiAssistant.stage.targets.validation', { count: validation.length })}</MenuItem>}
       </TextField>
       <Typography variant="caption" color="text.secondary" noWrap title={t('aiAssistant.stage.targetHelp')}>{t('aiAssistant.stage.targetHelp')}</Typography>
       {bounded.contextTruncated && <Alert severity="info">{t('aiAssistant.stage.truncated')}</Alert>}

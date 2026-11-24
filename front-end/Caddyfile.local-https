@@ -1,0 +1,43 @@
+{
+	# IP clients can omit SNI. Use the configured host when the client omits it.
+	default_sni {$FOSSBOT_LOCAL_HOST}
+	auto_https disable_redirects
+	# Proxy errors may include private sharing URLs.
+	log {
+		exclude http.log.error
+	}
+}
+
+(api_unavailable) {
+	header Content-Type application/json
+	respond `{"detail":"The platform API is unavailable. Start the backend and try again."}` 503
+}
+
+localhost, {$FOSSBOT_LOCAL_HOST} {
+	tls internal
+	header Referrer-Policy no-referrer
+
+	redir /api /api/ 308
+	handle_path /api/* {
+		request_body {
+			max_size 32MiB
+		}
+		reverse_proxy {$FOSSBOT_LOCAL_API_UPSTREAM} {
+			header_up X-Real-IP {remote_host}
+			@unavailable status 502 503 504
+			handle_response @unavailable {
+				import api_unavailable
+			}
+		}
+	}
+
+	handle {
+		root * /srv
+		try_files {path} {path}/index.html {path}/index.htm /index.html
+		file_server
+	}
+
+	handle_errors 502 503 504 {
+		import api_unavailable
+	}
+}

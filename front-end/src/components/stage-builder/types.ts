@@ -1,3 +1,7 @@
+import type { LabelAttachment, RuntimeLabelAttachment } from '../../simulator/stages/labelAttachment';
+import type { LineCorner } from '../../simulator/stages/lineGeometryCore';
+export type { LineCorner } from '../../simulator/stages/lineGeometryCore';
+
 export type StageEntryMaterial = {
   color?: string | number;
   opacity?: number;
@@ -45,6 +49,7 @@ export type StageSkyboxEntry = {
 };
 
 export type StageBaseEntry = {
+  id?: string;
   type: 'base';
   dimensions: [number, number];
   material?: StageEntryMaterial;
@@ -57,6 +62,7 @@ export type StagePrimitiveCollisionMode = 'auto' | 'none';
 export type StageModelCollisionMode = 'auto' | 'none' | 'trimesh' | 'convexHull' | 'compoundConvex';
 
 export type StageCubeEntry = {
+  id?: string;
   type: 'cube';
   dimensions: [number, number, number];
   material?: StageEntryMaterial;
@@ -73,6 +79,7 @@ export type StageCubeEntry = {
 };
 
 export type StageCylinderEntry = {
+  id?: string;
   type: 'cylinder';
   dimensions: [number, number, number, number?];
   material?: StageEntryMaterial;
@@ -124,6 +131,9 @@ export type StageArrowEntry = {
 
 export type StageLineEntry = {
   type: 'line';
+  closed?: boolean;
+  curveVersion?: 1 | 2;
+  corners?: LineCorner[];
   points: [number, number][];
   width?: number;
   color?: string | number;
@@ -131,13 +141,10 @@ export type StageLineEntry = {
   name?: string;
 };
 
-export type StageLabelFace = 'front' | 'back' | 'left' | 'right' | 'top' | 'bottom';
+export type { LabelFace as StageLabelFace } from '../../simulator/stages/labelAttachment';
 
-export type StageLabelAttachment = {
+export type StageLabelAttachment = LabelAttachment & {
   parentId: string;
-  face: StageLabelFace;
-  offset: [number, number];
-  rotation: number;
   billboard?: boolean;
 };
 
@@ -159,13 +166,9 @@ export type StageTextEntry = {
   color?: string | number;
   scale?: number;
   onFloor?: boolean;
+  orientation?: Vec3;
   attachment?: StageLabelAttachment;
-  attach?: {
-    parentName: string;
-    face: StageLabelFace;
-    offset: [number, number];
-    rotation: number;
-  };
+  attach?: RuntimeLabelAttachment;
   style?: StageTextStyle;
   name?: string;
 };
@@ -180,6 +183,7 @@ export type StageFossbotEntry = {
 export type StageModelFormat = 'obj' | 'stl' | 'glb';
 
 export type StageModelEntry = {
+  id?: string;
   type: 'model';
   filename: string;
   format?: StageModelFormat;
@@ -308,15 +312,21 @@ export type StageBuilderGroup = {
 };
 
 export type StageValidationOverrideMap = Record<string, boolean>;
+export type StageHierarchyRow = { kind: 'object' | 'group' | 'folder'; id: string };
+export type StageHierarchyFolder = { id: string; name: string; children: StageHierarchyRow[] };
 
 export type StageBuilderMetadata = {
-  version: 2;
+  version: 2 | 3;
   groups: StageBuilderGroup[];
   validationOverrides: StageValidationOverrideMap;
   gridVisible?: boolean;
   gridSize?: number;
-  defaultSnapPreset?: 'off' | 'fine' | 'medium' | 'coarse';
+  defaultSnapPreset?: 'off' | 'precise' | 'fine' | 'medium' | 'coarse';
   defaultRotationSnapPreset?: 'off' | '15' | '30' | '45';
+  lastMovementSnapPreset?: 'precise' | 'fine' | 'medium' | 'coarse';
+  hierarchyOrder?: StageHierarchyRow[];
+  folders?: StageHierarchyFolder[];
+  attachedOrder?: Record<string, string[]>;
   lockCamera?: boolean;
   skybox?: StageBuilderSkyboxSettings;
 };
@@ -403,6 +413,9 @@ export type EditorArrowObject = EditorObjectCommon & {
 
 export type EditorLineObject = EditorObjectCommon & {
   kind: 'line';
+  closed?: boolean;
+  curveVersion?: 1 | 2;
+  corners?: LineCorner[];
   points: Vec2[];
   width: number;
   color: string;
@@ -416,6 +429,7 @@ export type EditorTextObject = EditorObjectCommon & {
   color: string;
   scale: number;
   onFloor: boolean;
+  orientation?: Vec3;
   attachment?: StageLabelAttachment;
   style?: StageTextStyle;
 };

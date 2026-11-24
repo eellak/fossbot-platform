@@ -337,6 +337,12 @@
   },
   "english": "English (UK)",
   "greek": "Greek (GR)",
+  "appHeader": {
+    "expandNavigation": "Expand navigation",
+    "collapseNavigation": "Collapse navigation",
+    "searchPages": "Search pages",
+    "closeSearch": "Close search"
+  },
   "languageSelector": "Change language",
   "login": "Login",
   "register": "Register",
@@ -537,11 +543,11 @@
   },
   "dashboardStages": {
     "mine": "My stages",
-    "mineSubtitle": "Stages saved locally or on GitHub.",
+    "mineSubtitle": "Browse and manage your saved stages.",
     "create": "Create new stage",
     "all": "All stages",
     "empty": "No saved stages yet",
-    "emptyHelp": "Create your first stage here, or connect GitHub to access existing repositories.",
+    "emptyHelp": "Create your first stage here.",
     "library": "Stage library",
     "librarySubtitle": "Discover community stages for FOSSBot simulations.",
     "libraryPageSubtitle": "Browse public stages for FOSSBot simulations.",
@@ -1374,7 +1380,7 @@
       "livePreviewToggle": "Preview in Stage Builder",
       "previewingLive": "Previewing proposed stage changes in Stage Builder",
       "backToBuddy": "Back to Buddy",
-      "confirmBody": "Stage Builder will apply this validated clone as one undoable dirty change. It will not save, export, publish, push to GitHub, or run the stage.",
+      "confirmBody": "Stage Builder will apply these changes as one edit you can undo. Saving, exporting, publishing and running the stage are separate actions.",
       "applied": "The reviewed stage proposal was applied as an unsaved draft. It was not exported, published, or run."
     },
     "errors": {
@@ -2011,7 +2017,7 @@
       "remoteStageSummary": "Optional remote stage versions",
       "remoteStageChanged": "the pinned stage version changed",
       "remoteStageUnchanged": "the pinned stage version is unchanged",
-      "noRemoteStages": "This course has no GitHub or marketplace stages. Publishing works the same way with built-in stages or no stage.",
+      "noRemoteStages": "This course has no external stage revisions to review.",
       "confirm": "Publish release",
       "success": "Release {{version}} published",
       "done": "Done",

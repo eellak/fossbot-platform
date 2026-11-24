@@ -2,9 +2,11 @@ import type * as RAPIER from '@dimforge/rapier3d-compat'
 import type { VehicleSettings, VehicleTelemetry } from '../physics/vehicle'
 import type { RawStageConfig, StageName } from '../stages'
 import type { LineFollowerConfig } from '../control/lineFollower'
+import type { StageLoadError } from '../stages/stageFormatCore'
 
 /** Configuration passed to SimEngine at construction. */
 export interface SimEngineConfig {
+  onStageLoadError?: (error: StageLoadError | null) => void
   /** Base URL for simulator public assets (default: `/js-simulator`). */
   publicAssetBaseUrl?: string
   /** Base URL for robot model assets (default: `${publicAssetBaseUrl}/models/robots/v2`). */

@@ -3,6 +3,8 @@ import { configToEditorStage, editorStageToRecord } from 'src/components/stage-b
 import { createCatalogObject, STAGE_OBJECT_CATALOG } from 'src/components/stage-builder/stageBuilderCatalog';
 import { boundsOutsideStage, cloneStage, objectBounds, objectDimensionsAreValid, objectPosition, requiresWallEnclosure, setObjectPosition, wallEnclosureStatus } from 'src/components/stage-builder/stageBuilderGeometry';
 import { validateStageBuilderStage } from 'src/components/stage-builder/stageBuilderValidation';
+import { replaceLinePoints } from 'src/components/stage-builder/stageBuilderLineEditing';
+import { normalizeStageHierarchy } from 'src/components/stage-builder/stageBuilderHierarchy';
 import type { EditorStage, EditorStageObject, StageSemanticKind, Vec2, Vec3 } from 'src/components/stage-builder/types';
 import type { StageAuthoringSuggestion, StageOperation } from '../types';
 import type { SuggestionPreview } from './codeSuggestions';
@@ -92,8 +94,8 @@ function applyOperations(stage: EditorStage, suggestion: StageAuthoringSuggestio
       added.add(id);
       return;
     }
-    const object = resolveObject(next, operation, tempIds);
-    if (target === 'selection' && !selected.has(object.id)) throw new Error('unselected_stage_object');
+    const object = ['group_objects', 'ungroup_objects'].includes(operation.op) ? null : resolveObject(next, operation, tempIds);
+    if (object && target === 'selection' && !selected.has(object.id)) throw new Error('unselected_stage_object');
     if (operation.op === 'update_object') {
       if (!operation.patch || Object.keys(operation.patch).some((key) => !PATCH_FIELDS.has(key))) throw new Error('invalid_suggestion');
       Object.assign(object, cloneStage(withoutNulls(operation.patch)));
@@ -120,8 +122,8 @@ function applyOperations(stage: EditorStage, suggestion: StageAuthoringSuggestio
       return;
     }
     if (operation.op === 'set_line_points') {
-      if (object.kind !== 'line' || !Array.isArray(operation.points) || operation.points.length < 2 || operation.points.some((point) => !finite(point, 2))) throw new Error('invalid_stage_geometry');
-      object.points = operation.points as Vec2[];
+      if (object.kind !== 'line' || !Array.isArray(operation.points) || operation.points.length < 1 || operation.points.some((point) => !finite(point, 2))) throw new Error('invalid_stage_geometry');
+      Object.assign(object, replaceLinePoints(object, operation.points as Vec2[], operation.corners));
       changed.add(object.id);
       return;
     }
@@ -138,13 +140,13 @@ function applyOperations(stage: EditorStage, suggestion: StageAuthoringSuggestio
       if (ids.length < 2 || new Set(ids).size !== ids.length || !operation.groupName?.trim()) throw new Error('invalid_suggestion');
       const groupId = idFactory(`group-${operation.groupName}`);
       const now = new Date().toISOString();
+      next.metadata.groups = next.metadata.groups.map(group => ({ ...group, objectIds: group.objectIds.filter(id => !ids.includes(id)) }));
       next.metadata.groups.push({ id: groupId, name: operation.groupName, objectIds: ids, createdAt: now, updatedAt: now });
       objects.forEach((item) => { if (item) item.groupId = groupId; });
       ids.forEach((id) => changed.add(id));
       return;
     }
-    const groupIds = new Set(objects.map((item) => item?.groupId).filter(Boolean));
-    next.metadata.groups = next.metadata.groups.filter((group) => !groupIds.has(group.id));
+    next.metadata.groups = next.metadata.groups.map(group => ({ ...group, objectIds: group.objectIds.filter(id => !ids.includes(id)) }));
     objects.forEach((item) => { if (item) delete item.groupId; });
     ids.forEach((id) => changed.add(id));
   });
@@ -154,7 +156,7 @@ function applyOperations(stage: EditorStage, suggestion: StageAuthoringSuggestio
     const bounds = objectBounds(object);
     if (bounds && boundsOutsideStage(bounds, next)) throw new Error('invalid_stage_geometry');
   });
-  const record = editorStageToRecord(next);
+  const record = editorStageToRecord(normalizeStageHierarchy(next));
   const roundTrip = configToEditorStage(record);
   if (!roundTrip.floor || roundTrip.objects.length !== next.objects.length || JSON.stringify(editorStageToRecord(roundTrip)).length === 0) throw new Error('invalid_stage_roundtrip');
   const beforeIssues = validateStageBuilderStage(stage);
@@ -186,6 +188,12 @@ export function previewStageSuggestion(suggestion: StageAuthoringSuggestion, sta
       removed: result.removed.size,
       resolvedIssues: result.beforeIssues.filter((item) => !afterIds.has(item.id)).map((item) => item.message),
       newIssues: result.afterIssues.filter((item) => !beforeIds.has(item.id)).map((item) => item.message),
+      geometryChanges: result.stage.objects.filter(object => object.kind === 'line' && (result.changed.has(object.id) || result.added.has(object.id))).map(object => {
+        if (object.kind !== 'line') return '';
+        const rounded = object.corners?.filter(corner => corner?.mode === 'rounded') || [];
+        const manual = rounded.filter(corner => corner?.mode === 'rounded' && corner.sizing === 'manual').length;
+        return `${object.name}: ${object.points.length} points, ${rounded.length} rounded corners (${manual} manual).${object.points.length === 1 ? ' This point has no runnable line yet.' : ''}`;
+      }),
       floor: result.stage.floor.dimensions,
       objects: result.stage.objects.slice(0, 80).map((object) => ({ id: object.id, kind: object.semanticKind || object.kind, position: objectPosition(object) })),
       editorStage: result.stage,

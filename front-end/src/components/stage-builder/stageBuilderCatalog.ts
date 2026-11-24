@@ -50,7 +50,7 @@ export const STAGE_CATALOG_GEOMETRY_PROMPT = [
   'collectible: sphere diameter [0.12].',
   'pushObject: cube dimensions [0.3,0.3,0.3].',
   'targetZone: flat marker dimensions [0.8,0.8] in [x,z].',
-  'line: default floor points [[x-0.5,z],[x,z+0.4],[x+0.5,z]]; set_line_points uses [x,z] pairs.',
+  'line: default floor points [[x-0.5,z],[x,z+0.4],[x+0.5,z]] with automatic rounded interiors. set_line_points uses [x,z] pairs and optional aligned corners with null endpoints. Interior corners are {mode: sharp}, {mode: rounded, sizing: auto}, or {mode: rounded, sizing: manual, trim: positive metres}. Whole replacements of curved paths require complete corners. Missing corners on sharp legacy paths stay sharp. Preserve manual requested trims. A single point is editable but has no runnable line.',
   'baseTile: flat marker dimensions [0.6,0.6] in [x,z].',
   'dangerZone: flat marker dimensions [0.8,0.8] in [x,z].',
   'sensorZone: flat marker dimensions [0.8,0.8] in [x,z].',
@@ -157,7 +157,7 @@ export function createCatalogObject(kind: StageSemanticKind, id: string, positio
     return { id, kind: 'arrow', semanticKind: kind, name: 'direction arrow', position: [p[0], 0.03, p[2]], rotationY: 0, dimensions: [0.75, 0.42, 0.04], color: '#111827' };
   }
   if (kind === 'line') {
-    return { id, kind: 'line', semanticKind: kind, name: 'line path', points: [[p[0] - 0.5, p[2]], [p[0], p[2] + 0.4], [p[0] + 0.5, p[2]]], width: 0.03, color: 'black' };
+    return { id, kind: 'line', semanticKind: kind, name: 'line path', curveVersion: 1, points: [[p[0] - 0.5, p[2]], [p[0], p[2] + 0.4], [p[0] + 0.5, p[2]]], corners: [null, { mode: 'rounded', sizing: 'auto' }, null], width: 0.03, color: 'black' };
   }
   if (kind === 'label') {
     return { id, kind: 'text', semanticKind: kind, name: 'text label', text: 'Label', position: [p[0], 0.02, p[2]], color: 'black', scale: 0.75, onFloor: true, style: { backgroundVisible: true, backgroundSize: [0.75, 0.24], backgroundColor: '#ffffff', backgroundOpacity: 0.9, borderVisible: true, borderColor: '#0f172a', borderWidth: 8, fontSize: 56 } };

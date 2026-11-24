@@ -1,5 +1,7 @@
 import type { EditorStage, EditorStageObject } from './types';
 import { boundsIntersect, objectBounds, objectDimensionsAreValid } from './stageBuilderGeometry';
+import { evaluateLineGeometry } from '../../simulator/stages/lineGeometryCore';
+import { hiddenEditorObjectIds } from '../../simulator/stages/stageFormatCore';
 
 export type StageBuilderValidationSeverity = 'error' | 'warning' | 'info';
 
@@ -39,6 +41,15 @@ function result(
 
 export function validateStageBuilderStage(stage: EditorStage): StageBuilderValidationResult[] {
   const results: StageBuilderValidationResult[] = [];
+  const hidden = hiddenEditorObjectIds(stage.objects);
+  for (const object of stage.objects) {
+    if (object.kind !== 'line') continue;
+    for (const diagnostic of evaluateLineGeometry(object).diagnostics) {
+      const severity = diagnostic.severity === 'notice' ? 'info' : hidden.has(object.id) && diagnostic.code !== 'unsupported-curve-version' ? 'warning' : 'error';
+      results.push(result(stage, `object:${object.id}:line:${diagnostic.code}:${diagnostic.pointIndex ?? ''}`, severity, [object.id], diagnostic.message,
+        hidden.has(object.id) ? 'This path is hidden and excluded from Run Test. Its authored points are retained for repair.' : 'Select the path to continue drawing, edit its nodes or choose Sharp at the affected corner.', false));
+    }
+  }
 
   if (!stage.title.trim()) {
     results.push(result(stage, 'stage:title-required', 'error', [], 'Stage title is required.', 'Stages need a title before they can be exported or tested.', false));
@@ -49,12 +60,12 @@ export function validateStageBuilderStage(stage: EditorStage): StageBuilderValid
     results.push(result(stage, 'stage:floor-missing', 'error', [], 'Floor is missing or invalid.', 'Every runnable stage needs a floor with positive width and depth.', false));
   }
 
-  const spawn = stage.objects.find((object) => object.kind === 'fossbot' && !object.hidden);
+  const spawn = stage.objects.find((object) => object.kind === 'fossbot' && !hidden.has(object.id));
   if (!spawn) {
     results.push(result(stage, 'stage:spawn-missing', 'error', [], 'Robot spawn is missing.', 'Place a Robot Spawn so the simulator knows where FOSSBot starts.', false));
   }
 
-  const challengeObjects = stage.objects.filter((object) => !object.hidden && object.challenge);
+  const challengeObjects = stage.objects.filter((object) => !hidden.has(object.id) && object.challenge);
   const markerOwners = new Map<string, EditorStageObject[]>();
   for (const object of challengeObjects) {
     const markerId = object.challenge?.markerId.trim() || '';
@@ -81,9 +92,9 @@ export function validateStageBuilderStage(stage: EditorStage): StageBuilderValid
     results.push(result(stage, 'stage:many-objects', 'warning', [], 'Obstacle count is above 50.', 'Large stages may be slow on older machines.'));
   }
 
-  const visibleCameras = stage.objects.filter((object) => object.kind === 'camera' && !object.hidden);
+  const visibleCameras = stage.objects.filter((object) => object.kind === 'camera' && !hidden.has(object.id));
   if (visibleCameras.length > 1) {
-    results.push(result(stage, 'stage:multiple-cameras', 'warning', visibleCameras.map((object) => object.id), 'Stage has multiple cameras.', 'Run Test uses the first exported camera. Hide or delete extra cameras unless this is intentional.'));
+    results.push(result(stage, 'stage:multiple-cameras', 'warning', visibleCameras.map((object) => object.id), 'Stage has multiple cameras.', 'Run Test uses the last exported camera. Hide or delete extra cameras unless this is intentional.'));
   }
 
   const bounds = stage.objects
@@ -91,7 +102,7 @@ export function validateStageBuilderStage(stage: EditorStage): StageBuilderValid
     .filter((entry): entry is { object: EditorStageObject; bounds: NonNullable<ReturnType<typeof objectBounds>> } => !!entry.bounds);
 
   for (const { object } of bounds) {
-    if (!objectDimensionsAreValid(object)) {
+    if (object.kind !== 'line' && !objectDimensionsAreValid(object)) {
       results.push(result(stage, `object:${object.id}:invalid-dimensions`, 'error', [object.id], `${labelFor(object)} has invalid size values.`, 'Width, height, radius, line width, and scale values must be positive.', false));
     }
 
@@ -170,7 +181,7 @@ export function validateStageBuilderStage(stage: EditorStage): StageBuilderValid
 }
 
 export function activeValidationResults(results: StageBuilderValidationResult[]): StageBuilderValidationResult[] {
-  return results.filter((item) => !(item.overridable && item.overridden));
+  return results.filter((item) => !(item.severity !== 'error' && item.overridable && item.overridden));
 }
 
 export function blockingValidationResults(results: StageBuilderValidationResult[]): StageBuilderValidationResult[] {

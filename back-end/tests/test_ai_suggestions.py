@@ -513,3 +513,36 @@ def test_stage_suggestion_rejects_asset_fields_and_stale_fingerprint():
     payload["operations"] = [{"op": "move_object", "objectId": "wall-1", "position": [1, 0, 1]}]
     with pytest.raises(SuggestionError, match="current workspace"):
         parse_suggestion(json.dumps(payload), "stage.suggest_changes", "f" * 64, context)
+
+
+def test_stage_line_replacement_requires_complete_corner_intent():
+    from utils.ai.schemas import StageAuthoringSuggestion
+    from utils.ai.suggestions import _validate_stage_operations
+    context = {"target": "stage", "stage_payload": {"objects": [{"id": "line", "kind": "line", "corners": [None, {"mode": "rounded", "sizing": "manual", "trim": 0.4}, None]}]}}
+    payload = {"version": "1", "type": "stage_operations", "baseFingerprint": "a" * 64, "rationale": "Repair route", "expectedValidation": "Valid route", "summary": "Replace points", "operations": [{"op": "set_line_points", "objectId": "line", "points": [[0, 0], [1, 0], [1, 1]]}]}
+    with pytest.raises(SuggestionError, match="complete corner"):
+        _validate_stage_operations(StageAuthoringSuggestion.model_validate(payload), context)
+    payload["operations"][0]["corners"] = [None, {"mode": "rounded", "sizing": "manual", "trim": 0.4}, None]
+    _validate_stage_operations(StageAuthoringSuggestion.model_validate(payload), context)
+    for corners in [[None, None], [None, {"mode": "rounded", "sizing": "manual", "trim": -1}, None]]:
+        payload["operations"][0]["corners"] = corners
+        with pytest.raises(SuggestionError):
+            _validate_stage_operations(StageAuthoringSuggestion.model_validate(payload), context)
+    payload["operations"][0].pop("corners")
+    context["stage_payload"]["objects"][0]["corners"] = [None, {"mode": "sharp"}, None]
+    _validate_stage_operations(StageAuthoringSuggestion.model_validate(payload), context)
+    payload["operations"][0]["points"] = [[0, 0]]
+    _validate_stage_operations(StageAuthoringSuggestion.model_validate(payload), context)
+
+
+def test_closed_stage_line_replacements_keep_closed_corner_rules():
+    from utils.ai.schemas import StageAuthoringSuggestion
+    from utils.ai.suggestions import _validate_stage_operations
+    context = {"target": "stage", "stage_payload": {"objects": [{"id": "loop", "kind": "line", "curveVersion": 2, "closed": True, "corners": [{"mode": "sharp"}] * 3}]}}
+    payload = {"version": "1", "type": "stage_operations", "baseFingerprint": "a" * 64, "rationale": "Repair route", "expectedValidation": "Valid route", "summary": "Replace points", "operations": [{"op": "set_line_points", "objectId": "loop", "points": [[0, 0], [1, 0], [1, 1]]}]}
+    _validate_stage_operations(StageAuthoringSuggestion.model_validate(payload), context)
+    payload["operations"][0]["corners"] = [{"mode": "rounded", "sizing": "auto"}] * 3
+    _validate_stage_operations(StageAuthoringSuggestion.model_validate(payload), context)
+    payload["operations"][0]["corners"] = [None, {"mode": "sharp"}, None]
+    with pytest.raises(SuggestionError):
+        _validate_stage_operations(StageAuthoringSuggestion.model_validate(payload), context)

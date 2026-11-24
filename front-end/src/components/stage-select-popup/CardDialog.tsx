@@ -167,7 +167,7 @@ function emitStageSelection(stage: StageSelection): void {
 
 const CardDialog: React.FC<CardDialogProps> = ({ open, onClose, onSelect, onSelectStage, onCreateStage }) => {
   const { token, user, isGuest } = useAuth();
-  const { marketplace: marketplaceEnabled } = useFeatureFlags();
+  const { githubStages, marketplace: marketplaceEnabled } = useFeatureFlags();
   const userKey = stageListUserKey(user);
   const [tab, setTab] = useState<StageSelectionSource>('default');
   const [userStages, setUserStages] = useState<ProviderStageListItem[]>([]);
@@ -208,7 +208,7 @@ const CardDialog: React.FC<CardDialogProps> = ({ open, onClose, onSelect, onSele
   }, [isGuest, open, token]);
 
   useEffect(() => {
-    if (!open || !token || !userKey || isGuest) {
+    if (!githubStages || !open || !token || !userKey || isGuest) {
       setUserStages([]);
       setProviderStatus(null);
       setUserLoading(false);
@@ -234,7 +234,7 @@ const CardDialog: React.FC<CardDialogProps> = ({ open, onClose, onSelect, onSele
     sync();
     const unsubscribe = subscribeUserStages(userKey, sync);
     return () => { active = false; unsubscribe(); };
-  }, [isGuest, open, token, userKey]);
+  }, [githubStages, isGuest, open, token, userKey]);
 
   const handleConnect = async () => {
     if (!token || isGuest) return;
@@ -267,9 +267,9 @@ const CardDialog: React.FC<CardDialogProps> = ({ open, onClose, onSelect, onSele
 
   const tabCounts = useMemo(() => ({
     default: defaultStages.length,
-    github: localStages.length + userStages.length,
+    github: localStages.length + (githubStages ? userStages.length : 0),
     marketplace: marketplaceStages.length,
-  }), [localStages.length, marketplaceStages.length, userStages.length]);
+  }), [githubStages, localStages.length, marketplaceStages.length, userStages.length]);
 
   const handleLocalSelect = async (stage: LocalStageSummary) => {
     if (isGuest) return;
@@ -415,33 +415,35 @@ const CardDialog: React.FC<CardDialogProps> = ({ open, onClose, onSelect, onSele
                 <Typography variant="body2" color="text.secondary">No local stages yet. Save one in Stage Builder.</Typography>
               )}
             </Box>
-            <Box sx={{ borderTop: 1, borderColor: 'divider', pt: 2 }}>
-              <Typography variant="subtitle2">GitHub stages <Typography component="span" variant="caption" color="text.secondary">(optional)</Typography></Typography>
-            </Box>
-            {(!token || (!providerLoading && (!providerStatus?.connected || providerStatus.needsReconnect))) && (
-              <Box sx={{ py: 2 }}><Typography variant="body2" color="text.secondary">Connect GitHub to also use stages stored in your repositories.</Typography>{token && <Button variant="outlined" startIcon={connecting ? undefined : <GitHubIcon />} onClick={handleConnect} disabled={connecting} sx={{ mt: 1 }}>{connecting ? 'Connecting…' : MARKETPLACE_COPY.connectGitHub}</Button>}</Box>
-            )}
-            {userError && <Alert severity={userStages.length ? "warning" : "error"}>{userError}</Alert>}
-            {userLoading || providerLoading ? (
-              <Grid container spacing={1.25}>{Array.from({ length: 6 }).map((_, item) => <Grid key={item} item xs={12} md={6}><StageListCardSkeleton /></Grid>)}</Grid>
-            ) : providerStatus?.connected && !providerStatus.needsReconnect && userStages.length ? (
-              <Grid container spacing={1.25}>
-                {userStages.map((stage) => (
-                    <Grid key={`${stage.repoOwner}/${stage.repoName}`} item xs={12} md={6}>
-                      <StageListCard
-                        title={stage.title || stage.repoName}
-                        description={stage.description}
-                        fallbackIcon={<GitHubIcon fontSize="small" />}
-                        meta={<GitHubIdentity username={stage.repoOwner} />}
-                        status={<Chip size="small" label={stage.private ? 'Private' : 'Public'} color={stage.private ? 'warning' : 'success'} variant="outlined" />}
-                        onOpen={() => handleUserSelect(stage)}
-                      />
-                    </Grid>
-                ))}
-              </Grid>
-            ) : token && providerStatus?.connected && !providerStatus.needsReconnect ? (
-              <Box sx={{ py: 3, textAlign: 'center' }}><Typography variant="subtitle1" fontWeight={600}>No saved stages yet</Typography><Typography variant="body2" color="text.secondary">Create one in Stage Builder.</Typography></Box>
-            ) : null}
+            {githubStages && <>
+              <Box sx={{ borderTop: 1, borderColor: 'divider', pt: 2 }}>
+                <Typography variant="subtitle2">GitHub stages <Typography component="span" variant="caption" color="text.secondary">(optional)</Typography></Typography>
+              </Box>
+              {(!token || (!providerLoading && (!providerStatus?.connected || providerStatus.needsReconnect))) && (
+                <Box sx={{ py: 2 }}><Typography variant="body2" color="text.secondary">Connect GitHub to also use stages stored in your repositories.</Typography>{token && <Button variant="outlined" startIcon={connecting ? undefined : <GitHubIcon />} onClick={handleConnect} disabled={connecting} sx={{ mt: 1 }}>{connecting ? 'Connecting…' : MARKETPLACE_COPY.connectGitHub}</Button>}</Box>
+              )}
+              {userError && <Alert severity={userStages.length ? "warning" : "error"}>{userError}</Alert>}
+              {userLoading || providerLoading ? (
+                <Grid container spacing={1.25}>{Array.from({ length: 6 }).map((_, item) => <Grid key={item} item xs={12} md={6}><StageListCardSkeleton /></Grid>)}</Grid>
+              ) : providerStatus?.connected && !providerStatus.needsReconnect && userStages.length ? (
+                <Grid container spacing={1.25}>
+                  {userStages.map((stage) => (
+                      <Grid key={`${stage.repoOwner}/${stage.repoName}`} item xs={12} md={6}>
+                        <StageListCard
+                          title={stage.title || stage.repoName}
+                          description={stage.description}
+                          fallbackIcon={<GitHubIcon fontSize="small" />}
+                          meta={<GitHubIdentity username={stage.repoOwner} />}
+                          status={<Chip size="small" label={stage.private ? 'Private' : 'Public'} color={stage.private ? 'warning' : 'success'} variant="outlined" />}
+                          onOpen={() => handleUserSelect(stage)}
+                        />
+                      </Grid>
+                  ))}
+                </Grid>
+              ) : token && providerStatus?.connected && !providerStatus.needsReconnect ? (
+                <Box sx={{ py: 3, textAlign: 'center' }}><Typography variant="subtitle1" fontWeight={600}>No saved stages yet</Typography><Typography variant="body2" color="text.secondary">Create one in Stage Builder.</Typography></Box>
+              ) : null}
+            </>}
           </Stack>
         )}
 
@@ -459,7 +461,7 @@ const CardDialog: React.FC<CardDialogProps> = ({ open, onClose, onSelect, onSele
                       description={stage.description}
                       previewUrl={stage.previewUrl}
                       meta={stage.author?.platformUsername ? `@${stage.author.platformUsername}` : <GitHubIdentity username={stage.author?.githubUsername || stage.repoOwner} />}
-                      status={<Stack direction="row" spacing={0.5}><Chip size="small" icon={stage.sourceType === 'local' ? <StorageIcon /> : <PublicIcon />} label={stage.sourceType === 'local' ? 'Local' : stage.badges?.verified ? 'Verified' : 'Published'} color={stage.badges?.verified ? 'primary' : 'default'} variant="outlined" />{stage.badges?.github && <Chip size="small" icon={<GitHubIcon />} label="GitHub source" variant="outlined" />}</Stack>}
+                      status={<Stack direction="row" spacing={0.5}><Chip size="small" icon={stage.sourceType === 'local' ? <StorageIcon /> : <PublicIcon />} label={stage.sourceType === 'local' ? 'Local' : stage.badges?.verified ? 'Verified' : 'Published'} color={stage.badges?.verified ? 'primary' : 'default'} variant="outlined" />{githubStages && stage.badges?.github && <Chip size="small" icon={<GitHubIcon />} label="GitHub source" variant="outlined" />}</Stack>}
                       onOpen={() => handleMarketplaceSelect(stage)}
                     />
                   </Grid>

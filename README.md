@@ -112,6 +112,9 @@ Administrators choose which guest views are available and whether guests receive
 
 ### Start the development stack
 
+For editor-only work with hot reload and no backend, see the
+[standalone Stage Builder workflow](front-end/src/components/stage-builder/README.md#standalone-editor-development).
+
 ```bash
 git clone https://github.com/eellak/fossbot-platform.git
 cd fossbot-platform
@@ -122,6 +125,12 @@ Open:
 
 - Platform: [http://localhost:3000](http://localhost:3000)
 - API documentation: [http://localhost:8000/docs](http://localhost:8000/docs)
+
+For SSH or IDE port forwarding, forward port `3000` for the frontend and `8000` for its API requests.
+
+Set `DEV_FRONTEND_PORT` and `DEV_BACKEND_PORT` in the repository-root `.env` to change the published ports. The localhost URLs follow those ports automatically. For a custom hostname or reverse proxy, set `REACT_APP_BACKEND_URL`, `FRONTEND_URL`, `GITHUB_APP_CALLBACK_URL`, and `GITHUB_APP_SETUP_URL` as needed.
+
+Both services bind to `127.0.0.1` by default. For LAN access, set `DEV_BIND_ADDRESS` to the host's LAN address. The frontend uses the page's hostname for a loopback API URL, keeping the configured backend port.
 
 The default development account is `admin` with password `admin`. These credentials are intended only for a local development environment.
 
@@ -184,6 +193,9 @@ fossbot-platform/
 ## Production deployment
 
 Production deployment is handled by the GitHub Actions workflow in `.github/workflows/deploy.yml`. The workflow builds the application, preserves the existing PostgreSQL volume, creates a database backup before migration, and verifies the deployed health endpoints. Deployment credentials and Firebase values belong in GitHub Actions secrets rather than tracked environment files.
+
+For stages with native curves, deploy the editor, simulators and backend validators together.
+See the [stage line format](sim/docs/stage-line-format.md).
 
 ## Simulator camera vision
 

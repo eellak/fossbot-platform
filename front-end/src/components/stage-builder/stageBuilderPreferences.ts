@@ -4,7 +4,7 @@ export type StageBuilderControlScheme = 'friendly' | 'legacyGizmo';
 export type StageBuilderStyleVariant = 'studio' | 'fossbot';
 export type StageBuilderLockMode = 'ignore' | 'selectThrough' | 'stopAtFirstHit';
 // Keep legacy values in the union so old, no-longer-primary components still type-check.
-export type StageBuilderSnapPreset = 'off' | 'fine' | 'medium' | 'coarse' | 'free' | 'grid';
+export type StageBuilderSnapPreset = 'off' | 'precise' | 'fine' | 'medium' | 'coarse' | 'free' | 'grid';
 export type StageBuilderRotationSnapPreset = 'off' | '15' | '30' | '45';
 
 export type StageBuilderPreferences = {
@@ -49,7 +49,9 @@ export const defaultStageBuilderPreferences: StageBuilderPreferences = {
 
 function migrateSnapPreset(value: unknown): StageBuilderSnapPreset {
   if (value === 'off' || value === 'free') return 'off';
+  if (value === 'precise') return 'precise';
   if (value === 'fine') return 'fine';
+  if (value === 'medium') return 'medium';
   if (value === 'coarse') return 'coarse';
   return 'fine';
 }

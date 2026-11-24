@@ -1,3 +1,4 @@
+import type { LineEditorActions } from './StageLineControls';
 import React from 'react';
 import {
   Accordion, AccordionDetails, AccordionSummary, Box, Button, FormControlLabel, IconButton, MenuItem, Stack, Switch, TextField, Tooltip, Typography,
@@ -11,15 +12,13 @@ import { StageBuilderNumberField } from './StageBuilderNumberField';
 import DescriptionField from 'src/components/shared/DescriptionField';
 import type { StageBuilderValidationResult } from './stageBuilderValidation';
 import type { StageBuilderPreferences } from './stageBuilderPreferences';
-import { defaultStageBuilderPreferences, type StageBuilderRotationSnapPreset, type StageBuilderSnapPreset } from './stageBuilderPreferences';
-import { rotationSnapPresetLabel, snapPresetLabel } from './stageBuilderSnapping';
 import { useEditorTheme } from './stageBuilderEditorTheme';
 import { PreviewSettingsPanel } from './PreviewSettingsPanel';
 import { STAGE_BUILDER_SKYBOX_COLORS, normalizeStageBuilderSkybox } from './stageBuilderSkybox';
 
-export type InspectorTab = 'empty' | 'object' | 'stage' | 'validation' | 'settings' | 'previewSettings';
+export type InspectorTab = 'empty' | 'object' | 'stage' | 'validation' | 'settings' | 'previewSettings' | 'testSettings';
 
-export interface EditorRightInspectorProps {
+export interface EditorRightInspectorProps extends LineEditorActions {
   tab: InspectorTab;
   onTabChange: (tab: InspectorTab) => void;
   stage: EditorStage;
@@ -29,6 +28,9 @@ export interface EditorRightInspectorProps {
   prefs: StageBuilderPreferences;
   onStageChange: (stage: EditorStage) => void;
   onObjectChange: (object: EditorStageObject) => void;
+  onObjectPreview: (object: EditorStageObject | null) => void;
+  onStagePreview: (stage: EditorStage | null) => void;
+  onFocusObjects: (ids: string[]) => void;
   onLookThroughCamera?: (camera: EditorStageObject) => void;
   onToggleValidationOverride: (id: string, enabled: boolean) => void;
   onPrefsChange: (patch: Partial<StageBuilderPreferences>) => void;
@@ -39,24 +41,6 @@ export interface EditorRightInspectorProps {
 function num(value: unknown, fallback = 0): number {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
-}
-
-function snapOptions() {
-  return [
-    { value: 'off', label: snapPresetLabel('off') },
-    { value: 'fine', label: snapPresetLabel('fine') },
-    { value: 'medium', label: snapPresetLabel('medium') },
-    { value: 'coarse', label: snapPresetLabel('coarse') },
-  ];
-}
-
-function rotationOptions() {
-  return [
-    { value: 'off', label: rotationSnapPresetLabel('off') },
-    { value: '15', label: rotationSnapPresetLabel('15') },
-    { value: '30', label: rotationSnapPresetLabel('30') },
-    { value: '45', label: rotationSnapPresetLabel('45') },
-  ];
 }
 
 const commonNumberProps = { type: 'number', size: 'small' as const, fullWidth: true };
@@ -113,13 +97,8 @@ function ContextHeader({ title, description, action }: { title: string; descript
   );
 }
 
-function StageContext({ stage, prefs, onStageChange, onPrefsChange }: Pick<EditorRightInspectorProps, 'stage' | 'prefs' | 'onStageChange' | 'onPrefsChange'>) {
+function StageContext({ stage, onStageChange, onStagePreview }: Pick<EditorRightInspectorProps, 'stage' | 'onStageChange' | 'onStagePreview'>) {
   const { colors: editorColors, type: editorType } = useEditorTheme();
-  const gridVisible = stage.metadata.gridVisible ?? true;
-  const gridSize = stage.metadata.gridSize ?? 0.5;
-  const defaultSnapPreset = stage.metadata.defaultSnapPreset || (prefs.snapPreset === 'free' || prefs.snapPreset === 'grid' ? 'fine' : prefs.snapPreset) as StageBuilderSnapPreset;
-  const defaultRotationSnapPreset = stage.metadata.defaultRotationSnapPreset || prefs.rotationSnapPreset;
-  const hasVisibleStageCamera = stage.objects.some((object) => object.kind === 'camera' && !object.hidden);
   const skybox = normalizeStageBuilderSkybox(stage.metadata.skybox);
   const skyboxColorPresetValue = STAGE_BUILDER_SKYBOX_COLORS.some((option) => option.value === skybox.color) ? skybox.color : '';
 
@@ -128,7 +107,7 @@ function StageContext({ stage, prefs, onStageChange, onPrefsChange }: Pick<Edito
 
   return (
     <Stack spacing={0} sx={{ color: editorColors.text }}>
-      <ContextHeader title="Stage" description="Whole-stage settings. Select an object to inspect object options." />
+      <ContextHeader title="Stage settings" description="Name, floor and background saved with this stage." />
 
       <Section title="Stage">
         <FieldRow label="Name">
@@ -146,9 +125,10 @@ function StageContext({ stage, prefs, onStageChange, onPrefsChange }: Pick<Edito
             <StageBuilderNumberField label="Depth" {...commonNumberProps} inputProps={{ step: 0.1, min: 0.5 }} value={stage.floor.dimensions[1]} onChange={(event) => onStageChange({ ...stage, floor: { ...stage.floor, dimensions: [stage.floor.dimensions[0], Math.max(0.5, num(event.target.value, stage.floor.dimensions[1]))] } })} />
           </InlineFields>
         </FieldRow>
-        <FieldRow label="Color" align="start">
+        <FieldRow label="Color">
           <ColorPickerField
             value={stage.floor.color}
+            onPreview={(color) => onStagePreview(color ? { ...stage, floor: { ...stage.floor, color } } : null)}
             pickerAriaLabel="Floor color picker"
             valueAriaLabel="Floor color value"
             onChange={(color) => onStageChange({ ...stage, floor: { ...stage.floor, color } })}
@@ -156,7 +136,7 @@ function StageContext({ stage, prefs, onStageChange, onPrefsChange }: Pick<Edito
         </FieldRow>
       </Section>
 
-      <Section title="Skybox">
+      <Section title="Background">
         <FieldRow label="Mode">
           <TextField {...commonFieldProps} select value={skybox.mode} inputProps={{ 'aria-label': 'Skybox mode' }} onChange={(event) => patchSkybox({ mode: event.target.value as typeof skybox.mode })}>
             <MenuItem value="default">Editor default</MenuItem>
@@ -171,9 +151,10 @@ function StageContext({ stage, prefs, onStageChange, onPrefsChange }: Pick<Edito
                 {STAGE_BUILDER_SKYBOX_COLORS.map((option) => <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>)}
               </TextField>
             </FieldRow>
-            <FieldRow label="Color" align="start">
+            <FieldRow label="Color">
               <ColorPickerField
                 value={skybox.color}
+                onPreview={(color) => onStagePreview(color ? { ...stage, metadata: { ...stage.metadata, skybox: { ...skybox, color } } } : null)}
                 pickerAriaLabel="Skybox color picker"
                 valueAriaLabel="Skybox color value"
                 onChange={(color) => patchSkybox({ color })}
@@ -183,66 +164,28 @@ function StageContext({ stage, prefs, onStageChange, onPrefsChange }: Pick<Edito
         )}
       </Section>
 
-      <Section title="Grid and Defaults">
-        <FieldRow label="Grid"><FormControlLabel control={<Switch size="small" checked={gridVisible} onChange={(event) => patchMetadata({ gridVisible: event.target.checked })} />} label="Visible" /></FieldRow>
-        <FieldRow label="Grid size">
-          <StageBuilderNumberField {...commonNumberProps} inputProps={{ step: 0.1, min: 0.1, 'aria-label': 'Grid size' }} value={gridSize} onChange={(event) => patchMetadata({ gridSize: Math.max(0.1, num(event.target.value, gridSize)) })} />
-        </FieldRow>
-        <FieldRow label="Move snap">
-          <TextField {...commonFieldProps} select value={defaultSnapPreset} inputProps={{ 'aria-label': 'Default snap size' }} onChange={(event) => {
-            const snapPreset = event.target.value as StageBuilderSnapPreset;
-            patchMetadata({ defaultSnapPreset: snapPreset as EditorStage['metadata']['defaultSnapPreset'] });
-            onPrefsChange({ snapPreset });
-          }}>
-            {snapOptions().map((option) => <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>)}
-          </TextField>
-        </FieldRow>
-        <FieldRow label="Rotate snap">
-          <TextField {...commonFieldProps} select value={defaultRotationSnapPreset} inputProps={{ 'aria-label': 'Default rotation snap' }} onChange={(event) => {
-            const rotationSnapPreset = event.target.value as StageBuilderRotationSnapPreset;
-            patchMetadata({ defaultRotationSnapPreset: rotationSnapPreset });
-            onPrefsChange({ rotationSnapPreset });
-          }}>
-            {rotationOptions().map((option) => <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>)}
-          </TextField>
-        </FieldRow>
-      </Section>
-
-      <Section title="Run Test">
-        <FieldRow label="Camera" align="start">
-          <Stack spacing={0.5}>
-            <FormControlLabel control={<Switch size="small" checked={!!stage.metadata.lockCamera} disabled={!hasVisibleStageCamera} onChange={(event) => patchMetadata({ lockCamera: event.target.checked })} />} label="Lock to stage camera" />
-            {!hasVisibleStageCamera && <Typography variant="caption" sx={editorType.caption}>Add or show a camera object to use a fixed Run Test view.</Typography>}
-          </Stack>
-        </FieldRow>
-      </Section>
-
-      <Section title="Metadata" defaultExpanded={false}>
-        <FieldRow label="Version"><TextField {...commonFieldProps} value={stage.metadata.version} disabled inputProps={{ 'aria-label': 'Editor metadata version' }} /></FieldRow>
-        <FieldRow label="Groups"><TextField {...commonFieldProps} value={stage.metadata.groups.length} disabled inputProps={{ 'aria-label': 'Groups' }} /></FieldRow>
-      </Section>
     </Stack>
   );
 }
 
-function SettingsContext({ prefs, onPrefsChange, onResetPrefs }: Pick<EditorRightInspectorProps, 'prefs' | 'onPrefsChange' | 'onResetPrefs'>) {
+function SettingsContext({ stage, onStageChange, prefs, onPrefsChange, onResetPrefs }: Pick<EditorRightInspectorProps, 'stage' | 'onStageChange' | 'prefs' | 'onPrefsChange' | 'onResetPrefs'>) {
   const { colors: editorColors } = useEditorTheme();
   return (
     <Stack spacing={0} sx={{ color: editorColors.text }}>
-      <ContextHeader title="Editor Settings" description="Workspace preferences stored locally for this editor." />
+      <ContextHeader title="Editor settings" description="View options and local workspace preferences." />
+      <Section title="Editor view">
+        <FullRow><FormControlLabel control={<Switch size="small" checked={stage.metadata.gridVisible ?? true} onChange={(event) => onStageChange({ ...stage, metadata: { ...stage.metadata, gridVisible: event.target.checked } })} />} label="Show grid" /></FullRow>
+        <FieldRow label="Grid spacing">
+          <StageBuilderNumberField {...commonNumberProps} value={stage.metadata.gridSize ?? 0.5} inputProps={{ min: 0.1, step: 0.1, 'aria-label': 'Grid spacing in metres' }} onChange={(event) => onStageChange({ ...stage, metadata: { ...stage.metadata, gridSize: Math.max(0.1, num(event.target.value, 0.5)) } })} />
+        </FieldRow>
+        <FullRow><Typography variant="caption">The grid is an editor guide saved with this stage. It does not appear in simulation or set movement snapping.</Typography></FullRow>
+      </Section>
 
       <Section title="Workspace">
         <FieldRow label="Style">
           <TextField {...commonFieldProps} select value={prefs.styleVariant} inputProps={{ 'aria-label': 'Editor style' }} onChange={(event) => onPrefsChange({ styleVariant: event.target.value as StageBuilderPreferences['styleVariant'] })}>
             <MenuItem value="fossbot">FossBot</MenuItem>
             <MenuItem value="studio">Studio</MenuItem>
-          </TextField>
-        </FieldRow>
-        <FieldRow label="Selection">
-          <TextField {...commonFieldProps} select value={prefs.lockMode} inputProps={{ 'aria-label': 'Selection behavior' }} onChange={(event) => onPrefsChange({ lockMode: event.target.value as StageBuilderPreferences['lockMode'] })}>
-            <MenuItem value="ignore">Ignore other objects</MenuItem>
-            <MenuItem value="selectThrough">Select through</MenuItem>
-            <MenuItem value="stopAtFirstHit">Stop at first hit</MenuItem>
           </TextField>
         </FieldRow>
         <FieldRow label="Transform">
@@ -253,15 +196,12 @@ function SettingsContext({ prefs, onPrefsChange, onResetPrefs }: Pick<EditorRigh
         </FieldRow>
       </Section>
 
-      <Section title="Snapping">
-        <FieldRow label="Move snap">
-          <TextField {...commonFieldProps} select value={prefs.snapPreset === 'free' || prefs.snapPreset === 'grid' ? 'fine' : prefs.snapPreset} inputProps={{ 'aria-label': 'Snapping' }} onChange={(event) => onPrefsChange({ snapPreset: event.target.value as StageBuilderSnapPreset })}>
-            {snapOptions().map((option) => <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>)}
-          </TextField>
-        </FieldRow>
-        <FieldRow label="Rotate snap">
-          <TextField {...commonFieldProps} select value={prefs.rotationSnapPreset} inputProps={{ 'aria-label': 'Rotation snap' }} onChange={(event) => onPrefsChange({ rotationSnapPreset: event.target.value as StageBuilderRotationSnapPreset })}>
-            {rotationOptions().map((option) => <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>)}
+      <Section title="Advanced" defaultExpanded={false}>
+        <FieldRow label="Selection">
+          <TextField {...commonFieldProps} select value={prefs.lockMode} inputProps={{ 'aria-label': 'Selection behavior' }} onChange={(event) => onPrefsChange({ lockMode: event.target.value as StageBuilderPreferences['lockMode'] })}>
+            <MenuItem value="ignore">Ignore other objects</MenuItem>
+            <MenuItem value="selectThrough">Select through</MenuItem>
+            <MenuItem value="stopAtFirstHit">Stop at first hit</MenuItem>
           </TextField>
         </FieldRow>
       </Section>
@@ -271,7 +211,7 @@ function SettingsContext({ prefs, onPrefsChange, onResetPrefs }: Pick<EditorRigh
         <FieldRow label="Viewport"><FormControlLabel control={<Switch size="small" checked={prefs.captureKeyboardInViewport} onChange={(event) => onPrefsChange({ captureKeyboardInViewport: event.target.checked })} />} label="Capture keys" /></FieldRow>
         <FieldRow label="Inspector"><FormControlLabel control={<Switch size="small" checked={prefs.showAdvancedInspector} onChange={(event) => onPrefsChange({ showAdvancedInspector: event.target.checked })} />} label="Advanced section" /></FieldRow>
         <FullRow>
-          <Button size="small" variant="outlined" onClick={() => { onPrefsChange(defaultStageBuilderPreferences); onResetPrefs(); }}>Reset editor settings</Button>
+          <Button size="small" variant="outlined" onClick={onResetPrefs}>Reset editor settings</Button>
         </FullRow>
       </Section>
     </Stack>
@@ -292,7 +232,7 @@ function EmptyContext() {
   );
 }
 
-function ValidationContext({ results, onToggleOverride, onBack }: { results: StageBuilderValidationResult[]; onToggleOverride: (id: string, enabled: boolean) => void; onBack: () => void }) {
+function ValidationContext({ results, onToggleOverride, onFocusObjects, onBack }: { results: StageBuilderValidationResult[]; onToggleOverride: (id: string, enabled: boolean) => void; onFocusObjects: (ids: string[]) => void; onBack: () => void }) {
   const { colors: editorColors } = useEditorTheme();
   return (
     <Stack spacing={0} sx={{ color: editorColors.text }}>
@@ -302,7 +242,7 @@ function ValidationContext({ results, onToggleOverride, onBack }: { results: Sta
         action={<Button size="small" variant="outlined" onClick={onBack}>Stage</Button>}
       />
       <Box sx={{ p: 1.25 }}>
-        <StageValidationPanel results={results} onToggleOverride={onToggleOverride} />
+        <StageValidationPanel results={results} onToggleOverride={onToggleOverride} onFocusObjects={onFocusObjects} />
       </Box>
     </Stack>
   );
@@ -317,15 +257,16 @@ export function EditorRightInspector({
   validationResults,
   prefs,
   onStageChange,
-  onObjectChange,
+  onObjectChange, onObjectPreview, onStagePreview, onFocusObjects,
   onLookThroughCamera,
   onToggleValidationOverride,
   onPrefsChange,
   onResetPrefs,
   onTogglePanel,
+  lineOperation, onLineOperationChange, onDeleteLine, onLinePreview,
 }: EditorRightInspectorProps) {
   const { colors: editorColors, type: editorType, inspectorSx } = useEditorTheme();
-  const context = tab === 'validation' ? 'validation' : tab === 'settings' ? 'settings' : tab === 'previewSettings' ? 'previewSettings' : tab === 'stage' ? 'stage' : selectedObject ? 'object' : 'empty';
+  const context = tab === 'testSettings' ? 'testSettings' : tab === 'validation' ? 'validation' : tab === 'settings' ? 'settings' : tab === 'previewSettings' ? 'previewSettings' : tab === 'stage' ? 'stage' : selectedObject ? 'object' : 'empty';
 
   const panelToggleButtonSx = {
     width: 28,
@@ -355,14 +296,23 @@ export function EditorRightInspector({
             advancedOpen={prefs.showAdvancedInspector}
             onAdvancedOpenChange={(showAdvancedInspector) => onPrefsChange({ showAdvancedInspector })}
             onChange={onObjectChange}
+            onObjectPreview={onObjectPreview}
+            lineOperation={lineOperation}
+            onLineOperationChange={onLineOperationChange}
+            onDeleteLine={onDeleteLine} onLinePreview={onLinePreview}
             onLookThroughCamera={onLookThroughCamera}
           />
         )}
         {context === 'empty' && <EmptyContext />}
-        {context === 'stage' && <StageContext stage={stage} prefs={prefs} onStageChange={onStageChange} onPrefsChange={onPrefsChange} />}
-        {context === 'settings' && <SettingsContext prefs={prefs} onPrefsChange={onPrefsChange} onResetPrefs={onResetPrefs} />}
-        {context === 'validation' && <ValidationContext results={validationResults} onToggleOverride={onToggleValidationOverride} onBack={() => onTabChange('stage')} />}
-        {context === 'previewSettings' && <PreviewSettingsPanel />}
+        {context === 'stage' && <StageContext stage={stage} onStageChange={onStageChange} onStagePreview={onStagePreview} />}
+        {context === 'settings' && <SettingsContext stage={stage} onStageChange={onStageChange} prefs={prefs} onPrefsChange={onPrefsChange} onResetPrefs={onResetPrefs} />}
+        {context === 'validation' && <ValidationContext onFocusObjects={onFocusObjects} results={validationResults} onToggleOverride={onToggleValidationOverride} onBack={() => onTabChange('stage')} />}
+        {context === 'testSettings' && <Stack>
+          <ContextHeader title="Test settings" description="Camera behaviour when running this stage." />
+          <FullRow><FormControlLabel control={<Switch size="small" checked={!!stage.metadata.lockCamera} onChange={(event) => onStageChange({ ...stage, metadata: { ...stage.metadata, lockCamera: event.target.checked } })} />} label="Lock to stage camera" /></FullRow>
+          <FullRow><Typography variant="caption">Uses the last visible stage camera. Add or show a camera to use a fixed Run Test view.</Typography></FullRow>
+        </Stack>}
+        {context === 'previewSettings'  && <PreviewSettingsPanel />}
       </Box>
     </Box>
   );

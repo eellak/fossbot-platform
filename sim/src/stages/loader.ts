@@ -1,3 +1,5 @@
+import { evaluateLineGeometry } from './lineGeometryCore'
+import { validateStageFormat, stageLoadError } from './stageFormatCore'
 import * as RAPIER from '@dimforge/rapier3d-compat'
 import * as THREE from 'three'
 import { STAGES, type RawStageConfig, type RawStageEntry, type StageName } from './index'
@@ -11,6 +13,7 @@ import { log } from '../util/log'
 import { syncObjectToBody } from '../physics/mesh-sync'
 import type { ChallengeMarker } from '../missions/types'
 import { challengeForEntry } from '../missions/stageChallengeCore.js'
+import type { RuntimeLabelAttachment } from './labelAttachment'
 import { surfaceDetails } from './surfaceDetails'
 
 interface StageDynamicObject {
@@ -113,8 +116,8 @@ function attachColliders(
 ): void {
   if (!visual.dynamicBody) {
     // Static: attach to shared stage body.
-    for (const c of collider.colliders) world.createCollider(c, stageBody)
     for (const d of collider.debugMeshes) collidersGroup.add(d)
+    for (const c of collider.colliders) world.createCollider(c, stageBody)
     return
   }
 
@@ -126,6 +129,13 @@ function attachColliders(
   bodyDesc = setBodyRotationFromEuler(bodyDesc, visual.dynamicBody.orientation)
   const body = world.createRigidBody(bodyDesc)
 
+  const debugGroup = new THREE.Group()
+  debugGroup.name = `collider_${visual.object.name || 'dynamic_stage_object'}`
+  for (const d of collider.debugMeshes) debugGroup.add(d)
+  collidersGroup.add(debugGroup)
+
+  dynamicObjects.push({ body, object: visual.object, collidersGroup: debugGroup })
+
   const massPerCollider = visual.dynamicBody.mass / collider.colliders.length
   for (const c of collider.colliders) {
     c.setMass(massPerCollider)
@@ -136,12 +146,7 @@ function attachColliders(
   body.setLinearDamping(0.2)
   body.setAngularDamping(0.2)
 
-  const debugGroup = new THREE.Group()
-  debugGroup.name = `collider_${visual.object.name || 'dynamic_stage_object'}`
-  for (const d of collider.debugMeshes) debugGroup.add(d)
-  collidersGroup.add(debugGroup)
 
-  dynamicObjects.push({ body, object: visual.object, collidersGroup: debugGroup })
 }
 
 export async function loadStage(
@@ -162,8 +167,9 @@ export async function loadStageEntries(
   world: RAPIER.World,
   opts: LoadStageOptions = {},
 ): Promise<StageHandle> {
-  const stageBody = world.createRigidBody(RAPIER.RigidBodyDesc.fixed())
+  validateStageFormat(entries)
   const objects: THREE.Object3D[] = []
+  const labelParents = new Map<string, THREE.Object3D>()
   const spawnPosition = DEFAULT_SPAWN.clone()
   const spawnOrientation = DEFAULT_ORIENT.clone()
   const modelLoads: Promise<void>[] = []
@@ -183,12 +189,34 @@ export async function loadStageEntries(
     configuredMarkerIds.add(challenge.markerId)
   })
 
+  const stageBody = world.createRigidBody(RAPIER.RigidBodyDesc.fixed())
   const stgCollidersGrp = new THREE.Group()
   stgCollidersGrp.name = 'stage_colliders'
   stgCollidersGrp.visible = false
   scene.add(stgCollidersGrp)
 
   const resolveAssetUrl = opts.resolveAssetUrl ?? ((url: string) => url)
+  let disposed = false
+  let stageAudio: ReturnType<typeof createStageAudioRuntime> | undefined
+  const dispose = () => {
+    if (disposed) return
+    disposed = true
+    for (const object of objects) {
+      scene.remove(object)
+      disposeVisual(object)
+    }
+    stageAudio?.dispose()
+    scene.remove(stgCollidersGrp)
+    disposeVisual(stgCollidersGrp)
+    if (!opts.isCancelled?.()) {
+      for (const { body } of dynamicObjects) {
+        if (world.getRigidBody(body.handle) === body) world.removeRigidBody(body)
+      }
+      if (world.getRigidBody(stageBody.handle) === stageBody) world.removeRigidBody(stageBody)
+    }
+  }
+
+  try {
 
   for (const [entryIndex, rawEntry] of entries.entries()) {
     const entry = resolveStageEntryAssets(rawEntry, resolveAssetUrl)
@@ -210,6 +238,7 @@ export async function loadStageEntries(
     }
     const type = entry.type as string
     const addVisual = (object: THREE.Object3D) => {
+      if (typeof entry.id === 'string') labelParents.set(entry.id, object)
       if (['cube', 'cylinder', 'sphere', 'wedge', 'model'].includes(type)) {
         object.userData.cameraVisionLabel = String(entry.visionLabel || entry.name || type)
       }
@@ -316,7 +345,13 @@ export async function loadStageEntries(
               disposeVisual(vis.object)
               return
             }
-            const col = await buildModelCollider(entry as any, vis.object)
+            let col: ColliderBuilt
+            try {
+              col = await buildModelCollider(entry as any, vis.object)
+            } catch (error) {
+              disposeVisual(vis.object)
+              throw error
+            }
             // The engine may have disposed the world while either asset loaded.
             // Never attach a collider to the now-removed shared stage body.
             if (opts.isCancelled?.()) {
@@ -330,34 +365,22 @@ export async function loadStageEntries(
             registerMarker(vis.object, dynamicObjects[dynamicObjects.length - 1]?.object === vis.object ? dynamicObjects[dynamicObjects.length - 1].body : undefined)
           })
           .catch((err) => {
-            if (!opts.isCancelled?.()) console.warn(`[stage] model load failed: ${(entry as any).filename}`, err)
+            if (!opts.isCancelled?.()) throw err
           })
         modelLoads.push(p)
         break
       }
       case 'line': {
-        const vis = buildLineVisual(entry as any)
+        const evaluated = evaluateLineGeometry(entry)
+        const vis = buildLineVisual(entry as any, evaluated)
         addVisual(vis.object)
         objects.push(vis.object)
-        lineSegments.push(...lineSegmentsFromEntry(entry as any))
+        lineSegments.push(...lineSegmentsFromEntry(entry as any, evaluated))
         break
       }
       case 'text': {
         const vis = buildTextVisual(entry as any)
-        const attachment = (vis.object.userData as { labelAttachment?: { parentName: string; face: 'front' | 'back' | 'left' | 'right' | 'top' | 'bottom'; offset: [number, number]; rotation: number } }).labelAttachment
-        if (attachment) {
-          const parent = objects.find((obj) => obj.name === attachment.parentName)
-          if (parent) {
-            applyAttachedLabelTransform(vis.object, attachment, parent)
-            parent.add(vis.object)
-            vis.object.userData.labelParentName = attachment.parentName
-          } else {
-            console.warn(`[stage] attached label parent "${attachment.parentName}" not found; adding label to scene root`)
-            addVisual(vis.object)
-          }
-        } else {
-          addVisual(vis.object)
-        }
+        addVisual(vis.object)
         objects.push(vis.object)
         break
       }
@@ -389,14 +412,25 @@ export async function loadStageEntries(
   }
 
   await Promise.all(modelLoads)
-  const stageAudio = createStageAudioRuntime(audioEntries, scene, {
+  for (const mesh of objects) {
+    const attachment = mesh.userData.labelAttachment as RuntimeLabelAttachment | undefined
+    if (!attachment) continue
+    const parent = attachment.parentId ? labelParents.get(attachment.parentId) : objects.find(object => object.name === attachment.parentName)
+    if (parent && !parent.userData.labelAttachment) {
+      applyAttachedLabelTransform(mesh, attachment, parent)
+      parent.add(mesh)
+      mesh.userData.labelParentName = attachment.parentName
+    } else {
+      console.warn(`[stage] attached label parent "${attachment.parentName}" not found`)
+    }
+  }
+  stageAudio = createStageAudioRuntime(audioEntries, scene, {
     camera: opts.camera,
     gestureTarget: opts.gestureTarget,
     resolveAssetUrl,
   })
   log.world(`loaded stage ${name}: ${objects.length} objects, ${stgCollidersGrp.children.length} collider wireframes`)
 
-  let disposed = false
   const objectCount = objects.length
   const colliderCount = stgCollidersGrp.children.length
   const lineSegmentCount = lineSegments.length
@@ -437,38 +471,13 @@ export async function loadStageEntries(
       }
     },
     updateAudio(position) {
-      if (!disposed) stageAudio.updateRobotPosition(position)
+      if (!disposed) stageAudio?.updateRobotPosition(position)
     },
-    dispose() {
-      if (disposed) return
-      disposed = true
-      for (const obj of objects) {
-        scene.remove(obj)
-        obj.traverse((child) => {
-          const mesh = child as THREE.Mesh
-          if (mesh.isMesh) {
-            mesh.geometry?.dispose()
-            const mat = mesh.material
-            if (Array.isArray(mat)) mat.forEach((m) => m.dispose())
-            else mat?.dispose()
-          }
-        })
-      }
-      stageAudio.dispose()
-      scene.remove(stgCollidersGrp)
-      stgCollidersGrp.traverse((child) => {
-        if ((child as any).isMesh || (child as any).isLineSegments) {
-          const m = child as THREE.Mesh | THREE.LineSegments
-          m.geometry?.dispose()
-          const mat = m.material as THREE.Material | THREE.Material[]
-          if (Array.isArray(mat)) mat.forEach((mt) => mt.dispose())
-          else mat?.dispose()
-        }
-      })
-      for (const dynamicObject of dynamicObjects) {
-        if (world.getRigidBody(dynamicObject.body.handle) === dynamicObject.body) world.removeRigidBody(dynamicObject.body)
-      }
-      if (world.getRigidBody(stageBody.handle) === stageBody) world.removeRigidBody(stageBody)
-    },
+    dispose,
+  }
+  } catch (error) {
+    await Promise.allSettled(modelLoads)
+    dispose()
+    throw stageLoadError(error)
   }
 }

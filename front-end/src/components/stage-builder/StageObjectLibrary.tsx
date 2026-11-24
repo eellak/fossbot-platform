@@ -1,12 +1,24 @@
-import React, { useEffect, useRef } from 'react';
-import { Box, Button, ButtonBase, Stack, Tooltip, Typography } from '@mui/material';
+import React, { useId, useRef, useState } from 'react';
+import { Box, Button, ButtonBase, Collapse, IconButton, Stack, Tooltip, Typography, useMediaQuery } from '@mui/material';
+import { alpha } from '@mui/material/styles';
+import { amber } from '@mui/material/colors';
 import type { StageSemanticKind } from './types';
-import { STAGE_OBJECT_CATALOG, catalogItem } from './stageBuilderCatalog';
-import UploadFileIcon from '@mui/icons-material/UploadFile';
+import { catalogItem } from './stageBuilderCatalog';
+import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
+import { StagePanelSearch } from './StagePanelSearch';
+import FlagOutlinedIcon from '@mui/icons-material/FlagOutlined';
+import RouteIcon from '@mui/icons-material/Route';
+import ViewInArOutlinedIcon from '@mui/icons-material/ViewInArOutlined';
+import TitleIcon from '@mui/icons-material/Title';
+import TuneIcon from '@mui/icons-material/Tune';
+import WidgetsOutlinedIcon from '@mui/icons-material/WidgetsOutlined';
+import StarIcon from '@mui/icons-material/Star';
+import StarBorderIcon from '@mui/icons-material/StarBorder';
+import HistoryIcon from '@mui/icons-material/History';
 import type { StageBuilderPrefab } from './stageBuilderPrefabs';
 import { useEditorTheme, type EditorTone } from './stageBuilderEditorTheme';
-import { PreviewImage } from './PreviewImage';
-import { fitDisplaySizeToTile, getKindSettings, getLibraryPreviewAreaSize, getPreviewAuthoringKind, setLibraryPreviewAreaSize, usePreviewSettingsVersion } from './stageBuilderPreviewSettings';
+import { PanelThumbnail, PreviewImage } from './PreviewImage';
+import { MAX_RECENT_LIBRARY_ITEMS, sameLibraryItem, type LibraryItem } from './stageBuilderRecentItems';
 
 export type StageBuilderLibraryGroup = {
   id: 'floorPaths' | 'structures' | 'robot' | 'challenge' | 'labels' | 'lighting';
@@ -22,10 +34,20 @@ export const STAGE_BUILDER_LIBRARY_GROUPS: StageBuilderLibraryGroup[] = [
   { id: 'lighting', label: 'Scene setup', items: ['camera', 'light', 'audio'] },
 ];
 
+const categoryIcons = {
+  robot: FlagOutlinedIcon, floorPaths: RouteIcon, structures: ViewInArOutlinedIcon,
+  labels: TitleIcon, lighting: TuneIcon, challenge: FlagOutlinedIcon,
+};
+
+const filledStarSx = { fill: amber[400], stroke: 'currentColor', strokeWidth: 1.3, strokeLinejoin: 'round' } as const;
+
 export interface StageObjectLibraryProps {
   activeKind?: StageSemanticKind | null;
   activePrefabId?: string | null;
   prefabs?: StageBuilderPrefab[];
+  recentItems?: LibraryItem[];
+  favouriteItems: LibraryItem[];
+  onToggleFavourite: (item: LibraryItem) => void;
   onAddKind?: (kind: StageSemanticKind) => void;
   onAddPrefab?: (prefab: StageBuilderPrefab) => void;
   // Backward-compatible prop names used by the deprecated Build drawer.
@@ -37,238 +59,129 @@ export interface StageObjectLibraryProps {
 
 export type PreviewKind = StageSemanticKind | 'prefab';
 
-const STATIC_PREVIEW_KINDS = new Set<StageSemanticKind>([
-  'baseTile',
-  'block',
-  'cylinder',
-  'directionArrow',
-  'line',
-  'obstacle',
-  'platform',
-  'ramp',
-  'robotSpawn',
-  'sphere',
-  'target',
-  'wall',
-]);
-
-export function hasStaticPreviewAsset(kind: StageSemanticKind): boolean {
-  return STATIC_PREVIEW_KINDS.has(kind);
-}
-
-export function staticPreviewUrl(kind: StageSemanticKind): string {
-  return `${process.env.PUBLIC_URL || ''}/stage-builder/previews/preview-${kind}.png`;
-}
-
 const libraryTileSx = (editorColors: ReturnType<typeof useEditorTheme>['colors']) => ({
   width: '100%',
-  minHeight: 76,
-  p: 0.5,
-  display: 'flex',
-  flexDirection: 'column',
-  alignItems: 'stretch',
-  justifyContent: 'space-between',
-  gap: 0.375,
-  border: `1px solid ${editorColors.border}`,
+  minHeight: 44,
+  py: 0.5,
+  pl: 0.75,
+  pr: 3,
+  height: '100%',
+  '@media (any-pointer: coarse)': { pr: 5.5 },
+  display: 'grid',
+  gridTemplateColumns: '28px minmax(0, 1fr)',
+  alignItems: 'center',
+  gap: 0.5,
+  border: `1px solid ${alpha(editorColors.border, 0.65)}`,
   borderRadius: 0.75,
-  bgcolor: editorColors.panelInset,
+  bgcolor: editorColors.panel,
   color: editorColors.text,
   textAlign: 'left',
-  transition: 'background-color 120ms ease, border-color 120ms ease, transform 120ms ease',
-  '&:hover': { bgcolor: `${editorColors.textMuted}0f`, borderColor: editorColors.borderStrong },
-  '&:active': { transform: 'translateY(1px)' },
-  '&:hover .library-preview': { opacity: 1, transform: 'translateY(-1px)' },
+  transition: 'background-color 120ms ease, border-color 120ms ease',
+  '&:hover': { bgcolor: editorColors.panelInset, borderColor: editorColors.borderStrong },
   '&:focus-visible': { outline: `2px solid ${editorColors.accent}`, outlineOffset: 1 },
 });
 
-function itemFor(kind: StageSemanticKind) {
-  return STAGE_OBJECT_CATALOG.find((item) => item.id === kind);
+const libraryGridSx = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+  gap: 0.5,
+  '& > :only-child': { gridColumn: '1 / -1' },
+  '@container (max-width: 239px)': { gridTemplateColumns: 'minmax(0, 1fr)' },
+};
+
+export function PreviewShape({ kind, width = 52, height = 40 }: { kind: PreviewKind; tone: EditorTone; width?: number; height?: number }) {
+  return kind === 'prefab' ? <Box sx={{ width, height }}>Preview unavailable</Box> : <PreviewImage kind={kind} width={width} height={height} />;
 }
 
-function StaticPreviewAsset({ kind, width, height }: { kind: StageSemanticKind; width: number; height: number }) {
-  return (
-    <img
-      src={staticPreviewUrl(kind)}
-      width={Math.round(width)}
-      height={Math.round(height)}
-      alt=""
-      draggable={false}
-      style={{ display: 'block', objectFit: 'contain', userSelect: 'none' }}
-    />
-  );
+interface LibraryTileProps {
+  label: string;
+  detail?: string;
+  active?: boolean;
+  tone: EditorTone;
+  previewKind: PreviewKind;
+  prefab?: StageBuilderPrefab;
+  favourite: boolean;
+  onToggleFavourite: () => void;
+  onClick: () => void;
 }
 
-export function PreviewShape({ kind, tone, width, height }: { kind: PreviewKind; tone: EditorTone; width?: number; height?: number }) {
-  const accent = tone.accent;
-  const soft = `${tone.accent}33`;
-
-  let icon: React.ReactNode;
-  if (kind === 'wall') icon = <Box sx={{ width: 44, height: 12, bgcolor: accent, opacity: 0.78, transform: 'rotate(-8deg)', boxShadow: `0 8px 0 ${soft}` }} />;
-  else if (kind === 'block') icon = <Box sx={{ width: 30, height: 30, bgcolor: accent, opacity: 0.72, boxShadow: `8px 8px 0 ${soft}` }} />;
-  else if (kind === 'ramp') icon = <Box sx={{ width: 42, height: 26, clipPath: 'polygon(0 100%, 100% 100%, 100% 20%)', bgcolor: accent, opacity: 0.76 }} />;
-  else if (kind === 'platform') icon = <Box sx={{ width: 46, height: 10, bgcolor: accent, opacity: 0.74, boxShadow: `0 10px 0 ${soft}` }} />;
-  else if (kind === 'cylinder') {
-    icon = (
-      <Box sx={{ position: 'relative', width: 34, height: 38 }}>
-        <Box sx={{ position: 'absolute', top: 5, left: 3, width: 28, height: 13, borderRadius: '50%', border: `2px solid ${accent}`, bgcolor: soft }} />
-        <Box sx={{ position: 'absolute', top: 11, left: 3, width: 28, height: 18, borderLeft: `2px solid ${accent}`, borderRight: `2px solid ${accent}`, bgcolor: soft }} />
-        <Box sx={{ position: 'absolute', bottom: 3, left: 3, width: 28, height: 13, borderRadius: '50%', border: `2px solid ${accent}`, bgcolor: soft }} />
-      </Box>
-    );
-  } else if (kind === 'sphere') icon = <Box sx={{ width: 34, height: 34, borderRadius: '50%', bgcolor: soft, border: `2px solid ${accent}`, boxShadow: `inset -8px -8px 0 ${accent}33` }} />;
-  else if (kind === 'wedge') icon = <Box sx={{ width: 42, height: 28, clipPath: 'polygon(0 100%, 100% 100%, 100% 0)', bgcolor: soft, borderBottom: `3px solid ${accent}`, borderRight: `3px solid ${accent}` }} />;
-  else if (kind === 'obstacle') icon = <Box sx={{ width: 0, height: 0, borderLeft: '18px solid transparent', borderRight: '18px solid transparent', borderBottom: `34px solid ${accent}`, opacity: 0.75 }} />;
-  else if (kind === 'robotSpawn') icon = <Box sx={{ width: 34, height: 24, border: `2px solid ${accent}`, borderRadius: 1, display: 'grid', placeItems: 'center', color: accent, fontSize: 13, fontWeight: 900 }}>R</Box>;
-  else if (kind === 'target') icon = <Box sx={{ width: 34, height: 34, borderRadius: '50%', border: `2px solid ${accent}`, boxShadow: `inset 0 0 0 7px ${soft}, inset 0 0 0 13px ${accent}` }} />;
-  else if (kind === 'checkpoint') icon = <Box sx={{ position: 'relative', width: 34, height: 34, borderLeft: `2px solid ${accent}` }}><Box sx={{ position: 'absolute', top: 4, left: 2, width: 24, height: 15, bgcolor: soft, border: `2px solid ${accent}` }} /></Box>;
-  else if (kind === 'dangerZone') icon = <Box sx={{ width: 30, height: 30, bgcolor: soft, border: `2px solid ${accent}`, transform: 'rotate(45deg)' }} />;
-  else if (kind === 'sensorZone') icon = <Box sx={{ width: 40, height: 28, border: `2px dashed ${accent}`, bgcolor: soft }} />;
-  else if (kind === 'camera') {
-    icon = (
-      <Box component="svg" viewBox="0 0 44 34" sx={{ width: 42, height: 32 }}>
-        <rect x="6" y="9" width="26" height="18" rx="3" fill={soft} stroke={accent} strokeWidth="2.4" />
-        <path d="M32 14 L40 9 L40 27 L32 22 Z" fill={soft} stroke={accent} strokeWidth="2.4" strokeLinejoin="round" />
-        <circle cx="17" cy="18" r="5" fill={`${accent}33`} stroke={accent} strokeWidth="2.2" />
-      </Box>
-    );
-  } else if (kind === 'audio') {
-    icon = (
-      <Box component="svg" viewBox="0 0 44 34" sx={{ width: 42, height: 32 }}>
-        <path d="M7 14 H15 L25 7 V27 L15 20 H7 Z" fill={soft} stroke={accent} strokeWidth="2.4" strokeLinejoin="round" />
-        <path d="M29 12 C32 15 32 19 29 22" fill="none" stroke={accent} strokeWidth="2.4" strokeLinecap="round" />
-        <path d="M34 8 C40 14 40 20 34 26" fill="none" stroke={accent} strokeWidth="2.4" strokeLinecap="round" opacity="0.78" />
-      </Box>
-    );
-  } else if (kind === 'line') {
-    icon = (
-      <Box component="svg" viewBox="0 0 52 34" sx={{ width: 52, height: 34 }}>
-        <path d="M5 24 C15 4 30 31 47 10" fill="none" stroke={accent} strokeWidth="4" strokeLinecap="round" />
-      </Box>
-    );
-  } else if (kind === 'directionArrow') {
-    icon = (
-      <Box component="svg" viewBox="0 0 52 34" sx={{ width: 52, height: 34 }}>
-        <path d="M5 17 H34" fill="none" stroke={accent} strokeWidth="7" strokeLinecap="round" />
-        <path d="M31 6 L47 17 L31 28 Z" fill={soft} stroke={accent} strokeWidth="3" strokeLinejoin="round" />
-      </Box>
-    );
-  } else if (kind === 'baseTile') icon = <Box sx={{ width: 38, height: 28, border: `2px solid ${accent}`, bgcolor: soft, transform: 'skewX(-12deg)' }} />;
-  else if (kind === 'label') icon = <Box sx={{ color: accent, fontSize: 24, fontWeight: 900, lineHeight: 1 }}>T</Box>;
-  else if (kind === 'light') {
-    icon = (
-      <Box component="svg" viewBox="0 0 40 40" sx={{ width: 38, height: 38 }}>
-        <g stroke={accent} strokeWidth="2.4" strokeLinecap="round">
-          <line x1="20" y1="3" x2="20" y2="9" />
-          <line x1="20" y1="31" x2="20" y2="37" />
-          <line x1="3" y1="20" x2="9" y2="20" />
-          <line x1="31" y1="20" x2="37" y2="20" />
-          <line x1="8" y1="8" x2="12" y2="12" />
-          <line x1="28" y1="28" x2="32" y2="32" />
-          <line x1="32" y1="8" x2="28" y2="12" />
-          <line x1="12" y1="28" x2="8" y2="32" />
-        </g>
-        <circle cx="20" cy="20" r="7" fill={`${accent}55`} stroke={accent} strokeWidth="2.4" />
-      </Box>
-    );
-  } else if (kind === 'prefab') {
-    icon = (
-      <Box sx={{ width: 44, height: 34, display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 0.5 }}>
-        {[0, 1, 2, 3].map((item) => <Box key={item} sx={{ bgcolor: item === 0 ? accent : soft, border: `1px solid ${accent}66` }} />)}
-      </Box>
-    );
-  } else icon = <Box sx={{ width: 28, height: 28, border: `2px solid ${accent}`, bgcolor: soft }} />;
-
-  if (width === undefined && height === undefined) return <>{icon}</>;
-
-  const boxWidth = width ?? 44;
-  const boxHeight = height ?? 34;
-  const scale = Math.max(0.1, Math.min(boxWidth / 52, boxHeight / 40));
-  return (
-    <Box sx={{ width: boxWidth, height: boxHeight, display: 'grid', placeItems: 'center', overflow: 'hidden' }} role="presentation" aria-hidden="true">
-      <Box sx={{ width: 52, height: 40, display: 'grid', placeItems: 'center', transform: `scale(${scale})`, transformOrigin: 'center' }}>
-        {icon}
-      </Box>
-    </Box>
-  );
-}
-
-function LibraryTile({ label, detail, active, tone, previewKind, onClick }: { label: string; detail?: string; active?: boolean; tone: EditorTone; previewKind: PreviewKind; onClick: () => void }) {
+function LibraryTile({ label, detail, active, tone, previewKind, prefab, favourite, onToggleFavourite, onClick }: LibraryTileProps) {
   const { colors: editorColors, type: editorType } = useEditorTheme();
-  // Pull the current display size from the settings store. Re-renders when
-  // settings change (via the version hook below) so the user can tune the one
-  // authoring tile live without kicking off WebGL renders for every visible tile.
-  const settingsVersion = usePreviewSettingsVersion();
-  const settings = previewKind === 'prefab' ? null : getKindSettings(previewKind);
-  const measuredArea = getLibraryPreviewAreaSize();
-  const displaySize = settings && measuredArea
-    ? fitDisplaySizeToTile(measuredArea, { width: settings.width, height: settings.height }, 0)
-    : settings?.displaySize ?? { width: 52, height: 52 };
-  const livePreviewKind = previewKind !== 'prefab' && getPreviewAuthoringKind() === previewKind ? previewKind : null;
-  const previewTone = settings?.objectColorOverride ? { ...tone, accent: settings.objectColorOverride } : tone;
-  // Reference settingsVersion so the linter / future readers see this
-  // component is intentionally subscribed to settings changes.
-  void settingsVersion;
-  // Measure the image area so the settings panel's "Fit to tile" action has
-  // a real tile size to fit against, not a hardcoded constant.
-  const areaRef = useRef<HTMLDivElement | null>(null);
-  useEffect(() => {
-    const element = areaRef.current;
-    if (!element || typeof ResizeObserver === 'undefined') return undefined;
-    const update = () => {
-      const rect = element.getBoundingClientRect();
-      // Guard against the (transient) zero-size measurement ResizeObserver
-      // emits right before the layout settles.
-      if (rect.width > 0 && rect.height > 0) {
-        setLibraryPreviewAreaSize({ width: rect.width, height: rect.height });
-      }
-    };
-    update();
-    const observer = new ResizeObserver(update);
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, []);
+  const starAction = favourite ? `Remove ${label} from favourites` : `Add ${label} to favourites`;
   return (
-    <Tooltip title={detail || ''} placement="right" disableHoverListener={!detail}>
+    <Box sx={{
+      position: 'relative', minWidth: 0,
+      '&:hover .library-star, &:focus-within .library-star': { opacity: 1, pointerEvents: 'auto' },
+    }}>
+      <Tooltip describeChild title={detail ? `${label}: ${detail}` : label} placement="right" disableHoverListener={!detail}>
+        <ButtonBase
+          aria-label={label}
+          aria-current={active || undefined}
+          onClick={onClick}
+          sx={{
+            ...libraryTileSx(editorColors),
+            color: active ? tone.text : editorColors.text,
+            ...(active && { bgcolor: tone.surface, borderColor: `${tone.accent}66` }),
+          }}
+        >
+          <Box className="library-preview" sx={{ width: 28, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', '& > *': { flexShrink: 0 } }}>
+            <PanelThumbnail kind={previewKind === 'prefab' ? undefined : previewKind} prefab={prefab} />
+          </Box>
+          <Typography variant="body2" sx={{ ...editorType.body, minWidth: 0, overflowWrap: 'anywhere', color: 'inherit', fontSize: '0.875rem', fontWeight: 600, lineHeight: 1.2 }}>
+            {label}
+          </Typography>
+        </ButtonBase>
+      </Tooltip>
       <ButtonBase
-        onClick={onClick}
+        className="library-star"
+        aria-label={`Favourite ${label}`}
+        aria-pressed={favourite}
+        title={starAction}
+        onClick={onToggleFavourite}
         sx={{
-          ...libraryTileSx(editorColors),
-          color: active ? tone.text : editorColors.text,
-          bgcolor: active ? tone.surface : editorColors.panelInset,
-          borderColor: active ? `${tone.accent}66` : editorColors.border,
+          position: 'absolute', top: 0, right: 0, width: 24, height: 24, borderRadius: 0.75,
+          opacity: favourite ? 1 : 0, pointerEvents: favourite ? 'auto' : 'none',
+          color: favourite ? editorColors.warning : editorColors.textMuted,
+          '&:focus-visible': { outline: `2px solid ${editorColors.accent}`, outlineOffset: -2 },
+          '@media (hover: none) and (pointer: fine), (any-pointer: coarse)': { opacity: 1, pointerEvents: 'auto' },
+          '@media (any-pointer: coarse)': { width: 44, height: 44 },
         }}
       >
-        <Box ref={areaRef} className="library-preview" sx={{ height: 52, display: 'grid', placeItems: 'center', opacity: 0.95, transition: 'opacity 120ms ease, transform 120ms ease' }}>
-          {livePreviewKind ? (
-            <PreviewImage kind={livePreviewKind} width={displaySize.width} height={displaySize.height} />
-          ) : previewKind !== 'prefab' && hasStaticPreviewAsset(previewKind) ? (
-            <StaticPreviewAsset kind={previewKind} width={displaySize.width} height={displaySize.height} />
-          ) : (
-            <PreviewShape
-              kind={previewKind}
-              tone={previewTone}
-              width={previewKind === 'prefab' ? 48 : displaySize.width}
-              height={previewKind === 'prefab' ? 38 : displaySize.height}
-            />
-          )}
-        </Box>
-        <Typography variant="caption" noWrap sx={{ ...editorType.body, color: 'inherit', fontSize: '0.6875rem', fontWeight: 750, lineHeight: 1.1 }}>
-          {label}
-        </Typography>
+        {favourite ? <StarIcon sx={{ fontSize: 16, ...filledStarSx }} /> : <StarBorderIcon sx={{ fontSize: 16 }} />}
       </ButtonBase>
-    </Tooltip>
+    </Box>
   );
 }
 
-function SectionHeader({ label, count }: { label: string; count: number }) {
+function LibrarySection({ label, count, icon, expanded, onToggle, buttonRef, children }: { buttonRef?: React.Ref<HTMLButtonElement>; label: string; count: number; icon: React.ReactNode; expanded: boolean; onToggle: () => void; children: React.ReactNode }) {
   const { colors: editorColors, type: editorType } = useEditorTheme();
+  const contentId = useId();
+  const reducedMotion = useMediaQuery('(prefers-reduced-motion: reduce)');
   return (
-    <Box sx={{ px: 0.25, minHeight: 20, display: 'flex', alignItems: 'center', gap: 0.75 }}>
-      <Typography variant="caption" sx={{ ...editorType.sectionLabel, minWidth: 0, flex: 1, color: editorColors.textMuted }}>{label}</Typography>
-      <Box sx={{ minWidth: 18, height: 18, px: 0.5, display: 'grid', placeItems: 'center', borderRadius: 0.5, bgcolor: `${editorColors.textMuted}0f`, border: `1px solid ${editorColors.border}` }}>
-        <Typography variant="caption" sx={{ ...editorType.caption, color: editorColors.textMuted, lineHeight: 1 }}>{count}</Typography>
-      </Box>
-    </Box>
+    <Stack sx={{ '&:not(:last-child)': { borderBottom: `1px solid ${editorColors.divider}` } }}>
+      <ButtonBase
+        ref={buttonRef}
+        aria-expanded={expanded}
+        aria-controls={contentId}
+        onClick={onToggle}
+        sx={{
+          px: 0.5, minHeight: 44, width: '100%', display: 'flex', alignItems: 'center', gap: 0.5,
+          textAlign: 'left', color: editorColors.text, borderRadius: 0.5,
+          '&:hover': { bgcolor: alpha(editorColors.text, 0.03) },
+          '&:focus-visible': { outline: `2px solid ${editorColors.accent}`, outlineOffset: 1 },
+        }}
+      >
+        <KeyboardArrowRightIcon sx={{ fontSize: 16, transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)', transition: reducedMotion ? 'none' : `transform ${expanded ? 180 : 140}ms ease-out` }} />
+        {icon}
+        <Typography component="span" variant="subtitle2" sx={{ ...editorType.panelTitle, minWidth: 0, flex: 1, fontWeight: 700, color: 'inherit' }}>{label}</Typography>
+        <Box sx={{ minWidth: 22, height: 22, px: 0.5, display: 'grid', placeItems: 'center', borderRadius: 0.5, bgcolor: `${editorColors.textMuted}0f`, border: `1px solid ${editorColors.border}` }}>
+          <Typography variant="caption" sx={{ ...editorType.caption, fontWeight: 700, color: 'inherit', lineHeight: 1 }}>{count}</Typography>
+        </Box>
+      </ButtonBase>
+      <Collapse id={contentId} in={expanded} timeout={reducedMotion ? 0 : { enter: 180, exit: 140 }} easing="ease-out" aria-hidden={!expanded} {...{ inert: expanded ? undefined : '' }}>
+        <Box sx={{ pt: 0.5, pb: 1 }}>{children}</Box>
+      </Collapse>
+    </Stack>
   );
 }
 
@@ -276,6 +189,9 @@ export function StageObjectLibrary({
   activeKind,
   activePrefabId,
   prefabs = [],
+  recentItems = [],
+  favouriteItems,
+  onToggleFavourite,
   onAddKind,
   onAddPrefab,
   onSelectKind,
@@ -285,69 +201,98 @@ export function StageObjectLibrary({
   const { colors: editorColors, tones: editorTones, type: editorType } = useEditorTheme();
   const addKind = onAddKind || onSelectKind;
   const addPrefab = onAddPrefab || onSelectPrefab;
+  const favouritesHeader = useRef<HTMLButtonElement>(null);
+  const [query, setQuery] = useState('');
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({ structures: true, recent: true });
+  const [searchCollapsed, setSearchCollapsed] = useState<Record<string, boolean>>({});
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+  const matches = (text: string) => text.toLocaleLowerCase().includes(normalizedQuery);
+  const groups = STAGE_BUILDER_LIBRARY_GROUPS.map(group => ({
+    ...group,
+    items: group.items.filter(kind => {
+      const item = catalogItem(kind);
+      return item?.placeable && matches(`${group.label} ${item.label} ${item.shortLabel}`);
+    }),
+  })).filter(group => group.items.length);
+  const matchingPrefabs = prefabs.filter(prefab => matches(`Prefabs ${prefab.title}`));
+  const available = (item: LibraryItem) => item.type === 'prefab'
+    ? prefabs.some(prefab => prefab.id === item.id)
+    : catalogItem(item.id)?.placeable;
+  const availableRecentItems = recentItems.filter(available).slice(0, MAX_RECENT_LIBRARY_ITEMS);
+  const availableFavourites = favouriteItems.filter(available);
+  const defaultExpanded = (id: string) => id === 'favourites' && availableFavourites.length > 0;
+  const expanded = (id: string) => normalizedQuery ? !searchCollapsed[id] : (expandedSections[id] ?? defaultExpanded(id));
+  const toggleSection = (id: string) => {
+    if (normalizedQuery) setSearchCollapsed(current => ({ ...current, [id]: !current[id] }));
+    else setExpandedSections(current => ({ ...current, [id]: !(current[id] ?? defaultExpanded(id)) }));
+  };
+  const changeQuery = (value: string) => { setQuery(value); setSearchCollapsed({}); };
+  const resultCount = groups.reduce((total, group) => total + group.items.length, matchingPrefabs.length);
+
+  function renderTile(item: LibraryItem, inFavourites = false) {
+    const favourite = favouriteItems.some(saved => sameLibraryItem(saved, item));
+    const toggle = () => {
+      if (inFavourites) favouritesHeader.current?.focus({ preventScroll: true });
+      onToggleFavourite(item);
+    };
+    if (item.type === 'prefab') {
+      const prefab = prefabs.find(entry => entry.id === item.id);
+      if (!prefab) return null;
+      return <LibraryTile key={`prefab:${item.id}`} label={prefab.title} detail={prefab.description || `${prefab.objects.length} objects`}
+        favourite={favourite} onToggleFavourite={toggle} active={activePrefabId === item.id} tone={editorTones.prefab}
+        previewKind="prefab" prefab={prefab} onClick={() => addPrefab?.(prefab)} />;
+    }
+    const object = catalogItem(item.id);
+    if (!object?.placeable) return null;
+    const group = STAGE_BUILDER_LIBRARY_GROUPS.find(group => group.items.includes(item.id));
+    return <LibraryTile key={`object:${item.id}`} label={object.shortLabel || object.label} detail={object.description}
+      favourite={favourite} onToggleFavourite={toggle} active={activeKind === item.id} tone={editorTones[group?.id || 'structures']}
+      previewKind={item.id} onClick={() => addKind?.(item.id)} />;
+  }
 
   return (
-    <Stack spacing={1.25} sx={{ color: editorColors.text }}>
-      <Box sx={{ px: 0.25 }}>
-        <Typography variant="subtitle2" sx={editorType.panelTitle}>Add objects</Typography>
-        <Typography variant="caption" sx={editorType.caption}>Choose a tile to add it at the floor center.</Typography>
+    <Stack spacing={1} sx={{ color: editorColors.text, containerType: 'inline-size' }}>
+      <Box sx={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: 1 }}>
+        <StagePanelSearch label="Search objects" placeholder="Search objects…" query={query} onChange={changeQuery} />
+        <Tooltip describeChild title="Import an OBJ, STL or GLB model">
+          <Button size="small" variant="outlined" aria-label="Import OBJ/STL/GLB model" onClick={onImportObject} sx={{ minHeight: 44, px: 0.75 }}>
+            Import…
+          </Button>
+        </Tooltip>
       </Box>
+      {normalizedQuery && <Typography role="status" variant="caption" sx={{ ...editorType.caption, px: 0.5 }}>{resultCount ? `${resultCount} matching item${resultCount === 1 ? '' : 's'}` : 'No matching objects or prefabs.'}</Typography>}
 
-      <Button
-        fullWidth
-        size="small"
-        variant="outlined"
-        startIcon={<UploadFileIcon fontSize="small" />}
-        onClick={onImportObject}
-        sx={{ justifyContent: 'flex-start' }}
-      >
-        Import OBJ/STL/GLB model
-      </Button>
+      <Box>
+        {!normalizedQuery && availableRecentItems.length > 0 && <LibrarySection label="Add again" count={availableRecentItems.length} icon={<HistoryIcon sx={{ fontSize: 18 }} />} expanded={expanded('recent')} onToggle={() => toggleSection('recent')}>
+          <Box sx={libraryGridSx}>
+            {availableRecentItems.map(item => renderTile(item))}
+          </Box>
+        </LibrarySection>}
+        {!normalizedQuery && <LibrarySection label="Favourites" count={availableFavourites.length}
+          icon={<StarIcon sx={{ fontSize: 18, color: editorColors.warning, ...filledStarSx }} />} buttonRef={favouritesHeader}
+          expanded={expanded('favourites')} onToggle={() => toggleSection('favourites')}>
+          {availableFavourites.length ? (
+            <Box sx={libraryGridSx}>{availableFavourites.map(item => renderTile(item, true))}</Box>
+          ) : <Typography variant="caption" sx={editorType.caption}>Star a library item to keep it here.</Typography>}
+        </LibrarySection>}
+        {groups.map((group) => {
+          const CategoryIcon = categoryIcons[group.id];
+          return (
+            <LibrarySection key={group.id} label={group.label} count={group.items.length} icon={<CategoryIcon sx={{ fontSize: 18 }} />} expanded={expanded(group.id)} onToggle={() => toggleSection(group.id)}>
+              <Box sx={libraryGridSx}>
+                {group.items.map(id => renderTile({ type: 'object', id }))}
+              </Box>
+            </LibrarySection>
+          );
+        })}
 
-      {STAGE_BUILDER_LIBRARY_GROUPS.map((group) => {
-        const tone = editorTones[group.id];
-        const placeableItems = group.items.map((kind) => itemFor(kind)).filter((item) => item?.placeable);
-        return (
-          <Stack key={group.id} spacing={0.5}>
-            <SectionHeader label={group.label} count={placeableItems.length} />
-            <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 0.625 }}>
-              {group.items.map((kind) => {
-                const item = itemFor(kind);
-                if (!item?.placeable) return null;
-                return (
-                  <LibraryTile
-                    key={kind}
-                    label={item.shortLabel || item.label}
-                    detail={item.description}
-                    active={activeKind === kind}
-                    tone={tone}
-                    previewKind={kind}
-                    onClick={() => addKind?.(kind)}
-                  />
-                );
-              })}
-            </Box>
-          </Stack>
-        );
-      })}
-
-      <Stack spacing={0.5}>
-        <SectionHeader label="Prefabs" count={prefabs.length} />
-        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 0.625 }}>
-          {prefabs.map((prefab) => (
-            <LibraryTile
-              key={prefab.id}
-              label={prefab.title}
-              detail={prefab.description || `${prefab.objects.length} objects`}
-              active={activePrefabId === prefab.id}
-              tone={editorTones.prefab}
-              previewKind="prefab"
-              onClick={() => addPrefab?.(prefab)}
-            />
-          ))}
-        </Box>
-        {!prefabs.length && <Typography variant="caption" sx={{ ...editorType.caption, px: 0.5 }}>No prefabs available.</Typography>}
-      </Stack>
+        {(!normalizedQuery || matchingPrefabs.length > 0) && <LibrarySection label="Prefabs" count={matchingPrefabs.length} icon={<WidgetsOutlinedIcon sx={{ fontSize: 18 }} />} expanded={expanded('prefabs')} onToggle={() => toggleSection('prefabs')}>
+          <Box sx={libraryGridSx}>
+            {matchingPrefabs.map(prefab => renderTile({ type: 'prefab', id: prefab.id }))}
+          </Box>
+          {!prefabs.length && <Typography variant="caption" sx={{ ...editorType.caption, px: 0.5 }}>No prefabs available.</Typography>}
+        </LibrarySection>}
+      </Box>
     </Stack>
   );
 }

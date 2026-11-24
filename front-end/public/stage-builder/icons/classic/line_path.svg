@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 20 20" fill="currentColor" role="img">
+  <title>Line path</title>
+  <path d="M3.5 13.6 v-1.8 a8.3 8.3 0 0 1 8.3 -8.3 h1.8 V6 h-1.8 A5.8 5.8 0 0 0 6 11.8 v1.8 z"/>
+  <path fill-rule="evenodd" d="M8.05 15.25 a3.3 3.3 0 1 0 -6.6 0 a3.3 3.3 0 1 0 6.6 0 z
+           M6.1 15.25 a1.35 1.35 0 1 0 -2.7 0 a1.35 1.35 0 1 0 2.7 0 z
+           M18.55 4.75 a3.3 3.3 0 1 0 -6.6 0 a3.3 3.3 0 1 0 6.6 0 z
+           M16.6 4.75 a1.35 1.35 0 1 0 -2.7 0 a1.35 1.35 0 1 0 2.7 0 z"/>
+</svg>

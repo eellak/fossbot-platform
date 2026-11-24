@@ -1,6 +1,8 @@
-import React, { lazy, Suspense, useEffect, useMemo, useState } from 'react';
-import { Alert, Box, CircularProgress, Stack, Typography } from '@mui/material';
+import React, { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { Alert, Box, Button, CircularProgress, Stack, Typography } from '@mui/material';
 import type { LocalStageRecord, StageJsonEntry } from 'src/components/stage-builder/types';
+import { validateStageFormat } from 'src/simulator/stages/stageFormatCore';
+import type { FossbotSimulatorHandle } from 'src/simulator/FossbotSimulator';
 import { stageAssetBaseUrlFromStageUrl } from 'src/simulator/stages/assets';
 
 const LazyFossbotSimulator = lazy(() =>
@@ -48,21 +50,18 @@ function recordTitle(payload: unknown, fallbackUrl: string): string {
   try {
     return new URL(fallbackUrl).pathname.split('/').filter(Boolean).slice(-2).join('/');
   } catch {
-    return 'GitHub stage';
+    return 'Stage';
   }
 }
 
-function entriesFromPayload(payload: unknown): StageJsonEntry[] {
-  if (Array.isArray(payload)) return payload as StageJsonEntry[];
-  const record = payload as Partial<LocalStageRecord> | null;
-  if (Array.isArray(record?.config)) return record.config;
-  throw new Error('Stage JSON must be an array or a FOSSBot stage record with config.');
-}
 
 const StageGitHubTestPage = () => {
   const stageUrl = useMemo(() => rawStageUrlFromParams(searchParams()), []);
   const [loadedStage, setLoadedStage] = useState<LoadedStage | null>(null);
   const [error, setError] = useState('');
+  const [loadError, setLoadError] = useState('');
+  const [retry, setRetry] = useState(0);
+  const simulator = useRef<FossbotSimulatorHandle>(null);
 
   useEffect(() => {
     if (!stageUrl) {
@@ -80,7 +79,7 @@ const StageGitHubTestPage = () => {
         const payload = await response.json();
         setLoadedStage({
           title: recordTitle(payload, stageUrl),
-          entries: entriesFromPayload(payload),
+          entries: validateStageFormat(payload) as StageJsonEntry[],
           stageAssetBaseUrl: stageAssetBaseUrlFromStageUrl(stageUrl),
         });
       })
@@ -90,7 +89,7 @@ const StageGitHubTestPage = () => {
       });
 
     return () => controller.abort();
-  }, [stageUrl]);
+  }, [stageUrl, retry]);
 
   return (
     <Box sx={{ width: '100vw', height: '100vh', display: 'flex', flexDirection: 'column', bgcolor: '#0b1020', color: '#f8fafc' }}>
@@ -102,7 +101,7 @@ const StageGitHubTestPage = () => {
       </Box>
       <Box sx={{ flex: 1, minHeight: 0, position: 'relative' }}>
         {error ? (
-          <Alert severity="error" sx={{ m: 2 }}>{error}</Alert>
+          <Alert severity="error" sx={{ m: 2 }} action={<Button color="inherit" onClick={() => setRetry(value => value + 1)}>Retry</Button>}>{error}</Alert>
         ) : !loadedStage ? (
           <Stack sx={{ height: '100%', alignItems: 'center', justifyContent: 'center' }} spacing={2}>
             <CircularProgress />
@@ -111,12 +110,15 @@ const StageGitHubTestPage = () => {
         ) : (
           <Suspense fallback={<Box sx={{ p: 2 }}>Loading simulator…</Box>}>
             <LazyFossbotSimulator
+              ref={simulator}
+              onLoadError={failure => setLoadError(failure?.message || '')}
               initialStageConfig={loadedStage.entries}
               config={{ ...simulatorConfig, stageAssetBaseUrl: loadedStage.stageAssetBaseUrl }}
               style={{ minHeight: '100%' }}
             />
           </Suspense>
         )}
+        {loadError && <Alert severity="error" sx={{ position: 'absolute', top: 8, left: 8, right: 8 }} action={<Button color="inherit" onClick={() => { void simulator.current?.retryStageLoad().catch(() => {}); }}>Retry</Button>}>{loadError}</Alert>}
       </Box>
     </Box>
   );

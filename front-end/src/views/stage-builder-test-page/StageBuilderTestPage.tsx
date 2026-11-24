@@ -1,6 +1,6 @@
 import React, { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Alert, Box, IconButton, Stack, Tooltip, Typography,
+  Alert, Box, Button, IconButton, Stack, ToggleButton, ToggleButtonGroup, Tooltip, Typography,
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import RestartAltIcon from '@mui/icons-material/RestartAlt';
@@ -15,8 +15,15 @@ import ArrowForwardIosIcon from '@mui/icons-material/ArrowForwardIos';
 import StopIcon from '@mui/icons-material/Stop';
 import { useNavigate } from 'react-router-dom';
 import type { FossbotSimulatorHandle } from 'src/simulator/FossbotSimulator';
+import { validateStageFormat } from 'src/simulator/stages/stageFormatCore';
 import { readStageBuilderRunHandoff } from 'src/components/stage-builder/stageBuilderRunHandoff';
-import { editorColors, editorTones, EditorThemeProvider, getEditorColors, getEditorPanelSx, getEditorTabsSx, getEditorTones, getEditorType, getInspectorPanelSx } from 'src/components/stage-builder/stageBuilderEditorTheme';
+import { RcControls } from 'src/components/robot/RcControls';
+import { createTheme, ThemeProvider, useTheme } from '@mui/material/styles';
+import { approvedThemeOptions } from 'src/theme/ApprovedTheme';
+import { EditorThemeProvider, getEditorColors, getEditorPanelSx, getEditorTabsSx, getEditorTones, getEditorType, getInspectorPanelSx } from 'src/components/stage-builder/stageBuilderEditorTheme';
+
+const editorColors = getEditorColors('fossbot');
+const editorTones = getEditorTones('fossbot');
 
 const LazyFossbotSimulator = lazy(() =>
   import('src/simulator/FossbotSimulator').then((module) => ({ default: module.FossbotSimulator })),
@@ -56,10 +63,10 @@ const remoteBtnSx = {
 
 const stopBtnSx = {
   ...remoteBtnSx,
-  borderColor: 'rgba(242,139,116,0.25)',
+  borderColor: editorColors.danger,
   color: editorColors.danger,
   '&:hover': {
-    bgcolor: 'rgba(242,139,116,0.1)',
+    bgcolor: editorColors.dangerSurface,
     borderColor: editorColors.danger,
     color: editorColors.danger,
   },
@@ -81,8 +88,26 @@ const SENSOR_INTERVAL_MS = 300;
 
 const StageBuilderTestPage = () => {
   const navigate = useNavigate();
+  const platformTheme = useTheme();
+  const theme = useMemo(() => {
+    const approved = approvedThemeOptions(false);
+    return createTheme(platformTheme, { ...approved, palette: { ...approved.palette, mode: 'light' } });
+  }, [platformTheme]);
   const simRef = useRef<FossbotSimulatorHandle | null>(null);
+  const [rcMode, setRcMode] = useState(false);
+  const simulation = useMemo(() => ({
+    rcDrive: (throttle: number, steering: number) => simRef.current?.rcDrive(throttle, steering),
+    stopMotion: () => simRef.current?.stopMotion(),
+    rgbSetColor: (color: string) => simRef.current?.rgbSetColor(color),
+  }), []);
   const handoff = useMemo(() => readStageBuilderRunHandoff(handoffIdFromUrl()), []);
+  const handoffError = useMemo(() => {
+    if (!handoff) return 'No Stage Builder run handoff was found. Return to the builder and press Run Test again.';
+    try { validateStageFormat(handoff.record); return ''; }
+    catch (error) { return error instanceof Error ? error.message : 'This stage could not be loaded.'; }
+  }, [handoff]);
+  const [loadError, setLoadError] = useState('');
+  const [ready, setReady] = useState(false);
   const [sensorHelpersVisible, setSensorHelpersVisible] = useState(false);
   const [collisionWireVisible, setCollisionWireVisible] = useState(() => !!handoff?.collisionWireVisible);
   const [sensors, setSensors] = useState<SensorSnapshot>({
@@ -141,9 +166,6 @@ const StageBuilderTestPage = () => {
     simRef.current?.setCollisionWireVisible(next);
   };
 
-  const editorColors = useMemo(() => getEditorColors('fossbot'), []);
-  const editorTones = useMemo(() => getEditorTones('fossbot'), []);
-
   return (
     <EditorThemeProvider value={useMemo(() => ({
       variant: 'fossbot',
@@ -153,7 +175,7 @@ const StageBuilderTestPage = () => {
       panelSx: getEditorPanelSx('fossbot'),
       tabsSx: getEditorTabsSx('fossbot'),
       inspectorSx: getInspectorPanelSx('fossbot'),
-    }), [editorColors, editorTones])}>
+    }), [editorColors, editorTones])}><ThemeProvider theme={theme}>
     <Box sx={{
       '--fossbot-box-border-radius': '0px',
       borderRadius: 0,
@@ -220,7 +242,7 @@ const StageBuilderTestPage = () => {
           </span>
         </Tooltip>
         <Tooltip title="Reset">
-          <IconButton size="small" onClick={() => simRef.current?.reset()} sx={{ color: 'inherit' }}>
+          <IconButton size="small" onClick={() => { setRcMode(false); simRef.current?.reset(); }} sx={{ color: 'inherit' }}>
             <RestartAltIcon fontSize="small" />
           </IconButton>
         </Tooltip>
@@ -231,29 +253,32 @@ const StageBuilderTestPage = () => {
         flex: 1,
         minHeight: 0,
         display: 'grid',
-        gridTemplateColumns: { xs: '1fr', md: 'minmax(0, 1fr) 280px' },
+        gridTemplateColumns: { xs: '1fr', md: `minmax(0, 1fr) ${rcMode ? 400 : 280}px` },
       }}>
         {/* simulator viewport */}
         <Box sx={{ minWidth: 0, minHeight: 0, position: 'relative' }}>
-          {!handoff ? (
+          {handoffError ? (
             <Alert severity="error" sx={{ m: 2 }}>
-              No Stage Builder run handoff was found. Return to the builder and press Run Test again.
+              {handoffError}
             </Alert>
           ) : (
             <>
               <Suspense fallback={<Box sx={{ p: 2 }}>Loading simulator…</Box>}>
                 <LazyFossbotSimulator
                   ref={simRef}
-                  initialStageConfig={handoff.record.config}
-                  config={{ ...simulatorConfig, showColliders: collisionWireVisible, stageAssetBaseUrl: handoff.stageAssetBaseUrl || undefined }}
+                  initialStageConfig={handoff!.record.config}
+                  config={{ ...simulatorConfig, showColliders: collisionWireVisible, stageAssetBaseUrl: handoff!.stageAssetBaseUrl || undefined }}
                   lockCamera={lockCamera}
                   onMountChange={(mounted) => {
+                    setReady(mounted);
                     if (mounted && sensorHelpersVisible) simRef.current?.setSensorHelpersVisible(true);
                     if (mounted && collisionWireVisible) simRef.current?.setCollisionWireVisible(true);
                   }}
+                  onLoadError={(error) => setLoadError(error?.message || '')}
                   style={{ minHeight: '100%' }}
                 />
               </Suspense>
+              {loadError && <Alert severity="error" sx={{ position: 'absolute', top: 8, left: 8, right: 8 }} action={<Button color="inherit" onClick={() => { void simRef.current?.retryStageLoad().catch(() => {}); }}>Retry</Button>}>{loadError}</Alert>}
               {hasAudioEntries && (
                 <Box sx={{
                   position: 'absolute',
@@ -286,28 +311,47 @@ const StageBuilderTestPage = () => {
           gap: 2,
           overflow: 'auto',
         }}>
+          <ToggleButtonGroup
+            exclusive
+            fullWidth
+            size="small"
+            value={rcMode ? 'rc' : 'step'}
+            onChange={(_, mode) => {
+              if (!mode) return;
+              simRef.current?.stopMotion();
+              setRcMode(mode === 'rc');
+            }}
+            aria-label="Test controls"
+          >
+            <ToggleButton value="step">Step</ToggleButton>
+            <ToggleButton value="rc">RC mode</ToggleButton>
+          </ToggleButtonGroup>
           {/* ── d-pad remote (centered) ── */}
+          {rcMode ? (
+            <RcControls simulation={simulation} disabled={!ready} />
+          ) : (
           <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <Stack spacing={1.5} alignItems="center">
-              <IconButton sx={remoteBtnSx} onClick={() => simRef.current?.moveStep(-0.4)}>
+              <IconButton disabled={!ready} sx={remoteBtnSx} onClick={() => simRef.current?.moveStep(-0.4)}>
                 <ArrowUpwardIcon />
               </IconButton>
               <Stack direction="row" spacing={1.5}>
-                <IconButton sx={remoteBtnSx} onClick={() => simRef.current?.rotateStep(0.174533)}>
+                <IconButton disabled={!ready} sx={remoteBtnSx} onClick={() => simRef.current?.rotateStep(0.174533)}>
                   <ArrowBackIosNewIcon />
                 </IconButton>
                 <IconButton sx={stopBtnSx} onClick={() => simRef.current?.stopMotion()}>
                   <StopIcon />
                 </IconButton>
-                <IconButton sx={remoteBtnSx} onClick={() => simRef.current?.rotateStep(-0.174533)}>
+                <IconButton disabled={!ready} sx={remoteBtnSx} onClick={() => simRef.current?.rotateStep(-0.174533)}>
                   <ArrowForwardIosIcon />
                 </IconButton>
               </Stack>
-              <IconButton sx={remoteBtnSx} onClick={() => simRef.current?.moveStep(0.4)}>
+              <IconButton disabled={!ready} sx={remoteBtnSx} onClick={() => simRef.current?.moveStep(0.4)}>
                 <ArrowDownwardIcon />
               </IconButton>
             </Stack>
           </Box>
+          )}
 
           {/* ── live telemetry ── */}
           <Box sx={{ width: '100%' }}>
@@ -390,7 +434,7 @@ const StageBuilderTestPage = () => {
         </Box>
       </Box>
     </Box>
-    </EditorThemeProvider>
+    </ThemeProvider></EditorThemeProvider>
   );
 };
 

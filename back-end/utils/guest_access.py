@@ -13,6 +13,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from models.models import GuestSettingsUpdate, GuestView
 from sqlalchemy.orm import Session
 from utils.beta_access import require_beta_access
+from utils.github_app_auth import github_stages_configured
 
 from routers.stage_sources import get_db
 
@@ -132,6 +133,7 @@ def save_guest_settings(db: Session, request: GuestSettingsUpdate, admin_id: int
 def guest_session_payload(session: GuestSession, settings: dict) -> dict:
     return {
         "is_guest": True,
+        "github_stages_enabled": github_stages_configured(),
         "alias": session.alias,
         "created_at": session.created_at,
         "expires_at": session.expires_at,

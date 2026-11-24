@@ -87,3 +87,10 @@ describe('objectVisualKey', () => {
       .not.toBe(objectVisualKey(external, { ...options, resolvedAssetUrl: '/b/meshes/model.stl' }));
   });
 });
+
+it('invalidates native corner edits but reuses the same unchanged route', () => {
+  const line: any = { id: 'path', name: 'Path', kind: 'line', points: [[0, 0], [1, 0], [1, 1]], width: 0.03, color: 'black', curveVersion: 1, corners: [null, { mode: 'rounded', sizing: 'auto' }, null] };
+  const key = objectVisualKey(line, options);
+  expect(objectVisualKey(JSON.parse(JSON.stringify(line)), options)).toBe(key);
+  expect(objectVisualKey({ ...line, corners: [null, { mode: 'rounded', sizing: 'manual', trim: 0.2 }, null] }, options)).not.toBe(key);
+});
