@@ -102,6 +102,7 @@ export default function RobotPage() {
           <Stack spacing={3}>
             <WebsiteSectionHeading>{c.assemblyTitle}</WebsiteSectionHeading>
             <Box component="iframe" src="https://www.youtube-nocookie.com/embed/0wdUeGlyvR4" title={c.assemblyTitle}
+              referrerPolicy="strict-origin-when-cross-origin"
               loading="lazy" allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen
               sx={{ display: 'block', width: '100%', aspectRatio: '16 / 9', border: 0 }} />
             <Typography variant="body2" color="text.secondary">{c.assemblyNotice}</Typography>
