@@ -118,11 +118,23 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 REVOKED_ACCESS_MESSAGE = "Your access to the platform has been revoked."
 INACTIVE_ACCOUNT_MESSAGE = "Your account has not been activated."
 MARKETPLACE_ROLES = {"verifier", "moderator"}
+ALLOWED_PROJECT_TYPES = {"python", "blockly"}
+
+
+class UserPayloadDict(dict):
+    def __getattr__(self, name: str) -> Any:
+        try:
+            return self[name]
+        except KeyError as error:
+            raise AttributeError(f"'UserPayloadDict' object has no attribute '{name}'") from error
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        self[name] = value
 
 
 def user_payload(db: SessionLocal, user: User) -> dict[str, Any]:
     roles = [assignment.role for assignment in db.query(MarketplaceRoleAssignment).filter(MarketplaceRoleAssignment.user_id == user.id).all()]
-    return {
+    return UserPayloadDict({
         "id": user.id,
         "username": user.username,
         "firstname": user.firstname,
@@ -136,7 +148,7 @@ def user_payload(db: SessionLocal, user: User) -> dict[str, Any]:
         "provider": user.provider,
         "access_revoked": user.access_revoked,
         "marketplace_roles": sorted(roles),
-    }
+    })
 FIREBASE_CERTS_URL = 'https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com'
 _firebase_certs_cache = {'certs': {}, 'expires_at': 0}
 
@@ -525,48 +537,73 @@ async def read_users_me(token: str = Depends(oauth2_scheme), db: SessionLocal = 
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=INACTIVE_ACCOUNT_MESSAGE)
     return user_payload(db, user)
 
-@app.put("/users/me")
+@app.put("/users/me", response_model=UserResponse)
 async def update_user_info(user_update: UpdateUserRequest, current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):
     # Fetch the current user from the database
     db_user = db.query(User).filter(User.id == current_user.id).first()
     if db_user is None:
         raise HTTPException(status_code=404, detail="User not found in database")
 
-    # Update the user information if provided
+    # Update username with duplicate check
+    if user_update.username:
+        new_username = user_update.username.strip()
+        if not new_username:
+            raise HTTPException(status_code=422, detail="Username cannot be empty")
+        if new_username != db_user.username:
+            existing_user = get_user(db, new_username)
+            if existing_user and existing_user.id != db_user.id:
+                raise HTTPException(status_code=400, detail="Username already registered")
+            db_user.username = new_username
+
+    # Update email with duplicate check and normalization
+    if user_update.email:
+        new_email = user_update.email.strip().lower()
+        if not new_email:
+            raise HTTPException(status_code=422, detail="Email cannot be empty")
+        if new_email != db_user.email:
+            existing_email = db.query(User).filter(User.email == new_email).first()
+            if existing_email and existing_email.id != db_user.id:
+                raise HTTPException(status_code=400, detail="An account with this email already exists.")
+            db_user.email = new_email
+
     if user_update.firstname:
         db_user.firstname = user_update.firstname
     if user_update.lastname:
         db_user.lastname = user_update.lastname
-    if user_update.username:
-        db_user.username = user_update.username
-    if user_update.email:
-        db_user.email = user_update.email
 
     # Commit the changes to the database and refresh
-    db.commit()
-    db.refresh(db_user)
+    try:
+        db.commit()
+        db.refresh(db_user)
+    except IntegrityError as error:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="Username or email already in use") from error
 
-    return db_user
+    return user_payload(db, db_user)
 
-@app.put("/users/me/password")
+@app.put("/users/me/password", response_model=UserResponse)
 async def update_user_password(user_password_update: UpdateUserPasswordRequest, current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):
     # Fetch the current user from the database
     db_user = db.query(User).filter(User.id == current_user.id).first()
     if db_user is None:
         raise HTTPException(status_code=404, detail="User not found in database")
 
-    # Update the user information if provided
-    if user_password_update.password:
-        hashed_password = get_hashed(user_password_update.password)
-        db_user.password = hashed_password
+    if not is_local_user(db_user):
+        raise HTTPException(status_code=400, detail="Only local accounts can update passwords.")
+
+    if not user_password_update.password or not user_password_update.password.strip():
+        raise HTTPException(status_code=422, detail="Password cannot be empty.")
+
+    hashed_password = get_hashed(user_password_update.password)
+    db_user.hashed_password = hashed_password
 
     # Commit the changes to the database and refresh
     db.commit()
     db.refresh(db_user)
 
-    return db_user
+    return user_payload(db, db_user)
 
-@app.put("/users/{user_id}/beta_tester")
+@app.put("/users/{user_id}/beta_tester", response_model=UserResponse)
 async def update_beta_tester_status(user_id: int, beta_tester_update: UpdateBetaTesterRequest, current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):
     if current_user.role != UserRole.ADMIN:
         raise HTTPException(status_code=403, detail="Not authorized for this action: UPDATE BETA TESTER STATUS")
@@ -580,9 +617,9 @@ async def update_beta_tester_status(user_id: int, beta_tester_update: UpdateBeta
     db.commit()
     db.refresh(db_user)
 
-    return db_user
+    return user_payload(db, db_user)
 
-@app.put("/users/{user_id}/activated")
+@app.put("/users/{user_id}/activated", response_model=UserResponse)
 async def update_activated_status(user_id: int, activated_update: UpdateActiavtedRequest, current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):
     if current_user.role != UserRole.ADMIN:
         raise HTTPException(status_code=403, detail="Not authorized for this action: UPDATE ACTIVATION STATUS")
@@ -606,9 +643,9 @@ async def update_activated_status(user_id: int, activated_update: UpdateActiavte
     db.commit()
     db.refresh(db_user)
 
-    return db_user
+    return user_payload(db, db_user)
 
-@app.put("/users/{user_id}/role")
+@app.put("/users/{user_id}/role", response_model=UserResponse)
 async def update_user_role(user_id: int, user_role_update: UpdateUserRoleRequest, current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):
     if current_user.role != UserRole.ADMIN:
         raise HTTPException(status_code=403, detail="Not authorized for this action: UPDATE USER ROLE")
@@ -634,7 +671,7 @@ async def update_user_role(user_id: int, user_role_update: UpdateUserRoleRequest
     db.commit()
     db.refresh(db_user)
 
-    return db_user
+    return user_payload(db, db_user)
 
 
 @app.put("/users/{user_id}/marketplace-roles")
@@ -657,7 +694,7 @@ async def update_marketplace_roles(
     db.commit()
     return user_payload(db, db_user)
 
-@app.put("/users/{user_id}/access_revoked")
+@app.put("/users/{user_id}/access_revoked", response_model=UserResponse)
 async def update_access_revoked_status(user_id: int, access_revoked_update: UpdateAccessRevokedRequest, current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):
     if current_user.role != UserRole.ADMIN:
         raise HTTPException(status_code=403, detail="Not authorized for this action: UPDATE ACCESS REVOKED STATUS")
@@ -674,7 +711,7 @@ async def update_access_revoked_status(user_id: int, access_revoked_update: Upda
     db.commit()
     db.refresh(db_user)
 
-    return db_user
+    return user_payload(db, db_user)
 
 @app.post("/register/")
 async def register_user(register_request: RegisterRequest, db: SessionLocal = Depends(get_db)):
@@ -782,7 +819,9 @@ async def read_own_projects(current_user: User = Depends(get_current_user), db: 
 
 @app.post("/projects/")
 async def create_project(project: ProjectsCreate, current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):
-    db_project = Projects(name=project.name, description=project.description,project_type=project.project_type,code=project.code, user_id=current_user.id)
+    if project.project_type not in ALLOWED_PROJECT_TYPES:
+        raise HTTPException(status_code=422, detail="Project type must be 'python' or 'blockly'")
+    db_project = Projects(name=project.name, description=project.description, project_type=project.project_type, code=project.code, user_id=current_user.id)
     set_project_stage_reference(db_project, normalize_stage_reference(project.stageReference, current_user, db))
     db.add(db_project)
     db.commit()
@@ -811,8 +850,12 @@ async def update_project(project_id: int, project_update: ProjectsCreate, curren
     if db_project is None:
         raise HTTPException(status_code=404, detail="Project not found")
 
+    if project_update.project_type not in ALLOWED_PROJECT_TYPES:
+        raise HTTPException(status_code=422, detail="Project type must be 'python' or 'blockly'")
+
     db_project.name = project_update.name
-    db_project.description = project_update.description    
+    db_project.description = project_update.description
+    db_project.project_type = project_update.project_type
     db_project.code = project_update.code
     if stage_reference_was_provided(project_update):
         set_project_stage_reference(db_project, normalize_stage_reference(project_update.stageReference, current_user, db))

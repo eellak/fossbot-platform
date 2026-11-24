@@ -7,14 +7,28 @@ from database.database import User
 from main import (
     INACTIVE_ACCOUNT_MESSAGE,
     authenticate_user,
+    create_project,
     delete_user,
     get_current_user,
     get_or_create_firebase_user,
     register_user,
     update_activated_status,
+    update_project,
+    update_user_info,
+    update_user_password,
     update_user_role,
 )
-from models.models import FirebaseTokenRequest, RegisterRequest, UpdateActiavtedRequest, UpdateUserRoleRequest, UserRole
+from models.models import (
+    FirebaseTokenRequest,
+    ProjectsCreate,
+    RegisterRequest,
+    UpdateActiavtedRequest,
+    UpdateUserPasswordRequest,
+    UpdateUserRequest,
+    UpdateUserRoleRequest,
+    UserRole,
+)
+from utils.utils_hash import verify_hashed
 
 
 def raises_http_status(status_code, action):
@@ -130,3 +144,116 @@ def test_admin_can_demote_another_admin_when_continuity_is_preserved(db, users):
 
     assert updated.role == UserRole.TUTOR
     assert admin.role == UserRole.ADMIN
+
+
+def test_update_user_password_updates_hashed_password(db, users):
+    student = users[2]
+    old_hash = student.hashed_password
+
+    updated = asyncio.run(update_user_password(
+        UpdateUserPasswordRequest(password="brand-new-secret-123"),
+        student,
+        db,
+    ))
+
+    db.expire_all()
+    refreshed = db.query(User).filter(User.id == student.id).one()
+    assert refreshed.hashed_password != old_hash
+    assert verify_hashed("brand-new-secret-123", refreshed.hashed_password)
+    assert "hashed_password" not in updated
+    assert "password" not in updated
+    assert updated.username == student.username
+    assert isinstance(updated.marketplace_roles, list)
+
+
+def test_update_user_password_rejects_empty_password_or_social_account(db, users):
+    student = users[2]
+    raises_http_status(422, lambda: asyncio.run(update_user_password(
+        UpdateUserPasswordRequest(password="   "),
+        student,
+        db,
+    )))
+
+    student.firebase_uid = "firebase-social-user"
+    student.provider = "google"
+    db.commit()
+
+    error = raises_http_status(400, lambda: asyncio.run(update_user_password(
+        UpdateUserPasswordRequest(password="new-secret"),
+        student,
+        db,
+    )))
+    assert "local accounts" in error.detail.lower()
+
+
+def test_update_user_info_handles_valid_and_duplicate_fields(db, users):
+    tutor, _, student, _ = users
+
+    # Valid update with normalized email
+    updated = asyncio.run(update_user_info(
+        UpdateUserRequest(username="updated-student", email="  NewStudentEmail@Example.Com  ", firstname="Up", lastname="Dated"),
+        student,
+        db,
+    ))
+
+    db.expire_all()
+    refreshed = db.query(User).filter(User.id == student.id).one()
+    assert refreshed.username == "updated-student"
+    assert refreshed.email == "newstudentemail@example.com"
+    assert refreshed.firstname == "Up"
+    assert refreshed.lastname == "Dated"
+    assert "hashed_password" not in updated
+    assert updated.marketplace_roles == []
+
+    # Duplicate username should be rejected with 400
+    dup_user_err = raises_http_status(400, lambda: asyncio.run(update_user_info(
+        UpdateUserRequest(username=tutor.username, email=refreshed.email, firstname=refreshed.firstname, lastname=refreshed.lastname),
+        refreshed,
+        db,
+    )))
+    assert "already registered" in dup_user_err.detail
+
+    # Duplicate email should be rejected with 400
+    dup_email_err = raises_http_status(400, lambda: asyncio.run(update_user_info(
+        UpdateUserRequest(username=refreshed.username, email=tutor.email, firstname=refreshed.firstname, lastname=refreshed.lastname),
+        refreshed,
+        db,
+    )))
+    assert "already exists" in dup_email_err.detail
+
+
+def test_create_and_update_project_validates_project_type(db, users):
+    student = users[2]
+
+    # Invalid project type on create
+    raises_http_status(422, lambda: asyncio.run(create_project(
+        ProjectsCreate(name="Bad", description="Desc", project_type="unsupported", code="print(1)"),
+        student,
+        db,
+    )))
+
+    # Valid project creation
+    proj = asyncio.run(create_project(
+        ProjectsCreate(name="Good", description="Desc", project_type="python", code="print(1)"),
+        student,
+        db,
+    ))
+    assert proj["project_type"] == "python"
+
+    # Invalid project type on update
+    raises_http_status(422, lambda: asyncio.run(update_project(
+        proj["id"],
+        ProjectsCreate(name="Good", description="Desc", project_type="invalid_type", code="print(2)"),
+        student,
+        db,
+    )))
+
+    # Valid project update
+    updated_proj = asyncio.run(update_project(
+        proj["id"],
+        ProjectsCreate(name="Good", description="Desc", project_type="blockly", code="<xml></xml>"),
+        student,
+        db,
+    ))
+    assert updated_proj["project_type"] == "blockly"
+
