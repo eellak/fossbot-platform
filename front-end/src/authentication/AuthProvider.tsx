@@ -122,9 +122,11 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
     localStorage.removeItem(GUEST_TOKEN_STORAGE_KEY);
   };
 
-  const loadAuthenticatedUser = async (accessToken: string) => {
+  const loadAuthenticatedUser = async (accessToken: string, isCurrent: () => boolean = () => true) => {
     const response = await getUserData(accessToken);
     const userData = await readApiJson(response);
+
+    if (!isCurrent()) return userData;
 
     if (!response.ok) {
       if ([revokedAccessMessage, inactiveAccountMessage].includes(userData.detail)) {
@@ -152,6 +154,7 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
       throw new Error(res.detail || 'Firebase login failed');
     }
 
+    setAuthStatus('loading');
     clearGuestIdentity();
     setUser(null);
     setToken(res.access_token);
@@ -202,7 +205,7 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
     }
     const fetchUserData = async () => {
       try {
-        await loadAuthenticatedUser(token);
+        await loadAuthenticatedUser(token, () => active);
       } catch (error) {
         console.error('Error fetching user data:', error);
         if (active) clearSession();
