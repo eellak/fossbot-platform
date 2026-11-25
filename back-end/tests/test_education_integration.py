@@ -987,3 +987,107 @@ def test_guest_marketplace_index_is_read_only_and_view_gated(client_for, users, 
     settings.allowed_views = ["classrooms"]
     db.commit()
     assert guest.get("/api/marketplace/index", headers=headers).status_code == 403
+
+
+def test_classroom_release_safeguards_and_missing_record_handling(client_for, users, db):
+    from routers.classrooms import release_lessons, released_mission, release_activity_types
+    from database.database import CourseRelease, ClassChallenge, CourseAssignment, ClassGroup
+    from fastapi import HTTPException
+
+    # 1. release_lessons handles None or malformed snapshot
+    dummy_release_none = CourseRelease(id=9991, course_id=1, version=1, snapshot=None)
+    assert release_lessons(dummy_release_none) == []
+    dummy_release_str = CourseRelease(id=9992, course_id=1, version=1, snapshot="invalid")
+    assert release_lessons(dummy_release_str) == []
+    dummy_release_missing_pos = CourseRelease(id=9993, course_id=1, version=1, snapshot={
+        "lessons": [{"lessonKey": "l1"}, {"lessonKey": "l2", "position": 1}]
+    })
+    lessons = release_lessons(dummy_release_missing_pos)
+    assert len(lessons) == 2
+    assert lessons[0]["lessonKey"] == "l1"
+
+    # 2. released_mission handles missing lessonKey or missing mission
+    with pytest.raises(HTTPException) as exc_info:
+        released_mission(dummy_release_missing_pos, "nonexistent", "activity1")
+    assert exc_info.value.status_code == 422
+
+    # 3. release_activity_types handles None and malformed lessons
+    assert release_activity_types(None) == {}
+    dummy_release_activities = CourseRelease(id=9994, course_id=1, version=1, snapshot={
+        "lessons": [{"lessonKey": "l1", "activities": [{"key": "a1", "type": "mission"}]}]
+    })
+    types = release_activity_types(dummy_release_activities)
+    assert types == {("l1", "a1"): "mission"}
+
+    # 4. Challenge statistics returns 404 when release is missing
+    tutor, _, _, _ = users
+    teacher = client_for(tutor)
+    course, lesson, release = create_published_course(teacher)
+    group = teacher.post("/class-groups", json={"name": "Challenge Group"}).json()
+    assignment_resp = teacher.post(
+        f"/class-groups/{group['id']}/assignments",
+        json={"course_id": course["id"]},
+    )
+    assert assignment_resp.status_code in (200, 201), assignment_resp.text
+    assignment = assignment_resp.json()
+    challenge = teacher.post(
+        f"/course-assignments/{assignment['id']}/challenges",
+        json={"lesson_key": lesson["lesson_key"], "activity_key": "route", "board_type": "highest_score", "tie_tolerance": 0, "enabled": True},
+    ).json()
+
+    # Verify normal stats work
+    stats = teacher.get(f"/class-challenges/{challenge['id']}/statistics")
+    assert stats.status_code == 200
+    assert stats.json()["activity_title"] == "Efficient route"
+
+    # Simulate purged CourseRelease for challenge
+    db_challenge = db.query(ClassChallenge).filter(ClassChallenge.id == challenge["id"]).one()
+    db_challenge.release_id = 999999
+    db.commit()
+
+    stats_purged = teacher.get(f"/class-challenges/{challenge['id']}/statistics")
+    assert stats_purged.status_code == 404
+    assert stats_purged.json()["detail"] == "Course release not found"
+
+    # 5. Leaderboard returns 404 when release is missing
+    teacher.put(f"/class-groups/{group['id']}", json={"leaderboards_enabled": True})
+    leaderboard_purged = teacher.get(f"/class-challenges/{challenge['id']}/leaderboard")
+    assert leaderboard_purged.status_code == 404
+    assert leaderboard_purged.json()["detail"] == "Course release not found"
+
+    # 6. Activity title fallback when activity lacks title
+    from routers.classrooms import challenge_payload
+    db_challenge.release_id = release["id"]
+    db.commit()
+    db_release = db.query(CourseRelease).filter(CourseRelease.id == release["id"]).one()
+    orig_snapshot = copy.deepcopy(db_release.snapshot)
+    snapshot_no_title = copy.deepcopy(orig_snapshot)
+    del snapshot_no_title["lessons"][0]["activities"][0]["title"]
+    db_release.snapshot = snapshot_no_title
+    db.commit()
+
+    stats_no_title = teacher.get(f"/class-challenges/{challenge['id']}/statistics")
+    assert stats_no_title.status_code == 200
+    assert stats_no_title.json()["activity_title"] == "Untitled Activity"
+
+    payload = challenge_payload(db, db_challenge)
+    assert payload["activity_title"] == "Untitled Activity"
+
+    db_release.snapshot = orig_snapshot
+    db.commit()
+
+    # 7. enrollment_analytics handles missing release gracefully
+    from routers.classrooms import enrollment_analytics
+    from database.database import Enrollment
+    dummy_enrollment = Enrollment(
+        id=9998,
+        course_id=course["id"],
+        assignment_id=assignment["id"],
+        active_release_id=999999,
+        student_id=tutor.id,
+    )
+    with pytest.raises(HTTPException) as exc_info:
+        enrollment_analytics(db, dummy_enrollment, latest_release_id=None)
+    assert exc_info.value.status_code == 404
+    assert exc_info.value.detail == "Course release not found"
+

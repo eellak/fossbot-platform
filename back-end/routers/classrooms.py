@@ -178,14 +178,20 @@ def challenge_or_404(db: Session, challenge_id: int) -> ClassChallenge:
 
 
 def release_lessons(release: CourseRelease) -> list[dict[str, Any]]:
-    return sorted(release.snapshot.get("lessons", []), key=lambda lesson: lesson["position"])
+    if release is None or not isinstance(release.snapshot, dict):
+        return []
+    lessons = release.snapshot.get("lessons", [])
+    if not isinstance(lessons, list):
+        return []
+    valid_lessons = [lesson for lesson in lessons if isinstance(lesson, dict)]
+    return sorted(valid_lessons, key=lambda lesson: lesson.get("position", 0))
 
 
 def released_mission(release: CourseRelease, lesson_key: str, activity_key: str) -> tuple[dict[str, Any], dict[str, Any]]:
-    lesson = next((item for item in release_lessons(release) if item["lessonKey"] == lesson_key), None)
+    lesson = next((item for item in release_lessons(release) if item.get("lessonKey") == lesson_key), None)
     if lesson is None:
         raise HTTPException(status_code=422, detail="Lesson is not part of the assigned release")
-    activity = next((item for item in lesson.get("activities", []) if item.get("key") == activity_key), None)
+    activity = next((item for item in lesson.get("activities", []) if isinstance(item, dict) and item.get("key") == activity_key), None)
     if activity is None or activity.get("type") != "mission":
         raise HTTPException(status_code=422, detail="Challenge must reference a mission in the assigned release")
     return lesson, activity
@@ -227,17 +233,22 @@ def ensure_assignment_enrollment(db: Session, assignment: CourseAssignment, memb
 
 
 def challenge_payload(db: Session, challenge: ClassChallenge) -> dict[str, Any]:
-    release = db.query(CourseRelease).filter(CourseRelease.id == challenge.release_id).one()
-    lesson, activity = released_mission(release, challenge.lesson_key, challenge.activity_key)
+    release = db.query(CourseRelease).filter(CourseRelease.id == challenge.release_id).first()
+    lesson, activity = {}, {}
+    if release is not None:
+        try:
+            lesson, activity = released_mission(release, challenge.lesson_key, challenge.activity_key)
+        except HTTPException:
+            lesson, activity = {}, {}
     return {
         "id": challenge.id,
         "assignment_id": challenge.assignment_id,
         "release_id": challenge.release_id,
-        "release_version": release.version,
+        "release_version": release.version if release else None,
         "lesson_key": challenge.lesson_key,
-        "lesson_title": lesson["title"],
+        "lesson_title": lesson.get("title", "Untitled Lesson"),
         "activity_key": challenge.activity_key,
-        "activity_title": activity["title"],
+        "activity_title": activity.get("title", "Untitled Activity"),
         "score_enabled": bool((activity.get("scoreConfig") or {}).get("enabled")),
         "enabled": challenge.enabled,
         "board_type": challenge.board_type,
@@ -247,32 +258,35 @@ def challenge_payload(db: Session, challenge: ClassChallenge) -> dict[str, Any]:
 
 
 def assignment_payload(db: Session, assignment: CourseAssignment, season: int) -> dict[str, Any]:
-    course = db.query(Course).filter(Course.id == assignment.course_id).one()
-    release = db.query(CourseRelease).filter(CourseRelease.id == assignment.release_id).one()
+    course = db.query(Course).filter(Course.id == assignment.course_id).first()
+    release = db.query(CourseRelease).filter(CourseRelease.id == assignment.release_id).first()
     challenges = db.query(ClassChallenge).filter(
         ClassChallenge.assignment_id == assignment.id,
         ClassChallenge.season == season,
     ).order_by(ClassChallenge.id).all()
     missions = []
-    for lesson in release_lessons(release):
-        for activity in lesson.get("activities", []):
-            if activity.get("type") == "mission":
-                missions.append({
-                    "lesson_key": lesson["lessonKey"],
-                    "lesson_title": lesson["title"],
-                    "activity_key": activity["key"],
-                    "activity_title": activity["title"],
-                    "score_enabled": bool((activity.get("scoreConfig") or {}).get("enabled")),
-                })
+    if release:
+        for lesson in release_lessons(release):
+            for activity in lesson.get("activities", []):
+                if isinstance(activity, dict) and activity.get("type") == "mission":
+                    missions.append({
+                        "lesson_key": lesson.get("lessonKey", ""),
+                        "lesson_title": lesson.get("title", "Untitled Lesson"),
+                        "activity_key": activity.get("key", ""),
+                        "activity_title": activity.get("title", "Untitled Activity"),
+                        "score_enabled": bool((activity.get("scoreConfig") or {}).get("enabled")),
+                    })
+    course_snapshot = release.snapshot.get("course", {}) if (release and isinstance(release.snapshot, dict)) else {}
+    course_title = course_snapshot.get("title") or (course.title if course else "Untitled Course")
     return {
         "id": assignment.id,
         "group_id": assignment.group_id,
         "course_id": assignment.course_id,
-        "course_title": release.snapshot["course"]["title"],
+        "course_title": course_title,
         "release_id": assignment.release_id,
-        "release_version": release.version,
-        "latest_release_id": course.latest_published_release_id,
-        "update_available": course.latest_published_release_id != assignment.release_id,
+        "release_version": release.version if release else None,
+        "latest_release_id": course.latest_published_release_id if course else None,
+        "update_available": (course.latest_published_release_id != assignment.release_id) if course else False,
         "update_policy": assignment.update_policy,
         "due_at": assignment.due_at,
         "missions": missions,
@@ -323,7 +337,9 @@ def teacher_group_payload(db: Session, group: ClassGroup) -> dict[str, Any]:
 
 
 def student_group_payload(db: Session, membership: ClassMembership) -> dict[str, Any]:
-    group = db.query(ClassGroup).filter(ClassGroup.id == membership.group_id).one()
+    group = db.query(ClassGroup).filter(ClassGroup.id == membership.group_id).first()
+    if group is None:
+        raise HTTPException(status_code=404, detail="Class group not found")
     assignments = db.query(CourseAssignment).filter(
         CourseAssignment.group_id == group.id,
     ).order_by(CourseAssignment.created_at).all()
@@ -436,8 +452,12 @@ def reset_challenge_season(
     ).all() if assignment_ids else []
     now = datetime.datetime.utcnow()
     for challenge in challenges:
-        assignment = next(item for item in assignments if item.id == challenge.assignment_id)
-        release = db.query(CourseRelease).filter(CourseRelease.id == assignment.release_id).one()
+        assignment = next((item for item in assignments if item.id == challenge.assignment_id), None)
+        if assignment is None:
+            continue
+        release = db.query(CourseRelease).filter(CourseRelease.id == assignment.release_id).first()
+        if release is None:
+            continue
         try:
             released_mission(release, challenge.lesson_key, challenge.activity_key)
         except HTTPException:
@@ -719,7 +739,9 @@ def create_challenge(
 ):
     require_teacher(user)
     assignment, group = teacher_assignment_or_404(db, user, assignment_id)
-    release = db.query(CourseRelease).filter(CourseRelease.id == assignment.release_id).one()
+    release = db.query(CourseRelease).filter(CourseRelease.id == assignment.release_id).first()
+    if release is None:
+        raise HTTPException(status_code=404, detail="Course release not found")
     _, activity = released_mission(release, request.lesson_key, request.activity_key)
     if request.board_type == "highest_score" and not (activity.get("scoreConfig") or {}).get("enabled"):
         raise HTTPException(status_code=422, detail="Highest-score challenges require scoring in the assigned release")
@@ -756,7 +778,9 @@ def update_challenge(
     values = request.model_dump(exclude_unset=True)
     board_type = values.get("board_type", challenge.board_type)
     if board_type == "highest_score":
-        release = db.query(CourseRelease).filter(CourseRelease.id == challenge.release_id).one()
+        release = db.query(CourseRelease).filter(CourseRelease.id == challenge.release_id).first()
+        if release is None:
+            raise HTTPException(status_code=404, detail="Course release not found")
         _, activity = released_mission(release, challenge.lesson_key, challenge.activity_key)
         if not (activity.get("scoreConfig") or {}).get("enabled"):
             raise HTTPException(status_code=422, detail="Highest-score challenges require scoring in the assigned release")
@@ -840,11 +864,13 @@ def read_challenge_statistics(
         if value is not None
     ]
     higher_is_better = challenge.board_type in {"highest_score", "most_optional"}
-    release = db.query(CourseRelease).filter(CourseRelease.id == challenge.release_id).one()
+    release = db.query(CourseRelease).filter(CourseRelease.id == challenge.release_id).first()
+    if release is None:
+        raise HTTPException(status_code=404, detail="Course release not found")
     _, activity = released_mission(release, challenge.lesson_key, challenge.activity_key)
     return {
         "challenge_id": challenge.id,
-        "activity_title": activity["title"],
+        "activity_title": activity.get("title", "Untitled Activity"),
         "board_type": challenge.board_type,
         "release_version": release.version,
         "season": challenge.season,
@@ -869,7 +895,9 @@ def read_leaderboard(
 ):
     challenge = challenge_or_404(db, challenge_id)
     assignment = assignment_or_404(db, challenge.assignment_id)
-    group = db.query(ClassGroup).filter(ClassGroup.id == assignment.group_id).one()
+    group = db.query(ClassGroup).filter(ClassGroup.id == assignment.group_id).first()
+    if group is None:
+        raise HTTPException(status_code=404, detail="Class group not found")
     teacher_view = bool(
         not participant.is_guest
         and participant.user.id == group.teacher_id
@@ -931,12 +959,14 @@ def read_leaderboard(
         entries.append(entry)
         previous_value, previous_rank = value, rank
 
-    release = db.query(CourseRelease).filter(CourseRelease.id == challenge.release_id).one()
+    release = db.query(CourseRelease).filter(CourseRelease.id == challenge.release_id).first()
+    if release is None:
+        raise HTTPException(status_code=404, detail="Course release not found")
     _, activity = released_mission(release, challenge.lesson_key, challenge.activity_key)
     return {
         "challenge_id": challenge.id,
         "group_name": group.name,
-        "activity_title": activity["title"],
+        "activity_title": activity.get("title", "Untitled Activity"),
         "board_type": challenge.board_type,
         "tie_tolerance": challenge.tie_tolerance,
         "release_id": release.id,
@@ -948,20 +978,26 @@ def read_leaderboard(
 
 
 def release_activity_types(release: CourseRelease) -> dict[tuple[str, str], str]:
+    if release is None:
+        return {}
     return {
-        (lesson["lessonKey"], activity["key"]): activity["type"]
+        (lesson.get("lessonKey", ""), activity.get("key", "")): activity.get("type", "")
         for lesson in release_lessons(release)
         for activity in lesson.get("activities", [])
+        if isinstance(activity, dict)
     }
 
 
 def enrollment_analytics(db: Session, enrollment: Enrollment, latest_release_id: Optional[int]) -> dict[str, Any]:
-    release = db.query(CourseRelease).filter(CourseRelease.id == enrollment.active_release_id).one()
+    release = db.query(CourseRelease).filter(CourseRelease.id == enrollment.active_release_id).first()
+    if release is None:
+        raise HTTPException(status_code=404, detail="Course release not found")
     lessons = release_lessons(release)
     activities = {
-        (lesson["lessonKey"], activity["key"]): activity
+        (lesson.get("lessonKey", ""), activity.get("key", "")): activity
         for lesson in lessons
         for activity in lesson.get("activities", [])
+        if isinstance(activity, dict)
     }
     progress = db.query(LessonProgress).filter(
         LessonProgress.enrollment_id == enrollment.id,
@@ -986,7 +1022,8 @@ def enrollment_analytics(db: Session, enrollment: Enrollment, latest_release_id:
         } and item.correctness is not None
     ]
     review_lessons = {
-        lesson["lessonKey"] for lesson in lessons if lesson.get("completionPolicy") == "teacher_review"
+        lesson.get("lessonKey") for lesson in lessons
+        if lesson.get("lessonKey") and lesson.get("completionPolicy") == "teacher_review"
     }
     awaiting_review = any(
         item.lesson_key in review_lessons and item.satisfied for item in answers
@@ -1006,21 +1043,24 @@ def enrollment_analytics(db: Session, enrollment: Enrollment, latest_release_id:
         ) if value is not None
     ]
     if enrollment.guest_session_id is not None:
-        guest = db.query(GuestSession).filter(GuestSession.id == enrollment.guest_session_id).one()
+        guest = db.query(GuestSession).filter(GuestSession.id == enrollment.guest_session_id).first()
         student_payload = {
-            "username": guest.alias,
-            "display_name": guest.alias,
+            "username": guest.alias if guest else "Unknown Guest",
+            "display_name": guest.alias if guest else "Unknown Guest",
             "is_guest": True,
         }
     else:
-        student = db.query(User).filter(User.id == enrollment.student_id).one()
+        student = db.query(User).filter(User.id == enrollment.student_id).first()
         student_payload = {
-            "username": student.username,
-            "display_name": f"{student.firstname} {student.lastname}".strip() or student.username,
+            "username": student.username if student else "Unknown User",
+            "display_name": (f"{student.firstname} {student.lastname}".strip() or student.username) if student else "Unknown User",
             "is_guest": False,
         }
     latest_attempt = successful[-1] if successful else (attempts[-1] if attempts else None)
-    best_attempt = max(scored, key=lambda item: item.score_result["total"]) if scored else None
+    best_attempt = max(
+        scored,
+        key=lambda item: (item.score_result.get("total", 0) if isinstance(item.score_result, dict) else 0)
+    ) if scored else None
     outcome_reasons = Counter()
     for attempt in attempts:
         if attempt.outcome == "succeeded":
@@ -1034,8 +1074,8 @@ def enrollment_analytics(db: Session, enrollment: Enrollment, latest_release_id:
             signals.add("runtime_error")
         activity = activities.get((attempt.lesson_key, attempt.activity_key), {})
         checkpoint_keys = {
-            objective["key"] for objective in activity.get("objectives", [])
-            if objective.get("condition", {}).get("type") == "checkpoints"
+            objective.get("key") for objective in activity.get("objectives", [])
+            if isinstance(objective, dict) and objective.get("condition", {}).get("type") == "checkpoints"
         }
         if any(
             result.get("key") in checkpoint_keys and result.get("status") != "succeeded"
