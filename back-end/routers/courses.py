@@ -1325,7 +1325,9 @@ def read_published_course(
         release_id = course.latest_published_release_id
     else:
         raise HTTPException(status_code=404, detail="Course not found")
-    release = db.query(CourseRelease).filter(CourseRelease.id == release_id).one()
+    release = db.query(CourseRelease).filter(CourseRelease.id == release_id).first()
+    if release is None:
+        raise HTTPException(status_code=404, detail="Course release not found")
     return release_course_payload(course, release)
 
 
@@ -1380,14 +1382,27 @@ def owned_enrollment_or_404(db: Session, actor: Union[User, Participant], enroll
 
 
 def release_lessons(release: CourseRelease) -> list[dict[str, Any]]:
-    return sorted(release.snapshot.get("lessons", []), key=lambda lesson: lesson["position"])
+    if release is None or not isinstance(release.snapshot, dict):
+        return []
+    lessons = release.snapshot.get("lessons", [])
+    if not isinstance(lessons, list):
+        return []
+    valid_lessons = [lesson for lesson in lessons if isinstance(lesson, dict)]
+    return sorted(valid_lessons, key=lambda lesson: lesson.get("position", 0))
 
 
 def lesson_for_release_or_404(release: CourseRelease, lesson_key: str) -> dict[str, Any]:
-    lesson = next((item for item in release_lessons(release) if item["lessonKey"] == lesson_key), None)
+    lesson = next((item for item in release_lessons(release) if item.get("lessonKey") == lesson_key), None)
     if lesson is None:
         raise HTTPException(status_code=404, detail="Lesson not found in active release")
     return lesson
+
+
+def active_enrollment_release_or_404(db: Session, enrollment: Enrollment) -> CourseRelease:
+    release = db.query(CourseRelease).filter(CourseRelease.id == enrollment.active_release_id).first()
+    if release is None:
+        raise HTTPException(status_code=404, detail="Course release not found")
+    return release
 
 
 def progress_row(db: Session, enrollment: Enrollment, lesson_key: str) -> Optional[LessonProgress]:
@@ -1414,8 +1429,8 @@ def activity_answer_row(
 
 def activity_state_payload(activity: dict[str, Any], answer: Optional[ActivityAnswer]) -> dict[str, Any]:
     return {
-        "activity_key": activity["key"],
-        "type": activity["type"],
+        "activity_key": activity.get("key", ""),
+        "type": activity.get("type", ""),
         "required": activity.get("required", False),
         "submitted_value": answer.submitted_value if answer else None,
         "correctness": answer.correctness if answer else None,
@@ -1433,7 +1448,8 @@ def required_activities_satisfied(
     enrollment: Enrollment,
     lesson: dict[str, Any],
 ) -> bool:
-    required = {activity["key"] for activity in lesson.get("activities", []) if activity.get("required", False)}
+    required = {activity.get("key") for activity in lesson.get("activities", []) if isinstance(activity, dict) and activity.get("required", False)}
+    required.discard(None)
     if not required:
         return True
     satisfied = {
@@ -1441,7 +1457,7 @@ def required_activities_satisfied(
         for item in db.query(ActivityAnswer).filter(
             ActivityAnswer.enrollment_id == enrollment.id,
             ActivityAnswer.release_id == enrollment.active_release_id,
-            ActivityAnswer.lesson_key == lesson["lessonKey"],
+            ActivityAnswer.lesson_key == lesson.get("lessonKey"),
             ActivityAnswer.satisfied.is_(True),
         ).all()
     }
@@ -1573,41 +1589,46 @@ def refresh_course_completion(db: Session, enrollment: Enrollment, release: Cour
 
 
 def enrollment_payload(db: Session, enrollment: Enrollment) -> dict[str, Any]:
-    course = db.query(Course).filter(Course.id == enrollment.course_id).one()
-    release = db.query(CourseRelease).filter(CourseRelease.id == enrollment.active_release_id).one()
+    course = db.query(Course).filter(Course.id == enrollment.course_id).first()
+    if course is None:
+        raise HTTPException(status_code=404, detail="Course not found")
+    release = db.query(CourseRelease).filter(CourseRelease.id == enrollment.active_release_id).first()
+    if release is None:
+        raise HTTPException(status_code=404, detail="Course release not found")
     stored = {item.lesson_key: item for item in db.query(LessonProgress).filter(
         LessonProgress.enrollment_id == enrollment.id,
         LessonProgress.release_id == release.id,
     ).all()}
     lessons = release_lessons(release)
     progress = [{
-        "lesson_key": lesson["lessonKey"],
-        "state": stored[lesson["lessonKey"]].state if lesson["lessonKey"] in stored else "not_started",
-        "started_at": stored[lesson["lessonKey"]].started_at if lesson["lessonKey"] in stored else None,
-        "completed_at": stored[lesson["lessonKey"]].completed_at if lesson["lessonKey"] in stored else None,
-        "completion_method": stored[lesson["lessonKey"]].completion_method if lesson["lessonKey"] in stored else None,
+        "lesson_key": lesson.get("lessonKey", ""),
+        "state": stored[lesson.get("lessonKey")].state if lesson.get("lessonKey") in stored else "not_started",
+        "started_at": stored[lesson.get("lessonKey")].started_at if lesson.get("lessonKey") in stored else None,
+        "completed_at": stored[lesson.get("lessonKey")].completed_at if lesson.get("lessonKey") in stored else None,
+        "completion_method": stored[lesson.get("lessonKey")].completion_method if lesson.get("lessonKey") in stored else None,
     } for lesson in lessons]
     completed_count = sum(item["state"] == "completed" for item in progress)
-    resume = next((item["lessonKey"] for item, state in zip(lessons, progress) if state["state"] != "completed"), None)
+    resume = next((item.get("lessonKey") for item, state in zip(lessons, progress) if state["state"] != "completed"), None)
     if resume is None and lessons:
-        resume = lessons[0]["lessonKey"]
+        resume = lessons[0].get("lessonKey")
     latest = db.query(CourseRelease).filter(CourseRelease.id == course.latest_published_release_id).first()
-    snapshot_course = release.snapshot["course"]
+    snapshot_course = release.snapshot.get("course", {}) if isinstance(release.snapshot, dict) else {}
+    author_name = (f"{course.author.firstname} {course.author.lastname}".strip() or course.author.username) if course.author else "Course Author"
     return {
         "id": enrollment.id,
         "course_id": course.id,
         "course": {
-            "title": snapshot_course["title"],
-            "description": snapshot_course["description"],
-            "author_name": f"{course.author.firstname} {course.author.lastname}".strip() or course.author.username,
-            "learning_objectives": snapshot_course["learningObjectives"],
+            "title": snapshot_course.get("title", course.title),
+            "description": snapshot_course.get("description", course.description or ""),
+            "author_name": author_name,
+            "learning_objectives": snapshot_course.get("learningObjectives", []),
             "cover_image_url": snapshot_course.get("coverImageUrl"),
             "age_range": snapshot_course.get("ageRange"),
             "difficulty": snapshot_course.get("difficulty"),
             "estimated_duration_minutes": snapshot_course.get("estimatedDurationMinutes"),
             "prerequisites": snapshot_course.get("prerequisites"),
             "tags": snapshot_course.get("tags"),
-            "visibility": snapshot_course["visibility"],
+            "visibility": snapshot_course.get("visibility", "private"),
         },
         "active_release": {
             "id": release.id,
@@ -1731,7 +1752,7 @@ def start_lesson(
 ):
     require_account_student(participant)
     enrollment = owned_enrollment_or_404(db, participant, enrollment_id)
-    release = db.query(CourseRelease).filter(CourseRelease.id == enrollment.active_release_id).one()
+    release = active_enrollment_release_or_404(db, enrollment)
     lesson_for_release_or_404(release, lesson_key)
     progress = progress_row(db, enrollment, lesson_key)
     if progress is None:
@@ -1756,7 +1777,7 @@ def read_lesson_workspace(
 ):
     require_account_student(participant)
     enrollment = owned_enrollment_or_404(db, participant, enrollment_id)
-    release = db.query(CourseRelease).filter(CourseRelease.id == enrollment.active_release_id).one()
+    release = active_enrollment_release_or_404(db, enrollment)
     lesson = lesson_for_release_or_404(release, lesson_key)
     return workspace_payload(initialize_workspace(db, enrollment, release, lesson))
 
@@ -1772,7 +1793,7 @@ def save_lesson_workspace(
     require_account_student(participant)
     enrollment = owned_enrollment_or_404(db, participant, enrollment_id)
     require_loaded_release(enrollment, request.release_id)
-    release = db.query(CourseRelease).filter(CourseRelease.id == enrollment.active_release_id).one()
+    release = active_enrollment_release_or_404(db, enrollment)
     lesson = lesson_for_release_or_404(release, lesson_key)
     workspace = initialize_workspace(db, enrollment, release, lesson)
     if workspace.revision != request.revision:
@@ -1803,7 +1824,7 @@ def reset_lesson_workspace(
     require_account_student(participant)
     enrollment = owned_enrollment_or_404(db, participant, enrollment_id)
     require_loaded_release(enrollment, request.release_id)
-    release = db.query(CourseRelease).filter(CourseRelease.id == enrollment.active_release_id).one()
+    release = active_enrollment_release_or_404(db, enrollment)
     lesson = lesson_for_release_or_404(release, lesson_key)
     workspace = initialize_workspace(db, enrollment, release, lesson)
     if workspace.revision != request.revision:
@@ -1824,7 +1845,7 @@ def read_activity_states(
 ):
     require_student(participant)
     enrollment = owned_enrollment_or_404(db, participant, enrollment_id)
-    release = db.query(CourseRelease).filter(CourseRelease.id == enrollment.active_release_id).one()
+    release = active_enrollment_release_or_404(db, enrollment)
     lesson = lesson_for_release_or_404(release, lesson_key)
     stored = {
         item.activity_key: item
@@ -1834,7 +1855,7 @@ def read_activity_states(
             ActivityAnswer.lesson_key == lesson_key,
         ).all()
     }
-    return [activity_state_payload(activity, stored.get(activity["key"])) for activity in lesson.get("activities", [])]
+    return [activity_state_payload(activity, stored.get(activity.get("key"))) for activity in lesson.get("activities", []) if isinstance(activity, dict)]
 
 
 @router.post("/enrollments/{enrollment_id}/lessons/{lesson_key}/activities/{activity_key}/submit")
@@ -1848,7 +1869,7 @@ def submit_activity(
 ):
     require_student(participant)
     enrollment = owned_enrollment_or_404(db, participant, enrollment_id)
-    release = db.query(CourseRelease).filter(CourseRelease.id == enrollment.active_release_id).one()
+    release = active_enrollment_release_or_404(db, enrollment)
     lesson = lesson_for_release_or_404(release, lesson_key)
     try:
         activity = activity_by_key(lesson, activity_key)
@@ -2018,7 +2039,7 @@ def read_mission_attempts(
 ):
     require_student(participant)
     enrollment = owned_enrollment_or_404(db, participant, enrollment_id)
-    release = db.query(CourseRelease).filter(CourseRelease.id == enrollment.active_release_id).one()
+    release = active_enrollment_release_or_404(db, enrollment)
     lesson = lesson_for_release_or_404(release, lesson_key)
     try:
         activity = activity_by_key(lesson, activity_key)
@@ -2045,7 +2066,7 @@ def read_mission_summary(
 ):
     require_student(participant)
     enrollment = owned_enrollment_or_404(db, participant, enrollment_id)
-    release = db.query(CourseRelease).filter(CourseRelease.id == enrollment.active_release_id).one()
+    release = active_enrollment_release_or_404(db, enrollment)
     lesson = lesson_for_release_or_404(release, lesson_key)
     try:
         activity = activity_by_key(lesson, activity_key)
@@ -2085,7 +2106,7 @@ def submit_mission_attempt(
 ):
     require_student(participant)
     enrollment = owned_enrollment_or_404(db, participant, enrollment_id)
-    release = db.query(CourseRelease).filter(CourseRelease.id == enrollment.active_release_id).one()
+    release = active_enrollment_release_or_404(db, enrollment)
     lesson = lesson_for_release_or_404(release, lesson_key)
     try:
         activity = activity_by_key(lesson, activity_key)
@@ -2243,16 +2264,17 @@ def complete_lesson(
 ):
     require_account_student(participant)
     enrollment = owned_enrollment_or_404(db, participant, enrollment_id)
-    release = db.query(CourseRelease).filter(CourseRelease.id == enrollment.active_release_id).one()
+    release = active_enrollment_release_or_404(db, enrollment)
     lesson = lesson_for_release_or_404(release, lesson_key)
-    if lesson["completionPolicy"] not in ("self", "hybrid"):
+    completion_policy = lesson.get("completionPolicy")
+    if completion_policy not in ("self", "hybrid"):
         raise HTTPException(status_code=409, detail="This lesson cannot be self-completed")
-    if lesson["completionPolicy"] == "hybrid" and not required_activities_satisfied(db, enrollment, lesson):
+    if completion_policy == "hybrid" and not required_activities_satisfied(db, enrollment, lesson):
         raise HTTPException(status_code=409, detail={
             "error": "required_activities_incomplete",
             "detail": "Complete the required activities before finishing this lesson.",
         })
-    complete_progress(db, enrollment, release, lesson_key, "hybrid" if lesson["completionPolicy"] == "hybrid" else "self")
+    complete_progress(db, enrollment, release, lesson_key, "hybrid" if completion_policy == "hybrid" else "self")
     safe_commit(db)
     return enrollment_payload(db, enrollment)
 
@@ -2266,10 +2288,10 @@ def uncomplete_lesson(
 ):
     require_account_student(participant)
     enrollment = owned_enrollment_or_404(db, participant, enrollment_id)
-    release = db.query(CourseRelease).filter(CourseRelease.id == enrollment.active_release_id).one()
+    release = active_enrollment_release_or_404(db, enrollment)
     lesson = lesson_for_release_or_404(release, lesson_key)
     progress = progress_row(db, enrollment, lesson_key)
-    if lesson["completionPolicy"] not in ("self", "hybrid") or progress is None or progress.completion_method not in ("self", "hybrid"):
+    if lesson.get("completionPolicy") not in ("self", "hybrid") or progress is None or progress.completion_method not in ("self", "hybrid"):
         raise HTTPException(status_code=409, detail="This completion cannot be undone")
     progress.state = "in_progress"
     progress.completed_at = None
@@ -2439,9 +2461,15 @@ def read_enrollment_updates(
 ):
     require_account_student(participant)
     enrollment = owned_enrollment_or_404(db, participant, enrollment_id)
-    active = db.query(CourseRelease).filter(CourseRelease.id == enrollment.active_release_id).one()
-    course = db.query(Course).filter(Course.id == enrollment.course_id).one()
-    latest = db.query(CourseRelease).filter(CourseRelease.id == course.latest_published_release_id).one()
+    active = active_enrollment_release_or_404(db, enrollment)
+    course = db.query(Course).filter(Course.id == enrollment.course_id).first()
+    if course is None:
+        raise HTTPException(status_code=404, detail="Course not found")
+    if not course.latest_published_release_id:
+        raise HTTPException(status_code=404, detail="No published release found")
+    latest = db.query(CourseRelease).filter(CourseRelease.id == course.latest_published_release_id).first()
+    if latest is None:
+        raise HTTPException(status_code=404, detail="Latest release not found")
     return release_update_payload(active, latest)
 
 
@@ -2454,7 +2482,7 @@ def update_enrollment_release(
 ):
     require_account_student(participant)
     enrollment = owned_enrollment_or_404(db, participant, enrollment_id)
-    active = db.query(CourseRelease).filter(CourseRelease.id == enrollment.active_release_id).one()
+    active = active_enrollment_release_or_404(db, enrollment)
     if request.current_release_id != active.id:
         raise HTTPException(status_code=409, detail={
             "error": "active_release_changed",
@@ -2572,7 +2600,9 @@ def legacy_create_lesson(request: LegacyLessonCreate, user: User = Depends(get_c
         stageReference=stage,
     )
     created = add_lesson(request.curriculum_id, canonical, user, db)
-    lesson = db.query(Lesson).filter(Lesson.id == created["id"]).one()
+    lesson = db.query(Lesson).filter(Lesson.id == created["id"]).first()
+    if lesson is None:
+        raise HTTPException(status_code=404, detail="Lesson not found")
     lesson.description = request.description
     lesson.image_url = request.image_url
     lesson.video_url = request.video_url

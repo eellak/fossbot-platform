@@ -1428,3 +1428,80 @@ def test_mission_does_not_replace_self_completion(client_for, users):
     completed = learner.post(f"/enrollments/{enrollment['id']}/lessons/{lesson['lesson_key']}/complete")
     assert completed.status_code == 200
     assert completed.json()["progress"][0]["completion_method"] == "self"
+
+
+def test_enrollment_safeguards_and_missing_record_handling(client_for, users, db):
+    from routers.courses import release_lessons, lesson_for_release_or_404, active_enrollment_release_or_404
+    from database.database import CourseRelease, Enrollment
+    from fastapi import HTTPException
+    import pytest
+
+    # 1. release_lessons handles None or malformed snapshot
+    dummy_release_none = CourseRelease(id=9991, course_id=1, version=1, snapshot=None)
+    assert release_lessons(dummy_release_none) == []
+    dummy_release_str = CourseRelease(id=9992, course_id=1, version=1, snapshot="invalid")
+    assert release_lessons(dummy_release_str) == []
+    dummy_release_missing_pos = CourseRelease(id=9993, course_id=1, version=1, snapshot={
+        "lessons": [{"lessonKey": "l1"}, {"lessonKey": "l2", "position": 1}]
+    })
+    lessons = release_lessons(dummy_release_missing_pos)
+    assert len(lessons) == 2
+    assert lessons[0]["lessonKey"] == "l1"
+
+    # 2. lesson_for_release_or_404 handles missing key without KeyError
+    with pytest.raises(HTTPException) as exc_info:
+        lesson_for_release_or_404(dummy_release_missing_pos, "nonexistent")
+    assert exc_info.value.status_code == 404
+
+    # 3. active_enrollment_release_or_404 returns 404 on missing release
+    dummy_enrollment = Enrollment(id=9999, course_id=1, active_release_id=999999, student_id=1)
+    with pytest.raises(HTTPException) as exc_info:
+        active_enrollment_release_or_404(db, dummy_enrollment)
+    assert exc_info.value.status_code == 404
+    assert exc_info.value.detail == "Course release not found"
+
+    # 4. End-to-end enrollment endpoints return 404 on purged release instead of 500 NoResultFound
+    tutor, _, student, _ = users
+    teacher = client_for(tutor)
+    course = create_course(teacher, title="Enrollment safeguard test")
+    lesson = add_lesson(
+        teacher,
+        course["id"],
+        activities=[mission_activity(required=False)],
+        completion_policy="self",
+        stageReference=observation_stage(),
+    )
+    teacher.post(f"/courses/{course['id']}/publish")
+    learner = client_for(student)
+    enrollment = learner.post(f"/courses/{course['id']}/enroll").json()
+
+    # Normal enrollment retrieval works
+    resp = learner.get(f"/enrollments/{enrollment['id']}")
+    assert resp.status_code == 200
+    assert resp.json()["course"]["title"] == "Enrollment safeguard test"
+
+    # Purge/unlink the active release
+    db_enrollment = db.query(Enrollment).filter(Enrollment.id == enrollment["id"]).one()
+    orig_release_id = db_enrollment.active_release_id
+    db_enrollment.active_release_id = 999999
+    db.commit()
+
+    # GET /enrollments/{id} returns 404 instead of 500
+    resp_purged = learner.get(f"/enrollments/{enrollment['id']}")
+    assert resp_purged.status_code == 404
+    assert resp_purged.json()["detail"] == "Course release not found"
+
+    # GET /enrollments/{id}/updates returns 404 instead of 500
+    resp_updates = learner.get(f"/enrollments/{enrollment['id']}/updates")
+    assert resp_updates.status_code == 404
+    assert resp_updates.json()["detail"] == "Course release not found"
+
+    # POST /enrollments/{id}/lessons/{lesson_key}/start returns 404 instead of 500
+    resp_start = learner.post(f"/enrollments/{enrollment['id']}/lessons/{lesson['lesson_key']}/start")
+    assert resp_start.status_code == 404
+    assert resp_start.json()["detail"] == "Course release not found"
+
+    # Restore release id
+    db_enrollment.active_release_id = orig_release_id
+    db.commit()
+
